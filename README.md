@@ -116,12 +116,58 @@ capstone-compression/
 
 ---
 
+## Quick Start
+
+```bash
+# 1. Clone
+git clone https://github.com/Blood-Dawn/capstone-compression.git
+cd capstone-compression
+
+# 2. Create and activate virtual environment
+python3 -m venv venv
+source venv/bin/activate          # Windows: venv\Scripts\Activate.ps1
+
+# 3. Install Python dependencies
+pip install -r requirements.txt
+
+# 4. Install FFmpeg (system binary  -  required)
+# Ubuntu/Debian:
+sudo apt update && sudo apt install ffmpeg -y
+# macOS:
+brew install ffmpeg
+
+# 5. Check that everything is ready
+bash check_deps.sh
+
+# 6. Run the pipeline on a test clip
+python src/pipeline/pipeline.py \
+  --input data/samples/your_clip.mp4 \
+  --camera-id cam_test \
+  --output outputs/ \
+  --preview
+```
+
+---
+
+## Documentation
+
+| Document | Description |
+|---|---|
+| [ROADMAP.md](ROADMAP.md) | Full milestone plan with team task assignments |
+| [DEV.md](DEV.md) | Developer setup guide, module explanations, Git workflow |
+| `check_deps.sh` | Run in terminal to verify your environment is ready |
+
+---
+
 ## Group Members
 
-- Kheiven D'Haiti
-- Jorge Sanchez
-- Ashleyn Montano
-- Riley Roberts
-- Victor De Souza Teixeira
+| Name | GitHub |
+|---|---|
+| Kheiven D'Haiti | [@Blood-Dawn](https://github.com/Blood-Dawn) |
+| Jorge Sanchez |  -  |
+| Ashleyn Montano |  -  |
+| Riley Roberts |  -  |
+| Victor De Souza Teixeira |  -  |
 
+**Course:** EGN 4950C Capstone | Florida Atlantic University | Spring 2026
 **Final Deadline:** May 6, 2026

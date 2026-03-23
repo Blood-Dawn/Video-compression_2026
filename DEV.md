@@ -48,9 +48,9 @@ The result is approximately 6x smaller video files compared to standard H.264 co
 - Check your version: `python3 --version`
 
 ### FFmpeg (Required  -  must be installed as a system binary)
-FFmpeg is not a Python package. It must be installed on your system.
+FFmpeg is not a Python package. It must be installed on your system separately.
 
-**Ubuntu/Debian:**
+**Ubuntu/Debian / WSL2:**
 ```bash
 sudo apt update && sudo apt install ffmpeg -y
 ```
@@ -60,16 +60,27 @@ sudo apt update && sudo apt install ffmpeg -y
 brew install ffmpeg
 ```
 
-**Windows WSL2:**
-```bash
-sudo apt update && sudo apt install ffmpeg -y
+**Windows (native  -  no WSL):**
+
+Option A - Windows Package Manager (fastest):
+```powershell
+winget install ffmpeg
 ```
 
-Verify it works:
+Option B - Manual install:
+1. Download the latest build from https://www.gyan.dev/ffmpeg/builds/ (grab `ffmpeg-release-essentials.zip`)
+2. Extract the zip to a folder like `C:\ffmpeg`
+3. Add `C:\ffmpeg\bin` to your Windows PATH:
+   - Open Start, search "Environment Variables"
+   - Under System Variables, find "Path", click Edit
+   - Click New and add `C:\ffmpeg\bin`
+   - Click OK and restart your terminal
+
+After installing with either option, close and reopen your terminal, then verify:
 ```bash
 ffmpeg -version
 ```
-You should see output starting with `ffmpeg version 4.x` or higher. If you get `command not found`, FFmpeg is not installed correctly.
+You should see output starting with `ffmpeg version 4.x` or higher. If you get `command not found`, FFmpeg is not on your PATH yet.
 
 ### Git
 - Git 2.x or higher
@@ -94,9 +105,17 @@ cd capstone-compression
 ### Step 2  -  Create a Python Virtual Environment
 This keeps project dependencies isolated from your system Python. Always do this.
 
+**Linux / macOS:**
 ```bash
 python3 -m venv venv
 ```
+
+**Windows (PowerShell or Git Bash):**
+```bash
+python -m venv venv
+```
+
+Note: On Windows, `python3` is not recognized. Use `python` instead.
 
 ### Step 3  -  Activate the Virtual Environment
 
@@ -105,14 +124,14 @@ python3 -m venv venv
 source venv/bin/activate
 ```
 
-**Windows WSL2:**
+**Windows Git Bash (MINGW64):**
 ```bash
-source venv/bin/activate
+source venv/Scripts/activate
 ```
 
-**Windows PowerShell (if not using WSL):**
+**Windows PowerShell:**
 ```powershell
-venv\Scripts\Activate.ps1
+.\venv\Scripts\Activate.ps1
 ```
 
 Your terminal prompt should now show `(venv)` at the beginning. If it does not, the venv is not active.

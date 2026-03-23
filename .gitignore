@@ -1,0 +1,70 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.env
+.venv
+env/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Data (large video files should not be committed)
+data/samples/*.mp4
+data/samples/*.avi
+data/samples/*.mov
+data/samples/*.mkv
+data/samples/*.h264
+data/samples/*.yuv
+data/raw/
+data/processed/
+*.bin
+
+# Model weights (download separately)
+*.pth
+*.pt
+*.onnx
+*.pb
+*.h5
+
+# Outputs
+outputs/
+results/
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Secrets / keys
+.env
+*.key
+*.pem
+config/secrets.yaml
+
+# SQLite databases (may contain sensitive metadata)
+*.db
+*.sqlite
+*.sqlite3
+
+# FFmpeg temp files
+*.ts
+*.part
+ffmpeg_tmp/

@@ -18,7 +18,12 @@ venv/
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
-# Data (large video files should not be committed)
+# Data -- local only, NEVER commit to GitHub
+# CDnet 2014 dataset (319k+ PNG frames + groundtruth masks)
+data/dataset/
+# VIRAT annotations (thousands of .yml files from IARPA DIVA / Kitware)
+data/viratannotations-master/
+# Raw video/binary samples
 data/samples/*.mp4
 data/samples/*.avi
 data/samples/*.mov
@@ -28,6 +33,7 @@ data/samples/*.yuv
 data/raw/
 data/processed/
 *.bin
+# See README "Test Datasets and Attribution" for download links
 
 # Model weights (download separately)
 *.pth

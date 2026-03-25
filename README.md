@@ -171,3 +171,24 @@ python src/pipeline/pipeline.py \
 
 **Course:** EGN 4950C Capstone | Florida Atlantic University | Spring 2026
 **Final Deadline:** May 6, 2026
+
+---
+
+## Test Datasets and Attribution
+
+This project uses the following publicly available datasets for benchmarking and development. All datasets are used strictly for non-commercial academic research in accordance with their respective terms.
+
+**CDnet 2014 - Change Detection Benchmark**
+Used for background subtraction benchmarking across multiple lighting conditions (baseline, nightVideos, badWeather, shadow, lowFramerate). This dataset provides pixel-level ground truth foreground masks, making it the standard benchmark for evaluating background subtraction algorithms.
+
+> Y. Wang, P.-M. Jodoin, F. Porikli, J. Konrad, Y. Benezeth, and P. Ishwar, "CDnet 2014: An Expanded Change Detection Benchmark Dataset," in *IEEE CVPR Workshops*, 2014.
+> Dataset: [www.changedetection.net](http://www.changedetection.net)
+
+Original CDnet paper:
+> N. Goyette, P.-M. Jodoin, F. Porikli, J. Konrad, and P. Ishwar, "changedetection.net: A New Change Detection Benchmark Dataset," in *IEEE CVPR Workshops*, 2012.
+
+**VIRAT Video Dataset**
+Used for person and vehicle activity recognition in outdoor surveillance scenarios. Annotations (in KPF format) provided by the IARPA DIVA program via Kitware (diva-te@kitware.com).
+
+> S. Oh, A. Hoogs, A. Perera, N. Cuntoor, C.-C. Chen, J. T. Lee, S. Mukherjee, J. K. Aggarwal, H. Lee, L. Davis, E. Swears, X. Wang, Q. Ji, K. Reddy, M. Shah, C. Vondrick, H. Pirsiavash, D. Ramanan, J. Yuen, A. Torralba, B. Song, A. Fong, A. Roy-Chowdhury, and M. Desai, "A Large-scale Benchmark Dataset for Event Recognition in Surveillance Video," in *Proc. IEEE Conf. CVPR*, Jun. 2011, pp. 3153-3160.
+> Dataset: [viratdata.org](https://viratdata.org) | Annotations: [IARPA DIVA / Kitware](https://github.com/kitware/viratannotations)

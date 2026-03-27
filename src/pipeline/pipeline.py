@@ -22,6 +22,10 @@ import time
 from pathlib import Path
 from collections import deque
 
+from utils.db import initialize_database, insert_segment
+import os
+from datetime import datetime
+
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from background_subtraction.background_subtraction import BackgroundSubtractor
@@ -90,6 +94,7 @@ def run_pipeline(
 
     subtractor = BackgroundSubtractor(method=bg_method)
     encoder = ROIEncoder(output_dir=output_dir)
+    initialize_database()
 
     segment_regions = []
     segment_writer = None
@@ -158,6 +163,18 @@ def run_pipeline(
                     segment_duration_s=segment_seconds,
                 )
                 log.info(f"Saved: {out}")
+                file_size = os.path.getsize(out)
+                timestamp = datetime.utcnow().isoformat()
+                    insert_segment(
+                        timestamp=timestamp,
+                        camera_id=camera_id,
+                        target_detected=(target_frames_this_segment > 0),
+                        roi_count=len(segment_regions),
+                        file_size=file_size,
+                        duration=segment_seconds,
+                        file_path=str(out),
+                    )
+
                 segment_regions = []
                 target_frames_this_segment = 0
                 segment_writer = cv2.VideoWriter(str(temp_path), fourcc, fps, (frame_w, frame_h))

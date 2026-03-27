@@ -100,10 +100,10 @@ Get the end-to-end pipeline running on a real test video clip and producing meas
 ### 1.4  -  Metadata Database
 **Feature Branch:** `feature/metadata-database`
 
-- [ ] Create `src/utils/db.py` with SQLite schema: `segments` table (timestamp, camera_id, target_detected, roi_count, file_size, duration, file_path)  -  **Owner: Ashleyn Montano___________**
-- [ ] Integrate database writes into the pipeline (write one row per encoded segment)  -  **Owner: Ashleyn Montano__________**
-- [ ] Implement query: "return all segments from camera X where targets were detected in the last N hours"  -  **Owner: Ashleyn Montano ___________**
-- [ ] Write unit tests for schema creation, insertion, and query  -  **Owner: Ashleyn Montano___________**
+- [x] Create `src/utils/db.py` with SQLite schema: `segments` table (timestamp, camera_id, target_detected, roi_count, file_size, duration, file_path)  -  **Owner: Ashleyn Montano___________**
+- [x] Integrate database writes into the pipeline (write one row per encoded segment)  -  **Owner: Ashleyn Montano__________**
+- [x] Implement query: "return all segments from camera X where targets were detected in the last N hours"  -  **Owner: Ashleyn Montano ___________**
+- [x] Write unit tests for schema creation, insertion, and query  -  **Owner: Ashleyn Montano___________**
 
 **Acceptance criteria:** After a pipeline run, `metadata.db` exists and contains correct rows. Query returns correct results.
 

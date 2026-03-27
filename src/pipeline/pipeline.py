@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 from collections import deque
 
-from utils.db import initialize_database, insert_segment
+from src.utils.db import initialize_database, insert_segment
 import os
 from datetime import datetime
 
@@ -165,15 +165,15 @@ def run_pipeline(
                 log.info(f"Saved: {out}")
                 file_size = os.path.getsize(out)
                 timestamp = datetime.utcnow().isoformat()
-                    insert_segment(
-                        timestamp=timestamp,
-                        camera_id=camera_id,
-                        target_detected=(target_frames_this_segment > 0),
-                        roi_count=len(segment_regions),
-                        file_size=file_size,
-                        duration=segment_seconds,
-                        file_path=str(out),
-                    )
+                insert_segment(
+                    timestamp=timestamp,
+                    camera_id=camera_id,
+                    target_detected=(target_frames_this_segment > 0),
+                    roi_count=len(segment_regions),
+                    file_size=file_size,
+                    duration=segment_seconds,
+                    file_path=str(out),
+                )
 
                 segment_regions = []
                 target_frames_this_segment = 0

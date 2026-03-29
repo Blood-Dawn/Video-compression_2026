@@ -141,6 +141,7 @@ def analyze_video(
     sample_rate: int = 15,
     warmup_frames: int = -1,
     output_dir: str = "outputs/demo_frames",
+    night_mode: bool = False,
 ) -> dict:
     """
     Runs background subtraction on a clip and produces demo output images.
@@ -161,6 +162,11 @@ def analyze_video(
                        Pass -1 (default) to auto-detect from temporalROI.txt for
                        CDnet clips, or fall back to 120 for plain video files.
         output_dir: Directory where comparison JPEG images are saved.
+        night_mode: If True, enables CLAHE preprocessing and a higher MOG2
+                    varThreshold tuned for low-light footage. Use this on any
+                    nightVideos or thermal clip to reduce false positives from
+                    streetlamp halos and sensor noise. See BackgroundSubtractor
+                    for full details on what night_mode changes.
 
     Returns:
         A dict with aggregate stats:
@@ -188,7 +194,9 @@ def analyze_video(
     Path(output_dir).mkdir(parents=True, exist_ok=True)
     scene_name = src.get_scene_name()
 
-    subtractor = BackgroundSubtractor(method=method)
+    subtractor = BackgroundSubtractor(method=method, night_mode=night_mode)
+    if night_mode:
+        log.info("Night mode ON: CLAHE preprocessing enabled, varThreshold=30")
     coverage_values = []
     frames_with_activity = 0
     sample_images_saved = 0
@@ -259,8 +267,9 @@ def analyze_video(
 def compare_all_methods(
     video_path: str,
     sample_rate: int = 15,
-    warmup_frames: int = 120,
+    warmup_frames: int = -1,
     output_dir: str = "outputs/demo_frames",
+    night_mode: bool = False,
 ) -> list:
     """
     Runs MOG2 and KNN sequentially on the same video and prints a comparison table.
@@ -269,10 +278,11 @@ def compare_all_methods(
     GMG is skipped here because its 10fps performance makes it impractical.
 
     Args:
-        video_path: Path to the input video.
+        video_path: Path to the input video or CDnet scene folder.
         sample_rate: Save a grid image every N post-warmup frames.
-        warmup_frames: Warmup duration for both algorithms.
+        warmup_frames: Warmup duration. -1 = auto-detect from temporalROI.txt.
         output_dir: Where to save comparison images.
+        night_mode: Pass True for low-light footage to enable CLAHE + higher threshold.
 
     Returns:
         List of result dicts, one per method.
@@ -281,7 +291,8 @@ def compare_all_methods(
     for method in ("MOG2", "KNN"):
         log.info(f"\n{'='*50}\nRunning {method}...\n{'='*50}")
         r = analyze_video(video_path, method=method, sample_rate=sample_rate,
-                          warmup_frames=warmup_frames, output_dir=output_dir)
+                          warmup_frames=warmup_frames, output_dir=output_dir,
+                          night_mode=night_mode)
         results.append(r)
     return results
 
@@ -369,6 +380,12 @@ if __name__ == "__main__":
         default="outputs/demo_frames",
         help="Directory to save comparison images. Default: outputs/demo_frames"
     )
+    parser.add_argument(
+        "--night-mode",
+        action="store_true",
+        help="Enable CLAHE preprocessing and higher MOG2 threshold for low-light footage. "
+             "Use on nightVideos or thermal clips to reduce glare false positives."
+    )
 
     args = parser.parse_args()
 
@@ -378,6 +395,7 @@ if __name__ == "__main__":
             sample_rate=args.sample_rate,
             warmup_frames=args.warmup,
             output_dir=args.output,
+            night_mode=args.night_mode,
         )
     else:
         r = analyze_video(
@@ -386,6 +404,7 @@ if __name__ == "__main__":
             sample_rate=args.sample_rate,
             warmup_frames=args.warmup,
             output_dir=args.output,
+            night_mode=args.night_mode,
         )
         results = [r]
 

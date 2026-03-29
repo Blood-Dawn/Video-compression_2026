@@ -11,16 +11,15 @@ All encoding uses libx264 (open source, royalty-free, runs on CPU).
 
 import ffmpeg
 import os
-import json
-import sqlite3
 from pathlib import Path
 from datetime import datetime
 from typing import List, Optional
 
-# Import from sibling module
+# Import from sibling modules
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from background_subtraction.background_subtraction import ForegroundRegion
+from utils.db import initialize_database, insert_segment
 
 
 class ROIEncoder:
@@ -59,26 +58,9 @@ class ROIEncoder:
         self.background_crf = background_crf
         self.preset = preset
         self.db_path = db_path
-        self._init_db()
-
-    def _init_db(self):
-        """Initialize SQLite metadata index for compressed segments."""
-        conn = sqlite3.connect(self.db_path)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS segments (
-                id          INTEGER PRIMARY KEY AUTOINCREMENT,
-                filename    TEXT NOT NULL,
-                timestamp   TEXT NOT NULL,
-                camera_id   TEXT,
-                has_targets INTEGER DEFAULT 0,
-                roi_count   INTEGER DEFAULT 0,
-                file_size   INTEGER,
-                duration_s  REAL,
-                notes       TEXT
-            )
-        """)
-        conn.commit()
-        conn.close()
+        # db.py owns the schema — delegate initialization there so both
+        # the encoder and the pipeline always agree on column names.
+        initialize_database(db_path)
 
     def encode_frame_sequence(
         self,
@@ -110,16 +92,17 @@ class ROIEncoder:
 
         crf = self.foreground_crf if has_targets else self.background_crf
 
+        # Build output kwargs conditionally -- passing acodec=None to
+        # ffmpeg-python causes it to emit an empty flag which errors on
+        # some FFmpeg versions. Only include acodec when audio is present.
+        output_kwargs = dict(vcodec="libx264", crf=crf, preset=self.preset)
+        if self._has_audio(input_path):
+            output_kwargs["acodec"] = "copy"
+
         (
             ffmpeg
             .input(input_path)
-            .output(
-                str(output_path),
-                vcodec="libx264",
-                crf=crf,
-                preset=self.preset,
-                acodec="copy" if self._has_audio(input_path) else None,
-            )
+            .output(str(output_path), **output_kwargs)
             .overwrite_output()
             .run(quiet=True)
         )
@@ -127,16 +110,19 @@ class ROIEncoder:
         file_size = output_path.stat().st_size if output_path.exists() else 0
         roi_count = sum(len(r) for r in regions_per_frame)
 
-        conn = sqlite3.connect(self.db_path)
-        conn.execute(
-            """INSERT INTO segments
-               (filename, timestamp, camera_id, has_targets, roi_count, file_size, duration_s)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (output_name, timestamp, camera_id, int(has_targets), roi_count,
-             file_size, segment_duration_s),
+        # Use db.py's insert_segment() so this always writes to the canonical
+        # schema. pipeline.py must NOT call insert_segment() again after this —
+        # doing so would produce a duplicate row for every segment.
+        insert_segment(
+            timestamp=timestamp,
+            camera_id=camera_id,
+            target_detected=has_targets,
+            roi_count=roi_count,
+            file_size=file_size,
+            duration=float(segment_duration_s),
+            file_path=str(output_path),
+            db_path=self.db_path,
         )
-        conn.commit()
-        conn.close()
 
         return str(output_path)
 
@@ -149,14 +135,17 @@ class ROIEncoder:
 
     def get_storage_report(self) -> dict:
         """Return summary statistics from the metadata index."""
+        import sqlite3
         conn = sqlite3.connect(self.db_path)
+        # Column names match db.py's canonical schema:
+        # target_detected (not has_targets), duration (not duration_s)
         cursor = conn.execute("""
             SELECT
-                COUNT(*) as total_segments,
-                SUM(file_size) as total_bytes,
-                SUM(has_targets) as segments_with_targets,
-                SUM(roi_count) as total_roi_detections,
-                SUM(duration_s) as total_duration_s
+                COUNT(*)              as total_segments,
+                SUM(file_size)        as total_bytes,
+                SUM(target_detected)  as segments_with_targets,
+                SUM(roi_count)        as total_roi_detections,
+                SUM(duration)         as total_duration_s
             FROM segments
         """)
         row = cursor.fetchone()

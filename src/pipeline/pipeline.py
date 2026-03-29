@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 from collections import deque
 
-from src.utils.db import initialize_database, insert_segment
+from src.utils.db import initialize_database
 import os
 from datetime import datetime
 
@@ -162,18 +162,12 @@ def run_pipeline(
                     camera_id=camera_id,
                     segment_duration_s=segment_seconds,
                 )
+                # encode_frame_sequence() already writes the metadata row
+                # via db.py's insert_segment(). Do NOT call insert_segment()
+                # here — that was a double-write bug producing two DB rows
+                # per segment (and crashing on the second write due to a
+                # schema mismatch between roi_encoder._init_db and db.py).
                 log.info(f"Saved: {out}")
-                file_size = os.path.getsize(out)
-                timestamp = datetime.utcnow().isoformat()
-                insert_segment(
-                    timestamp=timestamp,
-                    camera_id=camera_id,
-                    target_detected=(target_frames_this_segment > 0),
-                    roi_count=len(segment_regions),
-                    file_size=file_size,
-                    duration=segment_seconds,
-                    file_path=str(out),
-                )
 
                 segment_regions = []
                 target_frames_this_segment = 0

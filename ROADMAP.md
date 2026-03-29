@@ -87,11 +87,11 @@ Get the end-to-end pipeline running on a real test video clip and producing meas
 ### 1.3  -  Metrics and Benchmarking
 **Feature Branch:** `feature/benchmarking-milestone1`
 
-- [ ] Implement `compute_psnr()` and `compute_ssim()` in `src/utils/metrics.py` and verify against known reference values  -  **Owner: ___________**
-- [ ] Implement `compute_compression_ratio()`  -  **Owner: ___________**
+- [ ] Implement `compute_psnr()` and `compute_ssim()` in `src/utils/metrics.py` and verify against known reference values  -  **Owner: Victor De Souza Teixeira**
+- [ ] Implement `compute_compression_ratio()`  -  **Owner: Victor De Souza Teixeira**
 - [x] Create foreground coverage benchmark across all CDnet categories  -  **Owner: Bloodawn (KheivenD)** ✅ 2026-03-26 — scripts/run_all_cdnet.py runs all 46 scenes; per-category avg FG% documented in outputs/cdnet_batch_results.log and session_log_2026-03-26.md
-- [ ] Create `notebooks/milestone1_benchmark.ipynb` that runs the pipeline on a test clip and reports PSNR, SSIM, and compression ratio  -  **Owner: ___________**
-- [ ] Document results in `docs/milestone1_results.md`  -  **Owner: ___________**
+- [ ] Create `notebooks/milestone1_benchmark.ipynb` that runs the pipeline on a test clip and reports PSNR, SSIM, and compression ratio  -  **Owner: Victor De Souza Teixeira**
+- [ ] Document results in `docs/milestone1_results.md`  -  **Owner: Victor De Souza Teixeira**
 
 **Acceptance criteria:** Notebook runs end-to-end without errors. Compression ratio is ≥ 3x on test footage. PSNR on foreground ROIs is ≥ 30 dB. SSIM on foreground ROIs is ≥ 0.85.
 

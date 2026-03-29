@@ -63,9 +63,9 @@ Get the end-to-end pipeline running on a real test video clip and producing meas
 
 - [x] Tune MOG2 parameters (`history`, `varThreshold`, `detectShadows`) on sample footage  -  **Owner: Bloodawn (KheivenD)** ✅ 2026-03-24 — night_mode flag adds CLAHE preprocessing + varThreshold=30 for low-light; VAR_THRESHOLD_DAY=16 / VAR_THRESHOLD_NIGHT=30 class constants set
 - [x] Tune KNN parameters on the same footage and compare mask quality  -  **Owner: Bloodawn (KheivenD)** ✅ 2026-03-26 — full 46-scene CDnet sweep run with both MOG2 and KNN; results in outputs/cdnet_batch_results.log; MOG2 recommended as primary algorithm
-- [ ] Implement morphological cleanup (erosion/dilation) to remove noise from the foreground mask  -  **Owner: ___________**
-- [ ] Add minimum contour area filter to discard trivially small detections  -  **Owner: ___________**
-- [ ] Write unit tests covering mask generation, empty frames, and all-foreground frames  -  **Owner: ___________**
+- [x] Implement morphological cleanup (erosion/dilation) to remove noise from the foreground mask  -  **Owner: Bloodawn (KheivenD)** ✅ 2026-03-29 — MORPH_CLOSE + MORPH_OPEN applied in apply() using elliptical kernel; morph_kernel_size param exposed in __init__
+- [x] Add minimum contour area filter to discard trivially small detections  -  **Owner: Bloodawn (KheivenD)** ✅ 2026-03-29 — min_area param (default 500px) filters contours in get_foreground_regions(); docstring notes 1500-2000px for HD footage
+- [x] Write unit tests covering mask generation, empty frames, and all-foreground frames  -  **Owner: Bloodawn (KheivenD)** ✅ 2026-03-29 — tests/test_background_subtraction.py expanded with mask generation, empty frame, all-foreground, min_area filter, morph cleanup, and night mode coverage
 
 **Acceptance criteria:** Foreground mask correctly isolates walking people and vehicles in the test clip with minimal noise. No false positives on a fully static frame.
 
@@ -74,11 +74,11 @@ Get the end-to-end pipeline running on a real test video clip and producing meas
 ### 1.2  -  ROI Encoding Pipeline
 **Feature Branch:** `feature/roi-ffmpeg-encoding`
 
-- [ ] Complete `ROIEncoder.encode_segment()` to produce a real compressed output file  -  **Owner: ___________**
-- [ ] Implement dual-pass encoding: foreground ROIs at CRF 18-23, background at CRF 40-51  -  **Owner: ___________**
-- [ ] Validate that the output file is a valid, playable video (not corrupted)  -  **Owner: ___________**
-- [ ] Implement `ROIEncoder.get_file_size()` and log pre/post compression sizes  -  **Owner: ___________**
-- [ ] Write integration test: encode a 10-second clip, verify output exists and is smaller than input  -  **Owner: ___________**
+- [x] Complete `ROIEncoder.encode_segment()` to produce a real compressed output file  -  **Owner: Jorge Sanchez** ✅ 2026-03-29 — encode_segment() pipes raw BGR frames to FFmpeg via stdin, returns (output_path, file_size) tuple; validates empty frames and mismatched bbox length
+- [x] Implement dual-pass encoding: foreground ROIs at CRF 18-23, background at CRF 40-51  -  **Owner: Jorge Sanchez** ✅ 2026-03-29 — has_targets flag selects foreground_crf (default 18) vs background_crf (default 45); logic in encode_segment()
+- [x] Validate that the output file is a valid, playable video (not corrupted)  -  **Owner: Jorge Sanchez** ✅ 2026-03-29 — raises RuntimeError if output file missing or zero bytes; test_output_file_is_valid_mp4 probes with ffmpeg.probe()
+- [x] Implement `ROIEncoder.get_file_size()` and log pre/post compression sizes  -  **Owner: Jorge Sanchez** ✅ 2026-03-29 — get_file_size() returns bytes or 0 for missing file; return value from encode_segment() matches get_file_size() (verified in test)
+- [x] Write integration test: encode a 10-second clip, verify output exists and is smaller than input  -  **Owner: Jorge Sanchez** ✅ 2026-03-29 — tests/test_roi_encoder.py: 10 tests across TestEncodeSegment, TestGetFileSize, TestBackgroundSegmentDB; includes compression ratio check and DB validation
 
 **Acceptance criteria:** Output file plays back correctly. Compressed size is measurably smaller than input. No FFmpeg subprocess errors.
 
@@ -293,10 +293,4 @@ main          ← stable, always working, tagged at each milestone
 
 ## Stretch Goals (If Time Permits)
 
-These are not required for the capstone but would strengthen the project:
-
-- VMAF metric integration for perceptual quality scoring
-- Lightweight YOLO-based object detection to verify people/vehicles are still detectable in compressed output
-- Web dashboard for querying the metadata database
-- Docker container for easy deployment on any hardware
-- Automated weekly storage report email
+These are not required for the ca

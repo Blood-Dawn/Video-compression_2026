@@ -13,9 +13,12 @@ import ffmpeg
 import os
 import json
 import sqlite3
+import subprocess
+import tempfile
+import numpy as np
 from pathlib import Path
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 # Import from sibling module
 import sys
@@ -40,7 +43,7 @@ class ROIEncoder:
         self,
         output_dir: str = "outputs/",
         foreground_crf: int = 18,
-        background_crf: int = 40,
+        background_crf: int = 45,
         preset: str = "veryfast",
         db_path: str = "outputs/metadata.db",
     ):
@@ -49,7 +52,7 @@ class ROIEncoder:
             output_dir: Where to write compressed output files.
             foreground_crf: CRF for foreground ROIs. Lower = higher quality.
                             18 is visually lossless; 23 is default H.264.
-            background_crf: CRF for background. 40 gives heavy compression.
+            background_crf: CRF for background. 45 gives heavy compression.
             preset: FFmpeg encoding speed preset. veryfast is good for low-spec hardware.
             db_path: SQLite database path for storing metadata index.
         """
@@ -79,6 +82,124 @@ class ROIEncoder:
         """)
         conn.commit()
         conn.close()
+
+    def encode_segment(
+        self,
+        frames: List[np.ndarray],
+        bboxes_per_frame: List[List[Tuple[int, int, int, int]]],
+        camera_id: str = "cam_unknown",
+        timestamp: Optional[str] = None,
+        fps: int = 30,
+    ) -> Tuple[str, int]:
+        """
+        Encode a list of raw frames into a compressed video segment.
+
+        Uses dual-pass encoding strategy:
+          - If any foreground bounding boxes exist, the segment is encoded at
+            foreground_crf (high quality, ~18-23).
+          - If no motion is detected anywhere, background_crf (heavy compression,
+            ~40-51) is used instead.
+
+        This is the primary encode method expected by the pipeline and roadmap.
+
+        Args:
+            frames: List of BGR frames as NumPy arrays (H x W x 3).
+            bboxes_per_frame: Bounding boxes per frame as (x, y, w, h) tuples.
+            camera_id: Identifier for this camera, stored in metadata DB.
+            timestamp: ISO timestamp string. Defaults to current UTC time.
+            fps: Frames per second for the output video.
+
+        Returns:
+            Tuple of (output_file_path: str, file_size_bytes: int).
+        """
+        if not frames:
+            raise ValueError("frames list is empty — nothing to encode.")
+
+        if timestamp is None:
+            timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+
+        output_name = f"{camera_id}_{timestamp}.mp4"
+        output_path = self.output_dir / output_name
+
+        # Dual-pass CRF selection: use high quality if any targets detected
+        has_targets = any(len(boxes) > 0 for boxes in bboxes_per_frame)
+        crf = self.foreground_crf if has_targets else self.background_crf
+
+        # Get frame dimensions from first frame
+        height, width = frames[0].shape[:2]
+        duration_s = len(frames) / fps
+
+        # Pipe raw frames to FFmpeg via stdin
+        process = (
+            ffmpeg
+            .input(
+                "pipe:0",
+                format="rawvideo",
+                pix_fmt="bgr24",
+                s=f"{width}x{height}",
+                r=fps,
+            )
+            .output(
+                str(output_path),
+                vcodec="libx264",
+                pix_fmt="yuv420p",
+                crf=crf,
+                preset=self.preset,
+            )
+            .overwrite_output()
+            .run_async(pipe_stdin=True, quiet=True)
+        )
+
+        # Write each frame as raw bytes
+        for frame in frames:
+            process.stdin.write(frame.astype(np.uint8).tobytes())
+
+        process.stdin.close()
+        process.wait()
+
+        if not output_path.exists():
+            raise RuntimeError(
+                f"FFmpeg encoding failed — output file not created: {output_path}"
+            )
+
+        file_size = self.get_file_size(str(output_path))
+        roi_count = sum(len(boxes) for boxes in bboxes_per_frame)
+
+        # Write metadata row to SQLite
+        conn = sqlite3.connect(self.db_path)
+        conn.execute(
+            """INSERT INTO segments
+               (filename, timestamp, camera_id, has_targets, roi_count, file_size, duration_s)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                output_name,
+                timestamp,
+                camera_id,
+                int(has_targets),
+                roi_count,
+                file_size,
+                round(duration_s, 3),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        return str(output_path), file_size
+
+    def get_file_size(self, path: str) -> int:
+        """
+        Return the size of a file in bytes.
+
+        Args:
+            path: Path to the file.
+
+        Returns:
+            File size in bytes, or 0 if the file does not exist.
+        """
+        p = Path(path)
+        if not p.exists():
+            return 0
+        return p.stat().st_size
 
     def encode_frame_sequence(
         self,

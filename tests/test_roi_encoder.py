@@ -209,6 +209,18 @@ class TestEncodeSegment:
                 camera_id="cam_test",
             )
 
+    def test_mismatched_bboxes_raises_error(self, encoder):
+        """bboxes_per_frame length not matching frames length should raise ValueError."""
+        frames = make_frames(10)
+        wrong_bboxes = make_bboxes_empty(5)  # wrong length
+
+        with pytest.raises(ValueError, match="must match"):
+            encoder.encode_segment(
+                frames=frames,
+                bboxes_per_frame=wrong_bboxes,
+                camera_id="cam_test",
+            )
+
 
 class TestGetFileSize:
 
@@ -237,3 +249,29 @@ class TestGetFileSize:
         )
 
         assert encoder.get_file_size(output_path) == returned_size
+
+
+class TestBackgroundSegmentDB:
+
+    def test_background_segment_db_row(self, encoder):
+        """A static scene (no targets) should write has_targets=0 and roi_count=0 to DB."""
+        frames = make_frames(10)
+        bboxes = make_bboxes_empty(10)
+
+        encoder.encode_segment(
+            frames=frames,
+            bboxes_per_frame=bboxes,
+            camera_id="cam_bg_db",
+            fps=30,
+        )
+
+        conn = sqlite3.connect(encoder.db_path)
+        rows = conn.execute(
+            "SELECT has_targets, roi_count FROM segments WHERE camera_id = 'cam_bg_db'"
+        ).fetchall()
+        conn.close()
+
+        assert len(rows) == 1
+        has_targets, roi_count = rows[0]
+        assert has_targets == 0
+        assert roi_count == 0

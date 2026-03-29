@@ -115,6 +115,12 @@ class ROIEncoder:
         if not frames:
             raise ValueError("frames list is empty — nothing to encode.")
 
+        if len(bboxes_per_frame) != len(frames):
+            raise ValueError(
+                f"bboxes_per_frame length ({len(bboxes_per_frame)}) must match "
+                f"frames length ({len(frames)})."
+            )
+
         if timestamp is None:
             timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
 
@@ -163,26 +169,28 @@ class ROIEncoder:
             )
 
         file_size = self.get_file_size(str(output_path))
+        if file_size == 0:
+            raise RuntimeError(
+                f"FFmpeg encoding failed — output file is empty: {output_path}"
+            )
         roi_count = sum(len(boxes) for boxes in bboxes_per_frame)
 
         # Write metadata row to SQLite
-        conn = sqlite3.connect(self.db_path)
-        conn.execute(
-            """INSERT INTO segments
-               (filename, timestamp, camera_id, has_targets, roi_count, file_size, duration_s)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (
-                output_name,
-                timestamp,
-                camera_id,
-                int(has_targets),
-                roi_count,
-                file_size,
-                round(duration_s, 3),
-            ),
-        )
-        conn.commit()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """INSERT INTO segments
+                   (filename, timestamp, camera_id, has_targets, roi_count, file_size, duration_s)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    output_name,
+                    timestamp,
+                    camera_id,
+                    int(has_targets),
+                    roi_count,
+                    file_size,
+                    round(duration_s, 3),
+                ),
+            )
 
         return str(output_path), file_size
 
@@ -270,18 +278,17 @@ class ROIEncoder:
 
     def get_storage_report(self) -> dict:
         """Return summary statistics from the metadata index."""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.execute("""
-            SELECT
-                COUNT(*) as total_segments,
-                SUM(file_size) as total_bytes,
-                SUM(has_targets) as segments_with_targets,
-                SUM(roi_count) as total_roi_detections,
-                SUM(duration_s) as total_duration_s
-            FROM segments
-        """)
-        row = cursor.fetchone()
-        conn.close()
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("""
+                SELECT
+                    COUNT(*) as total_segments,
+                    SUM(file_size) as total_bytes,
+                    SUM(has_targets) as segments_with_targets,
+                    SUM(roi_count) as total_roi_detections,
+                    SUM(duration_s) as total_duration_s
+                FROM segments
+            """)
+            row = cursor.fetchone()
         return {
             "total_segments": row[0],
             "total_bytes": row[1],

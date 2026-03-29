@@ -74,11 +74,11 @@ Get the end-to-end pipeline running on a real test video clip and producing meas
 ### 1.2  -  ROI Encoding Pipeline
 **Feature Branch:** `feature/roi-ffmpeg-encoding`
 
-- [ ] Complete `ROIEncoder.encode_segment()` to produce a real compressed output file  -  **Owner: ___________**
-- [ ] Implement dual-pass encoding: foreground ROIs at CRF 18-23, background at CRF 40-51  -  **Owner: ___________**
-- [ ] Validate that the output file is a valid, playable video (not corrupted)  -  **Owner: ___________**
-- [ ] Implement `ROIEncoder.get_file_size()` and log pre/post compression sizes  -  **Owner: ___________**
-- [ ] Write integration test: encode a 10-second clip, verify output exists and is smaller than input  -  **Owner: ___________**
+- [x] Complete `ROIEncoder.encode_segment()` to produce a real compressed output file  -  **Owner: Jorge Sanchez**
+- [x] Implement dual-pass encoding: foreground ROIs at CRF 18-23, background at CRF 40-51  -  **Owner: Jorge Sanchez**
+- [x] Validate that the output file is a valid, playable video (not corrupted)  -  **Owner: Jorge Sanchez**
+- [x] Implement `ROIEncoder.get_file_size()` and log pre/post compression sizes  -  **Owner: Jorge Sanchez**
+- [x] Write integration test: encode a 10-second clip, verify output exists and is smaller than input  -  **Owner: Jorge Sanchez**
 
 **Acceptance criteria:** Output file plays back correctly. Compressed size is measurably smaller than input. No FFmpeg subprocess errors.
 

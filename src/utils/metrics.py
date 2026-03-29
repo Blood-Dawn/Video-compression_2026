@@ -20,23 +20,38 @@ from skimage.metrics import peak_signal_noise_ratio as psnr_fn
 
 def compute_psnr(original: np.ndarray, compressed: np.ndarray) -> float:
     """PSNR in dB. Higher is better. >40 dB is considered very good."""
+    if original.shape != compressed.shape:
+        raise ValueError("original and compressed must have the same shape")
+
+    if np.array_equal(original, compressed):
+        return float("inf")
+
     return float(psnr_fn(original, compressed, data_range=255))
 
 
 def compute_ssim(original: np.ndarray, compressed: np.ndarray) -> float:
     """SSIM in [0, 1]. Higher is better. >0.95 is considered very good."""
+    if original.shape != compressed.shape:
+        raise ValueError("original and compressed must have the same shape")
     gray_orig = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
     gray_comp = cv2.cvtColor(compressed, cv2.COLOR_BGR2GRAY)
     return float(ssim_fn(gray_orig, gray_comp, data_range=255))
 
 
-def compression_ratio(original_path: str, compressed_path: str) -> float:
+def compute_compression_ratio(original_size_bytes: int, compressed_size_bytes: int) -> float:
     """Ratio of original size to compressed size. 6.0 means 6x smaller."""
+    if original_size_bytes < 0 or compressed_size_bytes < 0:
+        raise ValueError("file sizes must be non-negative")
+    if compressed_size_bytes == 0:
+        return float("inf")
+    return float(original_size_bytes / compressed_size_bytes)
+
+
+def compression_ratio(original_path: str, compressed_path: str) -> float:
+    """Convenience wrapper that computes compression ratio from file paths."""
     orig_size = Path(original_path).stat().st_size
     comp_size = Path(compressed_path).stat().st_size
-    if comp_size == 0:
-        return float("inf")
-    return orig_size / comp_size
+    return compute_compression_ratio(orig_size, comp_size)
 
 
 def foreground_coverage(mask: np.ndarray) -> float:

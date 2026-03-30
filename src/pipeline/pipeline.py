@@ -57,6 +57,7 @@ def run_pipeline(
     output_dir: str = "outputs/",
     segment_seconds: int = 60,
     bg_method: str = "MOG2",
+    mode: str = "mode0",
     show_preview: bool = False,
     warmup_frames: int = 120,
 ):
@@ -82,6 +83,16 @@ def run_pipeline(
     Frames are buffered in memory as a list of numpy arrays and piped directly to
     FFmpeg via stdin. This avoids the lossy XVID intermediate AVI that was used
     previously, which degraded quality before the final encode step.
+    
+    MODE BEHAVIOR:
+    - mode0:
+        Current baseline pipeline. Buffers all post-warmup frames and encodes
+        them in segment-sized chunks, regardless of whether foreground objects
+        are detected.
+    - mode1:
+        Standard Event Recording mode. Buffers and stores only frames where
+        foreground regions are detected. This acts as the sponsor-style event
+        clip baseline, where only footage containing activity is preserved.
 
     Args:
         input_source: Camera index (int) or video file / CDnet scene path (str).
@@ -90,6 +101,7 @@ def run_pipeline(
         output_dir: Directory where compressed output segments are written.
         segment_seconds: Seconds of footage per output segment.
         bg_method: Background subtraction algorithm. "MOG2" recommended.
+        mode: Pipeline mode selector.
         show_preview: Show live bounding-box preview. Disable on headless servers.
         warmup_frames: Frames to feed through the background model before encoding.
                        Overridden by FrameSource.get_warmup_frames() for CDnet sources.
@@ -122,6 +134,7 @@ def run_pipeline(
 
     log.info(f"Source: {input_source} | {frame_w}x{frame_h} @ {fps:.1f}fps")
     log.info(f"Segment length: {segment_seconds}s ({frames_per_segment} frames)")
+    log.info(f"Mode: {mode}")
     log.info(f"Warmup: {effective_warmup} frames (~{effective_warmup/fps:.1f}s)")
 
     subtractor = BackgroundSubtractor(method=bg_method)
@@ -157,11 +170,23 @@ def run_pipeline(
             # Buffer frames in memory — no lossy intermediate file.
             # Previously XVID AVI was used, which compressed frames before FFmpeg,
             # degrading quality. Raw numpy arrays are lossless.
-            segment_frames.append(frame.copy())
-            segment_regions.append(regions)
+            # Buffer frames selectively depending on mode
+            
+            # Default Mode
+            if(mode == "mode0"):
+                segment_frames.append(frame.copy())
+                segment_regions.append(regions)
 
-            if regions:
-                target_frames_this_segment += 1
+                if regions:
+                    target_frames_this_segment += 1
+                    
+            # Standard Event Recording
+            # Only buffer frames when motion/foreground regions are detected
+            elif mode == "mode1":
+                if regions:
+                    segment_frames.append(frame.copy())
+                    segment_regions.append(regions)
+                    target_frames_this_segment += 1
 
             if show_preview:
                 vis = subtractor.draw_regions(frame, regions)
@@ -170,9 +195,10 @@ def run_pipeline(
                     break
 
             frame_count += 1
-            encode_count += 1
+            # encode_count tracks frames actually buffered for output
+            encode_count = len(segment_frames)
 
-            if encode_count > 0 and encode_count % frames_per_segment == 0:
+            if encode_count > 0 and encode_count % frames_per_segment == 0 and len(segment_frames > 0):
                 seg_num = encode_count // frames_per_segment
                 log.info(
                     f"Encoding segment {seg_num} | "
@@ -192,6 +218,7 @@ def run_pipeline(
                 segment_frames = []
                 segment_regions = []
                 target_frames_this_segment = 0
+                encode_count = 0
 
     except KeyboardInterrupt:
         log.info("Interrupted by user.")
@@ -233,6 +260,12 @@ if __name__ == "__main__":
     parser.add_argument("--output", default="outputs/")
     parser.add_argument("--segment", type=int, default=60, help="Segment duration in seconds")
     parser.add_argument("--method", default="MOG2", choices=["MOG2", "KNN"])
+    parser.add_argument("--mode", default="mode0", choices=["mode0", "mode1"], 
+        help=(
+        "Pipeline mode: "
+        "mode0 = current full-segment pipeline (store all post-warmup frames), "
+        "mode1 = standard event recording (store only frames with detected foreground objects)"),
+    )
     parser.add_argument("--preview", action="store_true")
     parser.add_argument(
         "--warmup",
@@ -252,6 +285,7 @@ if __name__ == "__main__":
         args.output,
         args.segment,
         args.method,
+        args.mode,
         args.preview,
         args.warmup,
     )

@@ -172,6 +172,10 @@ def run_pipeline(
             # degrading quality. Raw numpy arrays are lossless.
             # Buffer frames selectively depending on mode
             
+            
+            valid_modes = {"mode0", "mode1"}
+            if mode not in valid_modes:
+                raise ValueError(f"Invalid mode '{mode}'. Expected one of: {sorted(valid_modes)}")
             # Default Mode
             if(mode == "mode0"):
                 segment_frames.append(frame.copy())

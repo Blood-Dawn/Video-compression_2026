@@ -198,7 +198,7 @@ def run_pipeline(
             # encode_count tracks frames actually buffered for output
             encode_count = len(segment_frames)
 
-            if encode_count > 0 and encode_count % frames_per_segment == 0 and len(segment_frames > 0):
+            if encode_count > 0 and encode_count % frames_per_segment == 0 and len(segment_frames) > 0:
                 seg_num = encode_count // frames_per_segment
                 log.info(
                     f"Encoding segment {seg_num} | "

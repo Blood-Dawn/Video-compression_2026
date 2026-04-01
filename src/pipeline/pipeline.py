@@ -172,6 +172,10 @@ def run_pipeline(
             # degrading quality. Raw numpy arrays are lossless.
             # Buffer frames selectively depending on mode
             
+            
+            valid_modes = {"mode0", "mode1"}
+            if mode not in valid_modes:
+                raise ValueError(f"Invalid mode '{mode}'. Expected one of: {sorted(valid_modes)}")
             # Default Mode
             if(mode == "mode0"):
                 segment_frames.append(frame.copy())
@@ -246,11 +250,11 @@ def run_pipeline(
             )
             log.info(f"Saved final partial segment: {out}")
 
-            if show_preview:
-                cv2.destroyAllWindows()
+        if show_preview:
+            cv2.destroyAllWindows()
 
-            report = encoder.get_storage_report()
-            log.info("Storage report: " + str(report))
+        report = encoder.get_storage_report()
+        log.info("Storage report: " + str(report))
 
 
 if __name__ == "__main__":

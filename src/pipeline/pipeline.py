@@ -202,7 +202,6 @@ def run_pipeline(
         # frames after one or more full segments), encode whatever remains in the
         # in-memory buffers as a final partial segment.
         if len(segment_frames) > 0 and len(segment_regions) > 0:
-            partial_duration_s = len(segment_frames) / fps
             log.info(
                 f"Encoding final partial segment | "
                 f"{len(segment_frames)} frames | "
@@ -219,11 +218,11 @@ def run_pipeline(
             )
             log.info(f"Saved final partial segment: {out}")
 
-            if show_preview:
-                cv2.destroyAllWindows()
+        if show_preview:
+            cv2.destroyAllWindows()
 
-            report = encoder.get_storage_report()
-            log.info("Storage report: " + str(report))
+        report = encoder.get_storage_report()
+        log.info("Storage report: " + str(report))
 
 
 if __name__ == "__main__":

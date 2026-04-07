@@ -5,7 +5,8 @@ Unit tests for src/pipeline/pipeline.py.
 Covers:
   - EOF behavior when the video ends exactly on a full segment boundary
   - No extra final partial-segment encode when zero leftover frames remain
-  - Cleanup/reporting still run on exit (preview cleanup + storage report)
+  - mode1 buffers only frames with detected foreground regions
+  - Storage reporting still runs on exit
 
 These tests use monkeypatch with lightweight dummy classes so they run fast
 and do not depend on real video files, OpenCV capture devices, or FFmpeg.
@@ -96,6 +97,28 @@ class DummyEncoder:
         return {"total_segments": self.call_log["encode_segment"]}
 
 
+class SequenceSubtractor:
+    """
+    Fake BackgroundSubtractor that returns a predefined sequence of region lists.
+
+    This lets tests control exactly which frames count as 'event' frames.
+    """
+    def __init__(self, regions_per_frame, *args, **kwargs):
+        self.regions_per_frame = regions_per_frame
+        self.index = 0
+
+    def apply(self, frame):
+        return np.zeros((frame.shape[0], frame.shape[1]), dtype=np.uint8)
+
+    def get_foreground_regions(self, mask):
+        regions = self.regions_per_frame[self.index]
+        self.index += 1
+        return regions
+
+    def draw_regions(self, frame, regions):
+        return frame
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -113,6 +136,22 @@ def exact_segment_frames():
         rng.integers(0, 256, (16, 16, 3), dtype=np.uint8)
         for _ in range(20)
     ]
+
+
+@pytest.fixture
+def mixed_event_frames():
+    """
+    Six frames total.
+
+    Used to verify that mode1 buffers only frames with detected foreground
+    regions and skips non-event frames.
+    """
+    rng = np.random.default_rng(456)
+    return [
+        rng.integers(0, 256, (16, 16, 3), dtype=np.uint8)
+        for _ in range(6)
+    ]
+
 
 
 # ---------------------------------------------------------------------------
@@ -168,4 +207,89 @@ class TestEOFBoundaryBehavior:
         assert calls["encode_segment"] == 1
 
         # Cleanup/reporting should still run with zero leftover frames.
+        assert calls["get_storage_report"] == 1
+        
+        
+# ---------------------------------------------------------------------------
+# mode1 behavior
+# ---------------------------------------------------------------------------
+
+class TestMode1Behavior:
+    def test_mode1_buffers_only_frames_with_foreground_regions(
+        self, monkeypatch, tmp_path, mixed_event_frames
+    ):
+        """
+        In mode1, run_pipeline() should only buffer frames that have detected
+        foreground regions and skip non-event frames.
+
+        Given six input frames where only three contain regions, the encoder
+        should receive exactly three frames and three bbox entries.
+        """
+        calls = {
+            "encode_segment": 0,
+            "get_storage_report": 0,
+            "encoded_frame_count": None,
+            "encoded_bboxes_count": None,
+        }
+
+        # Event pattern across 6 frames: skip, keep, skip, keep, skip, keep
+        regions_per_frame = [
+            [],
+            [DummyRegion()],
+            [],
+            [DummyRegion()],
+            [],
+            [DummyRegion()],
+        ]
+
+        monkeypatch.setattr(
+            "pipeline.pipeline.FrameSource",
+            lambda *_args, **_kwargs: DummyFrameSource(
+                mixed_event_frames, fps=10.0, width=16, height=16
+            )
+        )
+        monkeypatch.setattr(
+            "pipeline.pipeline.BackgroundSubtractor",
+            lambda *args, **kwargs: SequenceSubtractor(regions_per_frame, *args, **kwargs)
+        )
+        monkeypatch.setattr(
+            "pipeline.pipeline.initialize_database",
+            lambda *_args, **_kwargs: None
+        )
+
+        class RecordingEncoder:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def encode_segment(self, frames, bboxes_per_frame, camera_id, fps):
+                calls["encode_segment"] += 1
+                calls["encoded_frame_count"] = len(frames)
+                calls["encoded_bboxes_count"] = len(bboxes_per_frame)
+                return "dummy_mode1.mp4"
+
+            def get_storage_report(self):
+                calls["get_storage_report"] += 1
+                return {"total_segments": calls["encode_segment"]}
+
+        monkeypatch.setattr(
+            "pipeline.pipeline.ROIEncoder",
+            RecordingEncoder
+        )
+
+        run_pipeline(
+            input_source="dummy.mp4",
+            camera_id="cam_test",
+            output_dir=str(tmp_path),
+            segment_seconds=60,
+            bg_method="MOG2",
+            mode="mode1",
+            show_preview=False,
+            warmup_frames=0,
+        )
+
+        # No full segment boundary is reached, so a single final partial encode
+        # should occur with only the 3 event frames.
+        assert calls["encode_segment"] == 1
+        assert calls["encoded_frame_count"] == 3
+        assert calls["encoded_bboxes_count"] == 3
         assert calls["get_storage_report"] == 1

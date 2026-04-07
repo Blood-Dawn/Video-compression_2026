@@ -106,6 +106,12 @@ def run_pipeline(
         warmup_frames: Frames to feed through the background model before encoding.
                        Overridden by FrameSource.get_warmup_frames() for CDnet sources.
     """
+    # Check valid mode input
+    valid_modes = {"mode0", "mode1"}
+    if mode not in valid_modes:
+        raise ValueError(f"Invalid mode '{mode}'. Expected one of: {sorted(valid_modes)}")
+    
+    
     # Sanitize camera_id to prevent path traversal in output filenames.
     safe_camera_id = _sanitize_camera_id(camera_id)
     if safe_camera_id != camera_id:
@@ -173,11 +179,9 @@ def run_pipeline(
             # Buffer frames selectively depending on mode
             
             
-            valid_modes = {"mode0", "mode1"}
-            if mode not in valid_modes:
-                raise ValueError(f"Invalid mode '{mode}'. Expected one of: {sorted(valid_modes)}")
+            
             # Default Mode
-            if(mode == "mode0"):
+            if mode == "mode0":
                 segment_frames.append(frame.copy())
                 segment_regions.append(regions)
 

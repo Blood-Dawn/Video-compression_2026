@@ -32,6 +32,7 @@ from utils.db import initialize_database                                    # fi
 from utils.frame_source import FrameSource                                  # fix: use FrameSource instead of raw VideoCapture
 from background_subtraction.background_subtraction import BackgroundSubtractor
 from compression.roi_encoder import ROIEncoder
+from pipeline.modes import validate_mode, get_mode_decision
 
 logging.basicConfig(
     level=logging.INFO,
@@ -107,9 +108,7 @@ def run_pipeline(
                        Overridden by FrameSource.get_warmup_frames() for CDnet sources.
     """
     # Check valid mode input
-    valid_modes = {"mode0", "mode1"}
-    if mode not in valid_modes:
-        raise ValueError(f"Invalid mode '{mode}'. Expected one of: {sorted(valid_modes)}")
+    validate_mode(mode)
     
     
     # Sanitize camera_id to prevent path traversal in output filenames.
@@ -180,21 +179,14 @@ def run_pipeline(
             
             
             
-            # Default Mode
-            if mode == "mode0":
+            mode_decision = get_mode_decision(mode, regions)
+            
+            if mode_decision.buffer_frame:
                 segment_frames.append(frame.copy())
                 segment_regions.append(regions)
-
-                if regions:
-                    target_frames_this_segment += 1
-                    
-            # Standard Event Recording
-            # Only buffer frames when motion/foreground regions are detected
-            elif mode == "mode1":
-                if regions:
-                    segment_frames.append(frame.copy())
-                    segment_regions.append(regions)
-                    target_frames_this_segment += 1
+                
+            if mode_decision.target_detected:
+                target_frames_this_segment += 1
 
             if show_preview:
                 vis = subtractor.draw_regions(frame, regions)

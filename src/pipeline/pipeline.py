@@ -197,6 +197,27 @@ def run_pipeline(
         log.info("Interrupted by user.")
     finally:
         src.release()
+
+        # If the video ends before reaching a full segment (short clips or leftover
+        # frames after one or more full segments), encode whatever remains in the
+        # in-memory buffers as a final partial segment.
+        if len(segment_frames) > 0 and len(segment_regions) > 0:
+            log.info(
+                f"Encoding final partial segment | "
+                f"{len(segment_frames)} frames | "
+                f"targets in {target_frames_this_segment}/{len(segment_frames)} frames"
+            )
+            out = encoder.encode_segment(
+                frames=segment_frames,
+                bboxes_per_frame=[
+                    [r.to_tuple() for r in regions]
+                    for regions in segment_regions
+                ],
+                camera_id=camera_id,
+                fps=fps,
+            )
+            log.info(f"Saved final partial segment: {out}")
+
         if show_preview:
             cv2.destroyAllWindows()
 

@@ -110,19 +110,30 @@ def run_all_demos(
         "camera_id": camera_id,
         "run_suffix": suffix,
         "modes": modes,
-        "views": views,
         "stitched_dir": str(stitched_dir),
         "outputs": {},
     }
 
     for mode in modes:
-        manifest["outputs"][mode] = str(stitched_outputs[mode])
+        manifest["outputs"][mode] = {}
+        for view in views:
+            manifest["outputs"][mode][view] = str(stitched_outputs[(mode, view)])
 
     manifest_path = stitched_dir / "manifest.json"
     with open(manifest_path, "w") as f:
         json.dump(manifest, f, indent=2)
 
     print(f"\n[INFO] Manifest written to: {manifest_path}")
+
+    split_screen_path: Path | None = None
+
+    if len(modes) > 1:
+        cmd = [
+            "python", "-m", "src.demo.split_screen",
+            "--manifest", str(manifest_path),
+        ]
+        subprocess.run(cmd, check=True)
+        split_screen_path = stitched_dir / "demo_splitscreen.mp4"
 
     print("\n=== Demo Run Complete ===\n")
     print("Generated outputs:\n")
@@ -136,7 +147,10 @@ def run_all_demos(
             path = stitched_outputs[(mode, view)]
             print(f"  {path.name}")
 
-    print(f"  manifest.json")
+    if split_screen_path is not None:
+        print(f"  {split_screen_path.name}")
+
+    print("  manifest.json")
     print("\n=========================\n")
 
 
@@ -158,7 +172,7 @@ if __name__ == "__main__":
         "--view",
         nargs="+",
         choices=["standard", "roi_tint"],
-        default="standard",
+        default=["standard"],
         help="Which stitched demo views to render",
     )
 

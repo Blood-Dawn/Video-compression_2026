@@ -115,7 +115,7 @@ All components must be open source, royalty-free, and run on CPU-only hardware. 
 
 - [ ] Implement Mode 2: store one background keyframe + per-frame object-bbox patches
 - [ ] Implement Mode 3: object-only forensic mode (padded bbox crop, no background)
-- [ ] Add `--mode` argument to pipeline.py CLI (mode0 / mode1 / mode2 / mode3)  *(mode0 and mode1 already done)*
+- [x] Add `--mode` argument to pipeline.py CLI (mode0 / mode1 / mode2 / mode3)  *(mode0 and mode1 already done)*  — KD
 - [ ] Add demo/concat mode: stitch output segments into a single playback file
 - [ ] Write unit tests for Mode 2 output structure (keyframe + patches)
 - [ ] Write unit tests for Mode 3 output (bbox crop, correct padding)
@@ -129,13 +129,13 @@ All components must be open source, royalty-free, and run on CPU-only hardware. 
 
 **Feature Branch:** `feature/enhancement-superresolution`
 
-- [ ] Research Real-ESRGAN CPU inference setup; document model download steps in `DEV.md`
-- [ ] Implement `Enhancer.upscale_frame(frame, scale)` using Real-ESRGAN in CPU mode
-- [ ] Implement `Enhancer.upscale_roi(frame, bbox)` — upscale only bounding region, paste back
-- [ ] Integrate enhancement into pipeline as optional post-offload pass (`--enhance` flag)
+- [x] Research Real-ESRGAN CPU inference setup; document model download steps in `DEV.md`  — KD
+- [x] Implement `Enhancer.upscale_frame(frame, scale)` using Real-ESRGAN in CPU mode  — KD
+- [x] Implement `Enhancer.upscale_roi(frame, bbox)` — upscale only bounding region, paste back  — KD
+- [x] Integrate enhancement into pipeline as optional post-offload pass (`--enhance` flag)  — KD
 - [ ] Benchmark enhancement processing time per frame on CPU hardware (target: Raspberry Pi)
-- [ ] Write unit tests for Enhancer: output dimensions, bbox validation, `is_available()`
-- [ ] Research AI-based compression alternative (e.g. YOLOv8 detection, neural video codecs); document tradeoffs vs current MOG2 pipeline
+- [x] Write unit tests for Enhancer: output dimensions, bbox validation, `is_available()`  — KD
+- [x] Research AI-based compression alternative (e.g. YOLOv8 detection, neural video codecs); document tradeoffs vs current MOG2 pipeline  — KD
 
 **Acceptance criteria:** `upscale_frame()` returns image at 2x or 4x target resolution. PSNR on enhanced output is measurably higher than non-enhanced compressed output. CPU benchmarks documented.
 
@@ -161,8 +161,8 @@ All components must be open source, royalty-free, and run on CPU-only hardware. 
 
 **Feature Branch:** `feature/data-integrity`
 
-- [ ] Build automated frame-level comparison test: decode compressed output and compare subject ROI pixel data against original
-- [ ] Document pass/fail criteria (government is risk-intolerant; even 5% foreground data loss is unacceptable)
+- [x] Build automated frame-level comparison test: decode compressed output and compare subject ROI pixel data against original  — KD
+- [x] Document pass/fail criteria (government is risk-intolerant; even 5% foreground data loss is unacceptable)  — KD
 - [ ] Integrate integrity check into CI test suite (`tests/test_data_integrity.py`)
 
 **Acceptance criteria:** Test passes on all four modes with zero foreground pixel data loss above threshold.
@@ -203,7 +203,7 @@ All components must be open source, royalty-free, and run on CPU-only hardware. 
 
 **Feature Branch:** `feature/encryption`
 
-- [ ] Implement AES-256 encryption for compressed output video files (`--encrypt` flag)
+- [x] Implement AES-256 encryption for compressed output video files (`--encrypt` flag)  — KD
 - [ ] Use Python `cryptography` library; store IV alongside segment record in DB
 - [ ] Add password-protected export for incident clips (AES-encrypted zip or container)
 - [ ] Write unit tests: encrypt/decrypt round-trip, IV uniqueness per segment
@@ -255,7 +255,7 @@ All components must be open source, royalty-free, and run on CPU-only hardware. 
 
 - [ ] Confirm pipeline runs on USB or IP camera input in real time (`--input 0`)
 - [ ] Verify `--preview` flag shows live foreground mask alongside original feed
-- [ ] Create `demo.sh` — one-click pipeline launch with sensible defaults, no args required
+- [x] Create `demo.sh` — one-click pipeline launch with sensible defaults, no args required  — KD
 - [ ] Test demo on laptop with no GPU (simulate target hardware)
 - [ ] Prepare 2-minute live demo segment: feed → mask → Mode 0 output → Mode 1 output → storage stats → metadata query
 

@@ -31,3 +31,4 @@ pytest-cov>=4.1.0
 # Uncomment when enhancement module is ready
 # basicsr>=1.4.2
 # realesrgan>=0.3.0
+flask>=3.0

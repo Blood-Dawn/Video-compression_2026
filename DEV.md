@@ -573,4 +573,174 @@ pytest tests/ -v
 
 ---
 
-*Last updated: March 2026. If you find anything in this guide that is wrong or out of date, update it and open a PR.*
+## Enhancement Module Setup
+
+The `Enhancer` class (`src/enhancement/enhancer.py`) supports two backends. Choose the one that fits your use case.
+
+### Backend 1 — OpenCV dnn_superres (Recommended for CPU batch processing)
+
+Fast, lightweight, and easy to set up. Best for bulk post-offload processing.
+
+**Step 1 — Install opencv-contrib-python**
+```bash
+pip install opencv-contrib-python
+```
+If you already have `opencv-python` installed, uninstall it first to avoid conflicts:
+```bash
+pip uninstall opencv-python
+pip install opencv-contrib-python
+```
+
+**Step 2 — Download model weights**
+
+Create the `models/` directory in the project root (already gitignored):
+```bash
+mkdir -p models
+```
+
+Download your chosen model. ESPCN x4 is the fastest on CPU:
+```bash
+# ESPCN x2 and x4 (fastest — ~1-5 ms/frame)
+curl -L "https://github.com/opencv/opencv_contrib/raw/master/modules/dnn_superres/models/ESPCN_x2.pb" -o models/ESPCN_x2.pb
+curl -L "https://github.com/opencv/opencv_contrib/raw/master/modules/dnn_superres/models/ESPCN_x4.pb" -o models/ESPCN_x4.pb
+
+# FSRCNN x2 and x4 (slightly better quality, ~5-15 ms/frame)
+curl -L "https://github.com/opencv/opencv_contrib/raw/master/modules/dnn_superres/models/FSRCNN_x2.pb" -o models/FSRCNN_x2.pb
+curl -L "https://github.com/opencv/opencv_contrib/raw/master/modules/dnn_superres/models/FSRCNN_x4.pb" -o models/FSRCNN_x4.pb
+```
+
+**Step 3 — Verify**
+```python
+from src.enhancement.enhancer import Enhancer
+e = Enhancer(scale=4, model="espcn")
+print(e.is_available())  # True if model file found and cv2.dnn_superres present
+print(repr(e))
+```
+
+**Expected output:**
+```
+True
+Enhancer(model='espcn', scale=4, device='cpu', backend='dnnsuperres', available=True)
+```
+
+---
+
+### Backend 2 — Real-ESRGAN (Best quality, slower — for high-value forensic targets)
+
+Produces the best visual quality. Use for specific frames of interest (faces, license plates).
+CPU inference only — no CUDA required. Accepts `--fp32` mode automatically.
+
+**Hallucination warning:** Real-ESRGAN (GAN-trained) may fabricate plausible details that are not in the original footage. For forensic applications, use `RealESRNet_x4plus` instead — it uses MSE loss and blurs rather than hallucinating.
+
+**Step 1 — Install Real-ESRGAN**
+```bash
+pip install realesrgan basicsr facexlib gfpgan
+```
+
+**Step 2 — Download model weights**
+```bash
+mkdir -p models
+
+# General purpose (best quality, GAN-trained — slight hallucination risk)
+curl -L "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth" \
+     -o models/RealESRGAN_x4plus.pth
+
+# MSE-trained variant (fewer hallucinations — preferred for forensic use)
+curl -L "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRNet_x4plus.pth" \
+     -o models/RealESRNet_x4plus.pth
+
+# Lighter general model (faster than x4plus, good quality)
+curl -L "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesr-general-x4v3.pth" \
+     -o models/realesr-general-x4v3.pth
+```
+
+**Step 3 — Verify**
+```python
+from src.enhancement.enhancer import Enhancer
+e = Enhancer(scale=4, model="realesrgan")
+print(e.is_available())  # True if .pth file found and realesrgan package installed
+```
+
+**CPU performance reference (approximate, varies by hardware):**
+
+| Model | 480p frame | 1080p frame |
+|---|---|---|
+| ESPCN x4 | ~3 ms | ~15 ms |
+| FSRCNN x4 | ~10 ms | ~45 ms |
+| Real-ESRGAN x4 (CPU fp32) | ~300 ms | ~1200 ms |
+| RealESRNet x4 (CPU fp32) | ~280 ms | ~1100 ms |
+
+For bulk post-offload processing of an hour of footage: ESPCN is practical; Real-ESRGAN is only practical for targeted, high-value clips.
+
+---
+
+### Running enhancement in the pipeline
+
+Pass `--enhance` to the pipeline to enable frame-level enhancement before encoding:
+
+```bash
+python src/pipeline/pipeline.py \
+  --input data/samples/test_clip.mp4 \
+  --camera-id cam_01 \
+  --output outputs/ \
+  --enhance \
+  --enhance-model espcn \
+  --enhance-scale 4
+```
+
+If the model is not available, `--enhance` logs a warning and the pipeline continues without enhancement. It never hard-fails on a missing model.
+
+---
+
+## Encryption Setup
+
+The pipeline supports AES-256-CBC encryption of all output video segments via `--encrypt`.
+
+**Step 1 — Install the cryptography library**
+```bash
+pip install cryptography
+```
+
+This is a pure-Python FIPS 140-2 validated implementation. No system dependencies.
+
+**Step 2 — Run the pipeline with encryption**
+
+Using a password (PBKDF2-HMAC-SHA256 key derivation, 600,000 iterations):
+```bash
+python src/pipeline/pipeline.py \
+  --input data/samples/test_clip.mp4 \
+  --camera-id cam_01 \
+  --output outputs/ \
+  --encrypt \
+  --password "your-secure-passphrase"
+```
+
+Using a raw key file (32 bytes = 256-bit key):
+```bash
+# Generate a key file once and store it securely
+python -c "import os; open('secret.key', 'wb').write(os.urandom(32))"
+
+python src/pipeline/pipeline.py \
+  --input data/samples/test_clip.mp4 \
+  --camera-id cam_01 \
+  --output outputs/ \
+  --encrypt \
+  --key-file secret.key
+```
+
+**Step 3 — Decrypt a segment**
+```python
+from src.utils.encryption import decrypt_file
+decrypt_file("outputs/cam_01_20260406_120000.mp4.enc", password="your-secure-passphrase")
+# Writes: outputs/cam_01_20260406_120000.mp4
+```
+
+**Security notes:**
+- A unique random IV is generated per segment. Two encrypted files with the same password are not identical.
+- The IV is stored in the first 16 bytes of the `.enc` file. The salt (for password-based derivation) is in bytes 16–32.
+- Never commit key files or passwords to git. Add `*.key` to `.gitignore`.
+- The original `.mp4` is deleted after encryption; only the `.mp4.enc` remains.
+
+---
+
+*Last updated: April 2026 — Bloodawn (KheivenD). If you find anything wrong or out of date, update it and open a PR.*

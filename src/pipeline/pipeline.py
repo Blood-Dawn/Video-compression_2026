@@ -23,6 +23,7 @@ import re
 import sys
 import numpy as np
 from pathlib import Path
+from typing import Optional
 
 # sys.path must be set before any local imports so this module can be run
 # directly (python src/pipeline/pipeline.py) or imported from the project root.
@@ -30,8 +31,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.db import initialize_database                                    # fix: was 'from src.utils.db'
 from utils.frame_source import FrameSource                                  # fix: use FrameSource instead of raw VideoCapture
+from utils.encryption import encrypt_file, _CRYPTO_AVAILABLE
 from background_subtraction.background_subtraction import BackgroundSubtractor
 from compression.roi_encoder import ROIEncoder
+from enhancement.enhancer import Enhancer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -59,6 +62,14 @@ def run_pipeline(
     bg_method: str = "MOG2",
     show_preview: bool = False,
     warmup_frames: int = 120,
+    mode: str = "mode0",
+    enhance: bool = False,
+    enhance_model: str = "espcn",
+    enhance_scale: int = 4,
+    encrypt: bool = False,
+    encrypt_password: Optional[str] = None,
+    encrypt_key_file: Optional[str] = None,
+    stop_event=None,
 ):
     """
     Main pipeline loop.
@@ -83,6 +94,13 @@ def run_pipeline(
     FFmpeg via stdin. This avoids the lossy XVID intermediate AVI that was used
     previously, which degraded quality before the final encode step.
 
+    MODES:
+    mode0 (default): All post-warmup frames are buffered and encoded. Baseline
+                     H.264 dual-CRF ROI encoding on every frame.
+    mode1:           Frame gating. Only frames with detected foreground activity
+                     are buffered. Segments are formed from active frames only,
+                     reducing storage when the scene is mostly static.
+
     Args:
         input_source: Camera index (int) or video file / CDnet scene path (str).
         camera_id: Identifier for this camera. Used in output filenames and the
@@ -93,7 +111,62 @@ def run_pipeline(
         show_preview: Show live bounding-box preview. Disable on headless servers.
         warmup_frames: Frames to feed through the background model before encoding.
                        Overridden by FrameSource.get_warmup_frames() for CDnet sources.
+        mode: Compression mode. "mode0" encodes all frames; "mode1" gates on
+              foreground activity (event clip / frame gating).
+        enhance: If True, apply super-resolution to segment frames before
+                 encoding. Uses the Enhancer class. Silently skipped when the
+                 requested model is not available (missing weights / package).
+        enhance_model: SR model backend. "espcn" or "fsrcnn" (fast CPU) or
+                       "realesrgan" / "realesrnet" (high quality, slow CPU).
+        enhance_scale: Upscale factor passed to Enhancer. Typically 2 or 4.
+        encrypt: If True, encrypt each output segment with AES-256-CBC after
+                 encoding. Requires `encrypt_password` or `encrypt_key_file`.
+                 The plaintext .mp4 is deleted; only the .mp4.enc file is kept.
+                 Requires the `cryptography` package.
+        encrypt_password: Passphrase for AES key derivation (PBKDF2-HMAC-SHA256,
+                          600,000 iterations). Mutually exclusive with
+                          encrypt_key_file.
+        encrypt_key_file: Path to a file containing a raw 32-byte AES-256 key.
+                          Mutually exclusive with encrypt_password.
     """
+    # Validate mode at function entry — not inside the per-frame loop.
+    valid_modes = {"mode0", "mode1"}
+    if mode not in valid_modes:
+        raise ValueError(f"Invalid mode {mode!r}. Choose from {sorted(valid_modes)}.")
+
+    # Validate and prepare encryption settings.
+    # Resolve the raw key from a key file early so file-not-found errors surface
+    # immediately rather than after the first segment is encoded.
+    _enc_key: Optional[bytes] = None
+    if encrypt:
+        if not _CRYPTO_AVAILABLE:
+            raise RuntimeError(
+                "--encrypt requires the `cryptography` package. "
+                "Install with:  pip install cryptography"
+            )
+        if encrypt_password is None and encrypt_key_file is None:
+            raise ValueError(
+                "--encrypt requires either --password or --key-file."
+            )
+        if encrypt_password is not None and encrypt_key_file is not None:
+            raise ValueError(
+                "Provide --password or --key-file, not both."
+            )
+        if encrypt_key_file is not None:
+            key_path = Path(encrypt_key_file)
+            if not key_path.exists():
+                raise FileNotFoundError(f"Key file not found: {key_path}")
+            _enc_key = key_path.read_bytes()
+            if len(_enc_key) != 32:
+                raise ValueError(
+                    f"Key file must contain exactly 32 bytes (AES-256); "
+                    f"got {len(_enc_key)} bytes."
+                )
+        log.info(
+            f"Encryption enabled: AES-256-CBC | "
+            f"key mode: {'key-file' if encrypt_key_file else 'password/PBKDF2'}"
+        )
+
     # Sanitize camera_id to prevent path traversal in output filenames.
     safe_camera_id = _sanitize_camera_id(camera_id)
     if safe_camera_id != camera_id:
@@ -128,6 +201,21 @@ def run_pipeline(
     encoder = ROIEncoder(output_dir=output_dir, db_path=db_path)
     initialize_database(db_path)   # fix: explicit path, consistent with encoder
 
+    # Optional super-resolution enhancement pass.
+    # Initialized here so the model is loaded once, not once per segment.
+    enhancer = None
+    if enhance:
+        enhancer = Enhancer(scale=enhance_scale, model=enhance_model)
+        if enhancer.is_available():
+            log.info(f"Enhancement enabled: {repr(enhancer)}")
+        else:
+            log.warning(
+                f"Enhancement requested (--enhance) but model '{enhance_model}' "
+                "is not available. Pipeline will run without enhancement. "
+                "See DEV.md → Enhancement Module Setup for install instructions."
+            )
+            enhancer = None  # treat as disabled so segment loop logic is simple
+
     segment_frames: list = []       # in-memory frame buffer (numpy arrays)
     segment_regions: list = []
     frame_count = 0
@@ -138,6 +226,9 @@ def run_pipeline(
 
     try:
         while True:
+            if stop_event is not None and stop_event.is_set():
+                log.info("Stop signal received. Flushing final segment.")
+                break
             ret, frame = src.read()
             if not ret:
                 log.info("End of source. Flushing final segment.")
@@ -157,8 +248,17 @@ def run_pipeline(
             # Buffer frames in memory — no lossy intermediate file.
             # Previously XVID AVI was used, which compressed frames before FFmpeg,
             # degrading quality. Raw numpy arrays are lossless.
-            segment_frames.append(frame.copy())
-            segment_regions.append(regions)
+            #
+            # mode0: buffer every frame regardless of activity.
+            # mode1: frame gating — only buffer frames with foreground regions,
+            #        so segments contain only active frames and skip idle frames.
+            if mode == "mode0":
+                segment_frames.append(frame.copy())
+                segment_regions.append(regions)
+            elif mode == "mode1":
+                if regions:
+                    segment_frames.append(frame.copy())
+                    segment_regions.append(regions)
 
             if regions:
                 target_frames_this_segment += 1
@@ -170,7 +270,7 @@ def run_pipeline(
                     break
 
             frame_count += 1
-            encode_count += 1
+            encode_count = len(segment_frames)
 
             if encode_count > 0 and encode_count % frames_per_segment == 0:
                 seg_num = encode_count // frames_per_segment
@@ -178,8 +278,12 @@ def run_pipeline(
                     f"Encoding segment {seg_num} | "
                     f"targets in {target_frames_this_segment}/{frames_per_segment} frames"
                 )
+                frames_to_encode = segment_frames
+                if enhancer is not None:
+                    log.info(f"Enhancing {len(segment_frames)} frames (scale x{enhance_scale})...")
+                    frames_to_encode = enhancer.enhance_batch(segment_frames)
                 out = encoder.encode_segment(
-                    frames=segment_frames,
+                    frames=frames_to_encode,
                     bboxes_per_frame=[
                         [r.to_tuple() for r in regions]
                         for regions in segment_regions
@@ -187,16 +291,61 @@ def run_pipeline(
                     camera_id=camera_id,
                     fps=fps,
                 )
-                log.info(f"Saved: {out}")
+                if encrypt:
+                    enc_out = encrypt_file(
+                        out,
+                        password=encrypt_password,
+                        key=_enc_key,
+                        delete_original=True,
+                    )
+                    log.info(f"Saved (encrypted): {enc_out}")
+                else:
+                    log.info(f"Saved: {out}")
 
                 segment_frames = []
                 segment_regions = []
                 target_frames_this_segment = 0
+                encode_count = 0
 
     except KeyboardInterrupt:
         log.info("Interrupted by user.")
     finally:
         src.release()
+
+        # Flush any frames that didn't fill a complete segment.
+        # This handles two cases: short clips shorter than one full segment,
+        # and leftover frames after the last full segment was encoded.
+        if len(segment_frames) > 0 and len(segment_regions) > 0:
+            log.info(
+                f"Encoding final partial segment | "
+                f"{len(segment_frames)} frames | "
+                f"targets in {target_frames_this_segment}/{len(segment_frames)} frames"
+            )
+            frames_to_encode = segment_frames
+            if enhancer is not None:
+                log.info(f"Enhancing {len(segment_frames)} frames (final segment)...")
+                frames_to_encode = enhancer.enhance_batch(segment_frames)
+            out = encoder.encode_segment(
+                frames=frames_to_encode,
+                bboxes_per_frame=[
+                    [r.to_tuple() for r in regions]
+                    for regions in segment_regions
+                ],
+                camera_id=camera_id,
+                fps=fps,
+            )
+            if encrypt:
+                enc_out = encrypt_file(
+                    out,
+                    password=encrypt_password,
+                    key=_enc_key,
+                    delete_original=True,
+                )
+                log.info(f"Saved final partial segment (encrypted): {enc_out}")
+            else:
+                log.info(f"Saved final partial segment: {out}")
+
+        # These always run on exit regardless of whether a partial segment existed.
         if show_preview:
             cv2.destroyAllWindows()
 
@@ -218,6 +367,56 @@ if __name__ == "__main__":
         default=120,
         help="Warmup frames before encoding starts. Overridden by CDnet temporalROI if available."
     )
+    parser.add_argument(
+        "--mode",
+        default="mode0",
+        choices=["mode0", "mode1"],
+        help="Compression mode. mode0: encode all frames. mode1: frame gating (active frames only)."
+    )
+    parser.add_argument(
+        "--enhance",
+        action="store_true",
+        help="Apply super-resolution to frames before encoding. Requires model weights in models/. "
+             "See DEV.md for setup. Silently skipped if model is unavailable."
+    )
+    parser.add_argument(
+        "--enhance-model",
+        default="espcn",
+        choices=["espcn", "fsrcnn", "edsr", "lapsrn", "realesrgan", "realesrnet", "realesr-general"],
+        help="SR model to use with --enhance. espcn/fsrcnn are fast CPU options; "
+             "realesrgan/realesrnet are highest quality but much slower."
+    )
+    parser.add_argument(
+        "--enhance-scale",
+        type=int,
+        default=4,
+        choices=[2, 4, 8],
+        help="Upscale factor for --enhance. Default 4x."
+    )
+
+    # ── Encryption arguments ───────────────────────────────────────────────
+    parser.add_argument(
+        "--encrypt",
+        action="store_true",
+        help="Encrypt each output segment with AES-256-CBC after encoding. "
+             "The plaintext .mp4 is deleted; only the .mp4.enc file is kept. "
+             "Requires --password or --key-file. "
+             "Requires:  pip install cryptography"
+    )
+    enc_key_group = parser.add_mutually_exclusive_group()
+    enc_key_group.add_argument(
+        "--password",
+        default=None,
+        help="Passphrase for AES key derivation (PBKDF2-HMAC-SHA256, 600k iters). "
+             "Used with --encrypt."
+    )
+    enc_key_group.add_argument(
+        "--key-file",
+        default=None,
+        help="Path to a file containing a raw 32-byte AES-256 key. "
+             "Used with --encrypt. Generate with: python -c "
+             "\"import os; open('camera.key','wb').write(os.urandom(32))\""
+    )
     args = parser.parse_args()
 
     input_src = args.input
@@ -232,4 +431,11 @@ if __name__ == "__main__":
         args.method,
         args.preview,
         args.warmup,
+        args.mode,
+        enhance=args.enhance,
+        enhance_model=args.enhance_model,
+        enhance_scale=args.enhance_scale,
+        encrypt=args.encrypt,
+        encrypt_password=args.password,
+        encrypt_key_file=args.key_file,
     )

@@ -1,3 +1,60 @@
+"""
+demo.py
+
+Renders annotated demo videos from pipeline outputs.
+
+This script takes:
+- metadata.db (segment index + file paths)
+- JSONL metadata (frame-level ROI + timestamps)
+
+and reconstructs a clean, human-readable video showing:
+- ROI bounding boxes
+- Optional ROI tinting
+- Time, mode, and segment labels
+- Frame skipping visualization (for sparse modes like mode1)
+
+------------------------------------------------------------
+WHAT THIS DOES:
+
+- Replays compressed segments in chronological order
+- Aligns frames using source timestamps
+- Handles missing frames (mode1) by:
+    - Holding previous frames (small gaps)
+    - Rendering skip cards (large gaps)
+- Overlays useful debug/demo information
+
+------------------------------------------------------------
+USAGE:
+
+Basic:
+    python -m src.demo.demo \
+        --db outputs/demo_mode0/metadata.db \
+        --metadata outputs/demo_mode0/cam_test_mode0_demo_frames.jsonl \
+        --output outputs/demos_stitched/mode0_demo.mp4
+
+ROI-tinted view:
+    python -m src.demo.demo \
+        --db outputs/demo_mode0/metadata.db \
+        --metadata outputs/demo_mode0/cam_test_mode0_demo_frames.jsonl \
+        --output outputs/demos_stitched/mode0_demo_roi.mp4 \
+        --view roi_tint
+
+Disable bounding boxes:
+    python -m src.demo.demo \
+        --db ... \
+        --metadata ... \
+        --output ... \
+        --no-boxes
+
+------------------------------------------------------------
+NOTES:
+
+- This does NOT recompress video — it only reads existing segments.
+- Frame timing is reconstructed from source timestamps.
+- Designed for demo/visualization, not benchmarking.
+- Benchmarking should use raw segment sizes from metadata.db instead.
+"""
+
 from __future__ import annotations
 
 import argparse

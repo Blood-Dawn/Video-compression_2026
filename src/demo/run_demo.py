@@ -1,19 +1,74 @@
+"""
+run_demo.py
+
+High-level demo orchestration script for the compression pipeline.
+
+This script automates:
+1. Running the pipeline across multiple modes (mode0, mode1, etc.)
+2. Rendering annotated demo videos for each mode
+3. Generating a split-screen comparison video
+4. Producing a manifest of all outputs
+
+------------------------------------------------------------
+USAGE:
+
+Basic: runs all modes by default
+    python -m src.demo.run_demo \
+        --input footage/test_clip.mp4 \
+        --output outputs/ \
+        --camera-id cam_test
+
+Multiple modes: select which modes to compare
+    python -m src.demo.run_demo \
+        --input footage/test_clip.mp4 \
+        --output outputs/ \
+        --camera-id cam_test \
+        --modes mode0 mode1 mode2
+
+With ROI-tinted view:
+    python -m src.demo.run_demo \
+        --input footage/test_clip.mp4 \
+        --output outputs/ \
+        --camera-id cam_test \
+        --view roi_tint
+
+------------------------------------------------------------
+OUTPUT STRUCTURE:
+
+outputs/
+├── demo_mode0/
+├── demo_mode1/
+├── demos_stitched/
+│   ├── mode0_demo.mp4
+│   ├── mode1_demo.mp4
+│   ├── demo_splitscreen.mp4
+│   └── manifest.json
+
+------------------------------------------------------------
+NOTES:
+
+- Each mode runs independently using the same input.
+- Demo videos are rendered from pipeline metadata (NOT reprocessed frames).
+- Split-screen is automatically generated for 2–4 modes.
+- If only one mode is used, split-screen is skipped.
+- File size comparisons for benchmarking should be computed from segment metadata (metadata.db),
+  not from stitched demo outputs. Stitched videos include overlays and are not
+  representative of compression efficiency.
+"""
+
 from __future__ import annotations
 
 import argparse
 import json
-import subprocess
-import sys
 from pathlib import Path
-from typing import Sequence
+
+from src.demo.demo import render_demo
+from src.demo.split_screen import build_split_screen_from_manifest
+from src.pipeline.pipeline import run_pipeline
 
 
 ALLOWED_MODES = {"mode0", "mode1", "mode2", "mode3"}
 ALLOWED_VIEWS = {"standard", "roi_tint"}
-
-
-def run_subprocess(cmd: Sequence[str]) -> None:
-    subprocess.run(list(cmd), check=True, shell=False)
 
 
 def validate_mode(mode: str) -> str:
@@ -65,36 +120,34 @@ def run_all_demos(
     no_boxes: bool = False,
 ):
     input_path = str(Path(input_path).resolve())
-    output_root = Path(output_root).resolve()
-    output_root.mkdir(parents=True, exist_ok=True)
+    output_root_path = Path(output_root).resolve()
+    output_root_path.mkdir(parents=True, exist_ok=True)
 
     modes = [validate_mode(mode) for mode in modes]
     views = [validate_view(view) for view in views]
 
-    suffix = get_next_run_suffix(output_root, modes)
+    suffix = get_next_run_suffix(output_root_path, modes)
 
-    print(f"\n=== Starting demo run (suffix='{suffix or 'base'}') ===\n")
+    print(f"\n=== Starting demo run (suffix='{suffix or 'base'}') ===")
 
     mode_output_dirs: dict[str, Path] = {}
 
     for mode in modes:
-        mode_dir = (output_root / f"demo_{mode}{suffix}").resolve()
+        mode_dir = (output_root_path / f"demo_{mode}{suffix}").resolve()
         mode_output_dirs[mode] = mode_dir
 
-        print(f"[RUN] Pipeline for {mode}")
+        print(f"\n[RUN] Pipeline for {mode}")
         print(f"Output dir: {mode_dir}")
 
-        cmd = [
-            sys.executable, "-m", "src.pipeline.pipeline",
-            "--input", input_path,
-            "--output", str(mode_dir),
-            "--camera-id", camera_id,
-            "--mode", mode,
-            "--demo",
-        ]
-        run_subprocess(cmd)
+        run_pipeline(
+            input_source=input_path,
+            camera_id=camera_id,
+            output_dir=str(mode_dir),
+            mode=mode,
+            demo=True,
+        )
 
-    stitched_dir = (output_root / f"demos_stitched{suffix}").resolve()
+    stitched_dir = (output_root_path / f"demos_stitched{suffix}").resolve()
     stitched_dir.mkdir(parents=True, exist_ok=True)
 
     stitched_outputs: dict[tuple[str, str], Path] = {}
@@ -116,18 +169,15 @@ def run_all_demos(
             print(f"JSONL: {jsonl_path}")
             print(f"Output: {output_video}")
 
-            cmd = [
-                sys.executable, "-m", "src.demo.demo",
-                "--db", str(db_path),
-                "--metadata", str(jsonl_path),
-                "--output", str(output_video),
-                "--view", view,
-            ]
+            render_demo(
+                db_path=str(db_path),
+                metadata_path=str(jsonl_path),
+                output_path=str(output_video),
+                view=view,
+                draw_boxes=not no_boxes,
+            )
 
-            if no_boxes:
-                cmd.append("--no-boxes")
-
-            run_subprocess(cmd)
+            print(f"Saved demo video: {output_video}")
             stitched_outputs[(mode, view)] = output_video
 
     manifest = {
@@ -151,14 +201,8 @@ def run_all_demos(
     print(f"\n[INFO] Manifest written to: {manifest_path}")
 
     split_screen_path: Path | None = None
-
     if len(modes) > 1:
-        cmd = [
-            sys.executable, "-m", "src.demo.split_screen",
-            "--manifest", str(manifest_path),
-        ]
-        run_subprocess(cmd)
-        split_screen_path = stitched_dir / "demo_splitscreen.mp4"
+        split_screen_path = build_split_screen_from_manifest(manifest_path)
 
     print("\n=== Demo Run Complete ===\n")
     print("Generated outputs:\n")

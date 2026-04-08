@@ -1,9 +1,31 @@
 from __future__ import annotations
 
 import argparse
-import subprocess
-from pathlib import Path
 import json
+import subprocess
+import sys
+from pathlib import Path
+from typing import Sequence
+
+
+ALLOWED_MODES = {"mode0", "mode1", "mode2", "mode3"}
+ALLOWED_VIEWS = {"standard", "roi_tint"}
+
+
+def run_subprocess(cmd: Sequence[str]) -> None:
+    subprocess.run(list(cmd), check=True, shell=False)
+
+
+def validate_mode(mode: str) -> str:
+    if mode not in ALLOWED_MODES:
+        raise ValueError(f"Unsupported mode: {mode}")
+    return mode
+
+
+def validate_view(view: str) -> str:
+    if view not in ALLOWED_VIEWS:
+        raise ValueError(f"Unsupported view: {view}")
+    return view
 
 
 def get_next_run_suffix(output_root: Path, modes: list[str]) -> str:
@@ -42,8 +64,12 @@ def run_all_demos(
     views: list[str],
     no_boxes: bool = False,
 ):
-    output_root = Path(output_root)
+    input_path = str(Path(input_path).resolve())
+    output_root = Path(output_root).resolve()
     output_root.mkdir(parents=True, exist_ok=True)
+
+    modes = [validate_mode(mode) for mode in modes]
+    views = [validate_view(view) for view in views]
 
     suffix = get_next_run_suffix(output_root, modes)
 
@@ -52,23 +78,23 @@ def run_all_demos(
     mode_output_dirs: dict[str, Path] = {}
 
     for mode in modes:
-        mode_dir = output_root / f"demo_{mode}{suffix}"
+        mode_dir = (output_root / f"demo_{mode}{suffix}").resolve()
         mode_output_dirs[mode] = mode_dir
 
         print(f"[RUN] Pipeline for {mode}")
         print(f"Output dir: {mode_dir}")
 
         cmd = [
-            "python", "-m", "src.pipeline.pipeline",
+            sys.executable, "-m", "src.pipeline.pipeline",
             "--input", input_path,
             "--output", str(mode_dir),
             "--camera-id", camera_id,
             "--mode", mode,
             "--demo",
         ]
-        subprocess.run(cmd, check=True)
+        run_subprocess(cmd)
 
-    stitched_dir = output_root / f"demos_stitched{suffix}"
+    stitched_dir = (output_root / f"demos_stitched{suffix}").resolve()
     stitched_dir.mkdir(parents=True, exist_ok=True)
 
     stitched_outputs: dict[tuple[str, str], Path] = {}
@@ -76,14 +102,14 @@ def run_all_demos(
     for mode in modes:
         mode_dir = mode_output_dirs[mode]
 
-        db_path = mode_dir / "metadata.db"
+        db_path = (mode_dir / "metadata.db").resolve()
         if not db_path.exists():
             raise RuntimeError(f"Missing metadata.db in {mode_dir}")
 
-        jsonl_path = find_jsonl_file(mode_dir, mode)
+        jsonl_path = find_jsonl_file(mode_dir, mode).resolve()
 
         for view in views:
-            output_video = stitched_dir / stitched_name_for_view(mode, view)
+            output_video = (stitched_dir / stitched_name_for_view(mode, view)).resolve()
 
             print(f"\n[RUN] demo.py for {mode} [{view}]")
             print(f"DB: {db_path}")
@@ -91,7 +117,7 @@ def run_all_demos(
             print(f"Output: {output_video}")
 
             cmd = [
-                "python", "-m", "src.demo.demo",
+                sys.executable, "-m", "src.demo.demo",
                 "--db", str(db_path),
                 "--metadata", str(jsonl_path),
                 "--output", str(output_video),
@@ -101,10 +127,9 @@ def run_all_demos(
             if no_boxes:
                 cmd.append("--no-boxes")
 
-            subprocess.run(cmd, check=True)
+            run_subprocess(cmd)
             stitched_outputs[(mode, view)] = output_video
-            
-            
+
     manifest = {
         "input": input_path,
         "camera_id": camera_id,
@@ -119,8 +144,8 @@ def run_all_demos(
         for view in views:
             manifest["outputs"][mode][view] = str(stitched_outputs[(mode, view)])
 
-    manifest_path = stitched_dir / "manifest.json"
-    with open(manifest_path, "w") as f:
+    manifest_path = (stitched_dir / "manifest.json").resolve()
+    with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
 
     print(f"\n[INFO] Manifest written to: {manifest_path}")
@@ -129,10 +154,10 @@ def run_all_demos(
 
     if len(modes) > 1:
         cmd = [
-            "python", "-m", "src.demo.split_screen",
+            sys.executable, "-m", "src.demo.split_screen",
             "--manifest", str(manifest_path),
         ]
-        subprocess.run(cmd, check=True)
+        run_subprocess(cmd)
         split_screen_path = stitched_dir / "demo_splitscreen.mp4"
 
     print("\n=== Demo Run Complete ===\n")
@@ -185,10 +210,10 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     run_all_demos(
-    input_path=args.input,
-    output_root=args.output,
-    camera_id=args.camera_id,
-    modes=args.modes,
-    views=args.view,
-    no_boxes=args.no_boxes,
-)
+        input_path=args.input,
+        output_root=args.output,
+        camera_id=args.camera_id,
+        modes=args.modes,
+        views=args.view,
+        no_boxes=args.no_boxes,
+    )

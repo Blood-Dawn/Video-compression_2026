@@ -184,6 +184,24 @@ All components must be open source, royalty-free, and run on CPU-only hardware. 
 
 ---
 
+### 2.6  —  GUI Dashboard and Operator Controls
+
+**Feature Branch:** `feature/gui-dashboard`
+
+- [x] Create Flask dashboard backend (`src/gui/app.py`) and package scaffold (`src/gui/__init__.py`)  — KD
+- [x] Create launcher (`run_gui.py`) with host/port/no-browser options for local and LAN use  — KD
+- [x] Add API endpoints for start/stop/status/segments/storage/log stream (`/api/*`)  — KD
+- [x] Add SSE live log streaming to dashboard for real-time operator visibility  — KD
+- [x] Implement dashboard layout updates (stats panel, resizable panes, log/segments toggle behavior)  — KD
+- [x] Add one-click demo launcher (`demo.sh`) for repeatable demo startup  — KD
+- [ ] Add GUI regression tests for start/stop and status polling behavior
+- [ ] Add API integration tests for `/api/start`, `/api/stop`, `/api/status`, `/api/segments`, `/api/storage`
+- [ ] Add user guide section in `README.md` with dashboard screenshots and common troubleshooting
+
+**Acceptance criteria:** Dashboard can start/stop pipeline, stream logs, and display live status/segment/storage data without terminal usage.
+
+---
+
 ### Milestone 2 Sign-Off Checklist
 
 - [ ] `pytest tests/ -v` passes with zero failures  —  Verifier: ___

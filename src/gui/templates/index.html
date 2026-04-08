@@ -503,6 +503,28 @@
       flex: 1;
     }
     .segments-panel .panel-header { flex-shrink: 0; }
+    .segments-player {
+      border-top: 1px solid var(--border);
+      padding: 0.6rem 0.75rem 0.75rem;
+      background: var(--surface2);
+      flex-shrink: 0;
+    }
+    .segments-player-label {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      margin-top: 0.4rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .segments-player video {
+      width: 100%;
+      max-height: 220px;
+      background: #000;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
     .table-wrap {
       flex: 1;
       overflow-y: auto;
@@ -898,12 +920,19 @@
                 <th>ROIs</th>
                 <th>Duration</th>
                 <th>Size</th>
+                <th>Play</th>
               </tr>
             </thead>
             <tbody id="segments-tbody">
-              <tr><td colspan="6" class="empty-state">NO SEGMENTS YET</td></tr>
+              <tr><td colspan="7" class="empty-state">NO SEGMENTS YET</td></tr>
             </tbody>
           </table>
+        </div>
+        <div class="segments-player">
+          <video id="segment-player" controls preload="metadata">
+            <source id="segment-player-src" src="" type="video/mp4" />
+          </video>
+          <div id="segment-player-label" class="segments-player-label">No segment selected</div>
         </div>
       </div>
 
@@ -1239,13 +1268,17 @@ async function loadSegments() {
     const data = await res.json();
     const tbody = document.getElementById('segments-tbody');
     if (!data.segments || !data.segments.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-state">NO SEGMENTS YET</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="7" class="empty-state">NO SEGMENTS YET</td></tr>';
       return;
     }
     tbody.innerHTML = data.segments.map(s => {
       const ts = formatTimestamp(s.timestamp);
       const targetClass = s.target_detected ? 'target-yes' : 'target-no';
       const targetText  = s.target_detected ? '▲ YES' : '○ no';
+      const label = `${ts} · ${s.camera_id}`;
+      const playCell = s.playable_url
+        ? `<button class="btn btn-ghost" onclick="playSegment('${escAttr(s.playable_url)}','${escAttr(label)}')">PLAY</button>`
+        : '<span class="target-no">—</span>';
       return `<tr>
         <td>${ts}</td>
         <td>${escHtml(s.camera_id)}</td>
@@ -1253,9 +1286,23 @@ async function loadSegments() {
         <td>${s.roi_count}</td>
         <td>${s.duration_s}s</td>
         <td>${s.file_size_kb} KB</td>
+        <td>${playCell}</td>
       </tr>`;
     }).join('');
   } catch(e) {}
+}
+
+function playSegment(url, label) {
+  const player = document.getElementById('segment-player');
+  const src = document.getElementById('segment-player-src');
+  const text = document.getElementById('segment-player-label');
+
+  src.src = url;
+  player.load();
+  text.textContent = `Selected: ${label}`;
+  player.play().catch(() => {
+    // autoplay may be blocked until user interacts
+  });
 }
 
 // ── UI state helpers ──────────────────────────────────────────
@@ -1315,6 +1362,9 @@ function escHtml(s) {
   return String(s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) {
+  return escHtml(s).replace(/'/g, '&#39;');
 }
 
 // ── Boot ─────────────────────────────────────────────────────

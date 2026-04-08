@@ -29,7 +29,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, render_template, request
+from flask import Flask, Response, jsonify, render_template, request, send_from_directory, abort
 
 # ── path setup ────────────────────────────────────────────────────────────────
 # Allow imports from src/ regardless of working directory
@@ -142,10 +142,10 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
     log.info(f"  Output:  {config.get('output_dir', 'outputs/')}")
     log.info("━" * 60)
 
+    _orig_fs_init = None
+    _orig_re_init = None
     try:
-        # Patch FrameSource and ROIEncoder lazily — import here so we can wrap
-        import importlib
-        import pipeline.pipeline as _pp
+        # Patch FrameSource and ROIEncoder lazily — import here so we can wrap.
         import utils.frame_source as _fs
         import compression.roi_encoder as _re
 
@@ -181,15 +181,22 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             stop_event=stop_event,
         )
 
-        # Restore originals
-        _fs.FrameSource.__init__ = _orig_fs_init
-        _re.ROIEncoder.__init__ = _orig_re_init
-
     except Exception as exc:
         log.error(f"Pipeline error: {exc}", exc_info=True)
         with _state_lock:
             _status["error"] = str(exc)
     finally:
+        # Always restore monkey patches, even if run_pipeline raised.
+        try:
+            import utils.frame_source as _fs
+            import compression.roi_encoder as _re
+            if _orig_fs_init is not None:
+                _fs.FrameSource.__init__ = _orig_fs_init
+            if _orig_re_init is not None:
+                _re.ROIEncoder.__init__ = _orig_re_init
+        except Exception:
+            pass
+
         with _state_lock:
             _status["running"] = False
         log.info("Pipeline stopped.")
@@ -232,7 +239,7 @@ def api_start():
     data = request.get_json(force=True) or {}
 
     # Resolve input: if digit treat as camera index, else file path
-    raw_input = data.get("input_source", "0").strip()
+    raw_input = str(data.get("input_source", "0")).strip()
     try:
         resolved_input = int(raw_input)
     except ValueError:
@@ -267,6 +274,14 @@ def api_start():
     _pipeline_thread.start()
 
     return jsonify({"ok": True, "config": config})
+
+
+def _segment_absolute_path(file_path: str, output_dir: str) -> Path:
+    """Resolve a segment path from DB into an absolute path."""
+    p = Path(file_path)
+    if not p.is_absolute():
+        p = Path(output_dir) / p
+    return p.resolve()
 
 
 @app.route("/api/stop", methods=["POST"])
@@ -308,21 +323,32 @@ def api_segments():
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
-    return jsonify({
-        "segments": [
-            {
-                "timestamp": r[0],
-                "camera_id": r[1],
-                "target_detected": bool(r[2]),
-                "roi_count": r[3],
-                "file_size_kb": round(r[4] / 1024, 1),
-                "duration_s": round(r[5], 1),
-                "file_path": r[6],
-            }
-            for r in rows
-        ],
-        "db_path": str(db_path),
-    })
+    output_dir = str(cfg.get("output_dir", str(_ROOT / "outputs")))
+    root_resolved = _ROOT.resolve()
+    segs = []
+    for r in rows:
+        abs_path = _segment_absolute_path(r[6], output_dir)
+        playable_url = None
+        if abs_path.exists() and abs_path.suffix.lower() in {".mp4", ".webm", ".mov", ".avi"}:
+            try:
+                rel = abs_path.relative_to(root_resolved).as_posix()
+                playable_url = f"/media/{rel}"
+            except ValueError:
+                # File is outside the project root; do not expose directly.
+                playable_url = None
+
+        segs.append({
+            "timestamp": r[0],
+            "camera_id": r[1],
+            "target_detected": bool(r[2]),
+            "roi_count": r[3],
+            "file_size_kb": round(r[4] / 1024, 1),
+            "duration_s": round(r[5], 1),
+            "file_path": r[6],
+            "playable_url": playable_url,
+        })
+
+    return jsonify({"segments": segs, "db_path": str(db_path)})
 
 
 @app.route("/api/storage")
@@ -399,6 +425,21 @@ def api_scan_videos():
             for f in sorted(data_dir.glob(ext)):
                 videos.append(str(f))
     return jsonify({"videos": videos, "data_dir": str(data_dir)})
+
+
+@app.route("/media/<path:rel_path>")
+def media_file(rel_path: str):
+    """
+    Serve media files under the project root for in-dashboard playback.
+    Path traversal is blocked by verifying resolved path remains under _ROOT.
+    """
+    root = _ROOT.resolve()
+    abs_path = (root / rel_path).resolve()
+    if root not in abs_path.parents and abs_path != root:
+        abort(404)
+    if not abs_path.exists() or not abs_path.is_file():
+        abort(404)
+    return send_from_directory(str(root), rel_path, as_attachment=False)
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

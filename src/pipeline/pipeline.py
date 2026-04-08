@@ -33,6 +33,7 @@ from utils.frame_source import FrameSource                                  # fi
 from background_subtraction.background_subtraction import BackgroundSubtractor
 from compression.roi_encoder import ROIEncoder
 from pipeline.modes import validate_mode, get_mode_decision
+from demo.demo_metadata import DemoMetadataWriter
 
 logging.basicConfig(
     level=logging.INFO,
@@ -59,6 +60,7 @@ def run_pipeline(
     segment_seconds: int = 60,
     bg_method: str = "MOG2",
     mode: str = "mode0",
+    demo: bool = False,
     show_preview: bool = False,
     warmup_frames: int = 120,
 ):
@@ -106,6 +108,7 @@ def run_pipeline(
         show_preview: Show live bounding-box preview. Disable on headless servers.
         warmup_frames: Frames to feed through the background model before encoding.
                        Overridden by FrameSource.get_warmup_frames() for CDnet sources.
+        demo: Demo mode toggle
     """
     # Check valid mode input
     validate_mode(mode)
@@ -118,6 +121,13 @@ def run_pipeline(
     camera_id = safe_camera_id
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
+    
+    # demo metadata for processing
+    demo_writer = None
+    if demo:
+        demo_metadata_path = Path(output_dir) / f"{camera_id}_{mode}_demo_frames.jsonl"
+        demo_writer = DemoMetadataWriter(demo_metadata_path)
+        log.info(f"Demo metadata enabled: {demo_metadata_path}")
 
     # Use FrameSource to support both video files and CDnet image sequences.
     src = FrameSource(str(input_source) if not isinstance(input_source, int) else input_source)
@@ -151,6 +161,8 @@ def run_pipeline(
     frame_count = 0
     encode_count = 0
     target_frames_this_segment = 0
+    segment_index = 0
+    frame_index_within_segment = 0
 
     log.info("Pipeline running. Press Ctrl+C to stop.")
 
@@ -185,6 +197,19 @@ def run_pipeline(
                 segment_frames.append(frame.copy())
                 segment_regions.append(regions)
                 
+                if demo_writer is not None:
+                    source_time_seconds = frame_count / fps
+                    demo_writer.write_record(
+                        source_frame_index=frame_count,
+                        source_time_seconds=source_time_seconds,
+                        mode=mode,
+                        segment_index=segment_index,
+                        frame_index_within_segment=frame_index_within_segment,
+                        regions=regions,
+                    )
+
+                frame_index_within_segment += 1
+                
             if mode_decision.target_detected:
                 target_frames_this_segment += 1
 
@@ -201,7 +226,7 @@ def run_pipeline(
             if encode_count > 0 and encode_count % frames_per_segment == 0 and len(segment_frames) > 0:
                 seg_num = encode_count // frames_per_segment
                 log.info(
-                    f"Encoding segment {seg_num} | "
+                    f"Encoding segment {segment_index + 1} | "
                     f"targets in {target_frames_this_segment}/{frames_per_segment} frames"
                 )
                 out = encoder.encode_segment(
@@ -219,6 +244,8 @@ def run_pipeline(
                 segment_regions = []
                 target_frames_this_segment = 0
                 encode_count = 0
+                segment_index += 1
+                frame_index_within_segment = 0
 
     except KeyboardInterrupt:
         log.info("Interrupted by user.")
@@ -244,12 +271,18 @@ def run_pipeline(
                 fps=fps,
             )
             log.info(f"Saved final partial segment: {out}")
+            
+            segment_index += 1
+            frame_index_within_segment = 0
 
         if show_preview:
             cv2.destroyAllWindows()
 
         report = encoder.get_storage_report()
         log.info("Storage report: " + str(report))
+        
+        if demo_writer is not None:
+            demo_writer.close()
 
 
 if __name__ == "__main__":
@@ -265,6 +298,7 @@ if __name__ == "__main__":
         "mode0 = current full-segment pipeline (store all post-warmup frames), "
         "mode1 = standard event recording (store only frames with detected foreground objects)"),
     )
+    parser.add_argument("--demo", action="store_true", help="Demo mode toggle")
     parser.add_argument("--preview", action="store_true")
     parser.add_argument(
         "--warmup",
@@ -285,6 +319,7 @@ if __name__ == "__main__":
         args.segment,
         args.method,
         args.mode,
+        args.demo,
         args.preview,
         args.warmup,
     )

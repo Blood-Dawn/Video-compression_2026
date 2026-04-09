@@ -29,14 +29,25 @@ from typing import Optional
 # directly (python src/pipeline/pipeline.py) or imported from the project root.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils.db import initialize_database                                    # fix: was 'from src.utils.db'
-from utils.frame_source import FrameSource                                  # fix: use FrameSource instead of raw VideoCapture
-from utils.encryption import encrypt_file, _CRYPTO_AVAILABLE
-from background_subtraction.background_subtraction import BackgroundSubtractor
-from compression.roi_encoder import ROIEncoder
-from pipeline.modes import validate_mode, get_mode_decision
-from demo.demo_metadata import DemoMetadataWriter
-from enhancement.enhancer import Enhancer
+try:
+    from utils.db import initialize_database
+    from utils.frame_source import FrameSource
+    from utils.encryption import encrypt_file, _CRYPTO_AVAILABLE
+    from background_subtraction.background_subtraction import BackgroundSubtractor
+    from compression.roi_encoder import ROIEncoder
+    from pipeline.modes import validate_mode, get_mode_decision
+    from demo.demo_metadata import DemoMetadataWriter
+    from enhancement.enhancer import Enhancer
+except ModuleNotFoundError:
+    # Fallback for environments where src/ is not first on import path.
+    from src.utils.db import initialize_database
+    from src.utils.frame_source import FrameSource
+    from src.utils.encryption import encrypt_file, _CRYPTO_AVAILABLE
+    from src.background_subtraction.background_subtraction import BackgroundSubtractor
+    from src.compression.roi_encoder import ROIEncoder
+    from src.pipeline.modes import validate_mode, get_mode_decision
+    from src.demo.demo_metadata import DemoMetadataWriter
+    from src.enhancement.enhancer import Enhancer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -221,10 +232,15 @@ def run_pipeline(
         else:
             log.warning(
                 f"Enhancement requested (--enhance) but model '{enhance_model}' "
-                "is not available. Pipeline will run without enhancement. "
-                "See DEV.md → Enhancement Module Setup for install instructions."
+                "is not available. Falling back to built-in bicubic enhancement. "
+                "Install optional enhancement packages/models for higher quality "
+                "(see DEV.md → Enhancement Module Setup)."
             )
-            enhancer = None  # treat as disabled so segment loop logic is simple
+            enhancer = Enhancer(scale=enhance_scale, model="bicubic")
+            if enhancer.is_available():
+                log.info(f"Enhancement fallback enabled: {repr(enhancer)}")
+            else:
+                enhancer = None  # treat as disabled so segment loop logic is simple
 
     segment_frames: list = []       # in-memory frame buffer (numpy arrays)
     segment_regions: list = []

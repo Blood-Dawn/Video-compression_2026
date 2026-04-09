@@ -55,6 +55,9 @@ _DEFAULT_MODELS_DIR = _PROJECT_ROOT / "models"
 # Supported OpenCV dnn_superres model names (lowercase).
 _DNNSUPERRES_MODELS = {"espcn", "fsrcnn", "edsr", "lapsrn"}
 
+# Dependency-free built-in backends (always available, no weight files needed).
+_BUILTIN_MODELS = {"bicubic"}
+
 # Supported Real-ESRGAN model filenames (stem → display name).
 _REALESRGAN_MODELS = {
     "RealESRGAN_x4plus": "realesrgan",
@@ -115,7 +118,7 @@ class Enhancer:
         self.models_dir = Path(models_dir) if models_dir else _DEFAULT_MODELS_DIR
 
         self._available: bool = False
-        self._backend: str = ""           # "dnnsuperres" or "realesrgan"
+        self._backend: str = ""           # "dnnsuperres", "realesrgan", or "bicubic"
         self._sr = None                   # loaded model object (backend-specific)
         self._realesrgan_upsampler = None # Real-ESRGAN RealESRGANer instance
 
@@ -149,6 +152,14 @@ class Enhancer:
 
         if self._backend == "realesrgan":
             return self._realesrgan_upscale(frame)
+
+        if self._backend == "bicubic":
+            h, w = frame.shape[:2]
+            return cv2.resize(
+                frame,
+                (w * self.scale, h * self.scale),
+                interpolation=cv2.INTER_CUBIC,
+            )
 
         raise RuntimeError(f"Unknown backend: {self._backend!r}")
 
@@ -246,16 +257,31 @@ class Enhancer:
         success. Logs a warning and returns quietly on failure (missing weights,
         missing package) so callers can gate behind is_available().
         """
-        if self.model in _DNNSUPERRES_MODELS:
+        if self.model in _BUILTIN_MODELS:
+            self._try_load_builtin()
+        elif self.model in _DNNSUPERRES_MODELS:
             self._try_load_dnnsuperres()
         elif self.model in {"realesrgan", "realesrnet", "realesr-general"}:
             self._try_load_realesrgan()
         else:
             log.warning(
                 f"Enhancer: unknown model {self.model!r}. "
-                f"Supported: {sorted(_DNNSUPERRES_MODELS | {'realesrgan', 'realesrnet', 'realesr-general'})}. "
+                f"Supported: {sorted(_DNNSUPERRES_MODELS | {'realesrgan', 'realesrnet', 'realesr-general'} | _BUILTIN_MODELS)}. "
                 "Enhancement disabled."
             )
+
+    def _try_load_builtin(self) -> None:
+        """Activate the dependency-free bicubic upscale backend.
+
+        Always succeeds — no weight files or extra packages required.
+        Use as a safe fallback when dnn_superres / Real-ESRGAN are not available.
+        """
+        self._backend = "bicubic"
+        self._available = True
+        log.info(
+            f"Enhancer: using built-in bicubic x{self.scale} fallback backend "
+            "(no weight files required)"
+        )
 
     def _try_load_dnnsuperres(self) -> None:
         """Load an OpenCV dnn_superres model from the models/ directory."""

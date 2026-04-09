@@ -48,7 +48,6 @@ Author: Bloodawn (KheivenD)
 """
 
 import os
-import struct
 from pathlib import Path
 from typing import Optional, Union
 

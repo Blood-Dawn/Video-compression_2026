@@ -27,6 +27,9 @@ pandas>=2.0.0
 pytest>=7.4.0
 pytest-cov>=4.1.0
 
+# Encryption (AES-256-CBC for at-rest segment protection)
+cryptography>=42.0
+
 # Optional: lightweight super-resolution (CPU-compatible)
 # Uncomment when enhancement module is ready
 # basicsr>=1.4.2

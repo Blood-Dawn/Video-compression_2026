@@ -60,14 +60,27 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
-from src.demo.demo import render_demo
-from src.demo.split_screen import build_split_screen_from_manifest
-from src.pipeline.pipeline import run_pipeline
+# Make src/ importable when this script is run directly (python src/demo/run_demo.py)
+# or as a module from the project root (python -m src.demo.run_demo).
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+try:
+    from demo.demo import render_demo
+    from demo.split_screen import build_split_screen_from_manifest
+    from pipeline.pipeline import run_pipeline
+except ModuleNotFoundError:
+    from src.demo.demo import render_demo
+    from src.demo.split_screen import build_split_screen_from_manifest
+    from src.pipeline.pipeline import run_pipeline
 
 
-ALLOWED_MODES = {"mode0", "mode1", "mode2", "mode3"}
+# mode2/mode3 are planned but not yet implemented in the pipeline.
+# ALLOWED_MODES is forward-looking for the demo orchestrator; validate_mode()
+# in pipeline.modes will reject them at runtime until they are added there.
+ALLOWED_MODES = {"mode0", "mode1"}
 ALLOWED_VIEWS = {"standard", "roi_tint"}
 
 

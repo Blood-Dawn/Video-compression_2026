@@ -19,6 +19,7 @@ Usage:
 Author: Bloodawn (KheivenD)
 """
 
+import collections
 import json
 import logging
 import os
@@ -37,8 +38,12 @@ _SRC = Path(__file__).resolve().parent.parent
 _ROOT = _SRC.parent
 sys.path.insert(0, str(_SRC))
 
-from pipeline.pipeline import run_pipeline  # noqa: E402
-from utils.db import get_connection          # noqa: E402
+try:
+    from pipeline.pipeline import run_pipeline  # noqa: E402
+    from utils.db import get_connection          # noqa: E402
+except ModuleNotFoundError:
+    from src.pipeline.pipeline import run_pipeline  # noqa: E402
+    from src.utils.db import get_connection          # noqa: E402
 
 # ── Flask app ─────────────────────────────────────────────────────────────────
 app = Flask(__name__, template_folder="templates")
@@ -60,21 +65,27 @@ _status: dict = {
 
 # ── Log capture ───────────────────────────────────────────────────────────────
 _log_queue: queue.Queue = queue.Queue(maxsize=1000)
-_log_history: list[str] = []   # kept in memory for late-connecting clients
-_LOG_HISTORY_MAX = 300
+_log_history: collections.deque = collections.deque(maxlen=300)  # (event_id, line)
+_log_id = 0
+_log_lock = threading.Lock()
 
 
 class _QueueLogHandler(logging.Handler):
-    """Forwards log records to the shared queue for SSE streaming."""
+    """Forwards log records to the shared queue for SSE streaming.
+
+    Each record is stamped with a monotonic event ID so SSE clients can
+    resume without replaying duplicate lines after a reconnect.
+    """
 
     def emit(self, record: logging.LogRecord) -> None:
+        global _log_id
         line = self.format(record)
-        # also append to history (with a cap)
-        _log_history.append(line)
-        if len(_log_history) > _LOG_HISTORY_MAX:
-            _log_history.pop(0)
+        with _log_lock:
+            _log_id += 1
+            item = (_log_id, line)
+            _log_history.append(item)
         try:
-            _log_queue.put_nowait(line)
+            _log_queue.put_nowait(item)
         except queue.Full:
             pass  # drop oldest — client will re-fetch on reconnect
 
@@ -146,8 +157,12 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
     _orig_re_init = None
     try:
         # Patch FrameSource and ROIEncoder lazily — import here so we can wrap.
-        import utils.frame_source as _fs
-        import compression.roi_encoder as _re
+        try:
+            import utils.frame_source as _fs
+            import compression.roi_encoder as _re
+        except ModuleNotFoundError:
+            import src.utils.frame_source as _fs
+            import src.compression.roi_encoder as _re
 
         _orig_fs_init = _fs.FrameSource.__init__
         _orig_re_init = _re.ROIEncoder.__init__
@@ -169,11 +184,12 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             output_dir=config.get("output_dir", str(_ROOT / "outputs")),
             segment_seconds=int(config.get("segment_seconds", 60)),
             bg_method=config.get("bg_method", "MOG2"),
+            mode=config.get("mode", "mode0"),
+            demo=False,          # demo metadata not needed from GUI
             show_preview=False,
             warmup_frames=int(config.get("warmup_frames", 120)),
-            mode=config.get("mode", "mode0"),
             enhance=config.get("enhance", False),
-            enhance_model=config.get("enhance_model", "espcn"),
+            enhance_model=config.get("enhance_model", "bicubic"),
             enhance_scale=int(config.get("enhance_scale", 4)),
             encrypt=config.get("encrypt", False),
             encrypt_password=config.get("encrypt_password") or None,
@@ -188,8 +204,12 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
     finally:
         # Always restore monkey patches, even if run_pipeline raised.
         try:
-            import utils.frame_source as _fs
-            import compression.roi_encoder as _re
+            try:
+                import utils.frame_source as _fs
+                import compression.roi_encoder as _re
+            except ModuleNotFoundError:
+                import src.utils.frame_source as _fs
+                import src.compression.roi_encoder as _re
             if _orig_fs_init is not None:
                 _fs.FrameSource.__init__ = _orig_fs_init
             if _orig_re_init is not None:
@@ -257,7 +277,7 @@ def api_start():
         "warmup_frames": data.get("warmup_frames", 120),
         "mode": data.get("mode", "mode0"),
         "enhance": bool(data.get("enhance", False)),
-        "enhance_model": data.get("enhance_model", "espcn"),
+        "enhance_model": data.get("enhance_model", "bicubic"),
         "enhance_scale": data.get("enhance_scale", 4),
         "encrypt": bool(data.get("encrypt", False)),
         "encrypt_password": data.get("encrypt_password", ""),
@@ -389,18 +409,36 @@ def api_storage():
 
 @app.route("/api/logs")
 def api_logs():
-    """Server-Sent Events stream — delivers live log lines to the browser."""
+    """Server-Sent Events stream — delivers live log lines to the browser.
+
+    Supports Last-Event-ID resume: on reconnect the browser sends the last
+    event ID it received, and the server replays only newer entries so no
+    lines are lost or duplicated across dropped connections.
+    """
+    last_event_id_hdr = request.headers.get("Last-Event-ID", "").strip()
+    try:
+        initial_last_sent = int(last_event_id_hdr) if last_event_id_hdr else 0
+    except ValueError:
+        initial_last_sent = 0
 
     def generate():
-        # First, replay recent history so the browser isn't blank on connect
-        for line in list(_log_history[-100:]):
-            yield f"data: {json.dumps(line)}\n\n"
+        last_sent = initial_last_sent
 
-        # Then stream new lines as they arrive
+        # Replay history entries the client hasn't seen yet.
+        with _log_lock:
+            backlog = [item for item in _log_history if item[0] > last_sent]
+        for event_id, line in backlog:
+            last_sent = event_id
+            yield f"id: {event_id}\ndata: {json.dumps(line)}\n\n"
+
+        # Stream new lines as they arrive.
         while True:
             try:
-                line = _log_queue.get(timeout=15)
-                yield f"data: {json.dumps(line)}\n\n"
+                event_id, line = _log_queue.get(timeout=15)
+                if event_id <= last_sent:
+                    continue   # already sent in backlog replay
+                last_sent = event_id
+                yield f"id: {event_id}\ndata: {json.dumps(line)}\n\n"
             except queue.Empty:
                 # keepalive ping so the browser doesn't close the SSE connection
                 yield ": keepalive\n\n"

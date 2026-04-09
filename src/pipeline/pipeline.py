@@ -34,6 +34,8 @@ from utils.frame_source import FrameSource                                  # fi
 from utils.encryption import encrypt_file, _CRYPTO_AVAILABLE
 from background_subtraction.background_subtraction import BackgroundSubtractor
 from compression.roi_encoder import ROIEncoder
+from pipeline.modes import validate_mode, get_mode_decision
+from demo.demo_metadata import DemoMetadataWriter
 from enhancement.enhancer import Enhancer
 
 logging.basicConfig(
@@ -60,9 +62,10 @@ def run_pipeline(
     output_dir: str = "outputs/",
     segment_seconds: int = 60,
     bg_method: str = "MOG2",
+    mode: str = "mode0",
+    demo: bool = False,
     show_preview: bool = False,
     warmup_frames: int = 120,
-    mode: str = "mode0",
     enhance: bool = False,
     enhance_model: str = "espcn",
     enhance_scale: int = 4,
@@ -111,6 +114,7 @@ def run_pipeline(
         show_preview: Show live bounding-box preview. Disable on headless servers.
         warmup_frames: Frames to feed through the background model before encoding.
                        Overridden by FrameSource.get_warmup_frames() for CDnet sources.
+        demo: Demo mode toggle
         mode: Compression mode. "mode0" encodes all frames; "mode1" gates on
               foreground activity (event clip / frame gating).
         enhance: If True, apply super-resolution to segment frames before
@@ -130,9 +134,7 @@ def run_pipeline(
                           Mutually exclusive with encrypt_password.
     """
     # Validate mode at function entry — not inside the per-frame loop.
-    valid_modes = {"mode0", "mode1"}
-    if mode not in valid_modes:
-        raise ValueError(f"Invalid mode {mode!r}. Choose from {sorted(valid_modes)}.")
+    validate_mode(mode)
 
     # Validate and prepare encryption settings.
     # Resolve the raw key from a key file early so file-not-found errors surface
@@ -174,6 +176,13 @@ def run_pipeline(
     camera_id = safe_camera_id
 
     Path(output_dir).mkdir(parents=True, exist_ok=True)
+    
+    # demo metadata for processing
+    demo_writer = None
+    if demo:
+        demo_metadata_path = Path(output_dir) / f"{camera_id}_{mode}_demo_frames.jsonl"
+        demo_writer = DemoMetadataWriter(demo_metadata_path)
+        log.info(f"Demo metadata enabled: {demo_metadata_path}")
 
     # Use FrameSource to support both video files and CDnet image sequences.
     src = FrameSource(str(input_source) if not isinstance(input_source, int) else input_source)
@@ -195,6 +204,7 @@ def run_pipeline(
 
     log.info(f"Source: {input_source} | {frame_w}x{frame_h} @ {fps:.1f}fps")
     log.info(f"Segment length: {segment_seconds}s ({frames_per_segment} frames)")
+    log.info(f"Mode: {mode}")
     log.info(f"Warmup: {effective_warmup} frames (~{effective_warmup/fps:.1f}s)")
 
     subtractor = BackgroundSubtractor(method=bg_method)
@@ -221,6 +231,8 @@ def run_pipeline(
     frame_count = 0
     encode_count = 0
     target_frames_this_segment = 0
+    segment_index = 0
+    frame_index_within_segment = 0
 
     log.info("Pipeline running. Press Ctrl+C to stop.")
 
@@ -248,19 +260,30 @@ def run_pipeline(
             # Buffer frames in memory — no lossy intermediate file.
             # Previously XVID AVI was used, which compressed frames before FFmpeg,
             # degrading quality. Raw numpy arrays are lossless.
-            #
-            # mode0: buffer every frame regardless of activity.
-            # mode1: frame gating — only buffer frames with foreground regions,
-            #        so segments contain only active frames and skip idle frames.
-            if mode == "mode0":
+            # Buffer frames selectively depending on mode
+            
+            
+            
+            mode_decision = get_mode_decision(mode, regions)
+            
+            if mode_decision.buffer_frame:
                 segment_frames.append(frame.copy())
                 segment_regions.append(regions)
-            elif mode == "mode1":
-                if regions:
-                    segment_frames.append(frame.copy())
-                    segment_regions.append(regions)
+                
+                if demo_writer is not None:
+                    source_time_seconds = frame_count / fps
+                    demo_writer.write_record(
+                        source_frame_index=frame_count,
+                        source_time_seconds=source_time_seconds,
+                        mode=mode,
+                        segment_index=segment_index,
+                        frame_index_within_segment=frame_index_within_segment,
+                        regions=regions,
+                    )
 
-            if regions:
+                frame_index_within_segment += 1
+                
+            if mode_decision.target_detected:
                 target_frames_this_segment += 1
 
             if show_preview:
@@ -270,12 +293,13 @@ def run_pipeline(
                     break
 
             frame_count += 1
+            # encode_count tracks frames actually buffered for output
             encode_count = len(segment_frames)
 
-            if encode_count > 0 and encode_count % frames_per_segment == 0:
+            if encode_count > 0 and encode_count % frames_per_segment == 0 and len(segment_frames) > 0:
                 seg_num = encode_count // frames_per_segment
                 log.info(
-                    f"Encoding segment {seg_num} | "
+                    f"Encoding segment {segment_index + 1} | "
                     f"targets in {target_frames_this_segment}/{frames_per_segment} frames"
                 )
                 frames_to_encode = segment_frames
@@ -306,12 +330,13 @@ def run_pipeline(
                 segment_regions = []
                 target_frames_this_segment = 0
                 encode_count = 0
+                segment_index += 1
+                frame_index_within_segment = 0
 
     except KeyboardInterrupt:
         log.info("Interrupted by user.")
     finally:
-        src.release()
-
+        src.release()        
         # Flush any frames that didn't fill a complete segment.
         # This handles two cases: short clips shorter than one full segment,
         # and leftover frames after the last full segment was encoded.
@@ -334,6 +359,10 @@ def run_pipeline(
                 camera_id=camera_id,
                 fps=fps,
             )
+            
+            segment_index += 1
+            frame_index_within_segment = 0
+
             if encrypt:
                 enc_out = encrypt_file(
                     out,
@@ -351,6 +380,9 @@ def run_pipeline(
 
         report = encoder.get_storage_report()
         log.info("Storage report: " + str(report))
+        
+        if demo_writer is not None:
+            demo_writer.close()
 
 
 if __name__ == "__main__":
@@ -360,18 +392,19 @@ if __name__ == "__main__":
     parser.add_argument("--output", default="outputs/")
     parser.add_argument("--segment", type=int, default=60, help="Segment duration in seconds")
     parser.add_argument("--method", default="MOG2", choices=["MOG2", "KNN"])
+    parser.add_argument("--mode", default="mode0", choices=["mode0", "mode1"], 
+        help=(
+        "Pipeline mode: "
+        "mode0 = current full-segment pipeline (store all post-warmup frames), "
+        "mode1 = standard event recording (store only frames with detected foreground objects)"),
+    )
+    parser.add_argument("--demo", action="store_true", help="Demo mode toggle")
     parser.add_argument("--preview", action="store_true")
     parser.add_argument(
         "--warmup",
         type=int,
         default=120,
         help="Warmup frames before encoding starts. Overridden by CDnet temporalROI if available."
-    )
-    parser.add_argument(
-        "--mode",
-        default="mode0",
-        choices=["mode0", "mode1"],
-        help="Compression mode. mode0: encode all frames. mode1: frame gating (active frames only)."
     )
     parser.add_argument(
         "--enhance",
@@ -429,9 +462,10 @@ if __name__ == "__main__":
         args.output,
         args.segment,
         args.method,
+        args.mode,
+        args.demo,
         args.preview,
         args.warmup,
-        args.mode,
         enhance=args.enhance,
         enhance_model=args.enhance_model,
         enhance_scale=args.enhance_scale,

@@ -2,17 +2,17 @@
 **Author:** Victor Teixeira  
 **Session duration:** ~3 hours  
 **Branch:** feature/enhancement-milestone2  
-**Status:** Complete — Milestone 2 fully implemented, reviewed, and PR opened
+**Status:** Complete — Milestone 2.1 fully implemented, reviewed, and PR opened
 
 ---
 
 ## Summary
 
-This session completed Milestone 2 of the selective compression pipeline: the Enhancement Module.
+This session completed Milestone 2.1 of the selective compression pipeline: the Enhancement Module.
 The objective was to implement a CPU-compatible super-resolution upscaler using Real-ESRGAN,
 integrate it into the existing pipeline, benchmark its performance, and document the setup.
 
-All milestone 2 checklist items are now complete:
+All milestone 2.1 checklist items are now complete:
 - `Enhancer` class implemented with `upscale_frame` and `upscale_roi` methods
 - Real-ESRGAN integrated with graceful bicubic fallback when weights are absent
 - Pipeline updated with optional `--enhance` and `--enhance-scale` CLI flags
@@ -148,9 +148,9 @@ Three issues were flagged in code review and resolved:
 
 | Commit | Message |
 |---|---|
-| `cd37790` | feat: add enhancement module with Real-ESRGAN upscaling (Milestone 2) |
+| `cd37790` | feat: add enhancement module with Real-ESRGAN upscaling (Milestone 2.1) |
 | `a3e0c48` | fix: address code review comments on enhancement module |
-| `d5cfe7c` | bench: add enhancer CPU benchmark script and notebook (Milestone 2) |
+| `d5cfe7c` | bench: add enhancer CPU benchmark script and notebook (Milestone 2.1) |
 
 ---
 

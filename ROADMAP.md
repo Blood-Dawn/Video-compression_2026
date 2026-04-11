@@ -1,4 +1,4 @@
-# Project Roadmap
+pytest tests/ -v# Project Roadmap
 ## Open Source Selective Video Compression for Static Surveillance Cameras
 **EGN 4950C Capstone | Florida Atlantic University | Spring 2026**
 **Sponsor:** Defense Innovation Unit (DIU)

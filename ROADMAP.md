@@ -130,13 +130,13 @@ Add post-offload super-resolution enhancement to foreground ROIs. Stress test th
 ### 2.1  -  Super-Resolution Enhancement Module
 **Feature Branch:** `feature/enhancement-superresolution`
 
-- [ ] Research Real-ESRGAN CPU inference setup and document model download steps in DEV.md  -  **Owner: ___________**
-- [ ] Create `src/enhancement/enhancer.py` with `Enhancer` class  -  **Owner: ___________**
-- [ ] Implement `Enhancer.upscale_frame(frame: np.ndarray, scale: int) -> np.ndarray` using Real-ESRGAN in CPU mode  -  **Owner: ___________**
-- [ ] Implement `Enhancer.upscale_roi(frame, bbox)` to upscale only a bounding region  -  **Owner: ___________**
-- [ ] Integrate the enhancement step into the pipeline as an optional post-offload pass  -  **Owner: ___________**
-- [ ] Benchmark enhancement processing time per frame on CPU hardware  -  **Owner: ___________**
-- [ ] Write unit tests for enhancer with a small test image  -  **Owner: ___________**
+- [x] Research Real-ESRGAN CPU inference setup and document model download steps in DEV.md  -  **Owner: Victor Teixeira**
+- [x] Create `src/enhancement/enhancer.py` with `Enhancer` class  -  **Owner: Victor Teixeira**
+- [x] Implement `Enhancer.upscale_frame(frame: np.ndarray, scale: int) -> np.ndarray` using Real-ESRGAN in CPU mode  -  **Owner: Victor Teixeira**
+- [x] Implement `Enhancer.upscale_roi(frame, bbox)` to upscale only a bounding region  -  **Owner: Victor Teixeira**
+- [x] Integrate the enhancement step into the pipeline as an optional post-offload pass  -  **Owner: Victor Teixeira**
+- [x] Benchmark enhancement processing time per frame on CPU hardware  -  **Owner: Victor Teixeira**
+- [x] Write unit tests for enhancer with a small test image  -  **Owner: Victor Teixeira**
 
 **Acceptance criteria:** `Enhancer.upscale_frame()` returns an image with 2x or 4x larger dimensions. PSNR on enhanced output is measurably higher than non-enhanced compressed output.
 

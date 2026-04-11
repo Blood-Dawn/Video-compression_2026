@@ -8,16 +8,25 @@ Designed to run continuously on low-spec hardware (Raspberry Pi, old x86 box).
 No GPU required.
 
 Author: Bloodawn (KheivenD)
+Enhancement module integration: Victor Teixeira
 
 Usage:
     python pipeline.py --input /dev/video0 --camera-id cam_01 --output outputs/
     python pipeline.py --input footage/test_clip.mp4 --camera-id cam_test
     python pipeline.py --input footage/test_clip.mp4 --camera-id cam_test --warmup 150
+    python pipeline.py --input footage/test_clip.mp4 --camera-id cam_test --enhance
+    python pipeline.py --input footage/test_clip.mp4 --camera-id cam_test --enhance --enhance-scale 2
 """
 
 import cv2
 import argparse
 import logging
+import time
+from pathlib import Path
+from collections import deque
+from typing import Optional
+
+from src.utils.db import initialize_database
 import os
 import re
 import sys
@@ -32,6 +41,7 @@ from utils.db import initialize_database                                    # fi
 from utils.frame_source import FrameSource                                  # fix: use FrameSource instead of raw VideoCapture
 from background_subtraction.background_subtraction import BackgroundSubtractor
 from compression.roi_encoder import ROIEncoder
+from enhancement.enhancer import Enhancer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -59,6 +69,8 @@ def run_pipeline(
     bg_method: str = "MOG2",
     show_preview: bool = False,
     warmup_frames: int = 120,
+    enhance: bool = False,
+    enhance_scale: int = 4,
 ):
     """
     Main pipeline loop.
@@ -88,11 +100,22 @@ def run_pipeline(
         camera_id: Identifier for this camera. Used in output filenames and the
                    SQLite metadata index. Sanitized to prevent path traversal.
         output_dir: Directory where compressed output segments are written.
-        segment_seconds: Seconds of footage per output segment.
-        bg_method: Background subtraction algorithm. "MOG2" recommended.
-        show_preview: Show live bounding-box preview. Disable on headless servers.
-        warmup_frames: Frames to feed through the background model before encoding.
-                       Overridden by FrameSource.get_warmup_frames() for CDnet sources.
+        segment_seconds: How many seconds of footage to accumulate before
+                         flushing and encoding one segment.
+        bg_method: Which background subtraction algorithm to use.
+                   "MOG2" is the recommended default for outdoor static cameras.
+        show_preview: Display a live preview window with bounding boxes drawn.
+                      Disable this on headless servers.
+        warmup_frames: Number of frames to feed through the background model
+                       before beginning to encode output. Default 120 frames
+                       (approximately 4 seconds at 30fps). Increase to 250-500
+                       for scenes with complex dynamic backgrounds (trees, flags).
+        enhance: When True, apply super-resolution sharpening to foreground ROIs
+                 before writing each frame to the segment buffer. Requires
+                 Real-ESRGAN weights in models/ (falls back to bicubic if absent).
+                 Adds per-frame CPU cost; not recommended for real-time sources.
+        enhance_scale: Intermediate upscale factor used by the Enhancer.
+                       Default 4 (matches RealESRGAN_x4plus weights).
     """
     # Sanitize camera_id to prevent path traversal in output filenames.
     safe_camera_id = _sanitize_camera_id(camera_id)
@@ -125,8 +148,24 @@ def run_pipeline(
     log.info(f"Warmup: {effective_warmup} frames (~{effective_warmup/fps:.1f}s)")
 
     subtractor = BackgroundSubtractor(method=bg_method)
-    encoder = ROIEncoder(output_dir=output_dir, db_path=db_path)
-    initialize_database(db_path)   # fix: explicit path, consistent with encoder
+    encoder = ROIEncoder(output_dir=output_dir)
+    initialize_database()
+
+    enhancer: Optional[Enhancer] = None
+    if enhance:
+        enhancer = Enhancer(scale=enhance_scale)
+        log.info(
+            f"Enhancement enabled (backend={enhancer.backend}, scale={enhance_scale}). "
+            "Foreground ROIs will be sharpened before encoding."
+        )
+
+    segment_regions = []
+    segment_writer = None
+    temp_path = Path(output_dir) / f"_tmp_{camera_id}.avi"
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    fourcc = cv2.VideoWriter_fourcc(*"XVID")
+    segment_writer = cv2.VideoWriter(str(temp_path), fourcc, fps, (frame_w, frame_h))
 
     segment_frames: list = []       # in-memory frame buffer (numpy arrays)
     segment_regions: list = []
@@ -154,10 +193,13 @@ def run_pipeline(
                 continue
             # --- END WARMUP GATE ---
 
-            # Buffer frames in memory — no lossy intermediate file.
-            # Previously XVID AVI was used, which compressed frames before FFmpeg,
-            # degrading quality. Raw numpy arrays are lossless.
-            segment_frames.append(frame.copy())
+            # Optional: sharpen foreground ROIs before writing to the buffer.
+            # Each detected region is enhanced in-place at original resolution.
+            if enhancer is not None and regions:
+                for region in regions:
+                    frame = enhancer.upscale_roi(frame, (region.x, region.y, region.w, region.h))
+
+            segment_writer.write(frame)
             segment_regions.append(regions)
 
             if regions:
@@ -218,6 +260,29 @@ if __name__ == "__main__":
         default=120,
         help="Warmup frames before encoding starts. Overridden by CDnet temporalROI if available."
     )
+    parser.add_argument(
+        "--enhance",
+        action="store_true",
+        help="Apply super-resolution sharpening to foreground ROIs before encoding. "
+             "Requires Real-ESRGAN weights in models/. Falls back to bicubic if absent. "
+             "Adds CPU overhead; not recommended for real-time sources."
+    )
+    def _valid_enhance_scale(value: str) -> int:
+        try:
+            v = int(value)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"--enhance-scale must be an integer, got '{value}'")
+        if v not in (2, 4):
+            raise argparse.ArgumentTypeError(f"--enhance-scale must be 2 or 4, got {v}")
+        return v
+
+    parser.add_argument(
+        "--enhance-scale",
+        type=_valid_enhance_scale,
+        default=4,
+        dest="enhance_scale",
+        help="Intermediate upscale factor for the enhancement pass. Must be 2 or 4. Default 4."
+    )
     args = parser.parse_args()
 
     input_src = args.input
@@ -232,4 +297,15 @@ if __name__ == "__main__":
         args.method,
         args.preview,
         args.warmup,
+    )
+    run_pipeline(
+        src,
+        args.camera_id,
+        args.output,
+        args.segment,
+        args.method,
+        args.preview,
+        args.warmup,
+        enhance=args.enhance,
+        enhance_scale=args.enhance_scale,
     )

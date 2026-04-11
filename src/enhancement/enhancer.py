@@ -16,6 +16,7 @@ Model download:
 """
 
 import logging
+import os
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -24,10 +25,15 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-# Resolved relative to the project root (two levels up from this file)
-_PROJECT_ROOT = Path(__file__).parent.parent.parent
-_MODELS_DIR = _PROJECT_ROOT / "models"
-_DEFAULT_MODEL_PATH = _MODELS_DIR / "RealESRGAN_x4plus.pth"
+# Default models directory: prefer the ENHANCER_MODELS_DIR env var so the
+# package stays robust when installed outside the original repo layout.
+_DEFAULT_MODELS_DIR = Path(
+    os.environ.get("ENHANCER_MODELS_DIR", "")
+) if os.environ.get("ENHANCER_MODELS_DIR") else Path(__file__).parent.parent.parent / "models"
+
+_DEFAULT_MODEL_PATH = _DEFAULT_MODELS_DIR / "RealESRGAN_x4plus.pth"
+
+_VALID_SCALES = {2, 4}
 
 
 class Enhancer:
@@ -35,8 +41,15 @@ class Enhancer:
     Frame and ROI upscaler using Real-ESRGAN (CPU-safe).
 
     Usage:
-        enhancer = Enhancer()                     # auto-detect model
+        enhancer = Enhancer()                          # auto-detect model
         enhancer = Enhancer(model_path="models/RealESRGAN_x4plus.pth")
+        enhancer = Enhancer(models_dir="/data/weights") # custom directory
+
+    The models directory is resolved in this order:
+      1. Explicit ``model_path`` argument
+      2. Explicit ``models_dir`` argument
+      3. ``ENHANCER_MODELS_DIR`` environment variable
+      4. ``<repo_root>/models/`` (default)
 
     If the model file or required packages are missing, all methods fall
     back to bicubic interpolation — behaviour is identical from the
@@ -46,17 +59,28 @@ class Enhancer:
     def __init__(
         self,
         model_path: Optional[str] = None,
+        models_dir: Optional[str] = None,
         scale: int = 4,
     ) -> None:
         """
         Args:
-            model_path: Path to RealESRGAN .pth weights file.
-                        Defaults to models/RealESRGAN_x4plus.pth.
-            scale: Native upscale factor of the loaded model (2 or 4).
-                   Must match the downloaded weights file.
+            model_path: Explicit path to a RealESRGAN .pth weights file.
+                        When given, ``models_dir`` is ignored.
+            models_dir: Directory that contains ``RealESRGAN_x4plus.pth``.
+                        Overrides the env-var / repo-relative default.
+            scale: Native upscale factor of the loaded model. Must be 2 or 4.
         """
+        if scale not in _VALID_SCALES:
+            raise ValueError(f"scale must be one of {_VALID_SCALES}, got {scale}")
         self.scale = scale
-        self.model_path = Path(model_path) if model_path else _DEFAULT_MODEL_PATH
+
+        if model_path:
+            self.model_path = Path(model_path)
+        elif models_dir:
+            self.model_path = Path(models_dir) / "RealESRGAN_x4plus.pth"
+        else:
+            self.model_path = _DEFAULT_MODEL_PATH
+
         self._upsampler = None   # RealESRGANer instance if available
         self._using_nn = False
         self._load_model()
@@ -85,22 +109,31 @@ class Enhancer:
             )
             return
 
-        model = RRDBNet(
-            num_in_ch=3,
-            num_out_ch=3,
-            num_feat=64,
-            num_block=23,
-            num_grow_ch=32,
-            scale=self.scale,
-        )
-        self._upsampler = RealESRGANer(
-            scale=self.scale,
-            model_path=str(self.model_path),
-            model=model,
-            half=False,   # CPU mode — fp16 is GPU-only
-        )
-        self._using_nn = True
-        log.info("Real-ESRGAN loaded: %s (x%d)", self.model_path.name, self.scale)
+        try:
+            model = RRDBNet(
+                num_in_ch=3,
+                num_out_ch=3,
+                num_feat=64,
+                num_block=23,
+                num_grow_ch=32,
+                scale=self.scale,
+            )
+            self._upsampler = RealESRGANer(
+                scale=self.scale,
+                model_path=str(self.model_path),
+                model=model,
+                half=False,   # CPU mode — fp16 is GPU-only
+            )
+            self._using_nn = True
+            log.info("Real-ESRGAN loaded: %s (x%d)", self.model_path.name, self.scale)
+        except Exception as exc:
+            log.warning(
+                "Real-ESRGAN failed to initialise (%s: %s) — using bicubic fallback.",
+                type(exc).__name__,
+                exc,
+            )
+            self._upsampler = None
+            self._using_nn = False
 
     # ------------------------------------------------------------------
     # Public API

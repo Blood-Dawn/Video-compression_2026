@@ -236,12 +236,21 @@ if __name__ == "__main__":
              "Requires Real-ESRGAN weights in models/. Falls back to bicubic if absent. "
              "Adds CPU overhead; not recommended for real-time sources."
     )
+    def _valid_enhance_scale(value: str) -> int:
+        try:
+            v = int(value)
+        except ValueError:
+            raise argparse.ArgumentTypeError(f"--enhance-scale must be an integer, got '{value}'")
+        if v not in (2, 4):
+            raise argparse.ArgumentTypeError(f"--enhance-scale must be 2 or 4, got {v}")
+        return v
+
     parser.add_argument(
         "--enhance-scale",
-        type=int,
+        type=_valid_enhance_scale,
         default=4,
         dest="enhance_scale",
-        help="Intermediate upscale factor for the enhancement pass. Default 4."
+        help="Intermediate upscale factor for the enhancement pass. Must be 2 or 4. Default 4."
     )
     args = parser.parse_args()
 

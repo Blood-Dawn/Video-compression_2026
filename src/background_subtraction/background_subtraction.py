@@ -168,6 +168,15 @@ class BackgroundSubtractor:
                 history=history, detectShadows=True
             )
         elif method == "GMG":
+            # GMG requires opencv-contrib-python (cv2.bgsegm module).
+            # The default requirements.txt installs opencv-python only.
+            # Raise a clear error rather than an AttributeError at apply() time.
+            if not hasattr(cv2, "bgsegm"):
+                raise ImportError(
+                    "GMG requires 'opencv-contrib-python'. "
+                    "Install it with: pip install opencv-contrib-python "
+                    "(remove opencv-python first to avoid conflicts)."
+                )
             self._subtractor = cv2.bgsegm.createBackgroundSubtractorGMG(
                 initializationFrames=history
             )

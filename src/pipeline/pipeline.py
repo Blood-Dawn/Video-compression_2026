@@ -28,10 +28,17 @@ from typing import Optional
 
 from src.utils.db import initialize_database
 import os
-from datetime import datetime
-
+import re
 import sys
+import numpy as np
+from pathlib import Path
+
+# sys.path must be set before any local imports so this module can be run
+# directly (python src/pipeline/pipeline.py) or imported from the project root.
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from utils.db import initialize_database                                    # fix: was 'from src.utils.db'
+from utils.frame_source import FrameSource                                  # fix: use FrameSource instead of raw VideoCapture
 from background_subtraction.background_subtraction import BackgroundSubtractor
 from compression.roi_encoder import ROIEncoder
 from enhancement.enhancer import Enhancer
@@ -41,6 +48,17 @@ logging.basicConfig(
     format="%(asctime)s  %(levelname)s  %(message)s",
 )
 log = logging.getLogger(__name__)
+
+
+def _sanitize_camera_id(camera_id: str) -> str:
+    """
+    Strip any characters from camera_id that are unsafe in file paths.
+
+    Allows only alphanumeric characters, underscores, and hyphens.
+    A camera_id like '../../etc/passwd' becomes '______etc_passwd'.
+    This prevents path traversal when camera_id is embedded in output filenames.
+    """
+    return re.sub(r"[^a-zA-Z0-9_-]", "_", camera_id)
 
 
 def run_pipeline(
@@ -58,22 +76,29 @@ def run_pipeline(
     Main pipeline loop.
 
     Reads frames from a camera or video file, runs background subtraction on each
-    frame, accumulates frame buffers into segments, then encodes each segment with
-    ROI-aware compression (foreground at high quality, background at low quality).
+    frame, accumulates frames in memory, then encodes each segment with ROI-aware
+    compression (foreground at high quality, background at low quality).
+
+    Uses FrameSource to transparently support both video files and CDnet-style
+    image sequence folders. If the source provides a temporal_roi (CDnet), the
+    warmup_frames argument is overridden with the scene's recommended warmup count
+    so benchmark results are comparable to published CDnet scores.
 
     WARMUP PERIOD:
     MOG2 and KNN both need time to build an accurate background model. During the
-    first `warmup_frames` frames the mask output is essentially noise -- the model
-    has not seen enough history to know what is background. If we start encoding
-    immediately, the first few seconds of every segment will be miscompressed.
-    The fix: feed frames through the subtractor during warmup but do NOT write them
-    to the output segment or accumulate their region lists. Encoding only begins
-    after warmup is complete.
+    first `warmup_frames` frames the mask output is essentially noise. The fix:
+    feed frames through the subtractor during warmup but do NOT accumulate them
+    for encoding. Encoding only begins after warmup is complete.
+
+    INTERMEDIATE FORMAT:
+    Frames are buffered in memory as a list of numpy arrays and piped directly to
+    FFmpeg via stdin. This avoids the lossy XVID intermediate AVI that was used
+    previously, which degraded quality before the final encode step.
 
     Args:
-        input_source: Camera index (int) or video file path (str).
-        camera_id: Identifier string for this camera, used in output filenames
-                   and the SQLite metadata index.
+        input_source: Camera index (int) or video file / CDnet scene path (str).
+        camera_id: Identifier for this camera. Used in output filenames and the
+                   SQLite metadata index. Sanitized to prevent path traversal.
         output_dir: Directory where compressed output segments are written.
         segment_seconds: How many seconds of footage to accumulate before
                          flushing and encoding one segment.
@@ -92,18 +117,35 @@ def run_pipeline(
         enhance_scale: Intermediate upscale factor used by the Enhancer.
                        Default 4 (matches RealESRGAN_x4plus weights).
     """
-    cap = cv2.VideoCapture(input_source)
-    if not cap.isOpened():
-        raise RuntimeError(f"Cannot open video source: {input_source}")
+    # Sanitize camera_id to prevent path traversal in output filenames.
+    safe_camera_id = _sanitize_camera_id(camera_id)
+    if safe_camera_id != camera_id:
+        log.warning(f"camera_id sanitized: {camera_id!r} -> {safe_camera_id!r}")
+    camera_id = safe_camera_id
 
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    frame_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    frame_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    frames_per_segment = int(fps * segment_seconds)
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+    # Use FrameSource to support both video files and CDnet image sequences.
+    src = FrameSource(str(input_source) if not isinstance(input_source, int) else input_source)
+
+    # If the source provides a temporal_roi (CDnet benchmark), use that as the
+    # warmup count so results are comparable to published CDnet scores.
+    effective_warmup = src.get_warmup_frames(fallback=warmup_frames)
+
+    fps = src.fps
+    frame_w = src.width
+    frame_h = src.height
+    frames_per_segment = max(1, int(fps * segment_seconds))
+
+    # Single consistent database path: output_dir/metadata.db.
+    # Previously pipeline.py called initialize_database() with no args, which
+    # defaulted to "metadata.db" in the cwd — a different file than the encoder's
+    # "outputs/metadata.db". Now both use the same explicit path.
+    db_path = str(Path(output_dir) / "metadata.db")
 
     log.info(f"Source: {input_source} | {frame_w}x{frame_h} @ {fps:.1f}fps")
     log.info(f"Segment length: {segment_seconds}s ({frames_per_segment} frames)")
-    log.info(f"Warmup period: {warmup_frames} frames (~{warmup_frames/fps:.1f}s) -- output suppressed during init")
+    log.info(f"Warmup: {effective_warmup} frames (~{effective_warmup/fps:.1f}s)")
 
     subtractor = BackgroundSubtractor(method=bg_method)
     encoder = ROIEncoder(output_dir=output_dir)
@@ -125,8 +167,8 @@ def run_pipeline(
     fourcc = cv2.VideoWriter_fourcc(*"XVID")
     segment_writer = cv2.VideoWriter(str(temp_path), fourcc, fps, (frame_w, frame_h))
 
-    # frame_count counts ALL frames including warmup.
-    # encode_count counts only frames written to output (post-warmup).
+    segment_frames: list = []       # in-memory frame buffer (numpy arrays)
+    segment_regions: list = []
     frame_count = 0
     encode_count = 0
     target_frames_this_segment = 0
@@ -135,24 +177,19 @@ def run_pipeline(
 
     try:
         while True:
-            ret, frame = cap.read()
+            ret, frame = src.read()
             if not ret:
                 log.info("End of source. Flushing final segment.")
                 break
 
-            # Always apply the subtractor -- it needs every frame to build
-            # and update its background model, even during warmup.
             mask = subtractor.apply(frame)
             regions = subtractor.get_foreground_regions(mask)
 
             # --- WARMUP GATE ---
-            # During warmup we run the subtractor (above) but skip everything
-            # that depends on having a stable mask: writing frames to the segment
-            # buffer and accumulating region lists.
-            if frame_count < warmup_frames:
+            if frame_count < effective_warmup:
                 frame_count += 1
-                if frame_count == warmup_frames:
-                    log.info(f"Warmup complete after {warmup_frames} frames. Encoding started.")
+                if frame_count == effective_warmup:
+                    log.info(f"Warmup complete after {effective_warmup} frames. Encoding started.")
                 continue
             # --- END WARMUP GATE ---
 
@@ -178,37 +215,32 @@ def run_pipeline(
             encode_count += 1
 
             if encode_count > 0 and encode_count % frames_per_segment == 0:
-                segment_writer.release()
+                seg_num = encode_count // frames_per_segment
                 log.info(
-                    f"Encoding segment {encode_count // frames_per_segment} | "
+                    f"Encoding segment {seg_num} | "
                     f"targets in {target_frames_this_segment}/{frames_per_segment} frames"
                 )
-                out = encoder.encode_frame_sequence(
-                    str(temp_path),
-                    segment_regions,
+                out = encoder.encode_segment(
+                    frames=segment_frames,
+                    bboxes_per_frame=[
+                        [r.to_tuple() for r in regions]
+                        for regions in segment_regions
+                    ],
                     camera_id=camera_id,
-                    segment_duration_s=segment_seconds,
+                    fps=fps,
                 )
-                # encode_frame_sequence() already writes the metadata row
-                # via db.py's insert_segment(). Do NOT call insert_segment()
-                # here — that was a double-write bug producing two DB rows
-                # per segment (and crashing on the second write due to a
-                # schema mismatch between roi_encoder._init_db and db.py).
                 log.info(f"Saved: {out}")
 
+                segment_frames = []
                 segment_regions = []
                 target_frames_this_segment = 0
-                segment_writer = cv2.VideoWriter(str(temp_path), fourcc, fps, (frame_w, frame_h))
 
     except KeyboardInterrupt:
         log.info("Interrupted by user.")
     finally:
-        cap.release()
-        if segment_writer:
-            segment_writer.release()
+        src.release()
         if show_preview:
             cv2.destroyAllWindows()
-        temp_path.unlink(missing_ok=True)
 
         report = encoder.get_storage_report()
         log.info("Storage report: " + str(report))
@@ -220,14 +252,13 @@ if __name__ == "__main__":
     parser.add_argument("--camera-id", default="cam_00")
     parser.add_argument("--output", default="outputs/")
     parser.add_argument("--segment", type=int, default=60, help="Segment duration in seconds")
-    parser.add_argument("--method", default="MOG2", choices=["MOG2", "KNN", "GMG"])
+    parser.add_argument("--method", default="MOG2", choices=["MOG2", "KNN"])
     parser.add_argument("--preview", action="store_true")
     parser.add_argument(
         "--warmup",
         type=int,
         default=120,
-        help="Number of frames to feed through background model before encoding starts. "
-             "Default 120 (~4s at 30fps). Increase for complex outdoor scenes."
+        help="Warmup frames before encoding starts. Overridden by CDnet temporalROI if available."
     )
     parser.add_argument(
         "--enhance",
@@ -254,8 +285,18 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    src = args.input if args.input == 0 else (
-        int(args.input) if str(args.input).isdigit() else args.input
+    input_src = args.input
+    if input_src != 0:
+        input_src = int(input_src) if str(input_src).isdigit() else input_src
+
+    run_pipeline(
+        input_src,
+        args.camera_id,
+        args.output,
+        args.segment,
+        args.method,
+        args.preview,
+        args.warmup,
     )
     run_pipeline(
         src,

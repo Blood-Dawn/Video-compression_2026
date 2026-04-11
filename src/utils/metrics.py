@@ -66,12 +66,27 @@ def foreground_coverage(mask: np.ndarray) -> float:
 
 
 def storage_savings_report(original_size_bytes: int, compressed_size_bytes: int) -> dict:
-    ratio = original_size_bytes / max(compressed_size_bytes, 1)
+    """
+    Summarise storage savings from a single encode.
+
+    Uses compute_compression_ratio() for consistent handling of zero/negative
+    inputs — same rules as the rest of this module.
+
+    Raises ValueError if either size is negative (delegated to
+    compute_compression_ratio).
+
+    Returns:
+        Dict with keys: original_mb, compressed_mb, saved_mb,
+        compression_ratio, space_saved_pct.
+    """
+    if original_size_bytes < 0 or compressed_size_bytes < 0:
+        raise ValueError("file sizes must be non-negative")
+    ratio = compute_compression_ratio(original_size_bytes, compressed_size_bytes)
     saved = original_size_bytes - compressed_size_bytes
     return {
         "original_mb": round(original_size_bytes / 1e6, 2),
         "compressed_mb": round(compressed_size_bytes / 1e6, 2),
         "saved_mb": round(saved / 1e6, 2),
-        "compression_ratio": round(ratio, 2),
+        "compression_ratio": round(ratio, 2) if ratio != float("inf") else ratio,
         "space_saved_pct": round((saved / max(original_size_bytes, 1)) * 100, 1),
     }

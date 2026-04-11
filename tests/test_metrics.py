@@ -36,6 +36,24 @@ def test_compute_ssim_different_frames():
 
 def test_compute_compression_ratio():
     assert compute_compression_ratio(6000, 1000) == 6.0
+def test_compute_ssim_shape_mismatch_raises():
+    frame1 = np.zeros((100, 100, 3), dtype=np.uint8)
+    frame2 = np.zeros((50, 50, 3), dtype=np.uint8)
+    with pytest.raises(ValueError, match="same shape"):
+        compute_ssim(frame1, frame2)
+
+
+def test_compute_ssim_returns_float():
+    frame = np.zeros((50, 50, 3), dtype=np.uint8)
+    assert isinstance(compute_ssim(frame, frame), float)
+
+
+# ---------------------------------------------------------------------------
+# compute_compression_ratio
+# ---------------------------------------------------------------------------
+
+def test_compute_compression_ratio_basic():
+    assert compute_compression_ratio(6000, 1000) == pytest.approx(6.0)
 
 
 def test_compute_compression_ratio_zero_compressed():
@@ -59,3 +77,102 @@ def test_compute_ssim_shape_mismatch_raises():
     frame2 = np.zeros((50, 50, 3), dtype=np.uint8)
     with pytest.raises(ValueError):
         compute_ssim(frame1, frame2)
+    with pytest.raises(ValueError, match="non-negative"):
+        compute_compression_ratio(-1, 100)
+
+
+def test_compute_compression_ratio_negative_compressed_raises():
+    with pytest.raises(ValueError, match="non-negative"):
+        compute_compression_ratio(100, -1)
+
+
+def test_compute_compression_ratio_equal_sizes():
+    assert compute_compression_ratio(1000, 1000) == pytest.approx(1.0)
+
+
+def test_compute_compression_ratio_returns_float():
+    assert isinstance(compute_compression_ratio(500, 100), float)
+
+
+# ---------------------------------------------------------------------------
+# compression_ratio (path-based wrapper)
+# ---------------------------------------------------------------------------
+
+def test_compression_ratio_from_paths():
+    """Path-based wrapper must return same result as compute_compression_ratio."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        orig = Path(tmpdir) / "original.bin"
+        comp = Path(tmpdir) / "compressed.bin"
+
+        orig.write_bytes(b"x" * 6000)
+        comp.write_bytes(b"x" * 1000)
+
+        result = compression_ratio(str(orig), str(comp))
+        assert result == pytest.approx(6.0)
+
+
+def test_compression_ratio_missing_file_raises():
+    """Missing file should raise FileNotFoundError (from stat())."""
+    with pytest.raises(FileNotFoundError):
+        compression_ratio("/nonexistent/original.bin", "/nonexistent/compressed.bin")
+
+
+# ---------------------------------------------------------------------------
+# foreground_coverage
+# ---------------------------------------------------------------------------
+
+def test_foreground_coverage_all_foreground():
+    mask = np.full((100, 100), 255, dtype=np.uint8)
+    assert foreground_coverage(mask) == pytest.approx(1.0)
+
+
+def test_foreground_coverage_empty_mask():
+    mask = np.zeros((100, 100), dtype=np.uint8)
+    assert foreground_coverage(mask) == pytest.approx(0.0)
+
+
+def test_foreground_coverage_partial():
+    mask = np.zeros((100, 100), dtype=np.uint8)
+    mask[:50, :] = 255  # top half foreground = 50%
+    assert foreground_coverage(mask) == pytest.approx(0.5)
+
+
+def test_foreground_coverage_zero_size_mask():
+    mask = np.zeros((0, 0), dtype=np.uint8)
+    assert foreground_coverage(mask) == 0.0
+
+
+def test_foreground_coverage_returns_float():
+    mask = np.zeros((100, 100), dtype=np.uint8)
+    assert isinstance(foreground_coverage(mask), float)
+
+
+# ---------------------------------------------------------------------------
+# storage_savings_report
+# ---------------------------------------------------------------------------
+
+def test_storage_savings_report_keys():
+    report = storage_savings_report(10_000_000, 2_000_000)
+    expected_keys = {"original_mb", "compressed_mb", "saved_mb", "compression_ratio", "space_saved_pct"}
+    assert set(report.keys()) == expected_keys
+
+
+def test_storage_savings_report_values():
+    report = storage_savings_report(10_000_000, 2_000_000)
+    assert report["original_mb"] == pytest.approx(10.0)
+    assert report["compressed_mb"] == pytest.approx(2.0)
+    assert report["saved_mb"] == pytest.approx(8.0)
+    assert report["compression_ratio"] == pytest.approx(5.0)
+    assert report["space_saved_pct"] == pytest.approx(80.0)
+
+
+def test_storage_savings_report_zero_compressed():
+    """Zero compressed size should not raise — uses max(..., 1) guard."""
+    report = storage_savings_report(1_000_000, 0)
+    assert report["compression_ratio"] > 0
+
+
+def test_storage_savings_report_no_savings():
+    report = storage_savings_report(1_000_000, 1_000_000)
+    assert report["compression_ratio"] == pytest.approx(1.0)
+    assert report["space_saved_pct"] == pytest.approx(0.0)

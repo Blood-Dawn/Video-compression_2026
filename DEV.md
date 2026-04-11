@@ -573,4 +573,88 @@ pytest tests/ -v
 
 ---
 
-*Last updated: March 2026. If you find anything in this guide that is wrong or out of date, update it and open a PR.*
+## 12. Enhancement Module Setup (Milestone 2)
+
+The enhancement module applies CPU-compatible super-resolution to sharpen foreground ROI regions before they are encoded. This uses [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN).
+
+### Step 1 — Install the enhancement dependencies
+
+These are already listed in `requirements.txt` but require a separate install step because `basicsr` has a non-trivial C++ build:
+
+```bash
+pip install basicsr realesrgan
+```
+
+On macOS you may need Xcode command-line tools first:
+```bash
+xcode-select --install
+```
+
+### Step 2 — Download model weights
+
+The model weights are **not** committed to git (they are ~67 MB and covered by the `*.pth` gitignore rule). Download them manually:
+
+```bash
+mkdir -p models
+curl -L -o models/RealESRGAN_x4plus.pth \
+  https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth
+```
+
+Or download from the browser: go to the [Real-ESRGAN releases page](https://github.com/xinntao/Real-ESRGAN/releases/tag/v0.1.0) and save `RealESRGAN_x4plus.pth` into `models/`.
+
+After downloading:
+```
+models/
+└── RealESRGAN_x4plus.pth   ← 67 MB, gitignored
+```
+
+### Step 3 — Verify the module loads
+
+```python
+from src.enhancement.enhancer import Enhancer
+e = Enhancer()
+print(e.backend)   # should print "realesrgan" if weights + packages are present
+```
+
+If it prints `"bicubic"`, either the packages are not installed or the weights file is missing. The pipeline will still run — just without AI sharpening.
+
+### Step 4 — Run the pipeline with enhancement
+
+```bash
+python src/pipeline/pipeline.py \
+  --input data/samples/test_clip.mp4 \
+  --camera-id cam_test \
+  --output outputs/ \
+  --enhance
+```
+
+**Enhancement CLI flags:**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--enhance` | off | Enable ROI super-resolution sharpening |
+| `--enhance-scale` | `4` | Intermediate upscale factor (must match model, default 4) |
+
+**Performance note:** Each foreground ROI is upscaled then downscaled back to original resolution on every frame. On a modern laptop CPU this adds ~50–200ms per frame depending on ROI size. Do **not** use `--enhance` on live camera feeds unless your hardware can sustain the load. It is intended for offline processing of stored footage.
+
+### How it works
+
+`upscale_roi(frame, bbox)` extracts the bounding box region, runs it through Real-ESRGAN at 4× (or bicubic fallback), then downsamples the result back to the original bbox dimensions and composites it into the frame. The frame size stays the same — this is a sharpening pass, not a resize. The sharpened frame is then handed to the segment writer and encoded at the foreground CRF setting.
+
+### Troubleshooting
+
+**`ImportError: No module named 'basicsr'`**
+Run `pip install basicsr realesrgan` inside your active venv.
+
+**`Model weights not found`**
+The `.pth` file is missing from `models/`. Re-run the curl command in Step 2.
+
+**`CUDA not available` warning**
+Normal — the Enhancer always runs in CPU mode (`half=False`). This warning comes from PyTorch and can be ignored.
+
+**Enhancement is slow**
+Use `--enhance-scale 2` to run a lighter intermediate pass, or skip `--enhance` entirely and process footage offline after offload.
+
+---
+
+*Last updated: April 2026 by Victor Teixeira (Milestone 2 — Enhancement Module). If you find anything in this guide that is wrong or out of date, update it and open a PR.*

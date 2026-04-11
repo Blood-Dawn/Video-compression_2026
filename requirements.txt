@@ -27,7 +27,8 @@ pandas>=2.0.0
 pytest>=7.4.0
 pytest-cov>=4.1.0
 
-# Optional: lightweight super-resolution (CPU-compatible)
-# Uncomment when enhancement module is ready
-# basicsr>=1.4.2
-# realesrgan>=0.3.0
+# Super-resolution enhancement (Milestone 2)
+# CPU-compatible. Required if --enhance flag is used in pipeline.py.
+# Install: pip install basicsr realesrgan
+basicsr>=1.4.2
+realesrgan>=0.3.0

@@ -8,11 +8,14 @@ Designed to run continuously on low-spec hardware (Raspberry Pi, old x86 box).
 No GPU required.
 
 Author: Bloodawn (KheivenD)
+Enhancement module integration: Victor Teixeira
 
 Usage:
     python pipeline.py --input /dev/video0 --camera-id cam_01 --output outputs/
     python pipeline.py --input footage/test_clip.mp4 --camera-id cam_test
     python pipeline.py --input footage/test_clip.mp4 --camera-id cam_test --warmup 150
+    python pipeline.py --input footage/test_clip.mp4 --camera-id cam_test --enhance
+    python pipeline.py --input footage/test_clip.mp4 --camera-id cam_test --enhance --enhance-scale 2
 """
 
 import cv2
@@ -21,6 +24,7 @@ import logging
 import time
 from pathlib import Path
 from collections import deque
+from typing import Optional
 
 from src.utils.db import initialize_database
 import os
@@ -30,6 +34,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from background_subtraction.background_subtraction import BackgroundSubtractor
 from compression.roi_encoder import ROIEncoder
+from enhancement.enhancer import Enhancer
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,6 +51,8 @@ def run_pipeline(
     bg_method: str = "MOG2",
     show_preview: bool = False,
     warmup_frames: int = 120,
+    enhance: bool = False,
+    enhance_scale: int = 4,
 ):
     """
     Main pipeline loop.
@@ -78,6 +85,12 @@ def run_pipeline(
                        before beginning to encode output. Default 120 frames
                        (approximately 4 seconds at 30fps). Increase to 250-500
                        for scenes with complex dynamic backgrounds (trees, flags).
+        enhance: When True, apply super-resolution sharpening to foreground ROIs
+                 before writing each frame to the segment buffer. Requires
+                 Real-ESRGAN weights in models/ (falls back to bicubic if absent).
+                 Adds per-frame CPU cost; not recommended for real-time sources.
+        enhance_scale: Intermediate upscale factor used by the Enhancer.
+                       Default 4 (matches RealESRGAN_x4plus weights).
     """
     cap = cv2.VideoCapture(input_source)
     if not cap.isOpened():
@@ -95,6 +108,14 @@ def run_pipeline(
     subtractor = BackgroundSubtractor(method=bg_method)
     encoder = ROIEncoder(output_dir=output_dir)
     initialize_database()
+
+    enhancer: Optional[Enhancer] = None
+    if enhance:
+        enhancer = Enhancer(scale=enhance_scale)
+        log.info(
+            f"Enhancement enabled (backend={enhancer.backend}, scale={enhance_scale}). "
+            "Foreground ROIs will be sharpened before encoding."
+        )
 
     segment_regions = []
     segment_writer = None
@@ -134,6 +155,12 @@ def run_pipeline(
                     log.info(f"Warmup complete after {warmup_frames} frames. Encoding started.")
                 continue
             # --- END WARMUP GATE ---
+
+            # Optional: sharpen foreground ROIs before writing to the buffer.
+            # Each detected region is enhanced in-place at original resolution.
+            if enhancer is not None and regions:
+                for region in regions:
+                    frame = enhancer.upscale_roi(frame, (region.x, region.y, region.w, region.h))
 
             segment_writer.write(frame)
             segment_regions.append(regions)
@@ -202,9 +229,33 @@ if __name__ == "__main__":
         help="Number of frames to feed through background model before encoding starts. "
              "Default 120 (~4s at 30fps). Increase for complex outdoor scenes."
     )
+    parser.add_argument(
+        "--enhance",
+        action="store_true",
+        help="Apply super-resolution sharpening to foreground ROIs before encoding. "
+             "Requires Real-ESRGAN weights in models/. Falls back to bicubic if absent. "
+             "Adds CPU overhead; not recommended for real-time sources."
+    )
+    parser.add_argument(
+        "--enhance-scale",
+        type=int,
+        default=4,
+        dest="enhance_scale",
+        help="Intermediate upscale factor for the enhancement pass. Default 4."
+    )
     args = parser.parse_args()
 
     src = args.input if args.input == 0 else (
         int(args.input) if str(args.input).isdigit() else args.input
     )
-    run_pipeline(src, args.camera_id, args.output, args.segment, args.method, args.preview, args.warmup)
+    run_pipeline(
+        src,
+        args.camera_id,
+        args.output,
+        args.segment,
+        args.method,
+        args.preview,
+        args.warmup,
+        enhance=args.enhance,
+        enhance_scale=args.enhance_scale,
+    )

@@ -1,227 +1,150 @@
 """
 enhancer.py
 
-CPU-compatible super-resolution enhancement using Real-ESRGAN.
-Designed for post-capture use: sharpening ROI regions before encoding,
-or offline enhancement of stored compressed footage.
+Stub for Milestone 2 post-compression enhancement / super-resolution.
 
-If Real-ESRGAN weights / packages are not available, falls back silently
-to bicubic interpolation so the pipeline never hard-crashes on setup issues.
+The Enhancer class defines the full interface that downstream code (pipeline,
+notebooks, tests) can import and call against today.  Every method raises
+NotImplementedError so integration wiring can be written and tested now,
+with the real implementation filled in during Milestone 2.
 
-Author: Victor Teixeira
+Planned implementation notes (Milestone 2):
+  - upscale_frame: apply a lightweight SR model (e.g. EDSR, Real-ESRGAN) to
+    an entire decoded frame.  Useful for background segments that were encoded
+    at high CRF and need perceptual quality restored before display.
+  - upscale_roi: crop the ROI region, upscale it, and paste it back onto the
+    full-resolution canvas. More efficient than upscaling the whole frame when
+    the ROI is a small fraction of total pixels.
+  - enhance_batch: process a list of frames in one call; allows the model to
+    be loaded once and applied across many frames without repeated init cost.
 
-Model download:
-    See DEV.md → "Enhancement Module Setup" for instructions.
-    TL;DR: download RealESRGAN_x4plus.pth and place it in models/
+Author: Bloodawn (KheivenD)
 """
 
-import logging
-import os
-from pathlib import Path
-from typing import Optional, Tuple
-
-import cv2
 import numpy as np
-
-log = logging.getLogger(__name__)
-
-# Default models directory: prefer the ENHANCER_MODELS_DIR env var so the
-# package stays robust when installed outside the original repo layout.
-_DEFAULT_MODELS_DIR = Path(
-    os.environ.get("ENHANCER_MODELS_DIR", "")
-) if os.environ.get("ENHANCER_MODELS_DIR") else Path(__file__).parent.parent.parent / "models"
-
-_DEFAULT_MODEL_PATH = _DEFAULT_MODELS_DIR / "RealESRGAN_x4plus.pth"
-
-_VALID_SCALES = {2, 4}
+from typing import List, Tuple
 
 
 class Enhancer:
     """
-    Frame and ROI upscaler using Real-ESRGAN (CPU-safe).
+    Post-compression image enhancement / super-resolution interface.
 
-    Usage:
-        enhancer = Enhancer()                          # auto-detect model
-        enhancer = Enhancer(model_path="models/RealESRGAN_x4plus.pth")
-        enhancer = Enhancer(models_dir="/data/weights") # custom directory
+    All methods are stubs that raise NotImplementedError.
+    Implement during Milestone 2 by replacing the raise statements with
+    a real model (EDSR, FSRCNN, Real-ESRGAN, etc.).
 
-    The models directory is resolved in this order:
-      1. Explicit ``model_path`` argument
-      2. Explicit ``models_dir`` argument
-      3. ``ENHANCER_MODELS_DIR`` environment variable
-      4. ``<repo_root>/models/`` (default)
-
-    If the model file or required packages are missing, all methods fall
-    back to bicubic interpolation — behaviour is identical from the
-    caller's perspective, just without AI-driven sharpening.
+    Usage (Milestone 2+):
+        enhancer = Enhancer(scale=2, model="edsr")
+        upscaled = enhancer.upscale_frame(frame)
+        roi_upscaled = enhancer.upscale_roi(frame, bbox=(x, y, w, h))
     """
 
     def __init__(
         self,
-        model_path: Optional[str] = None,
-        models_dir: Optional[str] = None,
-        scale: int = 4,
-    ) -> None:
+        scale: int = 2,
+        model: str = "edsr",
+        device: str = "cpu",
+    ):
         """
         Args:
-            model_path: Explicit path to a RealESRGAN .pth weights file.
-                        When given, ``models_dir`` is ignored.
-            models_dir: Directory that contains ``RealESRGAN_x4plus.pth``.
-                        Overrides the env-var / repo-relative default.
-            scale: Native upscale factor of the loaded model. Must be 2 or 4.
+            scale: Upscale factor. Typically 2 or 4.
+            model: Model architecture name. Supported values TBD (Milestone 2).
+                   Suggested options: "edsr", "fsrcnn", "esrgan".
+            device: Compute device. "cpu" for Raspberry Pi / legacy hardware.
+                    "cuda" or "mps" if available.
         """
-        if scale not in _VALID_SCALES:
-            raise ValueError(f"scale must be one of {_VALID_SCALES}, got {scale}")
         self.scale = scale
+        self.model = model
+        self.device = device
 
-        if model_path:
-            self.model_path = Path(model_path)
-        elif models_dir:
-            self.model_path = Path(models_dir) / "RealESRGAN_x4plus.pth"
-        else:
-            self.model_path = _DEFAULT_MODEL_PATH
-
-        self._upsampler = None   # RealESRGANer instance if available
-        self._using_nn = False
-        self._load_model()
-
-    # ------------------------------------------------------------------
-    # Internal
-    # ------------------------------------------------------------------
-
-    def _load_model(self) -> None:
-        """Attempt to load Real-ESRGAN. Swallows all failures gracefully."""
-        try:
-            from basicsr.archs.rrdbnet_arch import RRDBNet  # type: ignore
-            from realesrgan import RealESRGANer              # type: ignore
-        except ImportError:
-            log.warning(
-                "realesrgan / basicsr not installed — using bicubic fallback. "
-                "To enable AI upscaling: pip install basicsr realesrgan"
-            )
-            return
-
-        if not self.model_path.exists():
-            log.warning(
-                "Model weights not found at %s — using bicubic fallback. "
-                "See DEV.md → 'Enhancement Module Setup' to download weights.",
-                self.model_path,
-            )
-            return
-
-        try:
-            model = RRDBNet(
-                num_in_ch=3,
-                num_out_ch=3,
-                num_feat=64,
-                num_block=23,
-                num_grow_ch=32,
-                scale=self.scale,
-            )
-            self._upsampler = RealESRGANer(
-                scale=self.scale,
-                model_path=str(self.model_path),
-                model=model,
-                half=False,   # CPU mode — fp16 is GPU-only
-            )
-            self._using_nn = True
-            log.info("Real-ESRGAN loaded: %s (x%d)", self.model_path.name, self.scale)
-        except Exception as exc:
-            log.warning(
-                "Real-ESRGAN failed to initialise (%s: %s) — using bicubic fallback.",
-                type(exc).__name__,
-                exc,
-            )
-            self._upsampler = None
-            self._using_nn = False
-
-    # ------------------------------------------------------------------
-    # Public API
-    # ------------------------------------------------------------------
-
-    @property
-    def backend(self) -> str:
-        """Return 'realesrgan' or 'bicubic' depending on what is active."""
-        return "realesrgan" if self._using_nn else "bicubic"
-
-    def upscale_frame(
-        self,
-        frame: np.ndarray,
-        scale: Optional[int] = None,
-    ) -> np.ndarray:
+    def upscale_frame(self, frame: np.ndarray) -> np.ndarray:
         """
-        Upscale an entire BGR frame.
+        Upscale an entire decoded video frame by self.scale.
 
         Args:
-            frame: H × W × 3 BGR numpy array (as returned by cv2.VideoCapture).
-            scale: Upscale factor override. If None, uses self.scale.
-                   When using Real-ESRGAN this is passed as outscale, so the
-                   model internally runs at its native 4× and is then resized
-                   to the requested factor.
+            frame: BGR uint8 numpy array, shape (H, W, 3).
 
         Returns:
-            Upscaled BGR numpy array of shape (H*scale × W*scale × 3).
+            Upscaled BGR uint8 numpy array, shape (H*scale, W*scale, 3).
+
+        Raises:
+            NotImplementedError: Until Milestone 2 implementation is complete.
         """
-        if frame is None or frame.size == 0:
-            raise ValueError("upscale_frame received an empty frame")
-
-        target_scale = scale if scale is not None else self.scale
-
-        if self._using_nn and self._upsampler is not None:
-            # RealESRGANer.enhance() returns (output_bgr, _)
-            out, _ = self._upsampler.enhance(frame, outscale=target_scale)
-            return out
-
-        # Bicubic fallback
-        h, w = frame.shape[:2]
-        return cv2.resize(
-            frame,
-            (w * target_scale, h * target_scale),
-            interpolation=cv2.INTER_CUBIC,
+        raise NotImplementedError(
+            "upscale_frame() is not yet implemented. "
+            "Complete the super-resolution model integration in Milestone 2."
         )
 
     def upscale_roi(
         self,
         frame: np.ndarray,
         bbox: Tuple[int, int, int, int],
-        scale: Optional[int] = None,
     ) -> np.ndarray:
         """
-        Enhance one bounding-box region and composite it back into the frame.
+        Crop the ROI from frame, upscale it, and paste it back.
 
-        The ROI is upscaled by `scale`, then resized back to the original
-        bounding-box dimensions before being pasted. This applies a
-        super-resolution sharpening pass in-place without changing frame size.
+        More efficient than full-frame upscaling when the ROI covers only a
+        small fraction of the total pixel area (typical for sparse surveillance
+        footage with one or two small targets).
 
         Args:
-            frame: H × W × 3 BGR numpy array.
-            bbox:  (x, y, w, h) bounding box in pixel coordinates.
-            scale: Upscale factor for the intermediate SR pass. Defaults to
-                   self.scale.
+            frame: Full-resolution BGR uint8 numpy array, shape (H, W, 3).
+            bbox: Bounding box as (x, y, w, h) in pixel coordinates.
 
         Returns:
-            A copy of `frame` with the bbox region sharpened in-place.
-        """
-        if frame is None or frame.size == 0:
-            raise ValueError("upscale_roi received an empty frame")
+            A copy of frame with the ROI region replaced by its upscaled version.
+            Output shape is identical to input shape.
 
+        Raises:
+            NotImplementedError: Until Milestone 2 implementation is complete.
+            ValueError: If bbox is out of bounds (raised even before implementation).
+        """
         x, y, w, h = bbox
         fh, fw = frame.shape[:2]
+        if x < 0 or y < 0 or x + w > fw or y + h > fh:
+            raise ValueError(
+                f"bbox {bbox} is out of bounds for frame of size {fw}x{fh}"
+            )
+        raise NotImplementedError(
+            "upscale_roi() is not yet implemented. "
+            "Complete the super-resolution model integration in Milestone 2."
+        )
 
-        # Clamp to frame bounds
-        x = max(0, min(x, fw - 1))
-        y = max(0, min(y, fh - 1))
-        w = min(w, fw - x)
-        h = min(h, fh - y)
+    def enhance_batch(self, frames: List[np.ndarray]) -> List[np.ndarray]:
+        """
+        Upscale a list of frames in one call (model loaded once).
 
-        if w <= 0 or h <= 0:
-            return frame.copy()
+        Args:
+            frames: List of BGR uint8 numpy arrays, all the same shape.
 
-        roi = frame[y : y + h, x : x + w]
-        upscaled = self.upscale_frame(roi, scale=scale)
+        Returns:
+            List of upscaled BGR uint8 numpy arrays.
 
-        # Resize back to original bbox size and paste
-        restored = cv2.resize(upscaled, (w, h), interpolation=cv2.INTER_CUBIC)
-        result = frame.copy()
-        result[y : y + h, x : x + w] = restored
-        return result
+        Raises:
+            NotImplementedError: Until Milestone 2 implementation is complete.
+            ValueError: If frames is empty or frames have inconsistent shapes.
+        """
+        if not frames:
+            raise ValueError("frames must not be empty")
+        shape = frames[0].shape
+        if any(f.shape != shape for f in frames):
+            raise ValueError("All frames must have the same shape")
+        raise NotImplementedError(
+            "enhance_batch() is not yet implemented. "
+            "Complete the super-resolution model integration in Milestone 2."
+        )
+
+    def is_available(self) -> bool:
+        """
+        Returns True when the enhancement backend is loaded and ready.
+
+        Always returns False in the stub so callers can gate enhancement
+        behind an availability check without crashing.
+        """
+        return False
+
+    def __repr__(self) -> str:
+        return (
+            f"Enhancer(model={self.model!r}, scale={self.scale}, "
+            f"device={self.device!r}, available={self.is_available()})"
+        )

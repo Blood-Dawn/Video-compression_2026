@@ -134,6 +134,7 @@ CONDITIONS = {
 
 
 def main():
+    np.random.seed(42)
     results = []
     print("Running tuning experiments...\n")
     for condition_name, clip_fn in CONDITIONS.items():

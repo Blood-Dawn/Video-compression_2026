@@ -23,7 +23,7 @@ venv/
 data/dataset/
 # VIRAT annotations (thousands of .yml files from IARPA DIVA / Kitware)
 data/viratannotations-master/
-# Raw video/binary samples
+# Raw video/binary samples -- all local only, see DEV.md Section 13 for how to build them
 data/samples/*.mp4
 data/samples/*.avi
 data/samples/*.mov
@@ -35,7 +35,6 @@ data/samples/virat_overlay_previews/
 data/raw/
 data/processed/
 *.bin
-# See README "Test Datasets and Attribution" for download links
 
 # Model weights (download separately)
 *.pth

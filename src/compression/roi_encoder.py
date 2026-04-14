@@ -80,6 +80,7 @@ class ROIEncoder:
         bboxes_per_frame: Optional[List[List[Tuple[int, int, int, int]]]] = None,
         camera_id: str = "cam_unknown",
         fps: float = 30.0,
+        object_type="unknown"
     ) -> str:
         """
         Encode a list of raw BGR numpy frames into a compressed MP4.
@@ -173,6 +174,7 @@ class ROIEncoder:
             file_size=file_size,
             duration=duration,
             file_path=str(output_path),
+            object_type=object_type,
             db_path=self.db_path,
         )
 

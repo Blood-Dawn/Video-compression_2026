@@ -573,174 +573,88 @@ pytest tests/ -v
 
 ---
 
-## Enhancement Module Setup
+## 12. Enhancement Module Setup (Milestone 2)
 
-The `Enhancer` class (`src/enhancement/enhancer.py`) supports two backends. Choose the one that fits your use case.
+The enhancement module applies CPU-compatible super-resolution to sharpen foreground ROI regions before they are encoded. This uses [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN).
 
-### Backend 1 — OpenCV dnn_superres (Recommended for CPU batch processing)
+### Step 1 — Install the enhancement dependencies
 
-Fast, lightweight, and easy to set up. Best for bulk post-offload processing.
+These are already listed in `requirements.txt` but require a separate install step because `basicsr` has a non-trivial C++ build:
 
-**Step 1 — Install opencv-contrib-python**
 ```bash
-pip install opencv-contrib-python
+pip install basicsr realesrgan
 ```
-If you already have `opencv-python` installed, uninstall it first to avoid conflicts:
+
+On macOS you may need Xcode command-line tools first:
 ```bash
-pip uninstall opencv-python
-pip install opencv-contrib-python
+xcode-select --install
 ```
 
-**Step 2 — Download model weights**
+### Step 2 — Download model weights
 
-Create the `models/` directory in the project root (already gitignored):
-```bash
-mkdir -p models
-```
+The model weights are **not** committed to git (they are ~67 MB and covered by the `*.pth` gitignore rule). Download them manually:
 
-Download your chosen model. ESPCN x4 is the fastest on CPU:
-```bash
-# ESPCN x2 and x4 (fastest — ~1-5 ms/frame)
-curl -L "https://github.com/opencv/opencv_contrib/raw/master/modules/dnn_superres/models/ESPCN_x2.pb" -o models/ESPCN_x2.pb
-curl -L "https://github.com/opencv/opencv_contrib/raw/master/modules/dnn_superres/models/ESPCN_x4.pb" -o models/ESPCN_x4.pb
-
-# FSRCNN x2 and x4 (slightly better quality, ~5-15 ms/frame)
-curl -L "https://github.com/opencv/opencv_contrib/raw/master/modules/dnn_superres/models/FSRCNN_x2.pb" -o models/FSRCNN_x2.pb
-curl -L "https://github.com/opencv/opencv_contrib/raw/master/modules/dnn_superres/models/FSRCNN_x4.pb" -o models/FSRCNN_x4.pb
-```
-
-**Step 3 — Verify**
-```python
-from src.enhancement.enhancer import Enhancer
-e = Enhancer(scale=4, model="espcn")
-print(e.is_available())  # True if model file found and cv2.dnn_superres present
-print(repr(e))
-```
-
-**Expected output:**
-```
-True
-Enhancer(model='espcn', scale=4, device='cpu', backend='dnnsuperres', available=True)
-```
-
----
-
-### Backend 2 — Real-ESRGAN (Best quality, slower — for high-value forensic targets)
-
-Produces the best visual quality. Use for specific frames of interest (faces, license plates).
-CPU inference only — no CUDA required. Accepts `--fp32` mode automatically.
-
-**Hallucination warning:** Real-ESRGAN (GAN-trained) may fabricate plausible details that are not in the original footage. For forensic applications, use `RealESRNet_x4plus` instead — it uses MSE loss and blurs rather than hallucinating.
-
-**Step 1 — Install Real-ESRGAN**
-```bash
-pip install realesrgan basicsr facexlib gfpgan
-```
-
-**Step 2 — Download model weights**
 ```bash
 mkdir -p models
-
-# General purpose (best quality, GAN-trained — slight hallucination risk)
-curl -L "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth" \
-     -o models/RealESRGAN_x4plus.pth
-
-# MSE-trained variant (fewer hallucinations — preferred for forensic use)
-curl -L "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRNet_x4plus.pth" \
-     -o models/RealESRNet_x4plus.pth
-
-# Lighter general model (faster than x4plus, good quality)
-curl -L "https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesr-general-x4v3.pth" \
-     -o models/realesr-general-x4v3.pth
+curl -L -o models/RealESRGAN_x4plus.pth \
+  https://github.com/xinntao/Real-ESRGAN/releases/download/v0.1.0/RealESRGAN_x4plus.pth
 ```
 
-**Step 3 — Verify**
+Or download from the browser: go to the [Real-ESRGAN releases page](https://github.com/xinntao/Real-ESRGAN/releases/tag/v0.1.0) and save `RealESRGAN_x4plus.pth` into `models/`.
+
+After downloading:
+```
+models/
+└── RealESRGAN_x4plus.pth   ← 67 MB, gitignored
+```
+
+### Step 3 — Verify the module loads
+
 ```python
 from src.enhancement.enhancer import Enhancer
-e = Enhancer(scale=4, model="realesrgan")
-print(e.is_available())  # True if .pth file found and realesrgan package installed
+e = Enhancer()
+print(e.backend)   # should print "realesrgan" if weights + packages are present
 ```
 
-**CPU performance reference (approximate, varies by hardware):**
+If it prints `"bicubic"`, either the packages are not installed or the weights file is missing. The pipeline will still run — just without AI sharpening.
 
-| Model | 480p frame | 1080p frame |
+### Step 4 — Run the pipeline with enhancement
+
+```bash
+python src/pipeline/pipeline.py \
+  --input data/samples/test_clip.mp4 \
+  --camera-id cam_test \
+  --output outputs/ \
+  --enhance
+```
+
+**Enhancement CLI flags:**
+
+| Flag | Default | Description |
 |---|---|---|
-| ESPCN x4 | ~3 ms | ~15 ms |
-| FSRCNN x4 | ~10 ms | ~45 ms |
-| Real-ESRGAN x4 (CPU fp32) | ~300 ms | ~1200 ms |
-| RealESRNet x4 (CPU fp32) | ~280 ms | ~1100 ms |
+| `--enhance` | off | Enable ROI super-resolution sharpening |
+| `--enhance-scale` | `4` | Intermediate upscale factor (must match model, default 4) |
 
-For bulk post-offload processing of an hour of footage: ESPCN is practical; Real-ESRGAN is only practical for targeted, high-value clips.
+**Performance note:** Each foreground ROI is upscaled then downscaled back to original resolution on every frame. On a modern laptop CPU this adds ~50–200ms per frame depending on ROI size. Do **not** use `--enhance` on live camera feeds unless your hardware can sustain the load. It is intended for offline processing of stored footage.
 
----
+### How it works
 
-### Running enhancement in the pipeline
+`upscale_roi(frame, bbox)` extracts the bounding box region, runs it through Real-ESRGAN at 4× (or bicubic fallback), then downsamples the result back to the original bbox dimensions and composites it into the frame. The frame size stays the same — this is a sharpening pass, not a resize. The sharpened frame is then handed to the segment writer and encoded at the foreground CRF setting.
 
-Pass `--enhance` to the pipeline to enable frame-level enhancement before encoding:
+### Troubleshooting
 
-```bash
-python src/pipeline/pipeline.py \
-  --input data/samples/test_clip.mp4 \
-  --camera-id cam_01 \
-  --output outputs/ \
-  --enhance \
-  --enhance-model espcn \
-  --enhance-scale 4
-```
+**`ImportError: No module named 'basicsr'`**
+Run `pip install basicsr realesrgan` inside your active venv.
 
-If the model is not available, `--enhance` logs a warning and the pipeline continues without enhancement. It never hard-fails on a missing model.
+**`Model weights not found`**
+The `.pth` file is missing from `models/`. Re-run the curl command in Step 2.
+
+**`CUDA not available` warning**
+Normal — the Enhancer always runs in CPU mode (`half=False`). This warning comes from PyTorch and can be ignored.
+
+**Enhancement is slow**
+Use `--enhance-scale 2` to run a lighter intermediate pass, or skip `--enhance` entirely and process footage offline after offload.
 
 ---
 
-## Encryption Setup
-
-The pipeline supports AES-256-CBC encryption of all output video segments via `--encrypt`.
-
-**Step 1 — Install the cryptography library**
-```bash
-pip install cryptography
-```
-
-This is a pure-Python FIPS 140-2 validated implementation. No system dependencies.
-
-**Step 2 — Run the pipeline with encryption**
-
-Using a password (PBKDF2-HMAC-SHA256 key derivation, 600,000 iterations):
-```bash
-python src/pipeline/pipeline.py \
-  --input data/samples/test_clip.mp4 \
-  --camera-id cam_01 \
-  --output outputs/ \
-  --encrypt \
-  --password "your-secure-passphrase"
-```
-
-Using a raw key file (32 bytes = 256-bit key):
-```bash
-# Generate a key file once and store it securely
-python -c "import os; open('secret.key', 'wb').write(os.urandom(32))"
-
-python src/pipeline/pipeline.py \
-  --input data/samples/test_clip.mp4 \
-  --camera-id cam_01 \
-  --output outputs/ \
-  --encrypt \
-  --key-file secret.key
-```
-
-**Step 3 — Decrypt a segment**
-```python
-from src.utils.encryption import decrypt_file
-decrypt_file("outputs/cam_01_20260406_120000.mp4.enc", password="your-secure-passphrase")
-# Writes: outputs/cam_01_20260406_120000.mp4
-```
-
-**Security notes:**
-- A unique random IV is generated per segment. Two encrypted files with the same password are not identical.
-- The IV is stored in the first 16 bytes of the `.enc` file. The salt (for password-based derivation) is in bytes 16–32.
-- Never commit key files or passwords to git. Add `*.key` to `.gitignore`.
-- The original `.mp4` is deleted after encryption; only the `.mp4.enc` remains.
-
----
-
-*Last updated: April 2026 — Bloodawn (KheivenD). If you find anything wrong or out of date, update it and open a PR.*
+*Last updated: April 2026 by Victor Teixeira (Milestone 2 — Enhancement Module). If you find anything in this guide that is wrong or out of date, update it and open a PR.*

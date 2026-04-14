@@ -30,6 +30,7 @@ data/samples/*.mov
 data/samples/*.mkv
 data/samples/*.h264
 data/samples/*.yuv
+data/samples/cdnet_mp4/
 data/raw/
 data/processed/
 *.bin
@@ -52,6 +53,14 @@ logs/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Office lock/temp/backup files
+.~lock.*
+*_backup.xlsx
+*_backup.docx
+
+# Claude / Cowork local files
+.claude/
 
 # IDE
 .vscode/

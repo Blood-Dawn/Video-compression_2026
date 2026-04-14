@@ -31,6 +31,7 @@ data/samples/*.mkv
 data/samples/*.h264
 data/samples/*.yuv
 data/samples/cdnet_mp4/
+!data/samples/cdnet_mp4/README.md
 data/samples/virat_overlay_previews/
 data/raw/
 data/processed/

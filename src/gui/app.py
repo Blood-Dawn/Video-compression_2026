@@ -24,11 +24,13 @@ import json
 import logging
 import os
 import queue
+import subprocess
 import sys
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import quote, unquote
 
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory, abort
 
@@ -39,11 +41,21 @@ _ROOT = _SRC.parent
 sys.path.insert(0, str(_SRC))
 
 try:
-    from pipeline.pipeline import run_pipeline  # noqa: E402
-    from utils.db import get_connection          # noqa: E402
+    from pipeline.pipeline import run_pipeline                          # noqa: E402
+    from utils.db import (                                              # noqa: E402
+        get_connection,
+        query_by_type,
+        query_daily_storage_summary,
+        query_segments_by_target_count,
+    )
 except ModuleNotFoundError:
-    from src.pipeline.pipeline import run_pipeline  # noqa: E402
-    from src.utils.db import get_connection          # noqa: E402
+    from src.pipeline.pipeline import run_pipeline                      # noqa: E402
+    from src.utils.db import (                                          # noqa: E402
+        get_connection,
+        query_by_type,
+        query_daily_storage_summary,
+        query_segments_by_target_count,
+    )
 
 # ── Flask app ─────────────────────────────────────────────────────────────────
 app = Flask(__name__, template_folder="templates")
@@ -334,7 +346,8 @@ def api_segments():
             rows = conn.execute(
                 """
                 SELECT timestamp, camera_id, target_detected, roi_count,
-                       file_size, duration, file_path
+                       file_size, duration, file_path,
+                       COALESCE(object_type, 'unknown') AS object_type
                 FROM segments
                 ORDER BY timestamp DESC
                 LIMIT 50
@@ -344,18 +357,12 @@ def api_segments():
         return jsonify({"error": str(exc)}), 500
 
     output_dir = str(cfg.get("output_dir", str(_ROOT / "outputs")))
-    root_resolved = _ROOT.resolve()
     segs = []
     for r in rows:
         abs_path = _segment_absolute_path(r[6], output_dir)
         playable_url = None
         if abs_path.exists() and abs_path.suffix.lower() in {".mp4", ".webm", ".mov", ".avi"}:
-            try:
-                rel = abs_path.relative_to(root_resolved).as_posix()
-                playable_url = f"/media/{rel}"
-            except ValueError:
-                # File is outside the project root; do not expose directly.
-                playable_url = None
+            playable_url = f"/api/media?path={quote(str(abs_path))}"
 
         segs.append({
             "timestamp": r[0],
@@ -365,6 +372,7 @@ def api_segments():
             "file_size_kb": round(r[4] / 1024, 1),
             "duration_s": round(r[5], 1),
             "file_path": r[6],
+            "object_type": r[7],
             "playable_url": playable_url,
         })
 
@@ -478,6 +486,302 @@ def media_file(rel_path: str):
     if not abs_path.exists() or not abs_path.is_file():
         abort(404)
     return send_from_directory(str(root), rel_path, as_attachment=False)
+
+
+@app.route("/api/media")
+def api_media():
+    """Serve any local video file by absolute path (local tool only).
+
+    Called as /api/media?path=<url-encoded-absolute-path>.
+    Rejects non-video extensions and non-existent files.
+    """
+    path = unquote(request.args.get("path", "").strip())
+    if not path:
+        abort(400)
+    p = Path(path).resolve()
+    if not p.exists() or not p.is_file():
+        abort(404)
+    if p.suffix.lower() not in {".mp4", ".webm", ".mov", ".avi", ".mkv"}:
+        abort(403)
+    return send_from_directory(str(p.parent), p.name, as_attachment=False)
+
+
+@app.route("/api/browse")
+def api_browse():
+    """Open a native OS file-picker dialog and return the selected path.
+
+    Uses subprocess so the tkinter dialog runs in its own process — tkinter
+    requires the OS main thread, which Flask request handlers are not on Windows.
+    """
+    script = (
+        "import tkinter as tk; from tkinter import filedialog; "
+        "root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True); "
+        "path = filedialog.askopenfilename("
+        "    title='Select video file',"
+        "    filetypes=[('Video files', '*.mp4 *.avi *.mov *.mkv *.h264'), ('All files', '*.*')]"
+        "); root.destroy(); print(path or '', end='')"
+    )
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        path = result.stdout.strip()
+    except Exception as exc:
+        log.warning(f"File picker failed: {exc}")
+        path = ""
+    return jsonify({"path": path})
+
+
+# ── Archive query routes (Ashleyn's DB queries) ───────────────────────────────
+
+def _get_db_path() -> Path:
+    """Return the metadata.db path from the last-used config, or default."""
+    with _state_lock:
+        cfg = _status.get("config", {})
+    return Path(cfg.get("output_dir", str(_ROOT / "outputs"))) / "metadata.db"
+
+
+def _rows_to_segment_list(rows) -> list:
+    """Convert raw DB tuples to JSON-serialisable dicts."""
+    segs = []
+    for r in rows:
+        # schema: id, timestamp, camera_id, target_detected, roi_count,
+        #         file_size, duration, file_path, object_type
+        abs_path = Path(r[7]).resolve()
+        playable_url = None
+        if abs_path.exists() and abs_path.suffix.lower() in {".mp4", ".webm", ".mov", ".avi"}:
+            playable_url = f"/api/media?path={quote(str(abs_path))}"
+        segs.append({
+            "id": r[0],
+            "timestamp": r[1],
+            "camera_id": r[2],
+            "target_detected": bool(r[3]),
+            "roi_count": r[4],
+            "file_size_kb": round(r[5] / 1024, 1),
+            "duration_s": round(r[6], 1),
+            "file_path": r[7],
+            "object_type": r[8] if len(r) > 8 else "unknown",
+            "playable_url": playable_url,
+        })
+    return segs
+
+
+@app.route("/api/query_segments")
+def api_query_segments():
+    """Filter segments by object_type (and optionally camera_id, time range).
+
+    Query params:
+        object_type  – required (e.g. 'vehicle', 'person', 'unknown')
+        camera_id    – optional
+        start_time   – optional ISO-style timestamp prefix
+        end_time     – optional ISO-style timestamp prefix
+    """
+    object_type = request.args.get("object_type", "").strip()
+    if not object_type:
+        return jsonify({"error": "object_type is required"}), 400
+
+    db_path = _get_db_path()
+    if not db_path.exists():
+        return jsonify({"segments": [], "db_path": str(db_path)})
+
+    try:
+        rows = query_by_type(
+            object_type=object_type,
+            camera_id=request.args.get("camera_id") or None,
+            start_time=request.args.get("start_time") or None,
+            end_time=request.args.get("end_time") or None,
+            db_path=str(db_path),
+        )
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"segments": _rows_to_segment_list(rows), "db_path": str(db_path)})
+
+
+@app.route("/api/daily_summary")
+def api_daily_summary():
+    """Return daily storage totals grouped by date and camera."""
+    db_path = _get_db_path()
+    if not db_path.exists():
+        return jsonify({"rows": [], "db_path": str(db_path)})
+
+    try:
+        rows = query_daily_storage_summary(db_path=str(db_path))
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    result = [
+        {
+            "date": r[0],
+            "camera_id": r[1],
+            "total_mb": round(r[2] / 1e6, 2),
+            "total_hours": r[3],
+        }
+        for r in rows
+    ]
+    return jsonify({"rows": result, "db_path": str(db_path)})
+
+
+@app.route("/api/busiest")
+def api_busiest():
+    """Return segments with the highest ROI/detection counts (busiest clips)."""
+    db_path = _get_db_path()
+    if not db_path.exists():
+        return jsonify({"segments": [], "db_path": str(db_path)})
+
+    try:
+        limit = int(request.args.get("limit", 20))
+        rows = query_segments_by_target_count(db_path=str(db_path), limit=limit)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"segments": _rows_to_segment_list(rows), "db_path": str(db_path)})
+
+
+# ── Demo / comparison routes (Riley's render system) ─────────────────────────
+
+_demo_lock = threading.Lock()
+_demo_state: dict = {
+    "running": False,
+    "status": "idle",        # idle | running | done | error
+    "modes": [],
+    "progress": "",
+    "result": None,          # populated on success
+    "error": None,
+}
+
+
+def _run_demo_thread(config: dict) -> None:
+    """Background thread: run multi-mode pipeline + render demo videos."""
+    try:
+        from demo.run_demo import run_all_demos          # noqa: E402
+    except ModuleNotFoundError:
+        from src.demo.run_demo import run_all_demos      # noqa: E402
+
+    def _update(**kw):
+        with _demo_lock:
+            _demo_state.update(kw)
+
+    _update(status="running", progress="Starting pipeline runs…", error=None, result=None)
+
+    try:
+        run_all_demos(
+            input_path=config["input_path"],
+            output_root=config["output_root"],
+            camera_id=config.get("camera_id", "cam_00"),
+            modes=config["modes"],
+            views=config.get("views", ["standard"]),
+            no_boxes=config.get("no_boxes", False),
+        )
+    except Exception as exc:
+        log.error(f"Demo run failed: {exc}", exc_info=True)
+        _update(running=False, status="error", error=str(exc))
+        return
+
+    _update(progress="Locating manifest…")
+
+    # Find the manifest written by run_all_demos() — it picks a suffix to avoid
+    # overwriting previous runs, so we glob for the newest one.
+    output_root = Path(config["output_root"]).resolve()
+    manifests = sorted(
+        output_root.glob("demos_stitched*/manifest.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if not manifests:
+        _update(running=False, status="error", error="manifest.json not found after demo run")
+        return
+
+    manifest_path = manifests[0]
+    try:
+        with open(manifest_path, encoding="utf-8") as f:
+            manifest = json.load(f)
+    except Exception as exc:
+        _update(running=False, status="error", error=f"Could not read manifest: {exc}")
+        return
+
+    # Build playable URL dict: {mode: {view: url}}
+    videos: dict = {}
+    for mode, view_map in manifest.get("outputs", {}).items():
+        videos[mode] = {}
+        for view, file_path in view_map.items():
+            p = Path(file_path).resolve()
+            if p.exists():
+                videos[mode][view] = f"/api/media?path={quote(str(p))}"
+            else:
+                videos[mode][view] = None
+
+    # Split-screen is in the same stitched dir if multiple modes ran
+    split_screen_url = None
+    stitched_dir = Path(manifest.get("stitched_dir", ""))
+    if stitched_dir.exists():
+        for candidate in stitched_dir.glob("demo_splitscreen*.mp4"):
+            split_screen_url = f"/api/media?path={quote(str(candidate.resolve()))}"
+            break
+
+    result = {
+        "manifest_path": str(manifest_path),
+        "modes": manifest.get("modes", []),
+        "videos": videos,
+        "split_screen": split_screen_url,
+    }
+    _update(running=False, status="done", progress="Complete.", result=result)
+    log.info(f"Demo run complete. Manifest: {manifest_path}")
+
+
+@app.route("/api/demo", methods=["POST"])
+def api_demo():
+    """Start a multi-mode demo run in the background.
+
+    POST body (JSON):
+        input_path   – path to source video
+        output_root  – root directory for demo outputs
+        camera_id    – camera identifier
+        modes        – list of mode strings, e.g. ["mode0", "mode1"]
+        views        – list of view strings (default ["standard"])
+        no_boxes     – bool, suppress ROI box overlays (default false)
+    """
+    with _demo_lock:
+        if _demo_state["running"]:
+            return jsonify({"error": "Demo already running"}), 409
+
+    data = request.get_json(force=True) or {}
+
+    input_path = data.get("input_path", "").strip()
+    output_root = data.get("output_root", "").strip() or str(_ROOT / "outputs")
+    modes = data.get("modes", ["mode0", "mode1"])
+
+    if not input_path:
+        return jsonify({"error": "input_path is required"}), 400
+    if not modes:
+        return jsonify({"error": "at least one mode is required"}), 400
+
+    config = {
+        "input_path": input_path,
+        "output_root": output_root,
+        "camera_id": data.get("camera_id", "cam_00"),
+        "modes": modes,
+        "views": data.get("views", ["standard"]),
+        "no_boxes": bool(data.get("no_boxes", False)),
+    }
+
+    with _demo_lock:
+        _demo_state.update(running=True, modes=modes, result=None, error=None, status="queued")
+
+    t = threading.Thread(target=_run_demo_thread, args=(config,), daemon=True, name="demo-worker")
+    t.start()
+
+    return jsonify({"ok": True, "modes": modes})
+
+
+@app.route("/api/demo/status")
+def api_demo_status():
+    """Return the current state of the background demo run."""
+    with _demo_lock:
+        return jsonify(dict(_demo_state))
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

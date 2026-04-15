@@ -42,6 +42,7 @@ from utils.frame_source import FrameSource                                  # fi
 from background_subtraction.background_subtraction import BackgroundSubtractor
 from compression.roi_encoder import ROIEncoder
 from enhancement.enhancer import Enhancer
+from demo.demo_metadata import DemoMetadataWriter
 
 def classify_object(roi_count):
     if roi_count > 10:
@@ -81,6 +82,12 @@ def run_pipeline(
     enhance: bool = False,
     enhance_scale: int = 4,
     mode: str = "mode0",
+    demo: bool = False,
+    enhance_model: str = "bicubic",
+    encrypt: bool = False,
+    encrypt_password: Optional[str] = None,
+    encrypt_key_file: Optional[str] = None,
+    stop_event=None,
 ):
     """
     Main pipeline loop.
@@ -158,16 +165,37 @@ def run_pipeline(
     log.info(f"Warmup: {effective_warmup} frames (~{effective_warmup/fps:.1f}s)")
 
     subtractor = BackgroundSubtractor(method=bg_method)
-    encoder = ROIEncoder(output_dir=output_dir)
-    initialize_database()
+    encoder = ROIEncoder(output_dir=output_dir, db_path=db_path)
+    initialize_database(db_path)
 
     enhancer: Optional[Enhancer] = None
     if enhance:
+        if enhance_model != "bicubic":
+            log.info(
+                "enhance_model='%s' requested; current pipeline uses Enhancer backend auto-selection.",
+                enhance_model,
+            )
         enhancer = Enhancer(scale=enhance_scale)
         log.info(
             f"Enhancement enabled (backend={enhancer.backend}, scale={enhance_scale}). "
             "Foreground ROIs will be sharpened before encoding."
         )
+
+    if encrypt:
+        log.warning(
+            "encrypt=True requested but encryption is not wired in run_pipeline yet; output will remain unencrypted."
+        )
+
+    if encrypt_password or encrypt_key_file:
+        log.warning(
+            "Encryption credentials provided but encryption is not wired in run_pipeline yet; values are ignored."
+        )
+
+    demo_writer: Optional[DemoMetadataWriter] = None
+    if demo:
+        demo_jsonl = Path(output_dir) / f"{camera_id}_{mode}_demo_frames.jsonl"
+        demo_writer = DemoMetadataWriter(demo_jsonl)
+        log.info(f"Demo metadata enabled: {demo_jsonl}")
 
     segment_regions = []
     segment_writer = None
@@ -179,26 +207,32 @@ def run_pipeline(
 
     segment_frames: list = []       # in-memory frame buffer (numpy arrays)
     segment_regions: list = []
-    frame_count = 0
+    source_frame_index = -1
     encode_count = 0
     target_frames_this_segment = 0
+    segment_index = 0
 
     log.info("Pipeline running. Press Ctrl+C to stop.")
 
     try:
         while True:
+            if stop_event is not None and hasattr(stop_event, "is_set") and stop_event.is_set():
+                log.info("Stop event received. Ending pipeline loop.")
+                break
+
             ret, frame = src.read()
             if not ret:
                 log.info("End of source. Flushing final segment.")
                 break
 
+            source_frame_index += 1
+
             mask = subtractor.apply(frame)
             regions = subtractor.get_foreground_regions(mask)
 
             # --- WARMUP GATE ---
-            if frame_count < effective_warmup:
-                frame_count += 1
-                if frame_count == effective_warmup:
+            if source_frame_index < effective_warmup:
+                if source_frame_index + 1 == effective_warmup:
                     log.info(f"Warmup complete after {effective_warmup} frames. Encoding started.")
                 continue
             # --- END WARMUP GATE ---
@@ -218,6 +252,16 @@ def run_pipeline(
             segment_frames.append(frame)
             segment_regions.append(regions)
 
+            if demo_writer is not None:
+                demo_writer.write_record(
+                    source_frame_index=source_frame_index,
+                    source_time_seconds=(source_frame_index / fps) if fps > 0 else 0.0,
+                    mode=mode,
+                    segment_index=segment_index,
+                    frame_index_within_segment=len(segment_frames) - 1,
+                    regions=regions,
+                )
+
             if regions:
                 target_frames_this_segment += 1
 
@@ -227,7 +271,6 @@ def run_pipeline(
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
 
-            frame_count += 1
             encode_count += 1
 
             if encode_count > 0 and encode_count % frames_per_segment == 0:
@@ -253,6 +296,7 @@ def run_pipeline(
                 segment_frames = []
                 segment_regions = []
                 target_frames_this_segment = 0
+                segment_index += 1
 
     except KeyboardInterrupt:
         log.info("Interrupted by user.")
@@ -283,6 +327,9 @@ def run_pipeline(
 
         report = encoder.get_storage_report()
         log.info("Storage report: " + str(report))
+
+        if demo_writer is not None:
+            demo_writer.close()
     
 
 
@@ -291,54 +338,4 @@ if __name__ == "__main__":
     parser.add_argument("--input", default=0, help="Camera index or video file path")
     parser.add_argument("--camera-id", default="cam_00")
     parser.add_argument("--output", default="outputs/")
-    parser.add_argument("--segment", type=int, default=60, help="Segment duration in seconds")
-    parser.add_argument("--method", default="MOG2", choices=["MOG2", "KNN"])
-    parser.add_argument("--preview", action="store_true")
-    parser.add_argument(
-        "--warmup",
-        type=int,
-        default=120,
-        help="Warmup frames before encoding starts. Overridden by CDnet temporalROI if available."
-    )
-    parser.add_argument(
-        "--enhance",
-        action="store_true",
-        help="Apply super-resolution sharpening to foreground ROIs before encoding. "
-             "Requires Real-ESRGAN weights in models/. Falls back to bicubic if absent. "
-             "Adds CPU overhead; not recommended for real-time sources."
-    )
-    def _valid_enhance_scale(value: str) -> int:
-        try:
-            v = int(value)
-        except ValueError:
-            raise argparse.ArgumentTypeError(f"--enhance-scale must be an integer, got '{value}'")
-        if v not in (2, 4):
-            raise argparse.ArgumentTypeError(f"--enhance-scale must be 2 or 4, got {v}")
-        return v
-
-    parser.add_argument(
-        "--enhance-scale",
-        type=_valid_enhance_scale,
-        default=4,
-        dest="enhance_scale",
-        help="Intermediate upscale factor for the enhancement pass. Must be 2 or 4. Default 4."
-    )
-    args = parser.parse_args()
-
-    input_src = args.input
-    if input_src != 0:
-        input_src = int(input_src) if str(input_src).isdigit() else input_src
-
-    run_pipeline(
-        input_src,
-        args.camera_id,
-        args.output,
-        args.segment,
-        args.method,
-        show_preview=args.preview,
-        warmup_frames=args.warmup,
-        enhance=args.enhance,
-        enhance_scale=args.enhance_scale,
-        mode=args.mode if hasattr(args, "mode") else "mode0",
-    )
-
+    parser.a

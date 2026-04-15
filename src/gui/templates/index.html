@@ -653,6 +653,172 @@
       display: inline-block;
       animation: blink 2s step-end infinite;
     }
+
+    /* ─────────────── BROWSE BUTTON ─────────────── */
+    .btn-browse {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      padding: 0.4rem 0.6rem;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .btn-browse:hover { border-color: var(--amber); color: var(--amber); }
+
+    /* ─────────────── DEMO PANEL ─────────────── */
+    #demo-section {
+      margin-top: 1rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface2);
+      overflow: hidden;
+    }
+    #demo-section .panel-header {
+      background: var(--surface3);
+      border-bottom: 1px solid var(--border);
+    }
+    .demo-player-wrap {
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    .demo-player-wrap video {
+      width: 100%;
+      max-height: 340px;
+      background: #000;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      display: block;
+    }
+    .demo-mode-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+    .demo-mode-tab {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 0.25rem 0.65rem;
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      background: transparent;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .demo-mode-tab:hover, .demo-mode-tab.active {
+      border-color: var(--teal);
+      color: var(--teal);
+      background: var(--teal-dim);
+    }
+    .demo-spinner {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      padding: 1rem 0.75rem;
+    }
+    .demo-spinner::before {
+      content: '';
+      width: 14px; height: 14px;
+      border: 2px solid var(--border);
+      border-top-color: var(--amber);
+      border-radius: 50%;
+      animation: spin 0.9s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #demo-status-msg {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      padding: 0 0.75rem 0.5rem;
+    }
+
+    /* ─────────────── QUERY / ARCHIVE PANEL ─────────────── */
+    #query-section {
+      margin-top: 0.5rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface2);
+      overflow: hidden;
+    }
+    .query-results-wrap {
+      padding: 0.5rem;
+    }
+    .query-result-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--border);
+      padding: 0.35rem 0.25rem;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+    }
+    .query-result-row:last-child { border-bottom: none; }
+    .qr-cam { color: var(--text-dim); min-width: 70px; }
+    .qr-ts  { color: var(--text); flex: 1; }
+    .qr-rois { color: var(--amber); min-width: 40px; text-align: right; }
+    .qr-play { flex-shrink: 0; }
+    .btn-play-sm {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      padding: 0.15rem 0.45rem;
+      background: var(--teal-dim);
+      border: 1px solid var(--teal);
+      border-radius: var(--radius);
+      color: var(--teal);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .btn-play-sm:hover { background: rgba(31,212,200,0.25); }
+
+    /* ─────────────── SEGMENT INLINE PREVIEW ─────────────── */
+    #seg-preview-wrap {
+      padding: 0.5rem 0.75rem;
+      border-top: 1px solid var(--border);
+      display: none;
+    }
+    #seg-preview-wrap.show { display: block; }
+    #seg-preview {
+      width: 100%;
+      max-height: 200px;
+      background: #000;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      display: block;
+    }
+    #seg-preview-label {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      color: var(--text-dim);
+      margin-top: 0.25rem;
+      word-break: break-all;
+    }
+
+    /* ─────────────── MODE CHECKBOXES (demo compare) ─────── */
+    .mode-check-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.4rem;
+    }
+    .mode-check-row label {
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--text);
+    }
+    .mode-check-row.disabled label { color: var(--text-dim); }
+    .mode-check-row.disabled input { opacity: 0.35; }
   </style>
 </head>
 
@@ -694,6 +860,7 @@
           <div class="input-with-btn">
             <input type="text" id="input-source" value="data/test_clip.mp4"
                    placeholder="0 for camera, or path/to/file.mp4" />
+            <button class="btn-browse" onclick="browseFile()" title="Browse for video file">📂</button>
             <button class="btn btn-ghost" onclick="scanVideos()" title="Scan data/ folder">⟳</button>
           </div>
           <div id="video-list" style="margin-top:0.4rem;"></div>
@@ -762,7 +929,6 @@
                 <select id="enhance-scale">
                   <option value="2">2×</option>
                   <option value="4" selected>4×</option>
-                  <option value="8">8×</option>
                 </select>
               </div>
             </div>
@@ -795,6 +961,83 @@
                 PBKDF2 · SHA-256 · 600k iters.
               </p>
             </div>
+          </div>
+        </details>
+      </div>
+
+      <!-- Demo / Compare Modes -->
+      <div class="config-section">
+        <details>
+          <summary>Demo / Compare Modes</summary>
+          <div style="padding-top:0.75rem;">
+            <p style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.5;">
+              Select modes to run in demo comparison. Renders annotated output
+              with bounding boxes and optional side-by-side split-screen.
+            </p>
+            <div class="mode-check-row">
+              <input type="checkbox" id="demo-mode0" value="mode0" checked />
+              <label for="demo-mode0">Mode 0 — 24/7 Continuous</label>
+            </div>
+            <div class="mode-check-row">
+              <input type="checkbox" id="demo-mode1" value="mode1" />
+              <label for="demo-mode1">Mode 1 — Frame Gating</label>
+            </div>
+            <div class="mode-check-row disabled">
+              <input type="checkbox" id="demo-mode2" value="mode2" disabled />
+              <label for="demo-mode2">Mode 2 — (coming soon)</label>
+            </div>
+            <div class="mode-check-row disabled">
+              <input type="checkbox" id="demo-mode3" value="mode3" disabled />
+              <label for="demo-mode3">Mode 3 — (coming soon)</label>
+            </div>
+            <div class="config-field" style="margin-top:0.75rem;">
+              <label class="config-label" for="demo-output-dir">Demo Output Root</label>
+              <input type="text" id="demo-output-dir" placeholder="Default: outputs/" />
+            </div>
+            <div style="margin-top:0.5rem;display:flex;gap:0.5rem;">
+              <input type="checkbox" id="demo-no-boxes" />
+              <label for="demo-no-boxes" style="font-family:var(--mono);font-size:0.65rem;color:var(--text);cursor:pointer;">
+                Disable ROI boxes in render
+              </label>
+            </div>
+            <button class="btn btn-ghost btn-full" style="margin-top:0.75rem;"
+                    onclick="runDemo()" id="btn-run-demo">▶ RUN DEMO</button>
+          </div>
+        </details>
+      </div>
+
+      <!-- Query Archive (Ashleyn's DB queries) -->
+      <div class="config-section">
+        <details>
+          <summary>Query Archive</summary>
+          <div style="padding-top:0.75rem;">
+            <div class="config-field">
+              <label class="config-label" for="q-object-type">Object Type</label>
+              <select id="q-object-type">
+                <option value="">— any —</option>
+                <option value="vehicle">Vehicle</option>
+                <option value="person">Person</option>
+                <option value="unknown">Unknown</option>
+              </select>
+            </div>
+            <div class="config-field">
+              <label class="config-label" for="q-camera-id">Camera ID (optional)</label>
+              <input type="text" id="q-camera-id" placeholder="e.g. cam_00" />
+            </div>
+            <div class="config-field">
+              <label class="config-label" for="q-start-time">Start Time (optional)</label>
+              <input type="text" id="q-start-time" placeholder="20260401T000000Z" />
+            </div>
+            <div class="config-field">
+              <label class="config-label" for="q-end-time">End Time (optional)</label>
+              <input type="text" id="q-end-time" placeholder="20260430T235959Z" />
+            </div>
+            <div style="display:flex;gap:0.4rem;margin-top:0.4rem;flex-wrap:wrap;">
+              <button class="btn btn-ghost" style="flex:1;min-width:80px;" onclick="runQuery()">SEARCH</button>
+              <button class="btn btn-ghost" style="flex:1;min-width:80px;" onclick="loadBusiest()">BUSIEST</button>
+              <button class="btn btn-ghost" style="flex:1;min-width:80px;" onclick="loadDailySummary()">DAILY</button>
+            </div>
+            <div id="query-results" style="margin-top:0.5rem;max-height:200px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border-bright) transparent;"></div>
           </div>
         </details>
       </div>
@@ -846,6 +1089,21 @@
         </div>
         <span class="progress-label" id="progress-label">—</span>
       </div>
+
+      <!-- Demo output panel -->
+      <div id="demo-section" style="display:none;">
+        <div class="panel-header">
+          <span class="panel-title">Demo Output</span>
+          <button class="log-clear-btn" onclick="closeDemoPanel()">✕ CLOSE</button>
+        </div>
+        <div id="demo-spinner" class="demo-spinner" style="display:none;">Rendering demo…</div>
+        <div id="demo-status-msg"></div>
+        <div id="demo-player-wrap" class="demo-player-wrap" style="display:none;">
+          <video id="demo-video" controls playsinline></video>
+          <div class="demo-mode-tabs" id="demo-tabs"></div>
+        </div>
+      </div>
+
       <div class="resize-divider-v" id="resize-divider-v"></div>
     </div>
 
@@ -883,15 +1141,21 @@
                 <th>Timestamp</th>
                 <th>Camera</th>
                 <th>Target</th>
+                <th>Type</th>
                 <th>ROIs</th>
                 <th>Duration</th>
                 <th>Size</th>
+                <th>Play</th>
               </tr>
             </thead>
             <tbody id="segments-tbody">
-              <tr><td colspan="6" class="empty-state">NO SEGMENTS YET</td></tr>
+              <tr><td colspan="8" class="empty-state">NO SEGMENTS YET</td></tr>
             </tbody>
           </table>
+        </div>
+        <div id="seg-preview-wrap">
+          <video id="seg-preview" controls playsinline></video>
+          <div id="seg-preview-label"></div>
         </div>
       </div>
 
@@ -1228,23 +1492,267 @@ async function loadSegments() {
     const data = await res.json();
     const tbody = document.getElementById('segments-tbody');
     if (!data.segments || !data.segments.length) {
-      tbody.innerHTML = '<tr><td colspan="6" class="empty-state">NO SEGMENTS YET</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="empty-state">NO SEGMENTS YET</td></tr>';
       return;
     }
     tbody.innerHTML = data.segments.map(s => {
       const ts = formatTimestamp(s.timestamp);
       const targetClass = s.target_detected ? 'target-yes' : 'target-no';
       const targetText  = s.target_detected ? '▲ YES' : '○ no';
+      const objType = escHtml(s.object_type || 'unknown');
+      const playBtn = s.playable_url
+        ? `<button class="btn-play-sm" onclick="playSegment('${escHtml(s.playable_url)}','${escHtml(s.file_path)}')">▶</button>`
+        : `<span style="color:var(--text-dim);font-size:0.6rem;">—</span>`;
       return `<tr>
         <td>${ts}</td>
         <td>${escHtml(s.camera_id)}</td>
         <td class="${targetClass}">${targetText}</td>
+        <td style="color:var(--teal)">${objType}</td>
         <td>${s.roi_count}</td>
         <td>${s.duration_s}s</td>
         <td>${s.file_size_kb} KB</td>
+        <td>${playBtn}</td>
       </tr>`;
     }).join('');
   } catch(e) {}
+}
+
+// ── Segment inline playback ────────────────────────────────────
+function playSegment(url, path) {
+  const wrap = document.getElementById('seg-preview-wrap');
+  const video = document.getElementById('seg-preview');
+  const label = document.getElementById('seg-preview-label');
+  video.src = url;
+  video.load();
+  video.play().catch(() => {});
+  label.textContent = path;
+  wrap.classList.add('show');
+  // Scroll into view
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ── Browse for video file (native OS dialog) ──────────────────
+async function browseFile() {
+  try {
+    const res = await fetch('/api/browse');
+    const data = await res.json();
+    if (data.path) {
+      document.getElementById('input-source').value = data.path;
+    }
+  } catch(e) {
+    console.error('browseFile', e);
+  }
+}
+
+// ── Demo compare ──────────────────────────────────────────────
+let _demoPollTimer = null;
+
+async function runDemo() {
+  const modes = ['mode0', 'mode1'].filter(m => {
+    const el = document.getElementById('demo-' + m);
+    return el && el.checked;
+  });
+  if (!modes.length) {
+    alert('Select at least one demo mode.');
+    return;
+  }
+  const inputPath = document.getElementById('input-source').value.trim();
+  if (!inputPath) {
+    alert('Set an input source first.');
+    return;
+  }
+  const outputRoot = document.getElementById('demo-output-dir').value.trim() || 'outputs/';
+  const noBoxes = document.getElementById('demo-no-boxes').checked;
+  const cameraId = document.getElementById('camera-id').value.trim() || 'cam_00';
+
+  document.getElementById('btn-run-demo').disabled = true;
+
+  try {
+    const res = await fetch('/api/demo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input_path: inputPath, output_root: outputRoot,
+                             camera_id: cameraId, modes, views: ['standard'],
+                             no_boxes: noBoxes }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      alert('Demo error: ' + (data.error || res.status));
+      document.getElementById('btn-run-demo').disabled = false;
+      return;
+    }
+    showDemoPanel('running', 'Pipeline running for modes: ' + modes.join(', ') + '…');
+    pollDemoStatus();
+  } catch(e) {
+    alert('Demo failed: ' + e);
+    document.getElementById('btn-run-demo').disabled = false;
+  }
+}
+
+function showDemoPanel(state, msg) {
+  const section = document.getElementById('demo-section');
+  const spinner = document.getElementById('demo-spinner');
+  const statusMsg = document.getElementById('demo-status-msg');
+  const playerWrap = document.getElementById('demo-player-wrap');
+  section.style.display = '';
+  statusMsg.textContent = msg;
+  spinner.style.display = (state === 'running') ? 'flex' : 'none';
+  playerWrap.style.display = (state === 'done') ? 'flex' : 'none';
+}
+
+function closeDemoPanel() {
+  document.getElementById('demo-section').style.display = 'none';
+  if (_demoPollTimer) { clearTimeout(_demoPollTimer); _demoPollTimer = null; }
+}
+
+function pollDemoStatus() {
+  if (_demoPollTimer) clearTimeout(_demoPollTimer);
+  _demoPollTimer = setTimeout(async () => {
+    try {
+      const res = await fetch('/api/demo/status');
+      const data = await res.json();
+      if (data.status === 'running' || data.status === 'queued') {
+        showDemoPanel('running', data.progress || 'Running…');
+        pollDemoStatus();
+      } else if (data.status === 'done' && data.result) {
+        renderDemoResult(data.result);
+        document.getElementById('btn-run-demo').disabled = false;
+      } else if (data.status === 'error') {
+        showDemoPanel('error', '⚠ Error: ' + (data.error || 'Unknown error'));
+        document.getElementById('btn-run-demo').disabled = false;
+      } else {
+        pollDemoStatus();
+      }
+    } catch(e) {
+      pollDemoStatus();
+    }
+  }, 2000);
+}
+
+function renderDemoResult(result) {
+  showDemoPanel('done', 'Render complete.');
+  const tabs = document.getElementById('demo-tabs');
+  tabs.innerHTML = '';
+
+  // Build tab list: split-screen first, then per-mode
+  const tabDefs = [];
+  if (result.split_screen) {
+    tabDefs.push({ label: 'SPLIT SCREEN', url: result.split_screen });
+  }
+  for (const [mode, views] of Object.entries(result.videos || {})) {
+    for (const [view, url] of Object.entries(views || {})) {
+      if (url) {
+        const label = view === 'standard' ? mode.toUpperCase() : `${mode.toUpperCase()} · ${view}`;
+        tabDefs.push({ label, url });
+      }
+    }
+  }
+
+  if (!tabDefs.length) {
+    document.getElementById('demo-status-msg').textContent = 'No output videos found.';
+    return;
+  }
+
+  // Create tab buttons
+  tabDefs.forEach((t, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'demo-mode-tab' + (i === 0 ? ' active' : '');
+    btn.textContent = t.label;
+    btn.onclick = () => {
+      document.querySelectorAll('.demo-mode-tab').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      loadDemoVideo(t.url);
+    };
+    tabs.appendChild(btn);
+  });
+
+  // Auto-load first tab
+  loadDemoVideo(tabDefs[0].url);
+}
+
+function loadDemoVideo(url) {
+  const video = document.getElementById('demo-video');
+  video.src = url;
+  video.load();
+  video.play().catch(() => {});
+}
+
+// ── Archive queries (Ashleyn) ─────────────────────────────────
+function _renderQueryResults(segments, container) {
+  if (!segments || !segments.length) {
+    container.innerHTML = '<div style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);padding:0.5rem;">No results.</div>';
+    return;
+  }
+  container.innerHTML = segments.slice(0, 30).map(s => {
+    const playBtn = s.playable_url
+      ? `<button class="btn-play-sm qr-play" onclick="playSegment('${escHtml(s.playable_url)}','${escHtml(s.file_path)}')">▶</button>`
+      : '';
+    return `<div class="query-result-row">
+      <span class="qr-cam">${escHtml(s.camera_id)}</span>
+      <span class="qr-ts">${formatTimestamp(s.timestamp)}</span>
+      <span class="qr-rois">${s.roi_count} ROI</span>
+      ${playBtn}
+    </div>`;
+  }).join('');
+}
+
+async function runQuery() {
+  const container = document.getElementById('query-results');
+  const objectType = document.getElementById('q-object-type').value;
+  if (!objectType) {
+    container.innerHTML = '<div style="font-family:var(--mono);font-size:0.65rem;color:var(--amber);padding:0.4rem;">Select an object type first.</div>';
+    return;
+  }
+  container.innerHTML = '<div style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);padding:0.4rem;">Searching…</div>';
+  const params = new URLSearchParams({ object_type: objectType });
+  const cId = document.getElementById('q-camera-id').value.trim();
+  const st  = document.getElementById('q-start-time').value.trim();
+  const et  = document.getElementById('q-end-time').value.trim();
+  if (cId) params.set('camera_id', cId);
+  if (st)  params.set('start_time', st);
+  if (et)  params.set('end_time', et);
+  try {
+    const res  = await fetch('/api/query_segments?' + params);
+    const data = await res.json();
+    _renderQueryResults(data.segments, container);
+  } catch(e) {
+    container.innerHTML = `<div style="font-family:var(--mono);font-size:0.65rem;color:var(--red);padding:0.4rem;">Error: ${escHtml(String(e))}</div>`;
+  }
+}
+
+async function loadBusiest() {
+  const container = document.getElementById('query-results');
+  container.innerHTML = '<div style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);padding:0.4rem;">Loading busiest clips…</div>';
+  try {
+    const res  = await fetch('/api/busiest?limit=20');
+    const data = await res.json();
+    _renderQueryResults(data.segments, container);
+  } catch(e) {
+    container.innerHTML = `<div style="font-family:var(--mono);font-size:0.65rem;color:var(--red);padding:0.4rem;">Error: ${escHtml(String(e))}</div>`;
+  }
+}
+
+async function loadDailySummary() {
+  const container = document.getElementById('query-results');
+  container.innerHTML = '<div style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);padding:0.4rem;">Loading daily summary…</div>';
+  try {
+    const res  = await fetch('/api/daily_summary');
+    const data = await res.json();
+    if (!data.rows || !data.rows.length) {
+      container.innerHTML = '<div style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);padding:0.5rem;">No data yet.</div>';
+      return;
+    }
+    container.innerHTML = data.rows.map(r =>
+      `<div class="query-result-row">
+        <span class="qr-cam">${escHtml(r.camera_id)}</span>
+        <span class="qr-ts">${escHtml(r.date)}</span>
+        <span class="qr-rois" style="color:var(--teal);">${r.total_mb} MB</span>
+        <span style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim)">${r.total_hours}h</span>
+      </div>`
+    ).join('');
+  } catch(e) {
+    container.innerHTML = `<div style="font-family:var(--mono);font-size:0.65rem;color:var(--red);padding:0.4rem;">Error: ${escHtml(String(e))}</div>`;
+  }
 }
 
 // ── UI state helpers ──────────────────────────────────────────

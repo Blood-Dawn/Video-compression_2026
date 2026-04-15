@@ -132,12 +132,13 @@ def test_pipeline_stress_one_hour():
 
                 frames, bboxes = make_synthetic_segment(seg_idx, has_motion=has_motion)
 
-                output_path, file_size = encoder.encode_segment(
+                output_path = encoder.encode_segment(
                     frames=frames,
                     bboxes_per_frame=bboxes,
                     camera_id="cam_stress",
                     fps=FPS,
                 )
+                file_size = encoder.get_file_size(output_path)
 
                 segments_encoded += 1
 
@@ -209,8 +210,10 @@ def test_storage_extrapolation():
         fg_frames, fg_bboxes = make_synthetic_segment(0, has_motion=True)
         bg_frames, bg_bboxes = make_synthetic_segment(1, has_motion=False)
 
-        _, fg_size = encoder.encode_segment(fg_frames, fg_bboxes, "cam_fg", fps=FPS)
-        _, bg_size = encoder.encode_segment(bg_frames, bg_bboxes, "cam_bg", fps=FPS)
+        fg_path = encoder.encode_segment(fg_frames, fg_bboxes, "cam_fg", fps=FPS)
+        bg_path = encoder.encode_segment(bg_frames, bg_bboxes, "cam_bg", fps=FPS)
+        fg_size = encoder.get_file_size(fg_path)
+        bg_size = encoder.get_file_size(bg_path)
 
         segments_per_hour  = 3600 // SEGMENT_DURATION_S   # 60
         segments_per_day   = segments_per_hour * 24        # 1440

@@ -220,8 +220,8 @@ class Enhancer:
         roi = frame[y : y + h, x : x + w]
         upscaled = self.upscale_frame(roi, scale=scale)
 
-        # Resize back to original bbox size and paste
-        restored = cv2.resize(upscaled, (w, h), interpolation=cv2.INTER_CUBIC)
-        result = frame.copy()
-        result[y : y + h, x : x + w] = restored
-        return result
+        # Resize enhanced ROI back to original bbox dimensions, then paste into copy
+        sharpened = cv2.resize(upscaled, (w, h), interpolation=cv2.INTER_CUBIC)
+        out = frame.copy()
+        out[y : y + h, x : x + w] = sharpened
+        return out

@@ -1,10 +1,16 @@
 import numpy as np
 import pytest
 
+import tempfile
+from pathlib import Path
+
 from src.utils.metrics import (
     compute_psnr,
     compute_ssim,
     compute_compression_ratio,
+    compression_ratio,
+    foreground_coverage,
+    storage_savings_report,
 )
 
 
@@ -173,6 +179,9 @@ def test_storage_savings_report_zero_compressed():
 
 
 def test_storage_savings_report_no_savings():
+    """Compressed size equals original — ratio 1.0, 0% saved."""
     report = storage_savings_report(1_000_000, 1_000_000)
-    assert report["compression_ratio"] == pytest.approx(1.0)
     assert report["space_saved_pct"] == pytest.approx(0.0)
+    assert report["compression_ratio"] == pytest.approx(1.0)
+    assert report["saved_mb"] == pytest.approx(0.0)
+   

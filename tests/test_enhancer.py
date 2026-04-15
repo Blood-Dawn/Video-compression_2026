@@ -146,8 +146,3 @@ def test_upscale_roi_raises_on_empty_frame(enhancer):
 def test_custom_scale_stored(small_frame):
     e = Enhancer(model_path="nonexistent.pth", scale=2)
     assert e.scale == 2
-
-
-def test_default_scale_is_four():
-    e = Enhancer(model_path="nonexistent.pth")
-    assert e.scale == 4

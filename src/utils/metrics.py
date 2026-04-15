@@ -88,5 +88,5 @@ def storage_savings_report(original_size_bytes: int, compressed_size_bytes: int)
         "compressed_mb": round(compressed_size_bytes / 1e6, 2),
         "saved_mb": round(saved / 1e6, 2),
         "compression_ratio": round(ratio, 2) if ratio != float("inf") else ratio,
-        "space_saved_pct": round((saved / max(original_size_bytes, 1)) * 100, 1),
+        "space_saved_pct": round((saved / original_size_bytes) * 100, 2) if original_size_bytes > 0 else 0.0,
     }

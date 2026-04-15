@@ -239,29 +239,20 @@ if __name__ == "__main__":
         type=int,
         choices=[2, 4],
         default=4,
-        help="Upscale factor passed to Enhancer. Default 4."
-    )
-    parser.add_argument(
-        "--model-path",
-        default=None,
-        help="Path to RealESRGAN .pth weights. Omit to use default models/ location."
+        help="Upscale factor. Must be 2 or 4. Default 4."
     )
     parser.add_argument(
         "--csv",
         default=None,
-        help="Save results to this CSV path."
+        help="Optional path to save results as CSV."
     )
     args = parser.parse_args()
 
-    log.info(f"Initialising Enhancer (scale={args.scale}) ...")
-    enhancer = Enhancer(model_path=args.model_path, scale=args.scale)
-    log.info(f"Backend: {enhancer.backend}")
+    enhancer = Enhancer(scale=args.scale)
+    log.info(f"Backend: {enhancer.backend}  Scale: {args.scale}x  Frames: {args.frames}")
 
-    log.info("Benchmarking upscale_frame ...")
     frame_results = benchmark_upscale_frame(enhancer, args.frames)
-
-    log.info("Benchmarking upscale_roi ...")
-    roi_results = benchmark_upscale_roi(enhancer, args.frames)
+    roi_results   = benchmark_upscale_roi(enhancer, args.frames)
 
     print_frame_table(frame_results)
     print_roi_table(roi_results)

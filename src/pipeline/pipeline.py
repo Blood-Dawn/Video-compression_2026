@@ -71,6 +71,7 @@ def run_pipeline(
     warmup_frames: int = 120,
     enhance: bool = False,
     enhance_scale: int = 4,
+    mode: str = "mode0",
 ):
     """
     Main pipeline loop.
@@ -199,7 +200,13 @@ def run_pipeline(
                 for region in regions:
                     frame = enhancer.upscale_roi(frame, (region.x, region.y, region.w, region.h))
 
+            # Mode 1: event-only — only buffer frames that contain foreground regions.
+            # Mode 0: continuous — buffer every frame.
+            if mode == "mode1" and not regions:
+                continue
+
             segment_writer.write(frame)
+            segment_frames.append(frame)
             segment_regions.append(regions)
 
             if regions:
@@ -238,6 +245,21 @@ def run_pipeline(
     except KeyboardInterrupt:
         log.info("Interrupted by user.")
     finally:
+        # Flush any remaining buffered frames as a final partial segment.
+        if segment_frames:
+            log.info(
+                f"Flushing final partial segment ({len(segment_frames)} frames)."
+            )
+            encoder.encode_segment(
+                frames=segment_frames,
+                bboxes_per_frame=[
+                    [r.to_tuple() for r in regions]
+                    for regions in segment_regions
+                ],
+                camera_id=camera_id,
+                fps=fps,
+            )
+
         src.release()
         if show_preview:
             cv2.destroyAllWindows()
@@ -295,17 +317,9 @@ if __name__ == "__main__":
         args.output,
         args.segment,
         args.method,
-        args.preview,
-        args.warmup,
-    )
-    run_pipeline(
-        src,
-        args.camera_id,
-        args.output,
-        args.segment,
-        args.method,
-        args.preview,
-        args.warmup,
+        show_preview=args.preview,
+        warmup_frames=args.warmup,
         enhance=args.enhance,
         enhance_scale=args.enhance_scale,
+        mode=args.mode if hasattr(args, "mode") else "mode0",
     )

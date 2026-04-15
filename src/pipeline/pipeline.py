@@ -43,6 +43,15 @@ from background_subtraction.background_subtraction import BackgroundSubtractor
 from compression.roi_encoder import ROIEncoder
 from enhancement.enhancer import Enhancer
 
+def classify_object(roi_count):
+    if roi_count > 10:
+        return "vehicle"
+    elif roi_count > 2:
+        return "person"
+    else:
+        return "unknown"
+    
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s  %(levelname)s  %(message)s",
@@ -227,6 +236,8 @@ def run_pipeline(
                     f"Encoding segment {seg_num} | "
                     f"targets in {target_frames_this_segment}/{frames_per_segment} frames"
                 )
+                roi_count = sum(len(r) for r in segment_regions)
+                object_type = classify_object(roi_count)
                 out = encoder.encode_segment(
                     frames=segment_frames,
                     bboxes_per_frame=[
@@ -235,6 +246,7 @@ def run_pipeline(
                     ],
                     camera_id=camera_id,
                     fps=fps,
+                    object_type=object_type
                 )
                 log.info(f"Saved: {out}")
 
@@ -250,7 +262,10 @@ def run_pipeline(
             log.info(
                 f"Flushing final partial segment ({len(segment_frames)} frames)."
             )
-            encoder.encode_segment(
+            roi_count = sum(len(r) for r in segment_regions)
+            object_type = classify_object(roi_count)
+
+            out = encoder.encode_segment(
                 frames=segment_frames,
                 bboxes_per_frame=[
                     [r.to_tuple() for r in regions]
@@ -258,7 +273,9 @@ def run_pipeline(
                 ],
                 camera_id=camera_id,
                 fps=fps,
+                object_type=object_type,
             )
+            log.info(f"Saved final segment: {out}")
 
         src.release()
         if show_preview:
@@ -266,6 +283,7 @@ def run_pipeline(
 
         report = encoder.get_storage_report()
         log.info("Storage report: " + str(report))
+    
 
 
 if __name__ == "__main__":
@@ -323,3 +341,4 @@ if __name__ == "__main__":
         enhance_scale=args.enhance_scale,
         mode=args.mode if hasattr(args, "mode") else "mode0",
     )
+

@@ -189,7 +189,7 @@ Kheiven built the Flask dashboard and wired in Riley's demo rendering system. Th
 | Fix `initialize_database()` — pass `db_path` arg so each run gets isolated DB | KD | 2026-04-18 | Urgent | Done | Was defaulting to `metadata.db` in CWD; now writes to per-run output directory |
 | Fix `ROIEncoder` — pass `db_path` to constructor (was hardcoded `outputs/`) | KD | 2026-04-18 | Urgent | Done | Encoder now writes to correct per-run DB |
 | SSE Last-Event-ID resume + deque log history | KD | 2026-04-09 | Medium | Done | Monotonic event IDs; `collections.deque(maxlen=300)`; no duplicate lines on reconnect |
-| GUI regression tests: `/api/start` `/api/stop` `/api/status` `/api/segments` `/api/storage` | KD | 2026-04-18 | Important | Not Started | Assert HTTP status, JSON shape, and state transitions for all 5 API endpoints. |
+| GUI regression tests: `/api/start` `/api/stop` `/api/status` `/api/segments` `/api/storage` | KD | 2026-04-18 | Important | Done | `tests/test_gui_api.py` — 24 tests; covers HTTP status, JSON shape, state transitions, DB-backed responses. |
 | Extend `test_pipeline.py`: `--enhance` bicubic path, `--encrypt` round-trip, stop_event | RR | 2026-04-18 | Important | Not Started | Bicubic test needs no SR weights. Encrypt test: verify `.enc` written, `.mp4` deleted. Stop-event: break mid-loop. |
 | Run `run_demo.py` end-to-end on a real test clip — verify split-screen output | RR | 2026-04-18 | Important | Not Started | `python -m src.demo.run_demo --input data/test.mp4 --output outputs/ --camera-id cam_test` |
 
@@ -405,7 +405,7 @@ Cody asked: "Are there research papers for lossy compression that selectively dr
 | 2.4 | Data integrity validation | Done ✅ |
 | 2.4 | CI integration for test_data_integrity.py | Open 🔲 |
 | 2.6 | GUI dashboard — Flask app, SSE, all API endpoints | Done ✅ |
-| 2.6 | GUI regression tests + API integration tests | Open 🔲 |
+| 2.6 | GUI regression tests + API integration tests | Done ✅ |
 | 3.1 | AES-256 encryption — initial CBC implementation | Done ✅ |
 | 3.4 | AI compression research | Done ✅ |
 | 3.4 | Deployment packaging research | Open 🔲 |

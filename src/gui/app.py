@@ -784,6 +784,199 @@ def api_demo_status():
         return jsonify(dict(_demo_state))
 
 
+# ── HLS live streaming (task 4.1) ────────────────────────────────────────────
+#
+# Architecture:
+#   Input (RTSP / webcam / file) → FFmpeg subprocess → .m3u8 + .ts chunks
+#   → Flask serves /api/hls/<camera_id>/ → hls.js plays in browser
+#
+# The HLS transcoder runs independently of the main pipeline so you can
+# preview a live stream without recording compressed segments.
+
+_hls_lock = threading.Lock()
+_hls_state: dict = {
+    "running": False,
+    "camera_id": None,
+    "input_source": None,
+    "playlist_url": None,
+    "hls_dir": None,
+    "error": None,
+}
+_hls_process: subprocess.Popen | None = None
+
+
+def _hls_dir_for(camera_id: str, output_dir: str) -> Path:
+    return Path(output_dir) / "hls" / camera_id
+
+
+@app.route("/api/hls/start", methods=["POST"])
+def api_hls_start():
+    """Start an FFmpeg HLS transcoder for a given input source.
+
+    POST body (JSON):
+        input_source  – RTSP URL, webcam index (int as string), or file path
+        camera_id     – identifier used in the playlist URL (default: cam_00)
+        output_dir    – where to write HLS chunks (default: outputs/)
+
+    Returns:
+        {"ok": true, "playlist_url": "/api/hls/<camera_id>/playlist.m3u8"}
+    """
+    global _hls_process
+
+    with _hls_lock:
+        if _hls_state["running"]:
+            return jsonify({"error": "HLS stream already running"}), 409
+
+    data = request.get_json(force=True) or {}
+    input_source = str(data.get("input_source", "0")).strip()
+    camera_id = str(data.get("camera_id", "cam_00")).strip()
+    output_dir = str(data.get("output_dir", "")).strip() or str(_ROOT / "outputs")
+
+    hls_dir = _hls_dir_for(camera_id, output_dir)
+    hls_dir.mkdir(parents=True, exist_ok=True)
+    playlist = hls_dir / "playlist.m3u8"
+
+    # FFmpeg HLS command:
+    #   -preset ultrafast + -tune zerolatency → minimal encode latency
+    #   -hls_time 2       → 2-second segments (target latency ~4–6s end-to-end)
+    #   -hls_list_size 5  → keep 5 segments in the playlist (10 seconds of buffer)
+    #   -hls_flags delete_segments+append_list → auto-delete old .ts files
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", input_source,
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-tune", "zerolatency",
+        "-an",                          # drop audio — not needed for surveillance
+        "-f", "hls",
+        "-hls_time", "2",
+        "-hls_list_size", "5",
+        "-hls_flags", "delete_segments+append_list",
+        str(playlist),
+    ]
+
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+        )
+    except FileNotFoundError:
+        return jsonify({"error": "ffmpeg not found on PATH — install FFmpeg and retry"}), 500
+
+    playlist_url = f"/api/hls/{camera_id}/playlist.m3u8"
+
+    with _hls_lock:
+        _hls_process = proc
+        _hls_state.update(
+            running=True,
+            camera_id=camera_id,
+            input_source=input_source,
+            playlist_url=playlist_url,
+            hls_dir=str(hls_dir),
+            error=None,
+        )
+
+    log.info(f"HLS stream started: {input_source} → {hls_dir}/playlist.m3u8")
+    return jsonify({"ok": True, "playlist_url": playlist_url})
+
+
+@app.route("/api/hls/stop", methods=["POST"])
+def api_hls_stop():
+    """Stop the running FFmpeg HLS transcoder."""
+    global _hls_process
+
+    with _hls_lock:
+        if not _hls_state["running"]:
+            return jsonify({"error": "HLS stream not running"}), 409
+        proc = _hls_process
+
+    if proc and proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+    with _hls_lock:
+        _hls_process = None
+        _hls_state.update(
+            running=False, camera_id=None,
+            input_source=None, playlist_url=None,
+        )
+
+    log.info("HLS stream stopped.")
+    return jsonify({"ok": True})
+
+
+@app.route("/api/hls/status")
+def api_hls_status():
+    """Return current HLS stream state.
+
+    Also detects if the FFmpeg process exited unexpectedly and updates state.
+    """
+    with _hls_lock:
+        snap = dict(_hls_state)
+        proc = _hls_process
+
+    if snap["running"] and proc and proc.poll() is not None:
+        # Process exited on its own — capture stderr for the error message
+        try:
+            _, stderr_bytes = proc.communicate(timeout=1)
+            err_msg = (stderr_bytes or b"").decode(errors="replace").strip()
+            err_msg = err_msg[-300:] if len(err_msg) > 300 else err_msg
+        except Exception:
+            err_msg = "FFmpeg process exited unexpectedly"
+        with _hls_lock:
+            _hls_state["running"] = False
+            _hls_state["error"] = err_msg or "FFmpeg process exited unexpectedly"
+        snap["running"] = False
+        snap["error"] = _hls_state["error"]
+
+    return jsonify(snap)
+
+
+@app.route("/api/hls/<camera_id>/playlist.m3u8")
+def api_hls_playlist(camera_id: str):
+    """Serve the HLS playlist file for hls.js."""
+    with _hls_lock:
+        hls_dir = _hls_state.get("hls_dir")
+        state_cam = _hls_state.get("camera_id")
+
+    if not hls_dir or state_cam != camera_id:
+        abort(404)
+
+    playlist = Path(hls_dir) / "playlist.m3u8"
+    if not playlist.exists():
+        abort(404)
+
+    resp = send_from_directory(str(Path(hls_dir)), "playlist.m3u8")
+    resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    resp.headers["Content-Type"] = "application/vnd.apple.mpegurl"
+    return resp
+
+
+@app.route("/api/hls/<camera_id>/<path:ts_file>")
+def api_hls_segment(camera_id: str, ts_file: str):
+    """Serve individual .ts chunk files for hls.js."""
+    with _hls_lock:
+        hls_dir = _hls_state.get("hls_dir")
+        state_cam = _hls_state.get("camera_id")
+
+    if not hls_dir or state_cam != camera_id:
+        abort(404)
+
+    # Only serve .ts files — reject anything else
+    if not ts_file.endswith(".ts"):
+        abort(403)
+
+    seg = Path(hls_dir) / Path(ts_file).name   # strip any path traversal
+    if not seg.exists() or not seg.is_file():
+        abort(404)
+
+    return send_from_directory(str(Path(hls_dir)), seg.name)
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def create_app() -> Flask:

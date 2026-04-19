@@ -7,6 +7,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <!-- hls.js — MIT licensed, browser-based HLS playback (task 4.1) -->
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
   <style>
     /* ─────────────── RESET & TOKENS ─────────────── */
@@ -1011,6 +1013,44 @@
         </details>
       </div>
 
+      <!-- Live Stream — HLS (task 4.1) -->
+      <div class="config-section">
+        <details>
+          <summary>Live Stream (HLS)</summary>
+          <div style="padding-top:0.75rem;">
+            <p style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.5;">
+              Stream a live camera feed to the browser via HLS. Enter an RTSP
+              URL, webcam index (0, 1, …), or a video file path.
+            </p>
+            <div class="config-field">
+              <label class="config-label" for="hls-input">Input Source</label>
+              <input type="text" id="hls-input" placeholder="rtsp://… or 0 for webcam" />
+            </div>
+            <div class="config-field">
+              <label class="config-label" for="hls-camera-id">Camera ID</label>
+              <input type="text" id="hls-camera-id" value="cam_00" />
+            </div>
+            <div style="display:flex;gap:0.4rem;margin-top:0.5rem;">
+              <button class="btn btn-ghost" style="flex:1;" id="btn-hls-start"
+                      onclick="hlsStart()">▶ START STREAM</button>
+              <button class="btn btn-ghost" style="flex:1;opacity:0.4;" id="btn-hls-stop"
+                      onclick="hlsStop()" disabled>■ STOP</button>
+            </div>
+            <div id="hls-status-msg" style="font-family:var(--mono);font-size:0.6rem;
+                 color:var(--text-dim);margin-top:0.5rem;"></div>
+            <!-- Inline player — shown once the stream is running -->
+            <div id="hls-player-wrap" style="display:none;margin-top:0.75rem;">
+              <video id="hls-video" controls playsinline muted
+                     style="width:100%;border-radius:4px;background:#000;"></video>
+              <p style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);
+                        margin-top:0.3rem;text-align:center;">
+                Target latency: ~4–6 s · H.264 ultrafast · no audio
+              </p>
+            </div>
+          </div>
+        </details>
+      </div>
+
       <!-- Query Archive (Ashleyn's DB queries) -->
       <div class="config-section">
         <details>
@@ -1817,6 +1857,125 @@ function escHtml(s) {
   return String(s)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;')
     .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── HLS live streaming (task 4.1) ─────────────────────────────
+let _hlsInstance = null;
+let _hlsStatusTimer = null;
+
+async function hlsStart() {
+  const input   = document.getElementById('hls-input').value.trim();
+  const camId   = document.getElementById('hls-camera-id').value.trim() || 'cam_00';
+  const outDir  = document.getElementById('output-dir').value.trim();
+  const msgEl   = document.getElementById('hls-status-msg');
+
+  if (!input) { msgEl.textContent = '⚠ Enter an input source first.'; return; }
+
+  msgEl.textContent = 'Starting FFmpeg HLS transcoder…';
+  document.getElementById('btn-hls-start').disabled = true;
+
+  try {
+    const res  = await fetch('/api/hls/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ input_source: input, camera_id: camId, output_dir: outDir }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      msgEl.textContent = '⚠ ' + (data.error || 'Failed to start stream.');
+      document.getElementById('btn-hls-start').disabled = false;
+      return;
+    }
+    msgEl.textContent = 'Waiting for first segment… (~4 s)';
+    document.getElementById('btn-hls-stop').disabled = false;
+    document.getElementById('btn-hls-stop').style.opacity = '1';
+
+    // Wait a few seconds for FFmpeg to produce the first .ts segment
+    setTimeout(() => _attachHlsPlayer(data.playlist_url, camId), 4000);
+
+    // Poll HLS status to catch unexpected FFmpeg exits
+    _hlsStatusTimer = setInterval(_hlsPollStatus, 3000);
+  } catch (e) {
+    msgEl.textContent = '⚠ Network error: ' + e.message;
+    document.getElementById('btn-hls-start').disabled = false;
+  }
+}
+
+function _attachHlsPlayer(playlistUrl, camId) {
+  const wrap  = document.getElementById('hls-player-wrap');
+  const video = document.getElementById('hls-video');
+  const msgEl = document.getElementById('hls-status-msg');
+
+  wrap.style.display = 'block';
+
+  if (Hls.isSupported()) {
+    // Tear down any previous instance
+    if (_hlsInstance) { _hlsInstance.destroy(); }
+
+    _hlsInstance = new Hls({ enableWorker: false });
+    _hlsInstance.loadSource(playlistUrl);
+    _hlsInstance.attachMedia(video);
+    _hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+      video.play().catch(() => {});
+      msgEl.textContent = '● LIVE — ' + camId;
+      msgEl.style.color = 'var(--green)';
+    });
+    _hlsInstance.on(Hls.Events.ERROR, (_evt, data) => {
+      if (data.fatal) {
+        msgEl.textContent = '⚠ HLS error: ' + data.type;
+        msgEl.style.color = 'var(--red)';
+      }
+    });
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    // Safari native HLS
+    video.src = playlistUrl;
+    video.play().catch(() => {});
+    msgEl.textContent = '● LIVE (native HLS) — ' + camId;
+    msgEl.style.color = 'var(--green)';
+  } else {
+    msgEl.textContent = '⚠ HLS not supported in this browser.';
+  }
+}
+
+async function hlsStop() {
+  clearInterval(_hlsStatusTimer);
+  if (_hlsInstance) { _hlsInstance.destroy(); _hlsInstance = null; }
+
+  const video = document.getElementById('hls-video');
+  video.pause();
+  video.src = '';
+  document.getElementById('hls-player-wrap').style.display = 'none';
+
+  const msgEl = document.getElementById('hls-status-msg');
+  msgEl.style.color = '';
+  msgEl.textContent = 'Stopping…';
+
+  try {
+    await fetch('/api/hls/stop', { method: 'POST' });
+    msgEl.textContent = 'Stream stopped.';
+  } catch (e) {
+    msgEl.textContent = '⚠ Stop request failed: ' + e.message;
+  }
+
+  document.getElementById('btn-hls-start').disabled = false;
+  document.getElementById('btn-hls-stop').disabled = true;
+  document.getElementById('btn-hls-stop').style.opacity = '0.4';
+}
+
+async function _hlsPollStatus() {
+  try {
+    const res  = await fetch('/api/hls/status');
+    const data = await res.json();
+    if (!data.running && data.error) {
+      clearInterval(_hlsStatusTimer);
+      const msgEl = document.getElementById('hls-status-msg');
+      msgEl.textContent = '⚠ Stream died: ' + data.error.slice(0, 120);
+      msgEl.style.color = 'var(--red)';
+      document.getElementById('btn-hls-start').disabled = false;
+      document.getElementById('btn-hls-stop').disabled = true;
+      document.getElementById('btn-hls-stop').style.opacity = '0.4';
+    }
+  } catch (_) { /* ignore network blips */ }
 }
 
 // ── Boot ─────────────────────────────────────────────────────

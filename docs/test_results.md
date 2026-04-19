@@ -17,10 +17,11 @@ Last updated: Apr 19, 2026 · Branch: `dev`
 | test_data_integrity.py | 14 | 14 | 0 | 0 |
 | test_enhancer.py | 15 | 15 | 0 | 0 |
 | test_detection_accuracy.py | 14 | 14 | 0 | 0 |
+| test_hls_streaming.py | 23 | 23 | 0 | 0 |
 | test_object_type_queries.py | 5 | 5 | 0 | 0 |
 | test_pipeline.py | 4 | 4 | 0 | 0 |
 | test_pipeline_stress.py | — | — | — | — |
-| **Total** | **189** | **189** | **0** | **0** |
+| **Total** | **212** | **212** | **0** | **0** |
 
 `test_pipeline_stress.py` runs a 1-hour simulation and is excluded from the standard suite. Run it separately with `pytest tests/test_pipeline_stress.py`.
 
@@ -142,6 +143,29 @@ TEST_CLIP=path/to/clip.mp4 uv run pytest tests/test_detection_accuracy.py -v
 
 ---
 
+### test_hls_streaming.py — 23 tests *(added Apr 19, 2026)*
+
+**What it covers:** Full HLS live streaming stack — 13 route-unit tests (monkeypatched FFmpeg), 5 real-FFmpeg integration tests, and 5 pipeline mode comparison tests.
+
+**Route unit tests (TestHlsRouteUnit, 13 tests):** All five HLS Flask routes via test client — idle status shape, `POST /api/hls/start` response and state transition, 409 on double-start, 409 stop-when-idle, start→stop cycle, camera_id/input_source echo in status, default camera_id fallback, 404 on playlist/segment when not running, 403 on non-`.ts` segment extension.
+
+**Real FFmpeg integration tests (TestHlsIntegration, 5 tests, `@pytest.mark.integration`):** Verified with `baseline_highway.mp4` as the input source — FFmpeg produces `playlist.m3u8` + `.ts` segments within 10 seconds, playlist route returns correct `Content-Type: application/vnd.apple.mpegurl` and `Cache-Control: no-cache`, playlist content contains valid `#EXTM3U` header and at least one `.ts` reference, segment route serves binary data (>1KB), and `../` path traversal in segment URL is rejected.
+
+**Pipeline mode comparison tests (TestPipelineModeComparison, 5 tests):** `baseline_highway.mp4` produces ≥30% motion frames after warmup (Mode 1 is viable), `baseline_office.mp4` shows <50% motion (Mode 1 saves significant storage on static scenes), Mode 1 frame count is always ≤ Mode 0 frame count, night-mode CLAHE detects ≥ as many regions as default MOG2 on `nightVideos_busyBoulvard.mp4`, and ROI bounding boxes from motion frames have positive width/height.
+
+**Why it matters:** Closes the "No tests for HLS streaming routes" gap. The integration tests run real FFmpeg against CDnet clips — not a mock — so they catch real subprocess or playlist-format regressions. The mode comparison tests are the automated proof that Mode 1 actually reduces encode load on static-background cameras while preserving ROI coverage on busy scenes.
+
+**To run:**
+```bash
+# Fast suite only (no real FFmpeg, ~2s)
+uv run pytest tests/test_hls_streaming.py -v -m "not integration"
+
+# Full suite including real FFmpeg (~5s)
+uv run pytest tests/test_hls_streaming.py -v
+```
+
+---
+
 ### test_pipeline_stress.py — excluded from standard run
 
 **What it covers:** 1-hour simulated continuous operation using a looped test clip. Tracks peak memory (`tracemalloc`), verifies memory does not grow unbounded, and reports projected storage at 60-day retention across 100 cameras.
@@ -159,7 +183,7 @@ pytest tests/test_pipeline_stress.py -v -s
 ## How to run the suite
 
 ```bash
-# Standard run (excludes stress test) — 189 tests, no setup required
+# Standard run (excludes stress test) — 212 tests, no setup required
 uv run pytest tests/ --ignore=tests/test_pipeline_stress.py -v
 
 # With coverage
@@ -179,5 +203,5 @@ uv run pytest tests/test_pipeline_stress.py -v -s
 | `test_detection_accuracy.py` needs a shared test clip | AM, JS | ✅ Closed — uses CDnet clips from `data/samples/cdnet_mp4/` |
 | `test_pipeline.py` needs tests for `--enhance` bicubic path and `--encrypt` round-trip | RR | Not Started (task 2.6) |
 | No tests for Mode 2 or Mode 3 (not yet implemented) | RR | Blocked on mode implementation |
-| No tests for HLS streaming routes | KD | Not Started (task 4.1) |
+| No tests for HLS streaming routes | KD | ✅ Closed — 23 tests in `test_hls_streaming.py` |
 | No tests for adaptive mode controller | KD | Not Started (task 4.4) |

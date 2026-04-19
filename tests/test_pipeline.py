@@ -88,7 +88,8 @@ class DummyEncoder:
     def __init__(self, call_log, *args, **kwargs):
         self.call_log = call_log
 
-    def encode_segment(self, frames, bboxes_per_frame, camera_id, fps):
+    def encode_segment(self, frames, bboxes_per_frame, camera_id, fps,
+                       object_type=None, **kwargs):
         self.call_log["encode_segment"] += 1
         return f"dummy_segment_{self.call_log['encode_segment']}.mp4"
 
@@ -261,7 +262,8 @@ class TestMode1Behavior:
             def __init__(self, *args, **kwargs):
                 pass
 
-            def encode_segment(self, frames, bboxes_per_frame, camera_id, fps):
+            def encode_segment(self, frames, bboxes_per_frame, camera_id, fps,
+                               object_type=None, **kwargs):
                 calls["encode_segment"] += 1
                 calls["encoded_frame_count"] = len(frames)
                 calls["encoded_bboxes_count"] = len(bboxes_per_frame)

@@ -98,52 +98,92 @@ You should see output starting with `ffmpeg version 4.x` or higher. If you get `
 
 Follow these steps **in order**. Do not skip any step.
 
-### Step 1  -  Clone the Repository
+### Option A — uv (recommended, requested by NIWC/Sean)
+
+uv manages the virtual environment, Python version, and dependency lock file for you. No manual venv creation needed.
+
+**Step 1 — Install uv**
+
+```bash
+# Linux / macOS / WSL2
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows (PowerShell)
+winget install astral-sh.uv
+```
+
+Restart your terminal after installing so the `uv` command is on your PATH.
+
+**Step 2 — Clone the repo**
 ```bash
 git clone https://github.com/Blood-Dawn/capstone-compression.git
 cd capstone-compression
 ```
 
-### Step 2  -  Create a Python Virtual Environment
-This keeps project dependencies isolated from your system Python. Always do this.
+**Step 3 — Install dependencies**
+```bash
+uv sync
+```
 
-**Linux / macOS:**
+This creates a `.venv/` directory, pins the exact Python version, and installs all dependencies from `pyproject.toml`. If `uv.lock` is present in the repo, it uses that to ensure every developer gets identical package versions.
+
+To also install the optional super-resolution enhancer (needed for `--enhance` flag):
+```bash
+uv sync --extra enhance
+```
+
+Note: `basicsr` and `realesrgan` pull in large CUDA packages. Skip `--extra enhance` if you are on a CPU-only machine and do not plan to use `--enhance`.
+
+**Step 4 — Run anything**
+
+Prefix commands with `uv run` — it automatically activates the managed virtualenv:
+```bash
+uv run python src/pipeline/pipeline.py --help
+uv run python run_gui.py
+uv run pytest
+```
+
+Or activate the venv directly if you prefer:
+```bash
+source .venv/bin/activate      # Linux / macOS
+.venv\Scripts\activate         # Windows PowerShell
+```
+
+---
+
+### Option B — pip (fallback)
+
+Use this if uv is unavailable on your machine.
+
+**Step 1 — Clone the repo**
+```bash
+git clone https://github.com/Blood-Dawn/capstone-compression.git
+cd capstone-compression
+```
+
+**Step 2 — Create a Python virtual environment**
+
+Linux / macOS:
 ```bash
 python3 -m venv venv
-```
-
-**Windows (PowerShell or Git Bash):**
-```bash
-python -m venv venv
-```
-
-Note: On Windows, `python3` is not recognized. Use `python` instead.
-
-### Step 3  -  Activate the Virtual Environment
-
-**Linux / macOS:**
-```bash
 source venv/bin/activate
 ```
 
-**Windows Git Bash (MINGW64):**
+Windows (PowerShell or Git Bash):
 ```bash
-source venv/Scripts/activate
+python -m venv venv
+.\venv\Scripts\Activate.ps1    # PowerShell
+source venv/Scripts/activate   # Git Bash
 ```
 
-**Windows PowerShell:**
-```powershell
-.\venv\Scripts\Activate.ps1
-```
+Your terminal prompt should show `(venv)` when active.
 
-Your terminal prompt should now show `(venv)` at the beginning. If it does not, the venv is not active.
-
-### Step 4  -  Install Python Dependencies
+**Step 3 — Install Python dependencies**
 ```bash
 pip install -r requirements.txt
 ```
 
-This will install OpenCV, NumPy, FFmpeg-Python, scikit-image, pytest, and all other required packages. It may take a few minutes.
+This installs OpenCV, NumPy, FFmpeg-Python, scikit-image, pytest, and all other required packages. It may take a few minutes.
 
 ### Step 5  -  Verify FFmpeg Is on PATH
 ```bash
@@ -425,14 +465,17 @@ sqlite3 outputs/metadata.db "SELECT * FROM segments;"
 Always run tests before submitting a pull request.
 
 ```bash
-# Run all tests
+# Run all tests (uv)
+uv run pytest tests/ -v
+
+# Run all tests (pip / activated venv)
 pytest tests/ -v
 
 # Run a specific test file
-pytest tests/test_background_subtraction.py -v
+uv run pytest tests/test_background_subtraction.py -v
 
 # Run with coverage report
-pytest tests/ -v --cov=src --cov-report=term-missing
+uv run pytest tests/ -v --cov=src --cov-report=term-missing
 ```
 
 A passing test run looks like:
@@ -581,9 +624,13 @@ The enhancement module applies CPU-compatible super-resolution to sharpen foregr
 
 ### Step 1 — Install the enhancement dependencies
 
-These are already listed in `requirements.txt` but require a separate install step because `basicsr` has a non-trivial C++ build:
+These are optional extras — only needed if you plan to use the `--enhance` flag.
 
 ```bash
+# uv (recommended)
+uv sync --extra enhance
+
+# pip fallback
 pip install basicsr realesrgan
 ```
 
@@ -646,7 +693,7 @@ python src/pipeline/pipeline.py \
 ### Troubleshooting
 
 **`ImportError: No module named 'basicsr'`**
-Run `pip install basicsr realesrgan` inside your active venv.
+Run `uv sync --extra enhance` (or `pip install basicsr realesrgan` in an activated venv).
 
 **`Model weights not found`**
 The `.pth` file is missing from `models/`. Re-run the curl command in Step 2.

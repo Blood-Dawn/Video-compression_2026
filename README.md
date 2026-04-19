@@ -40,40 +40,55 @@ On top of compression, the system also:
 
 You'll need Python 3.10+ and FFmpeg installed on your machine.
 
+### Quick setup with uv (recommended)
+
+[uv](https://astral.sh/uv) handles the virtual environment and dependency locking automatically.
+
 ```bash
-# 1. Clone the repo
+# 1. Install uv (one-time)
+curl -LsSf https://astral.sh/uv/install.sh | sh   # Linux / macOS
+# Windows: winget install astral-sh.uv
+
+# 2. Clone the repo
 git clone https://github.com/Blood-Dawn/capstone-compression.git
 cd capstone-compression
 
-# 2. Set up a virtual environment
-python3 -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\Activate.ps1
+# 3. Install dependencies and create virtualenv in one step
+uv sync
 
-# 3. Install dependencies
-pip install -r requirements.txt
+# 4. Install FFmpeg (still required as a system binary)
+sudo apt install ffmpeg -y    # Ubuntu/Debian/WSL2
+brew install ffmpeg            # macOS
 
-# 4. Install FFmpeg
-# Ubuntu/Debian:
-sudo apt install ffmpeg -y
-# macOS:
-brew install ffmpeg
-
-# 5. Verify your setup
-bash check_deps.sh
-
-# 6. Run it on a clip
-python src/pipeline/pipeline.py \
+# 5. Run it on a clip
+uv run python src/pipeline/pipeline.py \
   --input data/samples/your_clip.mp4 \
   --camera-id cam_01 \
   --output outputs/ \
   --mode mode0
 ```
 
-To open the dashboard instead of running from the terminal:
+To use the super-resolution enhancer (`--enhance` flag), install the optional extras:
 
 ```bash
-python run_gui.py
+uv sync --extra enhance
+```
+
+To open the dashboard:
+
+```bash
+uv run python run_gui.py
 # Then open http://localhost:5000 in your browser
+```
+
+### Alternative setup with pip
+
+```bash
+git clone https://github.com/Blood-Dawn/capstone-compression.git
+cd capstone-compression
+python3 -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 ```
 
 ---

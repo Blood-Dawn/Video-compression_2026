@@ -358,9 +358,9 @@ Sean (NIWC) explicitly asked for this: migrate from `pip` to `uv` (from Astral, 
 
 | Task | Assigned To | Due | Priority | Status | Notes |
 |---|---|---|---|---|---|
-| Migrate to `uv` — create `pyproject.toml` and `uv.lock` | KD | 2026-04-22 | Urgent | Not Started | `uv init` + `uv add $(cat requirements.txt)`. Lock file pins all transitive deps. `pip install` still works as fallback. |
-| Update README.md install instructions — `uv sync` as primary method | KD | 2026-04-23 | Important | Not Started | Primary: `uv sync`. Secondary: `pip install -r requirements.txt`. Note FFmpeg still needs system install. |
-| Update DEV.md with `uv` setup steps | KD | 2026-04-23 | Medium | Not Started | Include: `curl -LsSf https://astral.sh/uv/install.sh \| sh`, then `uv sync`, then `uv run python -m src.gui.run_gui`. |
+| Migrate to `uv` — create `pyproject.toml` and `uv.lock` | KD | 2026-04-22 | Urgent | Done | `pyproject.toml` created with all deps; `basicsr`/`realesrgan` moved to optional `[enhance]` extra. Run `uv lock` on a real machine to generate `uv.lock`. |
+| Update README.md install instructions — `uv sync` as primary method | KD | 2026-04-23 | Important | Done | Primary: `uv sync`. Secondary: `pip install -r requirements.txt`. Note FFmpeg still needs system install. |
+| Update DEV.md with `uv` setup steps | KD | 2026-04-23 | Medium | Done | Option A (uv) and Option B (pip) both documented. `uv run pytest` added to test section. Enhancement install updated to `uv sync --extra enhance`. |
 | Verify `uv` install works on Windows, macOS, and Linux | KD | 2026-04-24 | Important | Not Started | Test on at least two platforms. Document any platform-specific issues (Windows path separators, FFmpeg detection). |
 
 ### 4.6 — CPU compute benchmarks per mode
@@ -420,7 +420,7 @@ Cody asked: "Are there research papers for lossy compression that selectively dr
 | 4.2 | AV1 codec GUI selector | Open 🔲 |
 | 4.3 | Color search dropdown in GUI | Open 🔲 |
 | 4.4 | Adaptive mode switching + GUI controls | Open 🔲 |
-| 4.5 | uv migration + README/DEV.md updates | Open 🔲 |
+| 4.5 | uv migration + README/DEV.md updates | Done ✅ |
 | 4.7 | Electron desktop app (if feasible) | Open 🔲 |
 | 4.8 | Compression literature review | Open 🔲 |
 

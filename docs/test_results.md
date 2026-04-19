@@ -16,15 +16,13 @@ Last updated: Apr 19, 2026 · Branch: `dev`
 | test_roi_encoder.py | 19 | 19 | 0 | 0 |
 | test_data_integrity.py | 14 | 14 | 0 | 0 |
 | test_enhancer.py | 15 | 15 | 0 | 0 |
+| test_detection_accuracy.py | 14 | 14 | 0 | 0 |
 | test_object_type_queries.py | 5 | 5 | 0 | 0 |
 | test_pipeline.py | 4 | 4 | 0 | 0 |
-| test_detection_accuracy.py | 2 | 0 | 2 | 0 |
 | test_pipeline_stress.py | — | — | — | — |
-| **Total** | **177** | **175** | **2** | **0** |
+| **Total** | **189** | **189** | **0** | **0** |
 
 `test_pipeline_stress.py` runs a 1-hour simulation and is excluded from the standard suite. Run it separately with `pytest tests/test_pipeline_stress.py`.
-
-`test_detection_accuracy.py` requires a real video clip. Set `TEST_CLIP=/path/to/clip.mp4` to activate those tests (see section below).
 
 ---
 
@@ -122,18 +120,25 @@ Last updated: Apr 19, 2026 · Branch: `dev`
 
 ---
 
-### test_detection_accuracy.py — 2 tests (skipped without TEST_CLIP)
+### test_detection_accuracy.py — 14 tests *(updated Apr 19, 2026)*
 
-**What it covers:** MOG2 detection on real footage — confirms at least one foreground region appears within 50 frames of a clip with motion, and that the false-positive rate stays under 2% on a static warmup scene.
+**What it covers:** MOG2 detection on the CDnet 2014 benchmark dataset (`data/samples/cdnet_mp4/`). No external clip or env var required — the 54 bundled videos activate all 14 tests automatically.
 
-**Why it matters:** The 0% FP target on static scenes was a sponsor requirement. These tests verify the tuned defaults actually meet it on real footage, not just synthetic frames.
+- `test_detection_not_empty` — at least one foreground region appears within 50 frames of `baseline_pedestrians.mp4`
+- `test_false_positive_rate_on_static_scene` — FP rate stays under 2% on `baseline_office.mp4` after a 30-frame warmup
+- `test_no_crash_on_cdnet_category` (parametrized × 11 categories) — BackgroundSubtractor processes 30 frames from one clip per category (PTZ, badWeather, baseline, cameraJitter, dynamicBackground, intermittentObjectMotion, lowFramerate, nightVideos, shadow, thermal, turbulence) without crashing or producing a corrupt mask
+- `test_detection_on_nightVideos` — night-mode (CLAHE preprocessing) finds foreground in `nightVideos_bridgeEntry.mp4` within 80 frames
+
+**Why it matters:** The 0% FP target on static scenes was a sponsor requirement. These tests verify the tuned defaults meet it on real surveillance footage across 11 scene categories — not just synthetic frames. The CDnet parametrized suite is a regression guard for anyone who changes MOG2 params.
 
 **To run:**
 ```bash
-TEST_CLIP=data/test_clip.mp4 pytest tests/test_detection_accuracy.py -v
-```
+# Standard — uses bundled CDnet clips automatically
+uv run pytest tests/test_detection_accuracy.py -v
 
-Place any surveillance clip at `data/test_clip.mp4` and the tests will activate automatically. The clip should have at least 80 frames and contain motion.
+# Override with a specific clip
+TEST_CLIP=path/to/clip.mp4 uv run pytest tests/test_detection_accuracy.py -v
+```
 
 ---
 
@@ -154,14 +159,11 @@ pytest tests/test_pipeline_stress.py -v -s
 ## How to run the suite
 
 ```bash
-# Standard run (excludes stress test)
+# Standard run (excludes stress test) — 189 tests, no setup required
 uv run pytest tests/ --ignore=tests/test_pipeline_stress.py -v
 
 # With coverage
 uv run pytest tests/ --ignore=tests/test_pipeline_stress.py --cov=src --cov-report=term-missing
-
-# With a real clip for detection accuracy tests
-TEST_CLIP=data/test_clip.mp4 uv run pytest tests/ --ignore=tests/test_pipeline_stress.py -v
 
 # Stress test (plan for 1 hour)
 uv run pytest tests/test_pipeline_stress.py -v -s
@@ -174,7 +176,7 @@ uv run pytest tests/test_pipeline_stress.py -v -s
 | Gap | Owner | Status |
 |---|---|---|
 | CI integration for `test_data_integrity.py` — run on every PR to `dev` | KD | Not Started (task 2.4) |
-| `test_detection_accuracy.py` needs a shared test clip committed to `data/` | AM, JS | Not Started |
+| `test_detection_accuracy.py` needs a shared test clip | AM, JS | ✅ Closed — uses CDnet clips from `data/samples/cdnet_mp4/` |
 | `test_pipeline.py` needs tests for `--enhance` bicubic path and `--encrypt` round-trip | RR | Not Started (task 2.6) |
 | No tests for Mode 2 or Mode 3 (not yet implemented) | RR | Blocked on mode implementation |
 | No tests for HLS streaming routes | KD | Not Started (task 4.1) |

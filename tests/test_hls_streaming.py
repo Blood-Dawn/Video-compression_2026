@@ -53,44 +53,44 @@ def _require_clip(p: Path) -> str:
 
 @pytest.fixture(autouse=True)
 def reset_hls_state(tmp_path):
-    """Reset all HLS global state before each test.
+    """Reset all HLS global state before and after each test.
 
     Points the default output_dir at a fresh tmp_path so tests never read or
     write to a real outputs/hls/ directory on the developer's machine.
     """
-    # Stop any lingering process
-    with gui_module._hls_lock:
-        if gui_module._hls_process and gui_module._hls_process.poll() is None:
-            gui_module._hls_process.terminate()
-            try:
-                gui_module._hls_process.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                gui_module._hls_process.kill()
-        gui_module._hls_process = None
-        gui_module._hls_state.update(
-            running=False,
-            camera_id=None,
-            input_source=None,
-            playlist_url=None,
-            hls_dir=None,
-            error=None,
-        )
 
+    def _reset():
+        # Signal the annotator thread to stop
+        if gui_module._hls_stop_event:
+            gui_module._hls_stop_event.set()
+        # Terminate any live FFmpeg process
+        with gui_module._hls_lock:
+            proc = gui_module._hls_process
+        if proc and proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+        with gui_module._hls_lock:
+            gui_module._hls_process = None
+            gui_module._hls_state.update(
+                running=False,
+                camera_id=None,
+                input_source=None,
+                playlist_url=None,
+                hls_dir=None,
+                error=None,
+            )
+        # Wait briefly for the thread to exit after stop_event is set
+        if gui_module._hls_thread and gui_module._hls_thread.is_alive():
+            gui_module._hls_thread.join(timeout=2)
+        gui_module._hls_thread = None
+        gui_module._hls_stop_event = None
+
+    _reset()
     yield
-
-    # Teardown — stop anything the test may have started
-    with gui_module._hls_lock:
-        if gui_module._hls_process and gui_module._hls_process.poll() is None:
-            gui_module._hls_process.terminate()
-            try:
-                gui_module._hls_process.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                gui_module._hls_process.kill()
-        gui_module._hls_process = None
-        gui_module._hls_state.update(
-            running=False, camera_id=None, input_source=None,
-            playlist_url=None, hls_dir=None, error=None,
-        )
+    _reset()
 
 
 @pytest.fixture
@@ -102,19 +102,45 @@ def client():
 
 @pytest.fixture
 def fake_ffmpeg(tmp_path):
-    """Monkeypatch subprocess.Popen to return a controllable fake process.
+    """Patch subprocess.Popen AND cv2.VideoCapture to avoid real I/O.
 
-    The fake process stays alive until its terminate() is called, so start/stop
-    state transitions are deterministic without real FFmpeg on PATH.
+    The fake VideoCapture blocks on read() until reset_hls_state teardown sets
+    the stop event, keeping the annotator thread alive (running=True) so
+    state-check assertions always see a consistent picture.
     """
+    # ── fake FFmpeg process ───────────────────────────────────────────────────
     mock_proc = MagicMock(spec=subprocess.Popen)
-    mock_proc.poll.return_value = None  # process is alive
-    mock_proc.stderr = MagicMock()
-    mock_proc.stderr.readline.return_value = b""
+    mock_proc.poll.return_value = None     # process stays alive
+    mock_proc.stdin = MagicMock()
+    mock_proc.stdin.write.return_value = None
+    mock_proc.stdin.close.return_value = None
     mock_proc.wait.return_value = 0
 
-    with patch("src.gui.app.subprocess.Popen", return_value=mock_proc) as patcher:
+    # ── fake VideoCapture ─────────────────────────────────────────────────────
+    # read() blocks on _read_block so the annotator thread stays in the loop
+    # until the test ends and reset_hls_state sets the stop event.
+    _read_block = threading.Event()
+
+    mock_cap = MagicMock()
+    mock_cap.isOpened.return_value = True
+    mock_cap.get.side_effect = lambda prop: {
+        cv2.CAP_PROP_FRAME_WIDTH: 320.0,
+        cv2.CAP_PROP_FRAME_HEIGHT: 240.0,
+        cv2.CAP_PROP_FPS: 25.0,
+    }.get(prop, 0.0)
+
+    def _blocking_read():
+        _read_block.wait(timeout=30)   # returns False once unblocked by teardown
+        return (False, None)
+
+    mock_cap.read.side_effect = _blocking_read
+    mock_cap.release.return_value = None
+
+    with patch("src.gui.app.subprocess.Popen", return_value=mock_proc), \
+         patch("src.gui.app.cv2.VideoCapture", return_value=mock_cap):
         yield mock_proc, tmp_path
+        # Unblock the blocking read() so the thread can exit during teardown
+        _read_block.set()
 
 
 # ──────────────────────────────────────────────

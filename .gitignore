@@ -84,3 +84,6 @@ config/secrets.yaml
 *.ts
 *.part
 ffmpeg_tmp/
+
+# MediaMTX binary (downloaded on demand — not committed)
+tools/mediamtx/

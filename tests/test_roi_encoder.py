@@ -55,6 +55,31 @@ pytestmark = pytest.mark.skipif(
 # ---------------------------------------------------------------------------
 
 class TestEncodeSegment:
+    def test_object_only_frame_keeps_only_bbox_pixels(self, encoder):
+        frame = np.zeros((8, 8, 3), dtype=np.uint8)
+        frame[:, :] = (10, 20, 30)
+        frame[2:5, 3:7] = (200, 100, 50)
+
+        out = encoder._copy_bboxes_to_black_frame(frame, [(3, 2, 4, 3)])
+
+        assert np.array_equal(out[2:5, 3:7], frame[2:5, 3:7])
+        assert np.count_nonzero(out[:2]) == 0
+        assert np.count_nonzero(out[:, :3]) == 0
+
+    def test_background_patch_frame_keeps_background_outside_bboxes(self, encoder):
+        background = np.full((8, 8, 3), 10, dtype=np.uint8)
+        frame = np.full((8, 8, 3), 200, dtype=np.uint8)
+
+        out = encoder._copy_bboxes_to_background_frame(
+            background,
+            frame,
+            [(2, 1, 3, 4)],
+        )
+
+        assert np.array_equal(out[1:5, 2:5], frame[1:5, 2:5])
+        assert np.array_equal(out[0, 0], background[0, 0])
+        assert np.array_equal(out[6:, :], background[6:, :])
+
     def test_returns_mp4_path(self, encoder, tiny_frames):
         out = encoder.encode_segment(tiny_frames, camera_id="cam_test", fps=10.0)
         assert out.endswith(".mp4")

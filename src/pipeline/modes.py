@@ -9,6 +9,8 @@ how each pipeline mode handles a post-warmup frame.
 Current modes:
 - mode0: buffer every post-warmup frame; mark target frames when detections exist
 - mode1: buffer only frames that contain detections
+- mode2: buffer foreground frames and encode bbox patches over a clean background
+- mode3: buffer only foreground frames and encode only bbox pixels
 
 The goal is to keep pipeline.py focused on orchestration while keeping
 mode-specific behavior isolated here for easier extension later.
@@ -18,7 +20,7 @@ from dataclasses import dataclass
 from typing import Iterable
 
 
-VALID_MODES = {"mode0", "mode1"}
+VALID_MODES = {"mode0", "mode1", "mode2", "mode3"}
 
 
 @dataclass(frozen=True)
@@ -32,9 +34,21 @@ class ModeDecision:
         target_detected:
             Whether this frame contains one or more detected foreground regions.
             This is used for stats/logging such as target_frames_this_segment.
+        store_foreground_layer:
+            Legacy flag for the old crop/mask artifact path. New mode3 output
+            uses the normal encoder with object_only=True instead.
     """
     buffer_frame: bool
     target_detected: bool
+    store_foreground_layer: bool = False
+
+    @property
+    def store_full_frame(self) -> bool:
+        """
+        Preferred name for new mode code. Kept as a property so existing tests
+        and callers that use buffer_frame continue to work unchanged.
+        """
+        return self.buffer_frame
 
 
 def validate_mode(mode: str) -> None:
@@ -82,6 +96,21 @@ def get_mode_decision(mode: str, regions: Iterable[object]) -> ModeDecision:
             target_detected=has_targets,
         )
 
+    if mode == "mode2":
+        # Background keyframe plus object patches: keep event frames only.
+        return ModeDecision(
+            buffer_frame=has_targets,
+            target_detected=has_targets,
+        )
+
+    if mode == "mode3":
+        # Object-only segment: normal MP4 output, black outside bbox regions.
+        return ModeDecision(
+            buffer_frame=has_targets,
+            target_detected=has_targets,
+            store_foreground_layer=False,
+        )
+
     # Defensive fallback; validate_mode() should make this unreachable.
     raise ValueError(f"Unhandled mode: {mode}")
 
@@ -100,6 +129,14 @@ def describe_mode(mode: str) -> str:
         "mode1": (
             "Standard event recording: store only post-warmup frames with "
             "detected foreground objects."
+        ),
+        "mode2": (
+            "Background keyframe plus object patches: store detected "
+            "bounding-box pixels composited over a clean scene background."
+        ),
+        "mode3": (
+            "Object-only segment: store detected bounding-box pixels on a "
+            "black canvas using the normal MP4 encoder."
         ),
     }
     return descriptions[mode]

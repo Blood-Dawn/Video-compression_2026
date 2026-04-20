@@ -167,7 +167,7 @@ class TestHlsRouteUnit:
         assert r.status_code == 200
         d = r.get_json()
         assert d["ok"] is True
-        assert d["playlist_url"] == "/api/hls/cam_01/playlist.m3u8"
+        assert d["playlist_url"].startswith("/api/hls/cam_01/playlist.m3u8?t=")
 
     def test_start_sets_running_true(self, client, fake_ffmpeg, tmp_path):
         _, tmpdir = fake_ffmpeg

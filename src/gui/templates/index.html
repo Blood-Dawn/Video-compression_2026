@@ -199,23 +199,50 @@
       grid-column: 2;
       grid-row: 3;
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr;
       overflow: hidden;
       position: relative;
     }
+    .content-bottom.log-open {
+      grid-template-columns: 1fr 1fr;
+    }
     #log-panel-container {
-      display: flex;
+      display: none;
       flex-direction: column;
       overflow: hidden;
       position: relative;
+      border-right: 1px solid var(--border);
+    }
+    .log-open #log-panel-container {
+      display: flex;
     }
     #segments-panel-container {
       display: flex;
       flex-direction: column;
       overflow: hidden;
-      border-left: 1px solid var(--border);
       position: relative;
     }
+
+    /* ─── Segment hover tooltip ─── */
+    #seg-tooltip {
+      position: fixed;
+      z-index: 9000;
+      background: var(--surface2);
+      border: 1px solid var(--border-bright);
+      border-radius: 3px;
+      padding: 0.55rem 0.8rem;
+      font-family: var(--mono);
+      font-size: 0.68rem;
+      color: var(--text);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.1s;
+      max-width: 280px;
+      white-space: pre-line;
+      line-height: 1.7;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    }
+    #seg-tooltip.visible { opacity: 1; }
 
     /* ─────────────── PANEL ─────────────── */
     .panel {
@@ -1029,6 +1056,93 @@
         </details>
       </div>
 
+      <!-- Local RTSP Server (optional MediaMTX integration) -->
+      <div class="config-section">
+        <details id="rtsp-server-details">
+          <summary>Local RTSP Server <span id="rtsp-server-badge" style="font-size:0.6rem;font-family:var(--mono);color:var(--text-dim);margin-left:0.3rem;"></span></summary>
+          <div style="padding-top:0.75rem;">
+            <p style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.5;">
+              Spin up a local <a href="https://github.com/bluenviron/mediamtx" target="_blank" style="color:var(--green);">MediaMTX</a>
+              RTSP server (MIT license) and push a video file into it — no external server needed.
+            </p>
+
+            <!-- Step 1: download binary -->
+            <div id="rtsp-dl-section">
+              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">
+                STEP 1 — DOWNLOAD BINARY
+              </div>
+              <div style="display:flex;gap:0.4rem;align-items:center;">
+                <button class="btn btn-ghost" style="flex:1;" id="btn-rtsp-dl"
+                        onclick="rtspDownload()">⬇ DOWNLOAD MediaMTX</button>
+              </div>
+              <div id="rtsp-dl-bar-wrap" style="display:none;margin-top:0.4rem;">
+                <div style="background:var(--surface2);border-radius:3px;height:6px;overflow:hidden;">
+                  <div id="rtsp-dl-bar" style="height:100%;width:0%;background:var(--green);transition:width 0.3s;"></div>
+                </div>
+                <div id="rtsp-dl-label" style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);margin-top:0.2rem;"></div>
+              </div>
+            </div>
+
+            <!-- Step 2: start/stop server -->
+            <div style="margin-top:0.75rem;">
+              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">
+                STEP 2 — START SERVER
+              </div>
+              <div style="display:flex;gap:0.4rem;">
+                <button class="btn btn-ghost" style="flex:1;" id="btn-rtsp-start"
+                        onclick="rtspStart()" disabled>▶ START</button>
+                <button class="btn btn-ghost" style="flex:1;opacity:0.4;" id="btn-rtsp-stop"
+                        onclick="rtspStop()" disabled>■ STOP</button>
+              </div>
+              <div id="rtsp-server-msg" style="font-family:var(--mono);font-size:0.6rem;
+                   color:var(--text-dim);margin-top:0.3rem;"></div>
+            </div>
+
+            <!-- Step 3: push video -->
+            <div style="margin-top:0.75rem;" id="rtsp-push-section">
+              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">
+                STEP 3 — PUSH VIDEO
+              </div>
+              <div class="config-field">
+                <label class="config-label" for="rtsp-push-path">Video File</label>
+                <div style="display:flex;gap:0.25rem;">
+                  <input type="text" id="rtsp-push-path" placeholder="path/to/video.mp4" style="flex:1;" />
+                  <button class="btn btn-ghost" style="padding:0 0.5rem;font-size:0.65rem;"
+                          onclick="rtspBrowse()">…</button>
+                </div>
+              </div>
+              <div class="config-field">
+                <label class="config-label" for="rtsp-stream-name">Stream Name</label>
+                <input type="text" id="rtsp-stream-name" value="live"
+                       placeholder="e.g. highway" style="width:100%;" />
+              </div>
+              <div style="display:flex;gap:0.4rem;margin-top:0.3rem;">
+                <button class="btn btn-ghost" style="flex:1;" id="btn-rtsp-push"
+                        onclick="rtspPush()" disabled>▶ PUSH VIDEO</button>
+                <button class="btn btn-ghost" style="flex:1;opacity:0.4;" id="btn-rtsp-stop-push"
+                        onclick="rtspStopPush()" disabled>■ STOP PUSH</button>
+              </div>
+              <div id="rtsp-push-msg" style="font-family:var(--mono);font-size:0.6rem;
+                   color:var(--text-dim);margin-top:0.3rem;"></div>
+            </div>
+
+            <!-- RTSP URL display + copy to HLS input -->
+            <div id="rtsp-url-box" style="display:none;margin-top:0.75rem;padding:0.5rem;
+                 background:var(--surface2);border-radius:4px;border:1px solid var(--border);">
+              <div style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);
+                          margin-bottom:0.25rem;">RTSP URL (copy into Live Stream input)</div>
+              <div style="display:flex;gap:0.3rem;align-items:center;">
+                <code id="rtsp-url-text" style="font-family:var(--mono);font-size:0.65rem;
+                      color:var(--green);flex:1;word-break:break-all;"></code>
+                <button class="btn btn-ghost" style="padding:0.2rem 0.4rem;font-size:0.6rem;white-space:nowrap;"
+                        onclick="rtspCopyUrl()">⧉ USE</button>
+              </div>
+            </div>
+
+          </div>
+        </details>
+      </div>
+
       <!-- Query Archive (Ashleyn's DB queries) -->
       <div class="config-section">
         <details>
@@ -1152,27 +1266,30 @@
     <div class="resize-divider-v" id="resize-divider-v"></div>
 
     <!-- ════════ CONTENT BOTTOM — Log + Segments ════════ -->
+    <!-- Segment hover tooltip (shared, positioned by JS) -->
+    <div id="seg-tooltip"></div>
+
     <div class="content-bottom" id="content-bottom">
 
-      <!-- Log terminal -->
+      <!-- Log terminal (hidden by default — toggle with LOG button) -->
       <div id="log-panel-container" class="log-panel">
         <div class="panel-header">
           <span class="panel-title">Live Log</span>
           <div style="display:flex;align-items:center;gap:0.75rem;">
             <span class="refresh-dot"></span>
             <button class="log-clear-btn" onclick="clearLog()">CLEAR</button>
-            <button class="log-clear-btn" id="log-toggle-btn" onclick="toggleLogPanel()" title="Collapse log panel">◀</button>
+            <button class="log-clear-btn" id="log-toggle-btn" onclick="toggleLogPanel()" title="Hide log panel">◀</button>
           </div>
         </div>
         <div id="log-terminal"></div>
       </div>
 
-      <!-- Segments table -->
+      <!-- Segments table — full width by default -->
       <div id="segments-panel-container" class="segments-panel">
         <div class="panel-header">
           <span class="panel-title">Output Segments</span>
-          <div style="display:flex;gap:0.5rem;">
-            <button class="btn btn-ghost" id="restore-log-btn" onclick="toggleLogPanel()" style="display:none;" title="Show log panel">▶ LOG</button>
+          <div style="display:flex;gap:0.5rem;align-items:center;">
+            <button class="btn btn-ghost" id="log-open-btn" onclick="toggleLogPanel()" title="Show log panel">▶ LOG</button>
             <button class="btn btn-ghost" onclick="loadSegments()">↻ REFRESH</button>
           </div>
         </div>
@@ -1182,11 +1299,11 @@
               <tr>
                 <th>Timestamp</th>
                 <th>Camera</th>
-                <th>Target</th>
+                <th title="TARGET — whether this segment contains motion/objects detected by background subtraction. YES = at least one ROI was found; used by Mode 1 to decide whether to save the segment at all.">Target ⓘ</th>
                 <th>Type</th>
-                <th>ROIs</th>
+                <th title="Number of Region-of-Interest detections across all frames in this segment. Higher = more activity.">ROIs ⓘ</th>
                 <th>Duration</th>
-                <th>Size</th>
+                <th title="Compressed file size. Hover a row to see estimated compression ratio vs raw video.">Size ⓘ</th>
                 <th>Play</th>
               </tr>
             </thead>
@@ -1397,28 +1514,65 @@ document.addEventListener('mouseup', () => {
   isResizingV = false;
 });
 
-// ── Toggle log panel with restore button ──────────────────
+// ── Toggle log panel ──────────────────────────────────────
 function toggleLogPanel() {
-  const logPanel  = document.getElementById('log-panel-container');
-  const segsPanel = document.getElementById('segments-panel-container');
-  const restoreBtn = document.getElementById('restore-log-btn');
-  const toggleBtn  = document.getElementById('log-toggle-btn');
-  const isHidden = logPanel.style.display === 'none';
+  const bottom    = document.getElementById('content-bottom');
+  const openBtn   = document.getElementById('log-open-btn');
+  const closeBtn  = document.getElementById('log-toggle-btn');
+  const isOpen    = bottom.classList.contains('log-open');
 
-  if (isHidden) {
-    logPanel.style.display = 'flex';
-    logPanel.style.width = '';
-    segsPanel.style.width = '';
-    restoreBtn.style.display = 'none';
-    toggleBtn.textContent = '◀';
-    toggleBtn.title = 'Collapse log panel';
+  if (isOpen) {
+    bottom.classList.remove('log-open');
+    openBtn.textContent = '▶ LOG';
+    openBtn.style.color = '';
+    closeBtn.textContent = '◀';
   } else {
-    logPanel.style.display = 'none';
-    segsPanel.style.width = '100%';
-    restoreBtn.style.display = 'inline-flex';
-    toggleBtn.textContent = '▶';
-    toggleBtn.title = 'Expand log panel';
+    bottom.classList.add('log-open');
+    openBtn.textContent = '✕ LOG';
+    openBtn.style.color = 'var(--amber)';
+    closeBtn.textContent = '◀';
+    // Scroll log to bottom when opening
+    const terminal = document.getElementById('log-terminal');
+    setTimeout(() => { terminal.scrollTop = terminal.scrollHeight; }, 50);
   }
+}
+
+// ── Segment hover tooltip ─────────────────────────────────
+const _tooltip = document.getElementById('seg-tooltip');
+
+function _showSegTooltip(evt, seg) {
+  const rawMb = (seg.duration_s * (seg.width || 640) * (seg.height || 480) * 3 * (seg.fps || 25)) / 1e6;
+  const compMb = seg.file_size_kb / 1024;
+  const ratio = rawMb > 0 ? (rawMb / compMb).toFixed(1) : '?';
+  const lines = [
+    `Camera:    ${seg.camera_id}`,
+    `Duration:  ${seg.duration_s}s`,
+    `ROI count: ${seg.roi_count} detections`,
+    `Compressed: ${compMb.toFixed(2)} MB`,
+    rawMb > 0 ? `Raw (est):  ${rawMb.toFixed(1)} MB` : null,
+    rawMb > 0 ? `Ratio:      ${ratio}× smaller` : null,
+    seg.object_type !== 'unknown' ? `Object type: ${seg.object_type}` : null,
+    `Mode target: ${seg.target_detected ? 'YES — motion detected' : 'NO — background only'}`,
+  ].filter(Boolean).join('\n');
+
+  _tooltip.textContent = lines;
+  _tooltip.classList.add('visible');
+  _moveTooltip(evt);
+}
+
+function _moveTooltip(evt) {
+  const tw = _tooltip.offsetWidth;
+  const th = _tooltip.offsetHeight;
+  let x = evt.clientX + 14;
+  let y = evt.clientY + 14;
+  if (x + tw > window.innerWidth - 8) x = evt.clientX - tw - 14;
+  if (y + th > window.innerHeight - 8) y = evt.clientY - th - 14;
+  _tooltip.style.left = x + 'px';
+  _tooltip.style.top  = y + 'px';
+}
+
+function _hideTooltip() {
+  _tooltip.classList.remove('visible');
 }
 
 // ── Status polling ────────────────────────────────────────────
@@ -1494,6 +1648,9 @@ async function pollStorage() {
   } catch(e) {}
 }
 
+// Store segment data for tooltip lookups (keyed by row index)
+let _segmentData = [];
+
 async function loadSegments() {
   try {
     const res  = await fetch('/api/segments');
@@ -1501,9 +1658,11 @@ async function loadSegments() {
     const tbody = document.getElementById('segments-tbody');
     if (!data.segments || !data.segments.length) {
       tbody.innerHTML = '<tr><td colspan="8" class="empty-state">NO SEGMENTS YET</td></tr>';
+      _segmentData = [];
       return;
     }
-    tbody.innerHTML = data.segments.map(s => {
+    _segmentData = data.segments;
+    tbody.innerHTML = data.segments.map((s, idx) => {
       const ts = formatTimestamp(s.timestamp);
       const targetClass = s.target_detected ? 'target-yes' : 'target-no';
       const targetText  = s.target_detected ? '▲ YES' : '○ no';
@@ -1511,18 +1670,28 @@ async function loadSegments() {
       const playBtn = s.playable_url
         ? `<button class="btn-play-sm" onclick="playSegment('${escHtml(s.playable_url)}','${escHtml(s.file_path)}')">▶</button>`
         : `<span style="color:var(--text-dim);font-size:0.6rem;">—</span>`;
-      return `<tr>
+      // Show compression ratio inline in Size column
+      const compMb  = s.file_size_kb / 1024;
+      const sizeStr = compMb >= 1
+        ? `${compMb.toFixed(1)} MB`
+        : `${s.file_size_kb} KB`;
+      return `<tr data-seg-idx="${idx}" onmouseenter="_onSegRowEnter(event,${idx})" onmousemove="_moveTooltip(event)" onmouseleave="_hideTooltip()">
         <td>${ts}</td>
         <td>${escHtml(s.camera_id)}</td>
         <td class="${targetClass}">${targetText}</td>
         <td style="color:var(--teal)">${objType}</td>
         <td>${s.roi_count}</td>
         <td>${s.duration_s}s</td>
-        <td>${s.file_size_kb} KB</td>
+        <td>${sizeStr}</td>
         <td>${playBtn}</td>
       </tr>`;
     }).join('');
   } catch(e) {}
+}
+
+function _onSegRowEnter(evt, idx) {
+  const s = _segmentData[idx];
+  if (s) _showSegTooltip(evt, s);
 }
 
 // ── Segment inline playback ────────────────────────────────────
@@ -1833,13 +2002,17 @@ async function hlsStart() {
   const sideMsg = document.getElementById('hls-sidebar-msg');
   const msgEl   = document.getElementById('hls-status-msg');
 
+  // Read mode from the pipeline config dropdown so the corner overlay matches
+  const modeRaw   = document.getElementById('mode-select').value || 'mode0';
+  const modeLabel = modeRaw === 'mode0' ? 'MODE 0' : modeRaw === 'mode1' ? 'MODE 1' : modeRaw.toUpperCase();
+
   if (!input) {
     sideMsg.textContent = '⚠ Enter an input source first.';
     sideMsg.style.color = 'var(--red)';
     return;
   }
 
-  sideMsg.textContent = 'Starting FFmpeg HLS transcoder…';
+  sideMsg.textContent = 'Starting annotated HLS stream…';
   sideMsg.style.color = 'var(--text-dim)';
   msgEl.textContent = '';
   document.getElementById('btn-hls-start').disabled = true;
@@ -1848,7 +2021,7 @@ async function hlsStart() {
     const res  = await fetch('/api/hls/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ input_source: input, camera_id: camId, output_dir: outDir }),
+      body: JSON.stringify({ input_source: input, camera_id: camId, output_dir: outDir, mode: modeLabel }),
     });
     const data = await res.json();
     if (!res.ok || data.error) {
@@ -1872,8 +2045,16 @@ async function hlsStart() {
     // Retry attaching the player until the playlist is ready (max 10 retries, 2s each)
     _attachHlsPlayer(data.playlist_url, camId, 0);
 
-    // Poll HLS status every 3s to catch unexpected FFmpeg exits
-    _hlsStatusTimer = setInterval(_hlsPollStatus, 3000);
+    // Poll HLS status every 1s for the first 15s (catches fast connection failures),
+    // then drop to 3s once the stream is established.
+    _hlsStatusTimer = setInterval(_hlsPollStatus, 1000);
+    setTimeout(() => {
+      clearInterval(_hlsStatusTimer);
+      // Only restart slow polling if the stream is still running
+      fetch('/api/hls/status').then(r => r.json()).then(d => {
+        if (d.running) _hlsStatusTimer = setInterval(_hlsPollStatus, 3000);
+      }).catch(() => {});
+    }, 15000);
   } catch (e) {
     sideMsg.textContent = '⚠ Network error: ' + e.message;
     sideMsg.style.color = 'var(--red)';
@@ -1969,20 +2150,256 @@ async function _hlsPollStatus() {
   try {
     const res  = await fetch('/api/hls/status');
     const data = await res.json();
-    if (!data.running && data.error) {
+
+    if (!data.running) {
       clearInterval(_hlsStatusTimer);
       const msgEl   = document.getElementById('hls-status-msg');
       const sideMsg = document.getElementById('hls-sidebar-msg');
-      msgEl.textContent = '⚠ Stream died: ' + data.error.slice(0, 120);
-      msgEl.style.color = 'var(--red)';
-      sideMsg.textContent = '⚠ Stream died';
-      sideMsg.style.color = 'var(--red)';
-      document.getElementById('btn-hls-start').disabled = false;
-      document.getElementById('btn-hls-stop').disabled = true;
-      document.getElementById('btn-hls-stop').style.opacity = '0.4';
+      const btnStart = document.getElementById('btn-hls-start');
+      const btnStop  = document.getElementById('btn-hls-stop');
+
+      if (data.error) {
+        // Distinguish connection failures from mid-stream crashes
+        const isConnErr = data.error.toLowerCase().includes('connect')
+                       || data.error.toLowerCase().includes('unreachable')
+                       || data.error.toLowerCase().includes('could not open');
+        const prefix = isConnErr ? '⚠ Connection failed' : '⚠ Stream stopped';
+        msgEl.textContent = prefix + ': ' + data.error.slice(0, 160);
+        msgEl.style.color = 'var(--red)';
+        sideMsg.textContent = prefix;
+        sideMsg.style.color = 'var(--red)';
+      } else {
+        // Stopped cleanly (e.g. file ended, user hit stop)
+        msgEl.textContent = 'Stream ended.';
+        msgEl.style.color = 'var(--text-dim)';
+        sideMsg.textContent = '◼ Stopped';
+        sideMsg.style.color = 'var(--text-dim)';
+      }
+
+      btnStart.disabled = false;
+      btnStop.disabled  = true;
+      btnStop.style.opacity = '0.4';
     }
   } catch (_) { /* ignore network blips */ }
 }
+
+// ── Local RTSP Server (MediaMTX) ─────────────────────────────
+let _rtspPollTimer = null;
+
+function _rtspApplyState(d) {
+  const badge       = document.getElementById('rtsp-server-badge');
+  const dlSection   = document.getElementById('rtsp-dl-section');
+  const btnDl       = document.getElementById('btn-rtsp-dl');
+  const dlBarWrap   = document.getElementById('rtsp-dl-bar-wrap');
+  const dlBar       = document.getElementById('rtsp-dl-bar');
+  const dlLabel     = document.getElementById('rtsp-dl-label');
+  const btnStart    = document.getElementById('btn-rtsp-start');
+  const btnStop     = document.getElementById('btn-rtsp-stop');
+  const serverMsg   = document.getElementById('rtsp-server-msg');
+  const btnPush     = document.getElementById('btn-rtsp-push');
+  const btnStopPush = document.getElementById('btn-rtsp-stop-push');
+  const pushMsg     = document.getElementById('rtsp-push-msg');
+  const urlBox      = document.getElementById('rtsp-url-box');
+  const urlText     = document.getElementById('rtsp-url-text');
+
+  // ── download section ──────────────────────────────────────
+  if (d.binary_present) {
+    dlSection.style.display = 'none';
+    btnStart.disabled = false;
+  } else if (d.downloading) {
+    btnDl.disabled = true;
+    dlBarWrap.style.display = 'block';
+    const prog = d.download_progress || '';
+    if (prog === 'extracting') {
+      dlBar.style.width = '95%';
+      dlLabel.textContent = 'Extracting…';
+    } else if (prog === 'done') {
+      dlBar.style.width = '100%';
+      dlLabel.textContent = 'Done';
+    } else if (prog.endsWith('%')) {
+      dlBar.style.width = prog;
+      dlLabel.textContent = `Downloading ${prog}`;
+    }
+  } else if (d.download_error) {
+    dlLabel.textContent = '⚠ ' + d.download_error;
+    dlLabel.style.color = 'var(--red)';
+    dlBarWrap.style.display = 'block';
+    btnDl.disabled = false;
+  }
+
+  // ── server badge ──────────────────────────────────────────
+  if (d.server_running) {
+    badge.textContent = '● RUNNING';
+    badge.style.color = 'var(--green)';
+  } else if (d.binary_present) {
+    badge.textContent = '○ STOPPED';
+    badge.style.color = 'var(--text-dim)';
+  } else {
+    badge.textContent = '(not installed)';
+    badge.style.color = 'var(--text-dim)';
+  }
+
+  // ── start/stop buttons ────────────────────────────────────
+  btnStart.disabled = !d.binary_present || d.server_running;
+  btnStart.style.opacity = btnStart.disabled ? '0.4' : '1';
+  btnStop.disabled  = !d.server_running;
+  btnStop.style.opacity = btnStop.disabled ? '0.4' : '1';
+
+  if (d.server_error) {
+    serverMsg.textContent = '⚠ ' + d.server_error;
+    serverMsg.style.color = 'var(--red)';
+  } else if (d.server_running) {
+    serverMsg.textContent = '● Server running on rtsp://localhost:8554/';
+    serverMsg.style.color = 'var(--green)';
+  } else {
+    serverMsg.textContent = '';
+  }
+
+  // ── push buttons ──────────────────────────────────────────
+  btnPush.disabled     = !d.server_running || d.pushing;
+  btnPush.style.opacity     = btnPush.disabled ? '0.4' : '1';
+  btnStopPush.disabled = !d.pushing;
+  btnStopPush.style.opacity = btnStopPush.disabled ? '0.4' : '1';
+
+  if (d.pushing) {
+    const short = (d.push_source || '').split(/[\\/]/).pop();
+    pushMsg.textContent = `● Pushing: ${short} → /${d.push_stream || 'live'}`;
+    pushMsg.style.color = 'var(--green)';
+  } else {
+    pushMsg.textContent = '';
+  }
+
+  // ── RTSP URL box ──────────────────────────────────────────
+  if (d.rtsp_url) {
+    urlBox.style.display = 'block';
+    urlText.textContent = d.rtsp_url;
+  } else if (d.server_running) {
+    urlBox.style.display = 'block';
+    urlText.textContent = 'rtsp://localhost:8554/live';
+  } else {
+    urlBox.style.display = 'none';
+  }
+}
+
+async function _rtspRefresh() {
+  try {
+    const r = await fetch('/api/rtsp/status');
+    if (!r.ok) return;
+    _rtspApplyState(await r.json());
+  } catch (_) {}
+}
+
+async function rtspDownload() {
+  document.getElementById('btn-rtsp-dl').disabled = true;
+  document.getElementById('rtsp-dl-bar-wrap').style.display = 'block';
+  document.getElementById('rtsp-dl-label').textContent = 'Starting download…';
+  document.getElementById('rtsp-dl-label').style.color = 'var(--text-dim)';
+  try {
+    const r = await fetch('/api/rtsp/download', { method: 'POST' });
+    const d = await r.json();
+    if (d.error) {
+      document.getElementById('rtsp-dl-label').textContent = '⚠ ' + d.error;
+      document.getElementById('rtsp-dl-label').style.color = 'var(--red)';
+      document.getElementById('btn-rtsp-dl').disabled = false;
+      return;
+    }
+    // Poll status every second until download is done
+    if (_rtspPollTimer) clearInterval(_rtspPollTimer);
+    _rtspPollTimer = setInterval(async () => {
+      await _rtspRefresh();
+      const st = await (await fetch('/api/rtsp/status')).json();
+      if (!st.downloading) clearInterval(_rtspPollTimer);
+    }, 1000);
+  } catch (e) {
+    document.getElementById('rtsp-dl-label').textContent = '⚠ ' + e.message;
+    document.getElementById('btn-rtsp-dl').disabled = false;
+  }
+}
+
+async function rtspStart() {
+  document.getElementById('btn-rtsp-start').disabled = true;
+  document.getElementById('rtsp-server-msg').textContent = 'Starting…';
+  document.getElementById('rtsp-server-msg').style.color = 'var(--text-dim)';
+  try {
+    const r = await fetch('/api/rtsp/start', { method: 'POST' });
+    const d = await r.json();
+    if (d.error) {
+      document.getElementById('rtsp-server-msg').textContent = '⚠ ' + d.error;
+      document.getElementById('rtsp-server-msg').style.color = 'var(--red)';
+      document.getElementById('btn-rtsp-start').disabled = false;
+    } else {
+      await _rtspRefresh();
+      if (!_rtspPollTimer) _rtspPollTimer = setInterval(_rtspRefresh, 3000);
+    }
+  } catch (e) {
+    document.getElementById('rtsp-server-msg').textContent = '⚠ ' + e.message;
+    document.getElementById('btn-rtsp-start').disabled = false;
+  }
+}
+
+async function rtspStop() {
+  await fetch('/api/rtsp/stop', { method: 'POST' });
+  if (_rtspPollTimer) { clearInterval(_rtspPollTimer); _rtspPollTimer = null; }
+  await _rtspRefresh();
+}
+
+async function rtspBrowse() {
+  try {
+    const r = await fetch('/api/browse');
+    const d = await r.json();
+    if (d.path) document.getElementById('rtsp-push-path').value = d.path;
+  } catch (_) {}
+}
+
+async function rtspPush() {
+  const path   = document.getElementById('rtsp-push-path').value.trim();
+  const stream = document.getElementById('rtsp-stream-name').value.trim() || 'live';
+  if (!path) {
+    document.getElementById('rtsp-push-msg').textContent = '⚠ Enter a video file path first.';
+    document.getElementById('rtsp-push-msg').style.color = 'var(--red)';
+    return;
+  }
+  document.getElementById('btn-rtsp-push').disabled = true;
+  document.getElementById('rtsp-push-msg').textContent = 'Starting FFmpeg push…';
+  document.getElementById('rtsp-push-msg').style.color = 'var(--text-dim)';
+  try {
+    const r = await fetch('/api/rtsp/push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ video_path: path, stream_name: stream }),
+    });
+    const d = await r.json();
+    if (d.error) {
+      document.getElementById('rtsp-push-msg').textContent = '⚠ ' + d.error;
+      document.getElementById('rtsp-push-msg').style.color = 'var(--red)';
+      document.getElementById('btn-rtsp-push').disabled = false;
+    } else {
+      // Auto-fill the HLS input with the new RTSP URL
+      document.getElementById('hls-input').value = d.rtsp_url;
+      await _rtspRefresh();
+    }
+  } catch (e) {
+    document.getElementById('rtsp-push-msg').textContent = '⚠ ' + e.message;
+    document.getElementById('btn-rtsp-push').disabled = false;
+  }
+}
+
+async function rtspStopPush() {
+  await fetch('/api/rtsp/stop_push', { method: 'POST' });
+  await _rtspRefresh();
+}
+
+function rtspCopyUrl() {
+  const url = document.getElementById('rtsp-url-text').textContent.trim();
+  if (url) {
+    document.getElementById('hls-input').value = url;
+    // Scroll the sidebar to the HLS section so the user sees it filled in
+    document.querySelector('[summary="Live Stream (HLS)"]')?.closest('details')?.setAttribute('open', '');
+  }
+}
+
+// Initial RTSP state load on page open
+window.addEventListener('DOMContentLoaded', () => { _rtspRefresh(); });
 
 // ── Boot ─────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {

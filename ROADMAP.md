@@ -311,8 +311,8 @@ Cody recommended HLS (HTTP Live Streaming) as the browser delivery protocol, wit
 | Research HLS pipeline: FFmpeg outputs .m3u8 + .ts chunks, Flask serves them | KD | 2026-04-25 | Urgent | Done | Implemented in `src/gui/app.py` — 5 routes: `/api/hls/start`, `/api/hls/stop`, `/api/hls/status`, `/api/hls/<cam>/playlist.m3u8`, `/api/hls/<cam>/<seg.ts>`. |
 | Integrate hls.js into index.html for browser-based HLS playback | KD | 2026-04-25 | Urgent | Done | CDN: `https://cdn.jsdelivr.net/npm/hls.js@latest`. `Hls.isSupported()` check with native HLS fallback for Safari. Inline player with 4s startup wait. |
 | Add RTSP URL input to GUI + validate with `ffprobe` before starting pipeline | KD | 2026-04-26 | Important | Done | RTSP URL / webcam index / file path input in "Live Stream" sidebar section. Camera ID field, start/stop buttons, status message, inline `<video>` player. |
-| Flask HLS segment server: generate + serve playlist and .ts chunks as pipeline runs | KD | 2026-04-26 | Important | Done | FFmpeg: `-preset ultrafast -tune zerolatency -hls_time 2 -hls_list_size 5 -hls_flags delete_segments+append_list`. Serves at `/api/hls/<cam>/`. |
-| Test HLS end-to-end: RTSP in → pipeline → HLS out → hls.js in browser | KD, RR | 2026-04-28 | Important | Not Started | Test with webcam (index 0) or VLC RTSP server. Hawaii traffic cams (gookami.org) are a free RTSP target. Target latency under 5 seconds. |
+| Flask HLS segment server: generate + serve playlist and .ts chunks as pipeline runs | KD | 2026-04-26 | Important | Done | Python annotator thread (ROI boxes + corner overlay) pipes rawvideo to FFmpeg stdin. FFmpeg: `-preset ultrafast -tune zerolatency -hls_time 2 -hls_list_size 5 -hls_flags delete_segments`. Stale `.ts`/`.m3u8` cleared on start. Cache-bust `?t=` on playlist URL. |
+| Test HLS end-to-end: RTSP in → pipeline → HLS out → hls.js in browser | KD, RR | 2026-04-28 | Important | Done | Tested 2026-04-20 with VLC re-streaming `cameraJitter_traffic.mp4` via `rtsp://localhost:8554/live`. Two vehicle segments captured with green ROI boxes. Fixed stale segment caching (delete .ts/.m3u8 on start, remove `append_list`, cache-bust playlist URL). |
 | Export working stream config as JSON (codec, CRF, resolution, mode) | KD | 2026-04-29 | Medium | Not Started | Cody asked for a "save config" button that exports known-working stream parameters so they can be reproduced on DoD hardware without guessing. |
 
 ### 4.2 — AV1 codec support (royalty-free)
@@ -410,13 +410,14 @@ Cody asked: "Are there research papers for lossy compression that selectively dr
 | 3.4 | AI compression research | Done ✅ |
 | 3.4 | Deployment packaging research | Open 🔲 |
 | 3.5 | demo.sh one-click launcher | Done ✅ |
-| 3.5 | Confirm webcam / IP camera real-time input | Open 🔲 |
+| 3.5 | Confirm webcam / IP camera real-time input | Done ✅ |
 | 3.5 | No-GPU laptop test | Open 🔲 |
 | 3.6 | Final report (`docs/final_report.md`) | Done ✅ |
 | 3.6 | Final results notebook (`final_results.ipynb`) | Open 🔲 |
 | 3.7 | Repository polish + documentation | Open 🔲 |
 | 3.8 | Capstone presentation (team lead) | Open 🔲 |
 | 4.1 | HLS streaming + hls.js integration | Done ✅ |
+| 4.1 | HLS end-to-end test (RTSP → pipeline → browser) | Done ✅ |
 | 4.2 | AV1 codec GUI selector | Open 🔲 |
 | 4.3 | Color search dropdown in GUI | Open 🔲 |
 | 4.4 | Adaptive mode switching + GUI controls | Open 🔲 |

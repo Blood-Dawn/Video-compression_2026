@@ -9,6 +9,7 @@ Requires: ffmpeg installed and on PATH, ffmpeg-python package.
 All encoding uses libx264 (open source, royalty-free, runs on CPU).
 """
 
+import cv2
 import ffmpeg
 import numpy as np
 import subprocess
@@ -150,11 +151,29 @@ class ROIEncoder:
             .run_async(pipe_stdin=True, quiet=True)
         )
 
-        # Build the full raw byte buffer and send it in one communicate() call.
-        # This drains stdout AND stderr automatically, preventing the deadlock
-        # that occurs when quiet=True pipes stderr — if the pipe buffer fills
-        # and nobody reads it, FFmpeg blocks and pytest freezes indefinitely.
-        raw = b"".join(f.tobytes() for f in frames)
+        # Draw green ROI bounding boxes on frames before encoding so the saved
+        # .mp4 segments show the same annotations as the HLS live stream.
+        # Only annotate when there are actual detections to avoid unnecessary
+        # copies on background-only (Mode 1 skipped) segments.
+        if has_targets:
+            annotated_frames = []
+            for frame, boxes in zip(frames, bboxes_per_frame):
+                if boxes:
+                    f = frame.copy()
+                    for bx, by, bw, bh in boxes:
+                        x1 = max(0, bx)
+                        y1 = max(0, by)
+                        x2 = min(w, bx + bw)
+                        y2 = min(h, by + bh)
+                        if x2 > x1 and y2 > y1:
+                            cv2.rectangle(f, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    annotated_frames.append(f)
+                else:
+                    annotated_frames.append(frame)
+            raw = b"".join(f.tobytes() for f in annotated_frames)
+        else:
+            raw = b"".join(f.tobytes() for f in frames)
+
         process.communicate(input=raw)
 
         if not output_path.exists() or output_path.stat().st_size == 0:

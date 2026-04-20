@@ -19,6 +19,7 @@ Usage:
 Author: Bloodawn (KheivenD)
 """
 
+import atexit
 import collections
 import json
 import logging
@@ -32,6 +33,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote, unquote
 
+import cv2
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory, abort
 
 # ── path setup ────────────────────────────────────────────────────────────────
@@ -102,13 +104,46 @@ class _QueueLogHandler(logging.Handler):
             pass  # drop oldest — client will re-fetch on reconnect
 
 
-# Attach the handler once to the root logger so it captures pipeline logs too
+# ── Log formatter and handlers ────────────────────────────────────────────────
+_LOG_FMT = logging.Formatter("%(asctime)s  %(levelname)-8s  %(name)s — %(message)s")
+
+# Queue handler — forwards records to the SSE stream for the browser
 _queue_handler = _QueueLogHandler()
 _queue_handler.setFormatter(logging.Formatter("%(asctime)s  %(levelname)s  %(message)s"))
-logging.getLogger().addHandler(_queue_handler)
-logging.getLogger().setLevel(logging.INFO)
+
+# File handler — writes all records to outputs/svcs.log for offline debugging
+_LOG_FILE = _ROOT / "outputs" / "svcs.log"
+_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+_file_handler = logging.FileHandler(str(_LOG_FILE), encoding="utf-8")
+_file_handler.setFormatter(_LOG_FMT)
+
+# Console handler — mirrors to terminal
+_console_handler = logging.StreamHandler(sys.stderr)
+_console_handler.setFormatter(_LOG_FMT)
+
+_root_logger = logging.getLogger()
+_root_logger.addHandler(_queue_handler)
+_root_logger.addHandler(_file_handler)
+_root_logger.setLevel(logging.DEBUG)   # capture DEBUG level — filter per-handler below
+
+# Only forward INFO+ to browser SSE and terminal (DEBUG goes to file only)
+_queue_handler.setLevel(logging.INFO)
+_console_handler.setLevel(logging.INFO)
+_file_handler.setLevel(logging.DEBUG)
 
 log = logging.getLogger(__name__)
+
+
+def _write_shutdown_log():
+    """Write a clean shutdown marker to the log file on process exit."""
+    log.info("=" * 60)
+    log.info("SVCS SERVER SHUTDOWN — %s", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
+    log.info("=" * 60)
+    # Flush file handler so nothing is lost if Python exits abruptly
+    _file_handler.flush()
+
+
+atexit.register(_write_shutdown_log)
 
 # ── Frame-count interceptor ───────────────────────────────────────────────────
 # We wrap the FrameSource.read() method at runtime to count decoded frames
@@ -787,11 +822,12 @@ def api_demo_status():
 # ── HLS live streaming (task 4.1) ────────────────────────────────────────────
 #
 # Architecture:
-#   Input (RTSP / webcam / file) → FFmpeg subprocess → .m3u8 + .ts chunks
+#   Input → OpenCV VideoCapture → BackgroundSubtractor → ROI boxes + corner
+#   overlay drawn on each frame → rawvideo piped to FFmpeg stdin → .m3u8 + .ts
 #   → Flask serves /api/hls/<camera_id>/ → hls.js plays in browser
 #
-# The HLS transcoder runs independently of the main pipeline so you can
-# preview a live stream without recording compressed segments.
+# Frames are annotated in Python before encoding so the live stream shows
+# the same green ROI bounding boxes as the demo comparison output.
 
 _hls_lock = threading.Lock()
 _hls_state: dict = {
@@ -803,25 +839,275 @@ _hls_state: dict = {
     "error": None,
 }
 _hls_process: subprocess.Popen | None = None
+_hls_thread: threading.Thread | None = None
+_hls_stop_event: threading.Event | None = None
 
 
 def _hls_dir_for(camera_id: str, output_dir: str) -> Path:
     return Path(output_dir) / "hls" / camera_id
 
 
+def _draw_corner_overlay(frame, mode_label: str, elapsed_s: int) -> None:
+    """Draw a small semi-transparent info box in the top-left corner.
+
+    Modifies *frame* in-place (avoids an extra copy on each frame).
+    Shows mode name and elapsed time in a compact format.
+    """
+    mins, secs = divmod(elapsed_s, 60)
+    lines = [mode_label, f"{mins:02d}:{secs:02d}"]
+
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.42
+    thickness = 1
+    line_h = 18
+    padding = 6
+
+    sizes = [cv2.getTextSize(ln, font, font_scale, thickness)[0] for ln in lines]
+    box_w = max(sz[0] for sz in sizes) + 2 * padding
+    box_h = len(lines) * line_h + 2 * padding
+
+    bx1, by1 = 8, 8
+    bx2, by2 = bx1 + box_w, by1 + box_h
+
+    # Semi-transparent black background (blend with a filled rectangle)
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (bx1, by1), (bx2, by2), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, dst=frame)
+
+    y = by1 + padding + line_h - 4
+    for ln in lines:
+        cv2.putText(frame, ln, (bx1 + padding, y),
+                    font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+        y += line_h
+
+
+def _hls_annotator_thread(
+    input_source: str,
+    hls_dir: Path,
+    mode_label: str,
+    stop_event: threading.Event,
+) -> None:
+    """Background thread: annotate frames with ROI boxes then pipe to FFmpeg.
+
+    Pipeline:
+        cv2.VideoCapture  →  BackgroundSubtractor  →  green ROI rectangles
+        + corner overlay  →  proc.stdin (rawvideo bgr24)  →  FFmpeg HLS muxer
+    """
+    import numpy as np  # noqa: F401 — needed for tobytes on numpy array
+
+    try:
+        from background_subtraction.background_subtraction import BackgroundSubtractor
+    except ModuleNotFoundError:
+        from src.background_subtraction.background_subtraction import BackgroundSubtractor
+
+    # ── open input ────────────────────────────────────────────────────────────
+    try:
+        cap_src = int(input_source)
+    except ValueError:
+        cap_src = input_source
+
+    is_rtsp = isinstance(cap_src, str) and cap_src.lower().startswith("rtsp://")
+    CONNECT_TIMEOUT = 10  # seconds — Python-level timeout for VideoCapture.open()
+
+    # cv2.VideoCapture.open() blocks until the OS-level RTSP timeout fires
+    # (~30s on Windows with pip opencv-python).  CAP_PROP_OPEN_TIMEOUT_MSEC is
+    # silently ignored on that build, so we enforce our own timeout by running
+    # the open() call in a daemon thread and giving up after CONNECT_TIMEOUT
+    # seconds.  The leaked thread will eventually exit on its own.
+    _cap_holder: list = [None]
+    _cap_opened: list = [False]
+    _open_done = threading.Event()
+
+    def _do_open():
+        c = cv2.VideoCapture()
+        # Try to set the property anyway — no-op on most builds but harmless
+        c.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, CONNECT_TIMEOUT * 1000)
+        c.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)
+        ok = c.open(cap_src)
+        _cap_holder[0] = c
+        _cap_opened[0] = ok
+        _open_done.set()
+
+    if is_rtsp:
+        log.info(f"HLS: connecting to RTSP stream ({CONNECT_TIMEOUT}s timeout)…")
+        _open_thread = threading.Thread(target=_do_open, daemon=True)
+        _open_thread.start()
+        if not _open_done.wait(timeout=CONNECT_TIMEOUT):
+            # Timeout fired before cv2 returned — the thread is still blocked
+            # in the OS network stack and we cannot kill it; it will
+            # self-terminate when the 30s OS timeout fires in the background.
+            err = (f"RTSP connection timed out after {CONNECT_TIMEOUT}s "
+                   f"— server unreachable or stream not found: {input_source}")
+            with _hls_lock:
+                _hls_state["error"] = err
+                _hls_state["running"] = False
+            log.error(f"HLS: {err}")
+            return
+    else:
+        _do_open()
+
+    cap = _cap_holder[0]
+    if cap is None or not _cap_opened[0] or not cap.isOpened():
+        err = f"Could not open input: {input_source}"
+        with _hls_lock:
+            _hls_state["error"] = err
+            _hls_state["running"] = False
+        log.error(f"HLS: {err}")
+        return
+
+    log.info(f"HLS: connected to {input_source}")
+
+    # ── resolve frame dimensions ──────────────────────────────────────────────
+    # VideoCapture.get() returns 0x0 for RTSP streams until the first frame
+    # arrives (the codec info isn't decoded yet). Read one frame to get real
+    # dimensions, then seek back for files or just continue for live sources.
+    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    fps = cap.get(cv2.CAP_PROP_FPS)
+
+    first_frame = None
+    if w == 0 or h == 0:
+        log.info("HLS: frame dimensions unknown from stream header — reading first frame…")
+        for _ in range(30):        # try up to 30 frames (handles buffered RTSP)
+            if stop_event.is_set():
+                cap.release()
+                with _hls_lock:
+                    _hls_state["running"] = False
+                return
+            ret, first_frame = cap.read()
+            if ret and first_frame is not None:
+                h, w = first_frame.shape[:2]
+                break
+        else:
+            cap.release()
+            with _hls_lock:
+                _hls_state["error"] = f"Could not determine frame size from: {input_source}"
+                _hls_state["running"] = False
+            log.error("HLS: failed to read first frame for dimension detection")
+            return
+
+    if fps <= 0 or fps > 120:
+        fps = 25.0
+
+    log.info(f"HLS: stream dimensions {w}x{h} @ {fps:.1f} fps")
+
+    # ── start FFmpeg receiving rawvideo from stdin ────────────────────────────
+    playlist = hls_dir / "playlist.m3u8"
+    cmd = [
+        "ffmpeg", "-y",
+        "-f", "rawvideo",
+        "-pix_fmt", "bgr24",
+        "-s", f"{w}x{h}",
+        "-r", str(fps),
+        "-i", "pipe:0",
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-tune", "zerolatency",
+        "-an",
+        "-f", "hls",
+        "-hls_time", "2",
+        "-hls_list_size", "5",
+        "-hls_flags", "delete_segments",
+        str(playlist),
+    ]
+
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        cap.release()
+        with _hls_lock:
+            _hls_state["error"] = "ffmpeg not found on PATH"
+            _hls_state["running"] = False
+        return
+
+    global _hls_process
+    with _hls_lock:
+        _hls_process = proc
+
+    # ── frame loop ────────────────────────────────────────────────────────────
+    subtractor = BackgroundSubtractor(var_threshold=50)
+    start_time = time.time()
+    WARMUP_FRAMES = 30
+    frame_num = 0
+
+    try:
+        while not stop_event.is_set():
+            # Use the pre-read first_frame (from RTSP dimension probe) on
+            # the first iteration so we don't skip a frame.
+            if first_frame is not None:
+                frame = first_frame
+                first_frame = None
+                ret = True
+            else:
+                ret, frame = cap.read()
+            if not ret or frame is None:
+                break  # EOF or read error
+
+            # Run background subtraction on every frame to build the model
+            mask = subtractor.apply(frame)
+
+            if frame_num >= WARMUP_FRAMES:
+                regions = subtractor.get_foreground_regions(mask)
+
+                # Draw green bounding boxes around each detected ROI
+                for region in regions:
+                    x1 = max(0, region.x)
+                    y1 = max(0, region.y)
+                    x2 = min(w, region.x + region.w)
+                    y2 = min(h, region.y + region.h)
+                    if x2 > x1 and y2 > y1:
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+                # Small corner overlay: mode + elapsed time
+                elapsed = int(time.time() - start_time)
+                _draw_corner_overlay(frame, mode_label, elapsed)
+
+            frame_num += 1
+
+            try:
+                proc.stdin.write(frame.tobytes())
+            except (BrokenPipeError, OSError):
+                break
+
+    except Exception as exc:
+        log.error(f"HLS annotator error: {exc}", exc_info=True)
+        with _hls_lock:
+            _hls_state["error"] = str(exc)
+    finally:
+        cap.release()
+        try:
+            proc.stdin.close()
+        except Exception:
+            pass
+        # Wait for FFmpeg to finish muxing its last segment
+        try:
+            proc.wait(timeout=6)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        with _hls_lock:
+            _hls_state["running"] = False
+        log.info("HLS annotator thread finished.")
+
+
 @app.route("/api/hls/start", methods=["POST"])
 def api_hls_start():
-    """Start an FFmpeg HLS transcoder for a given input source.
+    """Start the annotated HLS stream for a given input source.
 
     POST body (JSON):
         input_source  – RTSP URL, webcam index (int as string), or file path
         camera_id     – identifier used in the playlist URL (default: cam_00)
         output_dir    – where to write HLS chunks (default: outputs/)
+        mode          – display label shown in the corner overlay (default: Mode 0)
 
     Returns:
         {"ok": true, "playlist_url": "/api/hls/<camera_id>/playlist.m3u8"}
     """
-    global _hls_process
+    global _hls_thread, _hls_stop_event
 
     with _hls_lock:
         if _hls_state["running"]:
@@ -831,47 +1117,26 @@ def api_hls_start():
     input_source = str(data.get("input_source", "0")).strip()
     camera_id = str(data.get("camera_id", "cam_00")).strip()
     output_dir = str(data.get("output_dir", "")).strip() or str(_ROOT / "outputs")
+    mode_label = str(data.get("mode", "Mode 0")).strip()
 
     hls_dir = _hls_dir_for(camera_id, output_dir)
     hls_dir.mkdir(parents=True, exist_ok=True)
-    playlist = hls_dir / "playlist.m3u8"
 
-    # FFmpeg HLS command:
-    #   -preset ultrafast + -tune zerolatency → minimal encode latency
-    #   -hls_time 2       → 2-second segments (target latency ~4–6s end-to-end)
-    #   -hls_list_size 5  → keep 5 segments in the playlist (10 seconds of buffer)
-    #   -hls_flags delete_segments+append_list → auto-delete old .ts files
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", input_source,
-        "-c:v", "libx264",
-        "-preset", "ultrafast",
-        "-tune", "zerolatency",
-        "-an",                          # drop audio — not needed for surveillance
-        "-f", "hls",
-        "-hls_time", "2",
-        "-hls_list_size", "5",
-        "-hls_flags", "delete_segments+append_list",
-        str(playlist),
-    ]
+    # Clear stale segments from any previous session so FFmpeg starts fresh
+    # and hls.js cannot accidentally serve old video from a different source.
+    for _stale in list(hls_dir.glob("*.ts")) + list(hls_dir.glob("*.m3u8")):
+        try:
+            _stale.unlink()
+        except OSError:
+            pass
+    log.debug("HLS: cleared stale segments from %s", hls_dir)
 
-    try:
-        # stderr → DEVNULL so the pipe buffer never blocks FFmpeg on Windows.
-        # (With stderr=PIPE and no reader the 4 KB Windows pipe buffer fills in
-        # ~1-2 s of FFmpeg progress output, freezing the process before it can
-        # write any .ts segments or the playlist.)
-        proc = subprocess.Popen(
-            cmd,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except FileNotFoundError:
-        return jsonify({"error": "ffmpeg not found on PATH — install FFmpeg and retry"}), 500
-
-    playlist_url = f"/api/hls/{camera_id}/playlist.m3u8"
+    # Cache-bust the playlist URL so the browser never serves a stale playlist
+    # from a previous session when the camera_id is reused.
+    _session_ts = int(time.time())
+    playlist_url = f"/api/hls/{camera_id}/playlist.m3u8?t={_session_ts}"
 
     with _hls_lock:
-        _hls_process = proc
         _hls_state.update(
             running=True,
             camera_id=camera_id,
@@ -881,20 +1146,35 @@ def api_hls_start():
             error=None,
         )
 
-    log.info(f"HLS stream started: {input_source} → {hls_dir}/playlist.m3u8")
+    _hls_stop_event = threading.Event()
+    _hls_thread = threading.Thread(
+        target=_hls_annotator_thread,
+        args=(input_source, hls_dir, mode_label, _hls_stop_event),
+        daemon=True,
+        name="hls-annotator",
+    )
+    _hls_thread.start()
+
+    log.info(f"HLS annotator started: {input_source} → {hls_dir}/playlist.m3u8")
     return jsonify({"ok": True, "playlist_url": playlist_url})
 
 
 @app.route("/api/hls/stop", methods=["POST"])
 def api_hls_stop():
-    """Stop the running FFmpeg HLS transcoder."""
-    global _hls_process
+    """Stop the running HLS annotator and FFmpeg encoder."""
+    global _hls_process, _hls_thread, _hls_stop_event
 
     with _hls_lock:
         if not _hls_state["running"]:
             return jsonify({"error": "HLS stream not running"}), 409
-        proc = _hls_process
 
+    # Signal the annotator thread to stop reading frames
+    if _hls_stop_event:
+        _hls_stop_event.set()
+
+    # Also terminate FFmpeg directly so we don't wait for the file to end
+    with _hls_lock:
+        proc = _hls_process
     if proc and proc.poll() is None:
         proc.terminate()
         try:
@@ -915,27 +1195,9 @@ def api_hls_stop():
 
 @app.route("/api/hls/status")
 def api_hls_status():
-    """Return current HLS stream state.
-
-    Also detects if the FFmpeg process exited unexpectedly and updates state.
-    """
+    """Return current HLS stream state."""
     with _hls_lock:
         snap = dict(_hls_state)
-        proc = _hls_process
-
-    if snap["running"] and proc and proc.poll() is not None:
-        # Process exited on its own — capture stderr for the error message
-        try:
-            _, stderr_bytes = proc.communicate(timeout=1)
-            err_msg = (stderr_bytes or b"").decode(errors="replace").strip()
-            err_msg = err_msg[-300:] if len(err_msg) > 300 else err_msg
-        except Exception:
-            err_msg = "FFmpeg process exited unexpectedly"
-        with _hls_lock:
-            _hls_state["running"] = False
-            _hls_state["error"] = err_msg or "FFmpeg process exited unexpectedly"
-        snap["running"] = False
-        snap["error"] = _hls_state["error"]
 
     return jsonify(snap)
 
@@ -981,6 +1243,110 @@ def api_hls_segment(camera_id: str, ts_file: str):
     return send_from_directory(str(Path(hls_dir)), seg.name)
 
 
+# ── Local RTSP server (optional MediaMTX integration) ────────────────────────
+#
+# Allows developers and demo operators to spin up a local RTSP server
+# without any external dependency.  MediaMTX is downloaded on first use
+# and cached in <project_root>/tools/mediamtx/.  It is MIT-licensed.
+#
+# Routes:
+#   GET  /api/rtsp/status         – current state of the manager
+#   POST /api/rtsp/download       – start background download of MediaMTX binary
+#   POST /api/rtsp/start          – start the MediaMTX server process
+#   POST /api/rtsp/stop           – stop server (and any active push)
+#   POST /api/rtsp/push           – start FFmpeg looping a file into the server
+#   POST /api/rtsp/stop_push      – stop the FFmpeg push
+
+try:
+    from utils.rtsp_server import RtspServerManager
+except ModuleNotFoundError:
+    from src.utils.rtsp_server import RtspServerManager
+
+_rtsp_mgr = RtspServerManager(tools_dir=_ROOT / "tools")
+
+
+@app.route("/api/rtsp/status")
+def api_rtsp_status():
+    """Return the current state of the local RTSP server manager."""
+    return jsonify(_rtsp_mgr.get_state())
+
+
+@app.route("/api/rtsp/download", methods=["POST"])
+def api_rtsp_download():
+    """Start downloading the MediaMTX binary in the background.
+
+    Idempotent — safe to call again if the binary is already present
+    (returns ok without re-downloading).
+    """
+    if _rtsp_mgr.binary_present():
+        return jsonify({"ok": True, "message": "binary already present"})
+
+    try:
+        _rtsp_mgr.start_download()
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 409
+
+    log.info("MediaMTX download started.")
+    return jsonify({"ok": True, "message": "download started"})
+
+
+@app.route("/api/rtsp/start", methods=["POST"])
+def api_rtsp_start():
+    """Start the local MediaMTX RTSP server."""
+    try:
+        _rtsp_mgr.start()
+    except RuntimeError as exc:
+        return jsonify({"error": str(exc)}), 409
+
+    log.info("Local RTSP server started — listening on rtsp://localhost:8554/")
+    return jsonify({"ok": True, "rtsp_url": state["rtsp_url"]})
+
+
+@app.route("/api/rtsp/stop", methods=["POST"])
+def api_rtsp_stop():
+    """Stop the local RTSP server (and any active push)."""
+    _rtsp_mgr.stop()
+    log.info("Local RTSP server stopped.")
+    return jsonify({"ok": True})
+
+
+@app.route("/api/rtsp/push", methods=["POST"])
+def api_rtsp_push():
+    """Start FFmpeg looping a local video file into the RTSP server.
+
+    POST body (JSON):
+        video_path   – absolute path to the video file
+        stream_name  – RTSP path to publish to (default: "live")
+    """
+    data = request.get_json(force=True) or {}
+    video_path = str(data.get("video_path", "")).strip()
+    stream_name = str(data.get("stream_name", "live")).strip() or "live"
+
+    if not video_path:
+        return jsonify({"error": "video_path is required"}), 400
+    if not Path(video_path).exists():
+        return jsonify({"error": f"File not found: {video_path}"}), 400
+    if not _rtsp_mgr.is_running():
+        return jsonify({"error": "RTSP server is not running — start it first"}), 409
+
+    try:
+        _rtsp_mgr.push(video_path, stream_name)
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+    rtsp_url = f"rtsp://localhost:8554/{stream_name}"
+    log.info(f"RTSP push started: {video_path} → {rtsp_url}")
+    return jsonify({"ok": True, "rtsp_url": rtsp_url})
+
+
+@app.route("/api/rtsp/stop_push", methods=["POST"])
+def api_rtsp_stop_push():
+    """Stop the active FFmpeg push."""
+    _rtsp_mgr.stop_push()
+    log.info("RTSP push stopped.")
+    return jsonify({"ok": True})
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def create_app() -> Flask:
@@ -988,6 +1354,10 @@ def create_app() -> Flask:
 
 
 if __name__ == "__main__":
-    log.info(f"Project root: {_ROOT}")
-    log.info("Dashboard: http://localhost:5000")
+    log.info("=" * 60)
+    log.info("SVCS SERVER STARTUP — %s", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
+    log.info("Project root:  %s", _ROOT)
+    log.info("Dashboard:     http://localhost:5000")
+    log.info("Log file:      %s", _LOG_FILE)
+    log.info("=" * 60)
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)

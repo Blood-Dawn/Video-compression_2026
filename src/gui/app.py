@@ -1298,6 +1298,7 @@ def api_rtsp_start():
     except RuntimeError as exc:
         return jsonify({"error": str(exc)}), 409
 
+    state = _rtsp_mgr.get_state()
     log.info("Local RTSP server started — listening on rtsp://localhost:8554/")
     return jsonify({"ok": True, "rtsp_url": state["rtsp_url"]})
 

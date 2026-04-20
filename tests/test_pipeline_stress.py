@@ -35,6 +35,7 @@ import time
 import sqlite3
 import tempfile
 import tracemalloc
+import gc
 import numpy as np
 import pytest
 from pathlib import Path
@@ -57,6 +58,10 @@ TOTAL_SEGMENTS        = max(1, SIMULATED_DURATION_S // SEGMENT_DURATION_S)
 
 # Fail if tracemalloc peak grows more than this over baseline
 MAX_MEMORY_GROWTH_MB  = 50
+SEGMENT_INPUT_MB      = (
+    FRAME_WIDTH * FRAME_HEIGHT * 3 * FRAMES_PER_SEGMENT / 1024 / 1024
+)
+MAX_TRANSIENT_OVER_SEGMENT_MB = 75
 
 
 # ---------------------------------------------------------------------------
@@ -100,8 +105,9 @@ def test_pipeline_stress_one_hour():
     Simulate SIMULATED_DURATION_S seconds of continuous footage through the
     encode pipeline. Verify no crash and no runaway memory growth.
 
-    Memory check uses tracemalloc peak — catches transient spikes, not just
-    the final vs. initial snapshot.
+    Memory check allows one in-memory synthetic input segment, then verifies
+    the encoder does not retain that memory after each segment and does not
+    allocate large transient buffers above the segment itself.
     """
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = str(Path(tmpdir) / "metadata.db")
@@ -118,6 +124,7 @@ def test_pipeline_stress_one_hour():
 
         segments_encoded = 0
         errors = []
+        max_retained_mb = 0.0
 
         print(
             f"\nStarting stress test: {TOTAL_SEGMENTS} segments x {SEGMENT_DURATION_S}s each "
@@ -142,8 +149,12 @@ def test_pipeline_stress_one_hour():
 
                 segments_encoded += 1
 
+                del frames, bboxes, output_path, file_size
+                gc.collect()
+                current_mb = tracemalloc.get_traced_memory()[0] / 1024 / 1024
+                max_retained_mb = max(max_retained_mb, current_mb)
+
                 if seg_idx % 10 == 0:
-                    current_mb = tracemalloc.get_traced_memory()[0] / 1024 / 1024
                     elapsed = time.time() - start_time
                     print(
                         f"  Segment {seg_idx + 1}/{TOTAL_SEGMENTS} | "
@@ -153,12 +164,19 @@ def test_pipeline_stress_one_hour():
 
             except Exception as e:
                 errors.append(f"Segment {seg_idx}: {e}")
+                try:
+                    del frames, bboxes
+                except UnboundLocalError:
+                    pass
+                gc.collect()
 
         # Peak memory across the entire run (catches transient spikes)
         _current, peak_bytes = tracemalloc.get_traced_memory()
         tracemalloc.stop()
         peak_mb = peak_bytes / 1024 / 1024
         memory_growth_mb = peak_mb - baseline_mb
+        retained_growth_mb = max_retained_mb - baseline_mb
+        transient_limit_mb = SEGMENT_INPUT_MB + MAX_TRANSIENT_OVER_SEGMENT_MB
 
         total_time = time.time() - start_time
 
@@ -170,10 +188,16 @@ def test_pipeline_stress_one_hour():
         assert segments_encoded == TOTAL_SEGMENTS, (
             f"Expected {TOTAL_SEGMENTS} segments, got {segments_encoded}"
         )
-        assert memory_growth_mb < MAX_MEMORY_GROWTH_MB, (
-            f"Peak memory grew {memory_growth_mb:.1f} MB above baseline "
+        assert retained_growth_mb < MAX_MEMORY_GROWTH_MB, (
+            f"Retained memory grew {retained_growth_mb:.1f} MB above baseline "
             f"(limit {MAX_MEMORY_GROWTH_MB} MB) -- possible memory leak. "
-            f"Peak: {peak_mb:.1f} MB, Baseline: {baseline_mb:.1f} MB"
+            f"Max retained: {max_retained_mb:.1f} MB, Baseline: {baseline_mb:.1f} MB"
+        )
+        assert memory_growth_mb < transient_limit_mb, (
+            f"Peak memory grew {memory_growth_mb:.1f} MB above baseline "
+            f"(limit {transient_limit_mb:.1f} MB = one synthetic segment plus "
+            f"{MAX_TRANSIENT_OVER_SEGMENT_MB} MB) -- encoder may be buffering "
+            f"more than one segment. Peak: {peak_mb:.1f} MB, Baseline: {baseline_mb:.1f} MB"
         )
 
         conn = sqlite3.connect(db_path)
@@ -185,6 +209,7 @@ def test_pipeline_stress_one_hour():
 
         print(f"\nStress test passed.")
         print(f"  Segments encoded : {segments_encoded}")
+        print(f"  Retained memory growth: {retained_growth_mb:.1f} MB")
         print(f"  Peak memory growth: {memory_growth_mb:.1f} MB")
         print(f"  Total wall time  : {total_time:.1f}s")
 

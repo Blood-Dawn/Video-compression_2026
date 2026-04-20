@@ -61,4 +61,5 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 markers = [
     "integration: real subprocess / network tests (may be slow)",
+    "slow: long-running stress tests",
 ]

@@ -47,6 +47,7 @@ class ROIEncoder:
         background_crf: int = 40,
         preset: str = "veryfast",
         db_path: str = "outputs/metadata.db",
+        draw_roi_boxes: bool = False,
     ):
         """
         Args:
@@ -55,6 +56,8 @@ class ROIEncoder:
             background_crf: CRF for background. 40 gives heavy compression.
             preset: FFmpeg speed preset. veryfast is good for low-spec hardware.
             db_path: SQLite database path for the metadata index.
+            draw_roi_boxes: When True, burn green ROI boxes into encoded output.
+                            Keep False for archival/integrity-preserving output.
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -62,6 +65,7 @@ class ROIEncoder:
         self.background_crf = background_crf
         self.preset = preset
         self.db_path = db_path
+        self.draw_roi_boxes = draw_roi_boxes
         # db.py owns the schema — delegate initialization so encoder and
         # pipeline always agree on column names and indexes.
         initialize_database(db_path)
@@ -81,7 +85,8 @@ class ROIEncoder:
         bboxes_per_frame: Optional[List[List[Tuple[int, int, int, int]]]] = None,
         camera_id: str = "cam_unknown",
         fps: float = 30.0,
-        object_type="unknown"
+        object_type="unknown",
+        draw_roi_boxes: Optional[bool] = None,
     ) -> str:
         """
         Encode a list of raw BGR numpy frames into a compressed MP4.
@@ -98,6 +103,9 @@ class ROIEncoder:
                               If None, treated as background-only.
             camera_id: Camera identifier for output filename and DB row.
             fps: Frames per second for the output video.
+            object_type: Metadata label stored with this segment.
+            draw_roi_boxes: Override for whether ROI boxes are burned into this
+                            encoded output. Defaults to the encoder instance setting.
 
         Returns:
             Path to the compressed output MP4 file.
@@ -151,30 +159,37 @@ class ROIEncoder:
             .run_async(pipe_stdin=True, quiet=True)
         )
 
-        # Draw green ROI bounding boxes on frames before encoding so the saved
-        # .mp4 segments show the same annotations as the HLS live stream.
-        # Only annotate when there are actual detections to avoid unnecessary
-        # copies on background-only (Mode 1 skipped) segments.
-        if has_targets:
-            annotated_frames = []
+        should_draw_boxes = self.draw_roi_boxes if draw_roi_boxes is None else draw_roi_boxes
+
+        try:
             for frame, boxes in zip(frames, bboxes_per_frame):
-                if boxes:
-                    f = frame.copy()
+                frame_to_write = frame
+                if should_draw_boxes and boxes:
+                    frame_to_write = frame.copy()
                     for bx, by, bw, bh in boxes:
                         x1 = max(0, bx)
                         y1 = max(0, by)
                         x2 = min(w, bx + bw)
                         y2 = min(h, by + bh)
                         if x2 > x1 and y2 > y1:
-                            cv2.rectangle(f, (x1, y1), (x2, y2), (0, 255, 0), 2)
-                    annotated_frames.append(f)
-                else:
-                    annotated_frames.append(frame)
-            raw = b"".join(f.tobytes() for f in annotated_frames)
-        else:
-            raw = b"".join(f.tobytes() for f in frames)
+                            cv2.rectangle(frame_to_write, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                process.stdin.write(frame_to_write.tobytes())
 
-        process.communicate(input=raw)
+            process.stdin.close()
+            return_code = process.wait()
+        except BrokenPipeError as exc:
+            try:
+                process.stdin.close()
+            except Exception:
+                pass
+            process.wait()
+            raise RuntimeError("FFmpeg pipe closed while encoding segment") from exc
+
+        if return_code != 0:
+            raise RuntimeError(
+                f"FFmpeg failed while encoding segment {timestamp} "
+                f"(exit code {return_code})."
+            )
 
         if not output_path.exists() or output_path.stat().st_size == 0:
             raise RuntimeError(

@@ -26,6 +26,7 @@ import sys
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 # sys.path must be set before any local imports so this module can be run
 # directly (python src/pipeline/pipeline.py) or imported from the project root.
@@ -90,6 +91,7 @@ def run_pipeline(
     encrypt: bool = False,
     encrypt_password: Optional[str] = None,
     encrypt_key_file: Optional[str] = None,
+    mode2_clean_seconds: float = 2.0,
     stop_event=None,
 ):
     """
@@ -121,6 +123,13 @@ def run_pipeline(
     mode1:           Frame gating. Only frames with detected foreground activity
                      are buffered. Segments are formed from active frames only,
                      reducing storage when the scene is mostly static.
+    mode2:           Background keyframe plus object patches. Only frames with
+                     foreground detections are buffered; the encoded segment is
+                     built by compositing each detected bounding box over the
+                     latest clean background frame.
+    mode3:           Object-only segment output. Only frames with foreground
+                     detections are buffered, and pixels outside each detected
+                     bounding box are blacked out before normal MP4 encoding.
 
     Args:
         input_source: Camera index (int) or video file / CDnet scene path (str).
@@ -139,7 +148,9 @@ def run_pipeline(
                        for scenes with complex dynamic backgrounds (trees, flags).
         demo: Demo mode toggle
         mode: Compression mode. "mode0" encodes all frames; "mode1" gates on
-              foreground activity (event clip / frame gating).
+              foreground activity; "mode2" composites foreground bbox patches
+              over a clean background; "mode3" encodes foreground bbox pixels
+              on a black canvas.
         enhance: When True, apply super-resolution sharpening to foreground ROIs
                  before writing each frame to the segment buffer. Requires
                  Real-ESRGAN weights in models/ (falls back to bicubic if absent).
@@ -155,6 +166,9 @@ def run_pipeline(
                           encrypt_key_file.
         encrypt_key_file: Path to a file containing a raw 32-byte AES-256 key.
                           Mutually exclusive with encrypt_password.
+        mode2_clean_seconds: Number of consecutive detection-free seconds
+                             required before a frame can refresh the mode2
+                             background keyframe. Default 2.0 seconds.
     """
     validate_mode(mode)
 
@@ -177,6 +191,7 @@ def run_pipeline(
     frame_w = src.width
     frame_h = src.height
     frames_per_segment = max(1, int(fps * segment_seconds))
+    mode2_clean_frames = max(1, int(round(fps * mode2_clean_seconds)))
 
     # Single consistent database path: output_dir/metadata.db.
     # Previously pipeline.py called initialize_database() with no args, which
@@ -188,6 +203,12 @@ def run_pipeline(
     log.info(f"Segment length: {segment_seconds}s ({frames_per_segment} frames)")
     log.info(f"Mode: {mode}")
     log.info(f"Warmup: {effective_warmup} frames (~{effective_warmup/fps:.1f}s)")
+    if mode == "mode2":
+        log.info(
+            "Mode2 clean background guard: %.1fs (%d consecutive frames)",
+            mode2_clean_seconds,
+            mode2_clean_frames,
+        )
 
     subtractor = BackgroundSubtractor(method=bg_method)
     encoder = ROIEncoder(output_dir=output_dir, db_path=db_path)
@@ -224,6 +245,9 @@ def run_pipeline(
 
     segment_frames: list = []       # in-memory frame buffer (numpy arrays)
     segment_regions: list = []
+    segment_background = None
+    last_clean_background = None
+    clean_frame_streak = 0
     source_frame_index = -1
     target_frames_this_segment = 0
     segment_index = 0
@@ -245,9 +269,16 @@ def run_pipeline(
 
             mask = subtractor.apply(frame)
             regions = subtractor.get_foreground_regions(mask)
+            has_regions = len(regions) > 0
 
             # --- WARMUP GATE ---
             if source_frame_index < effective_warmup:
+                if has_regions:
+                    clean_frame_streak = 0
+                else:
+                    clean_frame_streak += 1
+                    if clean_frame_streak >= mode2_clean_frames:
+                        last_clean_background = frame.copy()
                 if source_frame_index + 1 == effective_warmup:
                     log.info(f"Warmup complete after {effective_warmup} frames. Encoding started.")
                 continue
@@ -261,7 +292,20 @@ def run_pipeline(
 
             mode_decision = get_mode_decision(mode, regions)
 
+            if has_regions:
+                clean_frame_streak = 0
+            else:
+                clean_frame_streak += 1
+                if clean_frame_streak >= mode2_clean_frames:
+                    last_clean_background = frame.copy()
+
             if mode_decision.buffer_frame:
+                if mode == "mode2" and not segment_frames:
+                    segment_background = (
+                        last_clean_background.copy()
+                        if last_clean_background is not None
+                        else None
+                    )
                 segment_frames.append(frame.copy())
                 segment_regions.append(regions)
 
@@ -291,6 +335,13 @@ def run_pipeline(
                 )
                 roi_count = sum(len(r) for r in segment_regions)
                 object_type = classify_object(roi_count)
+                mode2_background = None
+                if mode == "mode2":
+                    mode2_background = (
+                        segment_background
+                        if segment_background is not None
+                        else np.zeros_like(segment_frames[0])
+                    )
                 out = encoder.encode_segment(
                     frames=segment_frames,
                     bboxes_per_frame=[
@@ -299,12 +350,15 @@ def run_pipeline(
                     ],
                     camera_id=camera_id,
                     fps=fps,
-                    object_type=object_type
+                    object_type=object_type,
+                    object_only=(mode == "mode3"),
+                    background_frame=mode2_background,
                 )
                 log.info(f"Saved: {out}")
 
                 segment_frames = []
                 segment_regions = []
+                segment_background = None
                 target_frames_this_segment = 0
                 segment_index += 1
 
@@ -318,6 +372,13 @@ def run_pipeline(
             )
             roi_count = sum(len(r) for r in segment_regions)
             object_type = classify_object(roi_count)
+            mode2_background = None
+            if mode == "mode2":
+                mode2_background = (
+                    segment_background
+                    if segment_background is not None
+                    else np.zeros_like(segment_frames[0])
+                )
 
             out = encoder.encode_segment(
                 frames=segment_frames,
@@ -328,6 +389,8 @@ def run_pipeline(
                 camera_id=camera_id,
                 fps=fps,
                 object_type=object_type,
+                object_only=(mode == "mode3"),
+                background_frame=mode2_background,
             )
             log.info(f"Saved final segment: {out}")
 
@@ -353,11 +416,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mode",
         default="mode0",
-        choices=["mode0", "mode1"],
+        choices=["mode0", "mode1", "mode2", "mode3"],
         help=(
             "Pipeline mode: "
             "mode0 = continuous stream, "
-            "mode1 = event recording with foreground activity"
+            "mode1 = event recording with foreground activity, "
+            "mode2 = background keyframe plus bbox patches, "
+            "mode3 = object-only bbox pixels on black canvas"
         ),
     )
     parser.add_argument("--demo", action="store_true", help="Write demo JSONL metadata")
@@ -390,6 +455,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Accepted for GUI/CLI compatibility; encryption is not wired in run_pipeline yet.",
     )
+    parser.add_argument(
+        "--mode2-clean-seconds",
+        type=float,
+        default=2.0,
+        help="Consecutive detection-free seconds before mode2 refreshes the clean background.",
+    )
     parser.add_argument("--password", default=None, help="Encryption password placeholder.")
     parser.add_argument("--key-file", default=None, help="Encryption key file placeholder.")
     args = parser.parse_args()
@@ -414,4 +485,5 @@ if __name__ == "__main__":
         encrypt=args.encrypt,
         encrypt_password=args.password,
         encrypt_key_file=args.key_file,
+        mode2_clean_seconds=args.mode2_clean_seconds,
     )

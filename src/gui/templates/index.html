@@ -903,6 +903,8 @@
           <select id="mode-select">
             <option value="mode0" selected>Mode 0 — 24/7 Continuous</option>
             <option value="mode1">Mode 1 — Frame Gating</option>
+            <option value="mode2">Mode 2 — Background + Patches</option>
+            <option value="mode3">Mode 3 — Object Only</option>
           </select>
         </div>
         <div class="config-field">
@@ -1003,13 +1005,13 @@
               <input type="checkbox" id="demo-mode1" value="mode1" />
               <label for="demo-mode1">Mode 1 — Frame Gating</label>
             </div>
-            <div class="mode-check-row disabled">
-              <input type="checkbox" id="demo-mode2" value="mode2" disabled />
-              <label for="demo-mode2">Mode 2 — (coming soon)</label>
+            <div class="mode-check-row">
+              <input type="checkbox" id="demo-mode2" value="mode2" />
+              <label for="demo-mode2">Mode 2 — Background + Patches</label>
             </div>
-            <div class="mode-check-row disabled">
-              <input type="checkbox" id="demo-mode3" value="mode3" disabled />
-              <label for="demo-mode3">Mode 3 — (coming soon)</label>
+            <div class="mode-check-row">
+              <input type="checkbox" id="demo-mode3" value="mode3" />
+              <label for="demo-mode3">Mode 3 — Object Only</label>
             </div>
             <div class="config-field" style="margin-top:0.75rem;">
               <label class="config-label" for="demo-output-dir">Demo Output Root</label>
@@ -1216,6 +1218,8 @@
       <div class="mode-bar">
         <span class="mode-chip" data-mode="mode0" id="chip-mode0">MODE 0 · CONTINUOUS</span>
         <span class="mode-chip" data-mode="mode1" id="chip-mode1">MODE 1 · FRAME GATE</span>
+        <span class="mode-chip" data-mode="mode2" id="chip-mode2">MODE 2 · PATCHES</span>
+        <span class="mode-chip" data-mode="mode3" id="chip-mode3">MODE 3 · OBJECT ONLY</span>
         <span class="mode-chip" id="chip-enhance">SR ENHANCE</span>
         <span class="mode-chip" id="chip-encrypt">AES-256</span>
       </div>
@@ -1725,7 +1729,7 @@ async function browseFile() {
 let _demoPollTimer = null;
 
 async function runDemo() {
-  const modes = ['mode0', 'mode1'].filter(m => {
+  const modes = ['mode0', 'mode1', 'mode2', 'mode3'].filter(m => {
     const el = document.getElementById('demo-' + m);
     return el && el.checked;
   });

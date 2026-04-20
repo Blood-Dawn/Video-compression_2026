@@ -75,6 +75,51 @@ class ROIEncoder:
         # Set to None = not yet determined; probe lazily on first encode_frame_sequence call.
         self._source_has_audio: Optional[bool] = None
 
+    @staticmethod
+    def _copy_bboxes_to_black_frame(
+        frame: np.ndarray,
+        boxes: List[Tuple[int, int, int, int]],
+    ) -> np.ndarray:
+        """
+        Return a full-size black frame with only bbox rectangles copied through.
+
+        This keeps output playable as a normal MP4 while making pixels outside
+        the detected object boxes trivially compressible.
+        """
+        object_only = np.zeros_like(frame)
+        h, w = frame.shape[:2]
+        for bx, by, bw, bh in boxes:
+            x1 = max(0, int(bx))
+            y1 = max(0, int(by))
+            x2 = min(w, int(bx) + int(bw))
+            y2 = min(h, int(by) + int(bh))
+            if x2 > x1 and y2 > y1:
+                object_only[y1:y2, x1:x2] = frame[y1:y2, x1:x2]
+        return object_only
+
+    @staticmethod
+    def _copy_bboxes_to_background_frame(
+        background_frame: np.ndarray,
+        frame: np.ndarray,
+        boxes: List[Tuple[int, int, int, int]],
+    ) -> np.ndarray:
+        """
+        Return a frame made from one background keyframe plus current bbox patches.
+
+        This is the mode2 representation: keep static scene context from a clean
+        background frame while updating only the detected moving-object boxes.
+        """
+        composed = background_frame.copy()
+        h, w = frame.shape[:2]
+        for bx, by, bw, bh in boxes:
+            x1 = max(0, int(bx))
+            y1 = max(0, int(by))
+            x2 = min(w, int(bx) + int(bw))
+            y2 = min(h, int(by) + int(bh))
+            if x2 > x1 and y2 > y1:
+                composed[y1:y2, x1:x2] = frame[y1:y2, x1:x2]
+        return composed
+
     # ------------------------------------------------------------------
     # Primary API: encode raw numpy frames (no lossy intermediate file)
     # ------------------------------------------------------------------
@@ -87,6 +132,8 @@ class ROIEncoder:
         fps: float = 30.0,
         object_type="unknown",
         draw_roi_boxes: Optional[bool] = None,
+        object_only: bool = False,
+        background_frame: Optional[np.ndarray] = None,
     ) -> str:
         """
         Encode a list of raw BGR numpy frames into a compressed MP4.
@@ -106,6 +153,13 @@ class ROIEncoder:
             object_type: Metadata label stored with this segment.
             draw_roi_boxes: Override for whether ROI boxes are burned into this
                             encoded output. Defaults to the encoder instance setting.
+            object_only: When True, encode normal full-size MP4 frames but copy
+                         only bbox rectangles onto a black canvas before
+                         compression. Used by mode3.
+            background_frame: Optional clean BGR background keyframe. When
+                              provided, encode each frame by copying only bbox
+                              rectangles from that frame onto this background.
+                              Used by mode2.
 
         Returns:
             Path to the compressed output MP4 file.
@@ -120,6 +174,8 @@ class ROIEncoder:
         shape = frames[0].shape
         if any(f.shape != shape for f in frames):
             raise ValueError("All frames must have the same shape")
+        if background_frame is not None and background_frame.shape != shape:
+            raise ValueError("background_frame must have the same shape as frames")
 
         if bboxes_per_frame is None:
             bboxes_per_frame = [[] for _ in frames]
@@ -163,9 +219,23 @@ class ROIEncoder:
 
         try:
             for frame, boxes in zip(frames, bboxes_per_frame):
-                frame_to_write = frame
+                if object_only:
+                    frame_to_write = self._copy_bboxes_to_black_frame(frame, boxes)
+                elif background_frame is not None:
+                    frame_to_write = self._copy_bboxes_to_background_frame(
+                        background_frame, frame, boxes
+                    )
+                else:
+                    frame_to_write = frame
                 if should_draw_boxes and boxes:
-                    frame_to_write = frame.copy()
+                    if object_only:
+                        frame_to_write = self._copy_bboxes_to_black_frame(frame, boxes)
+                    elif background_frame is not None:
+                        frame_to_write = self._copy_bboxes_to_background_frame(
+                            background_frame, frame, boxes
+                        )
+                    else:
+                        frame_to_write = frame.copy()
                     for bx, by, bw, bh in boxes:
                         x1 = max(0, bx)
                         y1 = max(0, by)

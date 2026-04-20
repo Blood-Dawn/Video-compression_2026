@@ -4,7 +4,7 @@ run_demo.py
 High-level demo orchestration script for the compression pipeline.
 
 This script automates:
-1. Running the pipeline across multiple modes (mode0, mode1, etc.)
+1. Running the pipeline across multiple modes (mode0, mode1, mode2, mode3)
 2. Rendering annotated demo videos for each mode
 3. Generating a split-screen comparison video
 4. Producing a manifest of all outputs
@@ -38,6 +38,8 @@ OUTPUT STRUCTURE:
 outputs/
 ├── demo_mode0/
 ├── demo_mode1/
+├── demo_mode2/
+├── demo_mode3/
 ├── demos_stitched/
 │   ├── mode0_demo.mp4
 │   ├── mode1_demo.mp4
@@ -77,10 +79,7 @@ except ModuleNotFoundError:
     from src.pipeline.pipeline import run_pipeline
 
 
-# mode2/mode3 are planned but not yet implemented in the pipeline.
-# ALLOWED_MODES is forward-looking for the demo orchestrator; validate_mode()
-# in pipeline.modes will reject them at runtime until they are added there.
-ALLOWED_MODES = {"mode0", "mode1"}
+ALLOWED_MODES = {"mode0", "mode1", "mode2", "mode3"}
 ALLOWED_VIEWS = {"standard", "roi_tint"}
 
 
@@ -246,8 +245,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--modes",
         nargs="+",
-        default=["mode0", "mode1"],
-        help="List of modes to run (default: mode0 mode1)",
+        default=["mode0", "mode1", "mode2", "mode3"],
+        help="List of modes to run (default: mode0 mode1 mode2 mode3)",
     )
 
     parser.add_argument(

@@ -775,7 +775,7 @@ def api_demo():
         input_path   – path to source video
         output_root  – root directory for demo outputs
         camera_id    – camera identifier
-        modes        – list of mode strings, e.g. ["mode0", "mode1"]
+        modes        – list of mode strings, e.g. ["mode0", "mode1", "mode2", "mode3"]
         views        – list of view strings (default ["standard"])
         no_boxes     – bool, suppress ROI box overlays (default false)
     """
@@ -787,7 +787,7 @@ def api_demo():
 
     input_path = data.get("input_path", "").strip()
     output_root = data.get("output_root", "").strip() or str(_ROOT / "outputs")
-    modes = data.get("modes", ["mode0", "mode1"])
+    modes = data.get("modes", ["mode0", "mode1", "mode2", "mode3"])
 
     if not input_path:
         return jsonify({"error": "input_path is required"}), 400

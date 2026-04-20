@@ -12,6 +12,73 @@ This session focused on three areas that came out of the first successful live-s
 
 ---
 
+## For Team Members — What to Expect After Pulling
+
+Pull the `dev` branch and restart the server. No new dependencies were added so you do not need to re-run `uv sync` or `pip install`. The changes are all in existing Python source files and the HTML template.
+
+### What changed and why
+
+**`src/utils/frame_source.py` — RTSP/HTTP URLs now work as pipeline input**
+
+Before this fix, if you typed an RTSP URL like `rtsp://localhost:8554/live` into the Pipeline Config input field, the server crashed immediately with:
+
+```
+RuntimeError: Input path does not exist: rtsp://localhost:8554/live
+```
+
+This happened because `FrameSource` passed the URL through Python's `Path()` constructor, which on Windows mangles `rtsp://` into a backslash-separated path that doesn't exist on disk. The fix detects any URL scheme (`rtsp://`, `http://`, `https://`, `rtmp://`, `rtsps://`) before `Path()` is ever called, and routes those directly to `cv2.VideoCapture`. The rest of the pipeline is unchanged — it doesn't know or care whether the source is a file or a stream.
+
+**What this means for you:** Any IP camera, RTSP relay, or HTTP MJPEG stream can now be used as a pipeline input source. If you are testing with a local video, nothing changes.
+
+---
+
+**`src/compression/roi_encoder.py` — ROI boxes now appear in saved segments**
+
+The output `.mp4` files in `outputs/` had no green bounding boxes even when vehicles or people were detected. The encoder was using the bounding box data to pick the compression quality (CRF 18 for foreground, CRF 40 for background) but never drawing the rectangles before encoding. This fix adds a `cv2.rectangle()` pass on each annotated frame before it gets piped to FFmpeg. Background-only segments are unaffected — no extra processing happens when there are no detections.
+
+**What this means for you:** Open any new segment in the dashboard player that has `TARGET: YES` — you will see green boxes around detected objects. Old segments already in `outputs/` will not be retroactively annotated.
+
+---
+
+**`src/gui/app.py` — Logging writes to a file + HLS stale segment fix**
+
+Two things changed here:
+
+1. **Log file.** The server now writes a full debug log to `outputs/svcs.log` every time it runs. The browser SSE stream and terminal still show INFO-level messages. The file gets DEBUG-level output — pipeline internals, frame counts, FFmpeg stderr. A shutdown timestamp is written automatically when you stop the server. If something goes wrong and you need to show a log to Kheiven or paste it into a support channel, this is the file to grab.
+
+2. **HLS stale video bug.** If you stopped the server, changed the input source, and restarted, the browser would play back the old video instead of the new one. This happened because old `.ts` segment files stayed on disk and FFmpeg continued the old playlist sequence. The fix clears all `.ts` and `.m3u8` files from the HLS output directory before each new stream starts. It also adds a timestamp to the playlist URL so the browser doesn't serve a cached copy. You should no longer need to hard-refresh the page when switching sources.
+
+---
+
+**`src/gui/templates/index.html` — Layout and tooltip changes**
+
+The log panel is now hidden by default. When you open the dashboard you will see the Output Segments table taking up the full bottom area. To open the log terminal, click the **▶ LOG** button in the top-right corner of the segments panel. Click **✕ LOG** to close it again.
+
+Hovering over any row in the Output Segments table now shows a tooltip with the estimated raw file size and the calculated compression ratio for that segment.
+
+Column headers for Target, ROIs, and Size have `ⓘ` icons — hover them to see what each column means.
+
+---
+
+### Quick sanity check after pulling
+
+1. `git pull origin dev`
+2. `python src/gui/app.py` (or `python run_gui.py`)
+3. Open `http://localhost:5000`
+4. The bottom panel should show Output Segments full-width with no log panel visible
+5. Click **▶ LOG** — the log panel should appear on the right
+6. Run a short pipeline on any CDnet clip — the output segment should have green ROI boxes in the player
+
+If you have VLC installed and want to test the RTSP path:
+```powershell
+& "C:\Program Files\VideoLAN\VLC\vlc.exe" `
+  "data\samples\cdnet_mp4\cameraJitter\cameraJitter_traffic.mp4" `
+  --sout "#rtp{sdp=rtsp://:8554/live}" --sout-keep --loop
+```
+Then set the Pipeline Config input to `rtsp://localhost:8554/live` and start the pipeline.
+
+---
+
 ## Bugs Fixed
 
 ### 1. ROI bounding boxes missing from pipeline output segments

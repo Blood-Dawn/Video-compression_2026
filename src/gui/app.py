@@ -856,10 +856,14 @@ def api_hls_start():
     ]
 
     try:
+        # stderr → DEVNULL so the pipe buffer never blocks FFmpeg on Windows.
+        # (With stderr=PIPE and no reader the 4 KB Windows pipe buffer fills in
+        # ~1-2 s of FFmpeg progress output, freezing the process before it can
+        # write any .ts segments or the playlist.)
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
         )
     except FileNotFoundError:
         return jsonify({"error": "ffmpeg not found on PATH — install FFmpeg and retry"}), 500

@@ -145,13 +145,14 @@
     main {
       display: grid;
       grid-template-columns: 340px 1fr;
-      grid-template-rows: minmax(280px, 1fr) 1fr;
+      /* row 1 = content-top (resizable), row 2 = drag handle, row 3 = content-bottom */
+      grid-template-rows: 320px 6px 1fr;
       gap: 0;
       height: calc(100vh - 56px);
     }
     .sidebar {
       grid-column: 1;
-      grid-row: 1 / 3;
+      grid-row: 1 / 4;          /* span all three rows */
       border-right: 1px solid var(--border);
       overflow-y: auto;
       display: flex;
@@ -162,59 +163,45 @@
     .content-top {
       grid-column: 2;
       grid-row: 1;
-      border-bottom: 1px solid var(--border);
       padding: 1.25rem 1.5rem;
       overflow-y: auto;
-      position: relative;
       display: flex;
       flex-direction: column;
-      min-height: 0;        /* allow grid to clamp this row */
+      min-height: 0;
     }
-    .content-bottom {
+    /* Vertical drag handle — sits between content-top and content-bottom */
+    .resize-divider-v {
       grid-column: 2;
       grid-row: 2;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      height: 100%;
-      overflow: hidden;
-      position: relative;
-    }
-    /* Vertical resize divider (between stats and log/segments) */
-    .resize-divider-v {
-      position: absolute;
-      bottom: -6px;
-      left: 0;
-      right: 0;
-      height: 12px;
       cursor: row-resize;
-      z-index: 50;
-      background: transparent;
+      background: var(--border);
       transition: background 0.15s;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
-    .resize-divider-v:hover {
-      background: var(--amber-glow);
+    .resize-divider-v::after {
+      content: '⋯';
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      letter-spacing: 0.15em;
+      pointer-events: none;
     }
+    .resize-divider-v:hover,
     .resize-divider-v.active {
       background: var(--amber-glow);
     }
-    /* Horizontal resize divider (between log and segments) */
-    .resize-divider {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      width: 12px;
-      left: 50%;
-      transform: translateX(-50%);
-      cursor: col-resize;
-      z-index: 100;
-      background: transparent;
-      transition: background 0.15s;
+    .resize-divider-v.active::after {
+      color: var(--bg);
     }
-    .resize-divider:hover {
-      background: var(--amber-glow);
-    }
-    .resize-divider.active {
-      background: var(--amber-glow);
+    .content-bottom {
+      grid-column: 2;
+      grid-row: 3;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      overflow: hidden;
+      position: relative;
     }
     #log-panel-container {
       display: flex;
@@ -1159,8 +1146,10 @@
         </div>
       </div>
 
-      <div class="resize-divider-v" id="resize-divider-v"></div>
     </div>
+
+    <!-- Drag handle — row 2 of main grid, drags content-top taller/shorter -->
+    <div class="resize-divider-v" id="resize-divider-v"></div>
 
     <!-- ════════ CONTENT BOTTOM — Log + Segments ════════ -->
     <div class="content-bottom" id="content-bottom">
@@ -1177,8 +1166,6 @@
         </div>
         <div id="log-terminal"></div>
       </div>
-
-      <div class="resize-divider" id="resize-divider"></div>
 
       <!-- Segments table -->
       <div id="segments-panel-container" class="segments-panel">
@@ -1377,94 +1364,60 @@ function clearLog() {
 }
 
 // ── Resizable panels (both horizontal and vertical) ──────
-let isResizingH = false;  // horizontal
-let isResizingV = false;  // vertical
-let startX = 0, startY = 0;
-let startWidth = 0, startHeight = 0;
+let isResizingV = false;
+let startY = 0;
+let startHeight = 0;
 
-// Horizontal resize (between log and segments)
-document.getElementById('resize-divider')?.addEventListener('mousedown', (e) => {
-  isResizingH = true;
-  startX = e.clientX;
-  const logPanel = document.getElementById('log-panel-container');
-  startWidth = logPanel.offsetWidth;
-  document.getElementById('resize-divider').classList.add('active');
-  e.preventDefault();
-});
-
-// Vertical resize (between stats and log/segments)
+// Vertical drag — resizes content-top by updating the main grid's first row height
 document.getElementById('resize-divider-v')?.addEventListener('mousedown', (e) => {
   isResizingV = true;
   startY = e.clientY;
-  const contentTop = document.getElementById('content-top');
-  startHeight = contentTop.offsetHeight;
+  // Read current first-row height from the grid
+  const main = document.querySelector('main');
+  startHeight = parseInt(getComputedStyle(main).gridTemplateRows.split(' ')[0], 10) || 320;
   document.getElementById('resize-divider-v').classList.add('active');
   e.preventDefault();
 });
 
 document.addEventListener('mousemove', (e) => {
-  if (isResizingH) {
-    const bottom = document.getElementById('content-bottom');
-    const logPanel = document.getElementById('log-panel-container');
-    const delta = e.clientX - startX;
-    const newWidth = startWidth + delta;
-    // Constrain: min 250px per panel, max so divider stays visible
-    const minWidth = 250;
-    const maxWidth = bottom.offsetWidth - 250;
-    const constrainedWidth = Math.max(minWidth, Math.min(newWidth, maxWidth));
-    logPanel.style.width = constrainedWidth + 'px';
-    document.getElementById('segments-panel-container').style.flex = '1';
-  }
-
-  if (isResizingV) {
-    const main = document.querySelector('main');
-    const contentTop = document.getElementById('content-top');
-    const delta = e.clientY - startY;
-    const newHeight = startHeight + delta;
-    // Constrain: min 200px for stats, max 80% of available height
-    const minHeight = 200;
-    const maxHeight = main.offsetHeight - 200;
-    const constrainedHeight = Math.max(minHeight, Math.min(newHeight, maxHeight));
-    contentTop.style.height = constrainedHeight + 'px';
-  }
+  if (!isResizingV) return;
+  const main = document.querySelector('main');
+  const delta = e.clientY - startY;
+  const newHeight = startHeight + delta;
+  const minH = 160;
+  const maxH = main.offsetHeight - 160;
+  const h = Math.max(minH, Math.min(newHeight, maxH));
+  main.style.gridTemplateRows = h + 'px 6px 1fr';
 });
 
 document.addEventListener('mouseup', () => {
-  if (isResizingH) {
-    document.getElementById('resize-divider').classList.remove('active');
-  }
   if (isResizingV) {
     document.getElementById('resize-divider-v').classList.remove('active');
   }
-  isResizingH = false;
   isResizingV = false;
 });
 
 // ── Toggle log panel with restore button ──────────────────
 function toggleLogPanel() {
-  const logPanel = document.getElementById('log-panel-container');
-  const divider = document.getElementById('resize-divider');
+  const logPanel  = document.getElementById('log-panel-container');
+  const segsPanel = document.getElementById('segments-panel-container');
   const restoreBtn = document.getElementById('restore-log-btn');
-  const toggleBtn = document.getElementById('log-toggle-btn');
+  const toggleBtn  = document.getElementById('log-toggle-btn');
   const isHidden = logPanel.style.display === 'none';
 
   if (isHidden) {
-    // Show log
     logPanel.style.display = 'flex';
-    logPanel.style.width = '50%';
-    divider.style.display = 'absolute';
+    logPanel.style.width = '';
+    segsPanel.style.width = '';
     restoreBtn.style.display = 'none';
     toggleBtn.textContent = '◀';
     toggleBtn.title = 'Collapse log panel';
-    document.getElementById('segments-panel-container').style.flex = '1';
   } else {
-    // Hide log
     logPanel.style.display = 'none';
-    divider.style.display = 'none';
+    segsPanel.style.width = '100%';
     restoreBtn.style.display = 'inline-flex';
     toggleBtn.textContent = '▶';
     toggleBtn.title = 'Expand log panel';
-    document.getElementById('segments-panel-container').style.width = '100%';
   }
 }
 

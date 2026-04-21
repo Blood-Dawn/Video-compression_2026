@@ -277,6 +277,17 @@ All queries are parameterized to prevent SQL injection. The database is local SQ
 
 Results produced by `notebooks/milestone1_benchmark.ipynb` on the CDnet 2014 dataset (March 30, 2026). All benchmarks run on CPU-only hardware.
 
+### Final Numbers Summary
+
+| Metric | Foreground ROI (CRF 18) | Background (CRF 45) | Effective (typical scene, ~5% FG) |
+|---|---|---|---|
+| Compression ratio | 1.0x | 16.6x | ~6.3x |
+| PSNR | 41.2 dB | 29.1 dB | — |
+| SSIM | 0.9783 | 0.7903 | — |
+| Storage per day (1080p30, 24 hr) | — | — | ~2–3 GB/camera |
+
+*Storage per day derived from 1-hour stress test extrapolation (6.3x effective ratio vs. naive H.264 baseline of ~15 GB/day).*
+
 ### Acceptance Criteria Status
 
 | Criterion | Target | Result | Status |

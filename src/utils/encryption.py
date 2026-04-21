@@ -1,23 +1,25 @@
 """
 src/utils/encryption.py
 
-AES-256-CBC encryption/decryption for compressed video segments.
+AES-256-GCM encryption/decryption for compressed video segments.
 
 Government requirement (Cody Hayashi, NIWC Pacific):
     Segments stored on-device must be encrypted at rest.
     Decryption only occurs during authorised review.
 
 File format (.enc):
-    Bytes  0 –  15  : IV (random, 16 bytes)
-    Bytes 16 –  31  : Salt (random, 16 bytes; used only in password mode)
-    Bytes 32 – end  : Ciphertext (AES-256-CBC, PKCS7-padded)
+    Bytes  0 –  11  : Nonce (random, 12 bytes)
+    Bytes 12 –  27  : Salt (random, 16 bytes; used only in password mode)
+    Bytes 28 –  43  : Auth tag (16 bytes, produced by GCM)
+    Bytes 44 – end  : Ciphertext (AES-256-GCM, no padding)
 
 Key modes:
     Password mode  — `password` arg; key = PBKDF2-HMAC-SHA256(password, salt, 600_000 iters)
     Raw-key mode   — `key` arg; must be exactly 32 bytes (256-bit); salt field is zeros
 
-The IV and salt are unique per file.  Knowing the password/key but not the IV
-is insufficient to decrypt — both are stored in the .enc file header.
+GCM authenticates the ciphertext with a 128-bit tag.  Any bit-flip or
+truncation in the ciphertext is detected before a single byte of plaintext
+is returned.  This is the primary difference from the previous CBC mode.
 
 Usage:
     from utils.encryption import encrypt_file, decrypt_file, generate_key
@@ -37,14 +39,16 @@ Usage:
     encrypt_file("segment_001.mp4", key=key)
 
 Security notes:
-    - Each call to encrypt_file() generates a fresh IV (and salt in password mode).
+    - Each call to encrypt_file() generates a fresh nonce (and salt in password mode).
     - The original plaintext file is deleted after successful encryption.
+    - GCM authentication prevents silent bit-flip attacks that CBC allows.
     - In password mode use a strong passphrase; PBKDF2 with 600k iterations makes
       brute-force expensive but a weak password is still a weak password.
     - Raw keys must be stored securely (HSM, encrypted key store, environment
       variable — NOT hard-coded in source).
 
-Author: Bloodawn (KheivenD)
+Author: Bloodawn (KheivenD) — CBC implementation
+        victort29 — GCM upgrade (authenticated encryption)
 """
 
 import os
@@ -56,10 +60,10 @@ from typing import Optional, Union
 # ---------------------------------------------------------------------------
 try:
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
-    from cryptography.hazmat.primitives import padding as sym_padding
     from cryptography.hazmat.backends import default_backend
     from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
     from cryptography.hazmat.primitives import hashes
+    from cryptography.exceptions import InvalidTag
     _CRYPTO_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _CRYPTO_AVAILABLE = False
@@ -69,14 +73,14 @@ except ImportError:  # pragma: no cover
 # Constants
 # ---------------------------------------------------------------------------
 
-IV_SIZE       = 16       # AES block size / IV length (bytes)
+NONCE_SIZE    = 12       # GCM standard nonce length (bytes)
 SALT_SIZE     = 16       # Salt length for PBKDF2 (bytes)
+TAG_SIZE      = 16       # GCM authentication tag length (bytes)
 KEY_SIZE      = 32       # AES-256 key length (bytes)
 PBKDF2_ITERS  = 600_000  # NIST recommendation for PBKDF2-HMAC-SHA256 (2023)
-HEADER_SIZE   = IV_SIZE + SALT_SIZE   # 32 bytes total
+HEADER_SIZE   = NONCE_SIZE + SALT_SIZE + TAG_SIZE   # 44 bytes total
 
-# Sentinel: raw-key mode uses a zero salt in the header so the format is
-# identical; the salt field is simply ignored during decryption.
+# Raw-key mode stores zeros in the salt field; the value is ignored on decrypt.
 _ZERO_SALT = b"\x00" * SALT_SIZE
 
 
@@ -140,7 +144,7 @@ def encrypt_file(
     output_path: Optional[Union[str, Path]] = None,
 ) -> Path:
     """
-    Encrypt a file in-place using AES-256-CBC.
+    Encrypt a file in-place using AES-256-GCM.
 
     Exactly one of `password` or `key` must be supplied.
 
@@ -170,21 +174,18 @@ def encrypt_file(
 
     out_path = Path(output_path) if output_path else path.with_suffix(path.suffix + ".enc")
 
-    # Generate fresh IV and (if password mode) salt for this file.
-    iv   = os.urandom(IV_SIZE)
-    salt = os.urandom(SALT_SIZE) if password is not None else _ZERO_SALT
+    nonce = os.urandom(NONCE_SIZE)
+    salt  = os.urandom(SALT_SIZE) if password is not None else _ZERO_SALT
 
-    # Resolve key.
     if password is not None:
         aes_key = derive_key(password, salt)
     else:
         aes_key = _validate_raw_key(key)  # type: ignore[arg-type]
 
-    # Read plaintext, encrypt, write header + ciphertext.
     plaintext = path.read_bytes()
-    ciphertext = _aes_cbc_encrypt(plaintext, aes_key, iv)
+    ciphertext, tag = _aes_gcm_encrypt(plaintext, aes_key, nonce)
 
-    out_path.write_bytes(iv + salt + ciphertext)
+    out_path.write_bytes(nonce + salt + tag + ciphertext)
 
     if delete_original:
         path.unlink()
@@ -203,7 +204,7 @@ def decrypt_file(
 
     Exactly one of `password` or `key` must be supplied.
 
-    The IV and (in password mode) the salt are read from the file header;
+    The nonce, salt, and auth tag are read from the file header;
     you do not need to supply them separately.
 
     Args:
@@ -219,8 +220,8 @@ def decrypt_file(
     Raises:
         ValueError:  Bad arguments or file header too short.
         FileNotFoundError: Input file does not exist.
-        RuntimeError: `cryptography` package not installed, or decryption
-                      fails (wrong key / corrupted file).
+        RuntimeError: `cryptography` package not installed, or authentication
+                      fails (wrong key, tampered ciphertext, or corrupted file).
     """
     _require_crypto()
     _validate_key_args(password, key)
@@ -236,31 +237,31 @@ def decrypt_file(
             f"(expected ≥{HEADER_SIZE} bytes, got {len(data)})"
         )
 
-    # Parse header.
-    iv        = data[:IV_SIZE]
-    salt      = data[IV_SIZE:IV_SIZE + SALT_SIZE]
+    nonce      = data[:NONCE_SIZE]
+    salt       = data[NONCE_SIZE:NONCE_SIZE + SALT_SIZE]
+    tag        = data[NONCE_SIZE + SALT_SIZE:HEADER_SIZE]
     ciphertext = data[HEADER_SIZE:]
 
-    # Resolve key.
     if password is not None:
         aes_key = derive_key(password, salt)
     else:
         aes_key = _validate_raw_key(key)  # type: ignore[arg-type]
 
-    # Decrypt.
     try:
-        plaintext = _aes_cbc_decrypt(ciphertext, aes_key, iv)
+        plaintext = _aes_gcm_decrypt(ciphertext, aes_key, nonce, tag)
+    except InvalidTag:
+        raise RuntimeError(
+            "decrypt_file: authentication failed — wrong key or file has been tampered with."
+        )
     except Exception as exc:
         raise RuntimeError(
             f"decrypt_file: decryption failed — wrong key or corrupted file. "
             f"({type(exc).__name__}: {exc})"
         ) from exc
 
-    # Determine output path.
     if output_path:
         out_path = Path(output_path)
     else:
-        # Strip the .enc suffix: segment_001.mp4.enc → segment_001.mp4
         name = path.name
         if name.endswith(".enc"):
             out_path = path.with_name(name[:-4])
@@ -304,22 +305,19 @@ def _validate_raw_key(key: bytes) -> bytes:
     return bytes(key)
 
 
-def _aes_cbc_encrypt(plaintext: bytes, key: bytes, iv: bytes) -> bytes:
-    """Encrypt plaintext with AES-256-CBC + PKCS7 padding."""
-    padder    = sym_padding.PKCS7(128).padder()
-    padded    = padder.update(plaintext) + padder.finalize()
-    cipher    = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+def _aes_gcm_encrypt(plaintext: bytes, key: bytes, nonce: bytes) -> tuple[bytes, bytes]:
+    """Encrypt plaintext with AES-256-GCM. Returns (ciphertext, tag)."""
+    cipher    = Cipher(algorithms.AES(key), modes.GCM(nonce), backend=default_backend())
     encryptor = cipher.encryptor()
-    return encryptor.update(padded) + encryptor.finalize()
+    ciphertext = encryptor.update(plaintext) + encryptor.finalize()
+    return ciphertext, encryptor.tag
 
 
-def _aes_cbc_decrypt(ciphertext: bytes, key: bytes, iv: bytes) -> bytes:
-    """Decrypt AES-256-CBC ciphertext and remove PKCS7 padding."""
-    cipher    = Cipher(algorithms.AES(key), modes.CBC(iv), backend=default_backend())
+def _aes_gcm_decrypt(ciphertext: bytes, key: bytes, nonce: bytes, tag: bytes) -> bytes:
+    """Decrypt AES-256-GCM ciphertext and verify the auth tag."""
+    cipher    = Cipher(algorithms.AES(key), modes.GCM(nonce, tag), backend=default_backend())
     decryptor = cipher.decryptor()
-    padded    = decryptor.update(ciphertext) + decryptor.finalize()
-    unpadder  = sym_padding.PKCS7(128).unpadder()
-    return unpadder.update(padded) + unpadder.finalize()
+    return decryptor.update(ciphertext) + decryptor.finalize()
 
 
 # ---------------------------------------------------------------------------
@@ -328,9 +326,8 @@ def _aes_cbc_decrypt(ciphertext: bytes, key: bytes, iv: bytes) -> bytes:
 
 if __name__ == "__main__":  # pragma: no cover
     import argparse
-    import sys
 
-    p = argparse.ArgumentParser(description="AES-256-CBC file encryption utility")
+    p = argparse.ArgumentParser(description="AES-256-GCM file encryption utility")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     enc_p = sub.add_parser("encrypt", help="Encrypt a file")

@@ -161,7 +161,7 @@ class BackgroundSubtractor:
 
         if method == "MOG2":
             self._subtractor = cv2.createBackgroundSubtractorMOG2(
-                history=history, varThreshold=50, detectShadows=False
+                history=history, varThreshold=resolved_threshold, detectShadows=False
             )
         elif method == "KNN":
             self._subtractor = cv2.createBackgroundSubtractorKNN(

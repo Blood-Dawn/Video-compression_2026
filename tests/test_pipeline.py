@@ -295,3 +295,163 @@ class TestMode1Behavior:
         assert calls["encoded_frame_count"] == 3
         assert calls["encoded_bboxes_count"] == 3
         assert calls["get_storage_report"] == 1
+
+
+# ---------------------------------------------------------------------------
+# mode2 behavior
+# ---------------------------------------------------------------------------
+
+class TestMode2Behavior:
+    def test_mode2_uses_background_only_after_two_clean_seconds(
+        self, monkeypatch, tmp_path
+    ):
+        calls = {
+            "encode_segment": 0,
+            "background_values": [],
+            "object_only": [],
+            "encoded_frame_counts": [],
+        }
+
+        frames = [
+            np.full((16, 16, 3), value, dtype=np.uint8)
+            for value in range(9)
+        ]
+        regions_per_frame = [
+            [],
+            [],
+            [],
+            [DummyRegion()],
+            [],
+            [],
+            [],
+            [],
+            [DummyRegion()],
+        ]
+
+        monkeypatch.setattr(
+            "pipeline.pipeline.FrameSource",
+            lambda *_args, **_kwargs: DummyFrameSource(
+                frames, fps=2.0, width=16, height=16
+            )
+        )
+        monkeypatch.setattr(
+            "pipeline.pipeline.BackgroundSubtractor",
+            lambda *args, **kwargs: SequenceSubtractor(regions_per_frame, *args, **kwargs)
+        )
+        monkeypatch.setattr(
+            "pipeline.pipeline.initialize_database",
+            lambda *_args, **_kwargs: None
+        )
+
+        class RecordingEncoder:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def encode_segment(self, frames, bboxes_per_frame, camera_id, fps,
+                               object_type=None, **kwargs):
+                calls["encode_segment"] += 1
+                calls["encoded_frame_counts"].append(len(frames))
+                calls["object_only"].append(kwargs.get("object_only"))
+                background = kwargs.get("background_frame")
+                calls["background_values"].append(
+                    None if background is None else int(background[0, 0, 0])
+                )
+                return f"mode2_patch_{calls['encode_segment']}.mp4"
+
+            def get_storage_report(self):
+                return {"total_segments": calls["encode_segment"]}
+
+        monkeypatch.setattr("pipeline.pipeline.ROIEncoder", RecordingEncoder)
+
+        run_pipeline(
+            input_source="dummy.mp4",
+            camera_id="cam_test",
+            output_dir=str(tmp_path),
+            segment_seconds=0.5,
+            bg_method="MOG2",
+            mode="mode2",
+            show_preview=False,
+            warmup_frames=0,
+            mode2_clean_seconds=2.0,
+        )
+
+        assert calls["encode_segment"] == 2
+        assert calls["encoded_frame_counts"] == [1, 1]
+        assert calls["object_only"] == [False, False]
+        assert calls["background_values"] == [0, 7]
+
+
+# ---------------------------------------------------------------------------
+# mode3 behavior
+# ---------------------------------------------------------------------------
+
+class TestMode3Behavior:
+    def test_mode3_encodes_object_only_mp4_segments(
+        self, monkeypatch, tmp_path, mixed_event_frames
+    ):
+        calls = {
+            "encode_segment": 0,
+            "get_storage_report": 0,
+            "encoded_frame_count": None,
+            "encoded_bboxes_count": None,
+            "object_only": None,
+        }
+
+        regions_per_frame = [
+            [],
+            [DummyRegion()],
+            [],
+            [DummyRegion()],
+            [],
+            [DummyRegion()],
+        ]
+
+        monkeypatch.setattr(
+            "pipeline.pipeline.FrameSource",
+            lambda *_args, **_kwargs: DummyFrameSource(
+                mixed_event_frames, fps=10.0, width=16, height=16
+            )
+        )
+        monkeypatch.setattr(
+            "pipeline.pipeline.BackgroundSubtractor",
+            lambda *args, **kwargs: SequenceSubtractor(regions_per_frame, *args, **kwargs)
+        )
+        monkeypatch.setattr(
+            "pipeline.pipeline.initialize_database",
+            lambda *_args, **_kwargs: None
+        )
+
+        class RecordingEncoder:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def encode_segment(self, frames, bboxes_per_frame, camera_id, fps,
+                               object_type=None, **kwargs):
+                calls["encode_segment"] += 1
+                calls["encoded_frame_count"] = len(frames)
+                calls["encoded_bboxes_count"] = len(bboxes_per_frame)
+                calls["object_only"] = kwargs.get("object_only")
+                return "mode3_object_only.mp4"
+
+            def get_storage_report(self):
+                calls["get_storage_report"] += 1
+                return {"total_segments": calls["encode_segment"]}
+
+        monkeypatch.setattr("pipeline.pipeline.ROIEncoder", RecordingEncoder)
+
+        run_pipeline(
+            input_source="dummy.mp4",
+            camera_id="cam_test",
+            output_dir=str(tmp_path),
+            segment_seconds=60,
+            bg_method="MOG2",
+            mode="mode3",
+            show_preview=False,
+            warmup_frames=0,
+        )
+
+        assert calls["encode_segment"] == 1
+        assert calls["encoded_frame_count"] == 3
+        assert calls["encoded_bboxes_count"] == 3
+        assert calls["object_only"] is True
+        assert calls["get_storage_report"] == 1

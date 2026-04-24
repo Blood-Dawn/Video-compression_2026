@@ -25,6 +25,56 @@ from background_subtraction.background_subtraction import ForegroundRegion
 from utils.db import initialize_database, insert_segment, get_connection
 
 
+# ── Corner overlay ────────────────────────────────────────────────────────────
+
+def draw_corner_overlay(frame: np.ndarray, mode_label: str, elapsed_s: int) -> None:
+    """Burn a semi-transparent info box into the top-left corner of *frame*.
+
+    Modifies the array in-place. Shows the mode name on the first line and
+    a MM:SS elapsed timer on the second. Designed to match the HLS live-stream
+    overlay so saved segments and the live preview look identical.
+
+    Args:
+        frame:      BGR uint8 numpy array — modified in-place.
+        mode_label: Short mode string, e.g. "MODE 0 · 24/7".
+        elapsed_s:  Seconds elapsed since the segment started.
+    """
+    mins, secs = divmod(elapsed_s, 60)
+    lines = [mode_label, f"{mins:02d}:{secs:02d}"]
+
+    font       = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.42
+    thickness  = 1
+    line_h     = 18
+    padding    = 6
+
+    sizes = [cv2.getTextSize(ln, font, font_scale, thickness)[0] for ln in lines]
+    box_w = max(sz[0] for sz in sizes) + 2 * padding
+    box_h = len(lines) * line_h + 2 * padding
+
+    bx1, by1 = 8, 8
+    bx2, by2 = bx1 + box_w, by1 + box_h
+
+    # Semi-transparent black background
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (bx1, by1), (bx2, by2), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, dst=frame)
+
+    y = by1 + padding + line_h - 4
+    for ln in lines:
+        cv2.putText(frame, ln, (bx1 + padding, y),
+                    font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+        y += line_h
+
+
+_MODE_LABELS = {
+    "mode0": "MODE 0 \u00b7 24/7",
+    "mode1": "MODE 1 \u00b7 EVENT",
+    "mode2": "MODE 2 \u00b7 PATCHES",
+    "mode3": "MODE 3 \u00b7 OBJ ONLY",
+}
+
+
 class ROIEncoder:
     """
     Encodes video with separate quality tiers for foreground and background.
@@ -134,6 +184,7 @@ class ROIEncoder:
         draw_roi_boxes: Optional[bool] = None,
         object_only: bool = False,
         background_frame: Optional[np.ndarray] = None,
+        mode_label: str = "",
     ) -> str:
         """
         Encode a list of raw BGR numpy frames into a compressed MP4.
@@ -216,9 +267,10 @@ class ROIEncoder:
         )
 
         should_draw_boxes = self.draw_roi_boxes if draw_roi_boxes is None else draw_roi_boxes
+        safe_fps = fps if fps and fps > 0 else 30.0
 
         try:
-            for frame, boxes in zip(frames, bboxes_per_frame):
+            for frame_idx, (frame, boxes) in enumerate(zip(frames, bboxes_per_frame)):
                 if object_only:
                     frame_to_write = self._copy_bboxes_to_black_frame(frame, boxes)
                 elif background_frame is not None:
@@ -243,6 +295,15 @@ class ROIEncoder:
                         y2 = min(h, by + bh)
                         if x2 > x1 and y2 > y1:
                             cv2.rectangle(frame_to_write, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+                # Burn mode label + per-frame elapsed time into every frame.
+                # Copy first if frame_to_write still points at the original array.
+                if mode_label:
+                    if frame_to_write is frame:
+                        frame_to_write = frame.copy()
+                    elapsed_s = int(frame_idx / safe_fps)
+                    draw_corner_overlay(frame_to_write, mode_label, elapsed_s)
+
                 process.stdin.write(frame_to_write.tobytes())
 
             process.stdin.close()

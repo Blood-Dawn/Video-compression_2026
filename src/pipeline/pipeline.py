@@ -39,6 +39,7 @@ from compression.roi_encoder import ROIEncoder
 from enhancement.enhancer import Enhancer
 from demo.demo_metadata import DemoMetadataWriter
 from pipeline.modes import get_mode_decision, validate_mode
+from compression.roi_encoder import _MODE_LABELS
 
 def classify_object(roi_count):
     if roi_count > 10:
@@ -353,6 +354,7 @@ def run_pipeline(
                     object_type=object_type,
                     object_only=(mode == "mode3"),
                     background_frame=mode2_background,
+                    mode_label=_MODE_LABELS.get(mode, ""),
                 )
                 log.info(f"Saved: {out}")
 
@@ -391,6 +393,7 @@ def run_pipeline(
                 object_type=object_type,
                 object_only=(mode == "mode3"),
                 background_frame=mode2_background,
+                mode_label=_MODE_LABELS.get(mode, ""),
             )
             log.info(f"Saved final segment: {out}")
 

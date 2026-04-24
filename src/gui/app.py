@@ -50,6 +50,7 @@ try:
         query_daily_storage_summary,
         query_segments_by_target_count,
     )
+    from compression.roi_encoder import draw_corner_overlay             # noqa: E402
 except ModuleNotFoundError:
     from src.pipeline.pipeline import run_pipeline                      # noqa: E402
     from src.utils.db import (                                          # noqa: E402
@@ -58,6 +59,7 @@ except ModuleNotFoundError:
         query_daily_storage_summary,
         query_segments_by_target_count,
     )
+    from src.compression.roi_encoder import draw_corner_overlay         # noqa: E402
 
 # ── Flask app ─────────────────────────────────────────────────────────────────
 app = Flask(__name__, template_folder="templates")
@@ -848,37 +850,12 @@ def _hls_dir_for(camera_id: str, output_dir: str) -> Path:
 
 
 def _draw_corner_overlay(frame, mode_label: str, elapsed_s: int) -> None:
-    """Draw a small semi-transparent info box in the top-left corner.
+    """Thin wrapper — delegates to the shared roi_encoder.draw_corner_overlay.
 
-    Modifies *frame* in-place (avoids an extra copy on each frame).
-    Shows mode name and elapsed time in a compact format.
+    Kept as a module-level name so the HLS annotator thread can call it
+    without changes.
     """
-    mins, secs = divmod(elapsed_s, 60)
-    lines = [mode_label, f"{mins:02d}:{secs:02d}"]
-
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.42
-    thickness = 1
-    line_h = 18
-    padding = 6
-
-    sizes = [cv2.getTextSize(ln, font, font_scale, thickness)[0] for ln in lines]
-    box_w = max(sz[0] for sz in sizes) + 2 * padding
-    box_h = len(lines) * line_h + 2 * padding
-
-    bx1, by1 = 8, 8
-    bx2, by2 = bx1 + box_w, by1 + box_h
-
-    # Semi-transparent black background (blend with a filled rectangle)
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (bx1, by1), (bx2, by2), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, dst=frame)
-
-    y = by1 + padding + line_h - 4
-    for ln in lines:
-        cv2.putText(frame, ln, (bx1 + padding, y),
-                    font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
-        y += line_h
+    draw_corner_overlay(frame, mode_label, elapsed_s)
 
 
 def _hls_annotator_thread(

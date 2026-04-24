@@ -130,8 +130,8 @@ Riley built the mode dispatch layer in `modes.py` and integrated it into the pip
 |---|---|---|---|---|---|
 | Mode dispatch: `modes.py` — ModeDecision, validate_mode, get_mode_decision | RR | 2026-04-09 | Urgent | Done | PR #6 `feat/mode-system` merged; fully tested; pipeline uses `get_mode_decision()` per frame |
 | Mode 1 frame-gating unit tests (`test_pipeline.py`) | RR | 2026-04-09 | Important | Done | 2/2 passing; covers exact-segment-boundary EOF and mode1 frame selection |
-| Implement Mode 2: one background keyframe + per-frame object patches | RR | 2026-04-11 | Urgent | Not Started | Background frame captured right before motion; only moving-object bbox crops saved per frame. Best for low-traffic scenes. Degrades gracefully to Mode 0 when traffic is constant (background never refreshes). |
-| Implement Mode 3: object-only forensic mode — padded crop, no background | RR | 2026-04-11 | Urgent | Not Started | Most aggressive mode — saves only padded bbox crop around detected subject, zero background. Intended for facial recognition and forensic pipelines. |
+| Implement Mode 2: one background keyframe + per-frame object patches | RR | 2026-04-11 | Urgent | Done | Merged 2026-04-20. `pipeline.py`: tracks clean frame streak, captures background keyframe, composites bbox patches over it. `layer_encoder.py`: `LayerSegmentEncoder` writes sparse artifacts (crop PNGs + mask PNGs + metadata.json + preview.mp4). GUI selectors wired in `index.html`. |
+| Implement Mode 3: object-only forensic mode — padded crop, no background | RR | 2026-04-11 | Urgent | Done | Merged 2026-04-20. `pipeline.py`: passes `object_only=True` to `ROIEncoder.encode_segment()`, which blacks out all pixels outside detected bounding boxes before piping to FFmpeg. Mode chip shown in GUI. Tests in `test_layer_encoder.py`, `test_modes.py`, `test_pipeline.py`. |
 | Demo/concat mode: stitch all output segments into one playback file | RR | 2026-04-10 | Important | Not Started | Proposed by Riley in Apr 1 sponsor meeting. Lets you review a full session without opening each 60-second clip. |
 
 ### 2.3 — Metadata query interface
@@ -217,7 +217,7 @@ Victor — the AES-256-CBC implementation is in `src/utils/encryption.py` and wo
 | Task | Assigned To | Due | Priority | Status | Notes |
 |---|---|---|---|---|---|
 | AES-256-CBC encryption for output video files (`--encrypt` flag) | KD | 2026-04-09 | Urgent | Done | `src/utils/encryption.py`; PBKDF2 600k iters; password or raw-key mode; IV+salt in header |
-| Upgrade AES-256-CBC to AES-256-GCM (authenticated encryption) | VT | 2026-04-18 | Important | Not Started | CBC has no auth tag — bit-flip attacks pass silently. GCM is a drop-in via `cryptography` lib. |
+| Upgrade AES-256-CBC to AES-256-GCM (authenticated encryption) | VT | 2026-04-18 | Important | Done | Merged via PR #12 on 2026-04-20. New header: nonce(12)+salt(16)+tag(16)+ciphertext. `InvalidTag` raised on any tamper. PKCS7 padding removed (GCM is stream mode). 24 unit tests in `tests/test_encryption.py`. |
 | Store IV + salt in DB per segment | VT | 2026-04-25 | Medium | Not Started | Required for per-segment decryption without re-prompting the user for their password. |
 | Password-protected incident clip export | VT | 2026-04-25 | Important | Not Started | Sponsor showed commercial systems charge extra for this. Include by default. |
 | Encrypt/decrypt round-trip unit tests | VT | 2026-04-25 | Important | Not Started | Verify `.enc` written; decryption recovers original bytes exactly; test both password and raw-key paths. |
@@ -430,8 +430,8 @@ Cody asked: "Are there research papers for lossy compression that selectively dr
 | Section | Area | Status |
 |---|---|---|
 | 2.2 | ModeDecision dispatch + mode1 gating (modes.py) | Done ✅ |
-| 2.2 | Mode 2 implementation | Open 🔲 |
-| 2.2 | Mode 3 implementation | Open 🔲 |
+| 2.2 | Mode 2 implementation | Done ✅ |
+| 2.2 | Mode 3 implementation | Done ✅ |
 | 2.6 | DemoMetadataWriter + renderer + split-screen | Done ✅ |
 | 2.6 | Extend `test_pipeline.py` (enhance / encrypt / stop) | Open 🔲 |
 | 2.6 | `run_demo.py` end-to-end on real footage | Open 🔲 |
@@ -443,7 +443,7 @@ Cody asked: "Are there research papers for lossy compression that selectively dr
 |---|---|---|
 | 1.3 | PSNR, SSIM, compression ratio metrics | Done ✅ |
 | 1.3 | `milestone1_benchmark.ipynb` | Done ✅ |
-| 3.1 | Upgrade AES-256-CBC to AES-256-GCM | Open 🔲 |
+| 3.1 | Upgrade AES-256-CBC to AES-256-GCM | Done ✅ |
 | 3.1 | IV + salt storage in DB per segment | Open 🔲 |
 | 3.1 | Password-protected incident clip export | Open 🔲 |
 | 3.1 | Encrypt/decrypt round-trip unit tests | Open 🔲 |

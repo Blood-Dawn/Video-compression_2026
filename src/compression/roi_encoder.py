@@ -271,6 +271,9 @@ class ROIEncoder:
 
         try:
             for frame_idx, (frame, boxes) in enumerate(zip(frames, bboxes_per_frame)):
+                # Step 1: apply mode-specific compositing.
+                # _copy_bboxes_* functions always return a NEW writable array,
+                # so mode2/3 frames are safe to draw on without an extra copy.
                 if object_only:
                     frame_to_write = self._copy_bboxes_to_black_frame(frame, boxes)
                 elif background_frame is not None:
@@ -278,15 +281,14 @@ class ROIEncoder:
                         background_frame, frame, boxes
                     )
                 else:
-                    frame_to_write = frame
+                    frame_to_write = frame  # still aliased to original; copy below if needed
+
+                # Step 2: draw green ROI boxes if requested.
+                # For mode 0/1 (frame_to_write is frame) we need a copy before
+                # drawing. For mode 2/3 the compositing above already produced a
+                # fresh array — no need to re-composite.
                 if should_draw_boxes and boxes:
-                    if object_only:
-                        frame_to_write = self._copy_bboxes_to_black_frame(frame, boxes)
-                    elif background_frame is not None:
-                        frame_to_write = self._copy_bboxes_to_background_frame(
-                            background_frame, frame, boxes
-                        )
-                    else:
+                    if frame_to_write is frame:
                         frame_to_write = frame.copy()
                     for bx, by, bw, bh in boxes:
                         x1 = max(0, bx)
@@ -296,8 +298,7 @@ class ROIEncoder:
                         if x2 > x1 and y2 > y1:
                             cv2.rectangle(frame_to_write, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-                # Burn mode label + per-frame elapsed time into every frame.
-                # Copy first if frame_to_write still points at the original array.
+                # Step 3: burn mode label + elapsed timer into top-left corner.
                 if mode_label:
                     if frame_to_write is frame:
                         frame_to_write = frame.copy()

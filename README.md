@@ -116,6 +116,17 @@ capstone-compression/
 
 ---
 
+## Metadata Query System
+
+This project includes a searchable metadata index using SQLite for querying encoded video segments.
+
+### Query CLI
+
+Run queries using:
+
+```bash
+python -m src.utils.db_query --type <object_type> [options]
+
 ## Quick Start
 
 ```bash

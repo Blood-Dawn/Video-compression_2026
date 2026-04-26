@@ -180,9 +180,11 @@ class TestMultiFrameSource:
         with patch("cv2.VideoCapture", side_effect=lambda s: _make_fake_cap(frame_count=500)):
             msrc = MultiFrameSource(["rtsp://a"])
             msrc.open()
-            # Check immediately after open before thread exhausts frames
-            assert msrc._readers[0].is_open is True
+            # Check immediately after open before thread exhausts frames via public API
+            assert msrc.any_alive() is True
             msrc.release()
+            # After release, no readers should be alive
+            assert msrc.any_alive() is False
 
     def test_active_count(self):
         with patch("cv2.VideoCapture", side_effect=lambda s: _make_fake_cap(frame_count=500)):

@@ -233,18 +233,24 @@ def query_daily_storage_summary(
         return cursor.fetchall()
 
 def query_by_type(
-    object_type: str,
+    object_type: Union[str, List[str]],
     camera_id: Optional[str] = None,
     start_time: Optional[str] = None,
     end_time: Optional[str] = None,
+    min_roi_count: Optional[int] = None,
     db_path: Union[str, Path] = DB_NAME,
 ) -> List[SegmentRow]:
     """
-    Query segments filtered by object type, optionally by camera and time range.
+    Query segments filtered by object type, camera, time range, and ROI count.
     """
 
-    query = "SELECT * FROM segments WHERE object_type = ?"
-    params = [object_type]
+    if isinstance(object_type, list):
+        placeholders = ",".join(["?"] * len(object_type))
+        query = f"SELECT * FROM segments WHERE object_type IN ({placeholders})"
+        params = object_type
+    else:
+        query = "SELECT * FROM segments WHERE object_type = ?"
+        params = [object_type]
 
     if camera_id:
         query += " AND camera_id = ?"
@@ -257,6 +263,10 @@ def query_by_type(
     if end_time:
         query += " AND timestamp <= ?"
         params.append(end_time)
+
+    if min_roi_count is not None:
+        query += " AND roi_count >= ?"
+        params.append(min_roi_count)
 
     query += " ORDER BY timestamp DESC"
 

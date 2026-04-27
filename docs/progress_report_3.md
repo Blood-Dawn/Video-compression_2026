@@ -129,7 +129,29 @@ Final result: **274 passed, 0 failed.**
 
 ---
 
-## Benchmark numbers
+## April 15 sponsor meeting
+
+Attendees: Kheiven D'Haiti, Riley Roberts, Cody Hayashi (NIWC Pacific), Geena Wann-Kung (NIWC Pacific), and Sean, a new NIWC contact Geena brought in because he'd heard about the project and wanted to see it.
+
+Kheiven opened with a screen share. Cody's reaction: "Love the website. Looks good, looks clean. Love dark mode." He jumped straight into technical questions, which is where most of the meeting ended up.
+
+Riley walked Cody through all four modes. Cody's first real question was about Mode 2 — specifically, does the background reference frame ever refresh? Lighting changes, rain, cloud cover. The answer is yes: the `bg_refresh_interval` parameter handles timed refreshes, and there's a planned context switch that falls back to Mode 0 automatically when traffic is too dense for Mode 2 to get a clean background frame. That exchange also surfaced an idea we're now tracking: an adaptive mode controller that switches between modes based on activity rate, without the operator having to intervene.
+
+On streaming, Riley mentioned we hadn't tested live RTSP yet — only file output. Cody gave a concrete recommendation: camera → RTSP → our server → FFmpeg → HLS → browser. RTSP for machine-to-machine (fast, secure, what most cameras already speak). HLS for the browser side, using either hls.js or video.js, both open source. He also pointed us to gookami.org, where all Hawaii state traffic cameras stream live 24/7 — free, realistic, full HD footage for testing.
+
+Geena asked whether operators could search footage by vehicle color. Cody sketched an approach: crop the center 50% of each bounding box, run a color histogram in HSV space, find the dominant hue, store the label in the database. No new model needed — it's just a histogram on pixels we already have. White cars are the edge case (they blend with backgrounds), but he figured most colors would produce a clear peak. We're tracking this in the roadmap under color detection.
+
+Cody also asked for a config export — a "save config" button that writes known-working stream parameters to a file so operators can reproduce the same setup on new hardware without guessing. His reasoning: on DoD networks, the network is usually the variable. If something works, you want to be able to replicate that exactly.
+
+Sean requested a migration from pip to uv (from astral.sh). NIWC security teams require it: uv locks Python versions, sandboxes packages away from system installs, and gives deterministic environments across machines. That's done — `pyproject.toml` and `uv.lock` are in the repo and `uv sync` is the install method now.
+
+Geena and Cody both pushed on compute benchmarks. The field scenario they described: a laptop plugged into a camera, running for hours on battery. They need CPU%, encode time, and estimated battery draw per mode to make deployment hardware decisions. That's still open.
+
+Cody also raised a comparison question: our system isn't really comparable to H.264 because we're selectively dropping data, not compressing everything. He asked whether there's prior research on intentionally lossy, event-driven compression for static surveillance cameras. If there is, citing it strengthens the final report. If there isn't, that's worth noting too.
+
+---
+
+
 
 These come from `notebooks/milestone1_benchmark.ipynb` run on the CDnet 2014 dataset (all 46 scenes, CPU-only hardware). The stress test numbers are from Jorge's 1-hour simulation in `tests/test_pipeline_stress.py`.
 

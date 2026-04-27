@@ -177,14 +177,27 @@ class TestMultiFrameSource:
                 assert "MultiFrameSource" in r
 
     def test_any_alive_true_when_running(self):
-        with patch("cv2.VideoCapture", side_effect=lambda s: _make_fake_cap(frame_count=500)):
+        # Use an event to hold the read loop open so it stays alive long enough to assert.
+        gate = threading.Event()
+
+        def _make_blocking_cap(source):
+            cap = _make_fake_cap(frame_count=0)
+            # Block inside read() until the gate is released
+            def _blocking_read():
+                gate.wait(timeout=5.0)
+                return False, None
+            cap.read.side_effect = _blocking_read
+            return cap
+
+        with patch("cv2.VideoCapture", side_effect=_make_blocking_cap):
             msrc = MultiFrameSource(["rtsp://a"])
             msrc.open()
-            # Check immediately after open before thread exhausts frames via public API
-            assert msrc.any_alive() is True
-            msrc.release()
-            # After release, no readers should be alive
-            assert msrc.any_alive() is False
+            try:
+                assert msrc.any_alive() is True
+            finally:
+                gate.set()   # unblock the read loop
+                msrc.release()
+        assert msrc.any_alive() is False
 
     def test_active_count(self):
         with patch("cv2.VideoCapture", side_effect=lambda s: _make_fake_cap(frame_count=500)):

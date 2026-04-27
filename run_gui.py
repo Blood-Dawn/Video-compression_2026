@@ -33,9 +33,9 @@ def _open_browser(host: str, port: int):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SVCS Web Dashboard")
-    parser.add_argument("--host", default="127.0.0.1",
-                        help="Bind address (default: 127.0.0.1). "
-                             "Use 0.0.0.0 to allow LAN access.")
+    parser.add_argument("--host", default="0.0.0.0",
+                        help="Bind address (default: 0.0.0.0, accessible on LAN). "
+                             "Use 127.0.0.1 to restrict to this machine only.")
     parser.add_argument("--port", type=int, default=5000, help="Port (default: 5000)")
     parser.add_argument("--no-browser", action="store_true",
                         help="Don't auto-open browser")

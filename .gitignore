@@ -18,6 +18,9 @@ venv/
 .ipynb_checkpoints/
 *.ipynb_checkpoints
 
+# Uploaded videos from web UI (user files, never commit)
+data/uploads/
+
 # Data -- local only, NEVER commit to GitHub
 # CDnet 2014 dataset (319k+ PNG frames + groundtruth masks)
 data/dataset/

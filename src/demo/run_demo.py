@@ -130,7 +130,24 @@ def run_all_demos(
     modes: list[str],
     views: list[str],
     no_boxes: bool = False,
+    progress_callback=None,
 ):
+    """Run pipelines for each mode then render annotated demo videos.
+
+    Args:
+        progress_callback: Optional callable(message: str, detail: dict) called
+            at each significant step so the caller can surface live updates.
+            detail keys: phase ("pipeline"|"render"|"stitch"), mode, mode_index,
+            mode_total, done (bool).
+    """
+    def _cb(msg, **kw):
+        if progress_callback is not None:
+            try:
+                progress_callback(msg, kw)
+            except Exception:
+                pass
+        print(msg)
+
     input_path = str(Path(input_path).resolve())
     output_root_path = Path(output_root).resolve()
     output_root_path.mkdir(parents=True, exist_ok=True)
@@ -139,17 +156,21 @@ def run_all_demos(
     views = [validate_view(view) for view in views]
 
     suffix = get_next_run_suffix(output_root_path, modes)
+    mode_total = len(modes)
 
-    print(f"\n=== Starting demo run (suffix='{suffix or 'base'}') ===")
+    _cb(f"Starting demo run — {mode_total} mode(s)", phase="start", mode_total=mode_total)
 
     mode_output_dirs: dict[str, Path] = {}
 
-    for mode in modes:
+    for mode_index, mode in enumerate(modes):
         mode_dir = (output_root_path / f"demo_{mode}{suffix}").resolve()
         mode_output_dirs[mode] = mode_dir
 
-        print(f"\n[RUN] Pipeline for {mode}")
-        print(f"Output dir: {mode_dir}")
+        _cb(
+            f"Running pipeline: {mode} ({mode_index + 1}/{mode_total})",
+            phase="pipeline", mode=mode,
+            mode_index=mode_index, mode_total=mode_total, done=False,
+        )
 
         run_pipeline(
             input_source=input_path,
@@ -159,12 +180,18 @@ def run_all_demos(
             demo=True,
         )
 
+        _cb(
+            f"Pipeline done: {mode} — rendering annotated video…",
+            phase="pipeline", mode=mode,
+            mode_index=mode_index, mode_total=mode_total, done=True,
+        )
+
     stitched_dir = (output_root_path / f"demos_stitched{suffix}").resolve()
     stitched_dir.mkdir(parents=True, exist_ok=True)
 
     stitched_outputs: dict[tuple[str, str], Path] = {}
 
-    for mode in modes:
+    for mode_index, mode in enumerate(modes):
         mode_dir = mode_output_dirs[mode]
 
         db_path = (mode_dir / "metadata.db").resolve()
@@ -176,10 +203,11 @@ def run_all_demos(
         for view in views:
             output_video = (stitched_dir / stitched_name_for_view(mode, view)).resolve()
 
-            print(f"\n[RUN] demo.py for {mode} [{view}]")
-            print(f"DB: {db_path}")
-            print(f"JSONL: {jsonl_path}")
-            print(f"Output: {output_video}")
+            _cb(
+                f"Rendering demo video: {mode} [{view}] ({mode_index + 1}/{mode_total})",
+                phase="render", mode=mode, view=view,
+                mode_index=mode_index, mode_total=mode_total, done=False,
+            )
 
             render_demo(
                 db_path=str(db_path),
@@ -189,7 +217,11 @@ def run_all_demos(
                 draw_boxes=not no_boxes,
             )
 
-            print(f"Saved demo video: {output_video}")
+            _cb(
+                f"Rendered: {output_video.name}",
+                phase="render", mode=mode, view=view,
+                mode_index=mode_index, mode_total=mode_total, done=True,
+            )
             stitched_outputs[(mode, view)] = output_video
 
     manifest = {
@@ -214,8 +246,11 @@ def run_all_demos(
 
     split_screen_path: Path | None = None
     if len(modes) > 1:
+        _cb("Building split-screen comparison…", phase="stitch", done=False)
         split_screen_path = build_split_screen_from_manifest(manifest_path)
+        _cb("Split-screen ready.", phase="stitch", done=True)
 
+    _cb("Demo run complete.", phase="done", done=True)
     print("\n=== Demo Run Complete ===\n")
     print("Generated outputs:\n")
 

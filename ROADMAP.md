@@ -7,13 +7,43 @@
 
 ## Who owns what
 
-| Member | Sections | Key open tasks |
-|---|---|---|
-| **Kheiven D'Haiti (KD)** | 2.4, 2.6, 3.1 (partial), 3.4, 3.5, 3.6, 4.4, 4.5, 4.8 | YOLO gate, GPU enhancer, test suite repair, deployment packaging, final results notebook, adaptive mode |
-| **Riley Roberts (RR)** | 2.2 (Mode 2/3), 2.5, 2.6 (partial) | Extend test_pipeline.py, run_demo.py end-to-end, demo/concat mode |
-| **Victor Teixeira (VT)** | 3.1 | IV/salt in DB, password-protected export |
-| **Ashleyn Montano (AM)** | 3.2, 4.3 | Color detection + DB column, object classifier rewrite, full-text search |
-| **Jorge Sanchez (JS)** | 2.5, 3.3, 4.6 | CPU benchmark per mode, AV1 encoder work |
+### Kheiven D'Haiti (KD)
+
+**Done:** Repo scaffold + project setup (Phase 0) · Background subtraction tuning — MOG2/KNN, night mode, CLAHE, morphological cleanup, min-area filter, 29 unit tests (M1) · CDnet foreground coverage benchmark across 46 scenes (M1) · Enhancement module — Real-ESRGAN / dnn_superres / bicubic fallback, upscale_frame, upscale_roi, --enhance pipeline integration, M2 benchmark notebook (M2) · Flask web dashboard — SSE live log, 16 API routes, file browser, demo runner, query archive sidebar, inline video player, segment preview (M2) · HLS streaming — 5 routes, hls.js integration, RTSP URL input, annotator thread, ultrafast FFmpeg HLS, VLC end-to-end test (M2/M3) · YOLO filter gate — YOLOv8-nano on MOG2 crops, 32-px suppression grid, night calibration conf=0.10 (PR #31, M3) · GPU acceleration for enhancer — CUDA/MPS/CPU auto-select, detect_gpu(), /api/gpu_info (M3) · Mode label + elapsed timer overlay (M3) · Double-compositing fix in encode_segment (M3) · Test suite repair — all four streaming encoder mocks, finish_segment dict fixes, schema index fix, 274 passing (M3) · Session log (M3) · uv migration — pyproject.toml, uv.lock, README/DEV.md (M3) · AES-256-CBC initial encryption implementation (M2) · GUI redesign — preset cards, 3-step flow, human-readable status, storage savings display (M2) · AI compression research doc
+
+**Open:** Deployment packaging research (Docker/PyInstaller/tarball for COTS x86) · Webcam/IP camera real-time test (no frame drops, no GPU) · final_results.ipynb (reproducible end-to-end benchmark) · README.md and DEV.md final pass · Adaptive mode controller (activity-rate-based auto-switching) · AV1 codec selector in GUI · Color search dropdown in GUI · Config JSON export · Electron packaging research · Compression literature review · v1.0.0 tag · Slide deck
+
+---
+
+### Riley Roberts (RR)
+
+**Done:** Mode dispatch — modes.py, ModeDecision, validate_mode, get_mode_decision, Mode 1 frame-gating tests (M2) · Demo system — DemoMetadataWriter + JSONL sidecar, render_demo() annotated video renderer, build_split_screen_from_manifest(), run_all_demos() orchestrator + manifest.json (M2) · Mode 2 — background keyframe capture, per-frame object patch compositing, GUI selectors (M3, PR #11) · Mode 3 — object-only blackout via object_only=True in ROIEncoder, GUI selectors (M3, PR #11) · Mode system repair — fixed mode dispatch broken by streaming encoder refactor; split raw_regions from regions for correct Mode 2 background selection (M3)
+
+**Open:** Demo/concat mode (stitch all session segments into one reviewable file) · Extend test_pipeline.py (enhance bicubic path, encrypt round-trip, stop_event mid-loop) · run_demo.py end-to-end on real test clip · Live demo segment for capstone presentation · Slide deck
+
+---
+
+### Victor De Souza Teixeira (VT)
+
+**Done:** metrics.py scaffold — compute_psnr(), compute_ssim(), compute_compression_ratio() (Phase 0/M1) · milestone1_benchmark.ipynb — pipeline on test clip, PSNR/SSIM/compression ratio (M1) · milestone1_results.md (M1) · AES-256-GCM upgrade — authenticated encryption, new file format (nonce+salt+tag+ciphertext), encrypt_bytes()/decrypt_bytes() for in-memory use, 24 unit tests including tamper detection (PR #12, M3) · GPU device detection utilities — detect_gpu(), best_device() exposed via /api/gpu_info (M3)
+
+**Open:** Store IV + salt in DB per segment (for per-segment decryption) · Password-protected incident clip export · Slide deck
+
+---
+
+### Ashleyn Montano (AM)
+
+**Done:** SQLite segments schema — WAL mode, idx_cam_time index, SegmentRow alias, 20 unit tests (M1) · DB writes integrated into pipeline — insert_segment() per encoded segment (M1) · query_recent_targets() (M1) · object_type column — ALTER TABLE migration, default 'unknown' (M2) · query_by_type(), query_segments_by_target_count(), query_daily_storage_summary() (M2) · CLI db_query.py with --camera/--last-hours/--type flags (M2) · test_object_type_queries.py (M2) · Multi-type query + ROI count filter — query_by_type() accepts Union[str, List[str]], parameterized IN placeholders, min_roi_count param, CLI rewritten with --min-roi and timezone-aware --last-hours (branch m3-metadata-query-fix, M3) · Detection accuracy calibration — co-owned with JS; varThreshold tuning, FP/FN measurements across lighting conditions, test_detection_accuracy.py (M2)
+
+**Open:** Color detection — detect_dominant_color() via HSV histogram on center 50% of bbox, dominant_color DB column, object_confidence column, color filter in /api/query_segments · Contour-based object classifier rewrite (replace heuristic with aspect ratio + area) · Full-text / multi-tag search in GUI query sidebar · Unit tests for color detection · Slide deck
+
+---
+
+### Jorge Sanchez (JS)
+
+**Done:** ROIEncoder skeleton + FFmpeg integration (Phase 0) · encode_segment() via FFmpeg stdin, dual-CRF (foreground CRF 18, background CRF 45), playable MP4 validation, get_file_size(), 18 integration tests (M1) · Algorithm comparison notebook (MOG2 vs KNN side-by-side, 46 CDnet scenes, 30 param combinations) + docs/algorithm_comparison.md (M2, PR #9) · Stress test — test_pipeline_stress.py, 1-hour simulated footage, tracemalloc memory verification, 60-day storage extrapolation, stress_test_results.md (M2, PR #9) · Detection accuracy calibration — co-owned with AM; varThreshold tuning, FP/FN table across lighting conditions (M2) · Watchfolder daemon — src/utils/watchfolder.py, 5s poll, size-stability check, .ingested sentinel, 22 unit tests (PR #13, M3) · MultiFrameSource — N parallel RTSP streams via daemon threads, 2-frame ring buffer, 5s stall timeout, threading.Event racy-test fix (PR #13, M3)
+
+**Open:** Per-mode CPU and battery benchmarks (avg CPU%, encode time, estimated battery drain per mode on 60-sec clip) · AV1 encoder feasibility — check libaom-av1/libsvtav1 availability, add codec param to ROIEncoder, benchmark AV1 vs H.264 on CPU · Per-mode compute table in stress_test_results.md · Slide deck
 
 ---
 

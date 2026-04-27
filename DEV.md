@@ -134,6 +134,35 @@ uv sync --extra enhance
 
 Note: `basicsr` and `realesrgan` pull in large CUDA packages. Skip `--extra enhance` if you are on a CPU-only machine and do not plan to use `--enhance`.
 
+**Step 3b — (GPU machines only) Install CUDA-enabled PyTorch**
+
+`uv sync` installs PyTorch, but pip/uv will default to the CPU-only build unless you explicitly request the CUDA index. If you have an NVIDIA GPU, run this after `uv sync`:
+
+```powershell
+# Windows (PowerShell) — RTX 5060 Ti / any NVIDIA GPU with CUDA 12.x driver
+pip install torch torchvision torchaudio `
+  --index-url https://download.pytorch.org/whl/cu128 `
+  --force-reinstall
+```
+
+```bash
+# Linux / macOS
+pip install torch torchvision torchaudio \
+  --index-url https://download.pytorch.org/whl/cu128 \
+  --force-reinstall
+```
+
+Replace `cu128` with the CUDA version shown in `nvidia-smi` (top-right corner). Common values: `cu118`, `cu121`, `cu124`, `cu128`.
+
+Verify GPU is now detected:
+```python
+import torch
+print(torch.cuda.is_available())       # True
+print(torch.cuda.get_device_name(0))   # RTX 5060 Ti (or your GPU)
+```
+
+Without this step, YOLO and the enhancement module run on CPU — both still work, just slower.
+
 **Step 4 — Run anything**
 
 Prefix commands with `uv run` — it automatically activates the managed virtualenv:
@@ -183,7 +212,27 @@ Your terminal prompt should show `(venv)` when active.
 pip install -r requirements.txt
 ```
 
-This installs OpenCV, NumPy, FFmpeg-Python, scikit-image, pytest, and all other required packages. It may take a few minutes.
+This installs OpenCV, NumPy, FFmpeg-Python, scikit-image, ultralytics (YOLO), pytest, and all other required packages. It may take a few minutes.
+
+**Step 3b — (GPU machines only) Install CUDA-enabled PyTorch**
+
+`pip install -r requirements.txt` installs the CPU-only PyTorch build by default. If you have an NVIDIA GPU, force-reinstall with the CUDA index after the main install:
+
+```powershell
+# Windows — match cu128 to your CUDA version from nvidia-smi
+pip install torch torchvision torchaudio `
+  --index-url https://download.pytorch.org/whl/cu128 `
+  --force-reinstall
+```
+
+```bash
+# Linux / WSL2
+pip install torch torchvision torchaudio \
+  --index-url https://download.pytorch.org/whl/cu128 \
+  --force-reinstall
+```
+
+Verify: `python -c "import torch; print(torch.cuda.is_available())"` should print `True`.
 
 ### Step 5  -  Verify FFmpeg Is on PATH
 ```bash
@@ -862,3 +911,216 @@ If a test is hardcoded to a specific path that does not exist on your machine, c
 ---
 
 *Section 13 added April 2026 — Kheiven D'Haiti.*
+
+---
+
+## 14. Web App Architecture — File Access, Remote Use, and EXE Deployment
+
+This section explains how file access works in the web app and why the "Browse" button behaves differently depending on how and where the server is running.
+
+### How the web server sees files
+
+SVCS is a Flask web application. When you run `python src/gui/app.py`, Flask starts a server process on your machine. That server process has access to your machine's file system. All file paths in the UI — the input source, output directory, browse dialog — refer to paths on the machine running Flask, not on the user's browser machine.
+
+This is normal for web apps. The browser is just a UI skin that sends HTTP requests to the Flask server.
+
+### The "Browse" button — server-side only
+
+The Browse (`…`) button opens a native file dialog (via `tkinter`) on the machine where Flask is running. If you're running the server on your own PC and accessing it from the same PC, Browse works exactly as expected.
+
+If a teammate accesses the server from their own device (laptop, phone, etc.), clicking Browse opens a dialog on **your PC** — not theirs. They cannot use Browse to select a file from their device.
+
+**Server PC requirements for Browse to work:**
+- Python `tkinter` must be installed (bundled with most Python distributions on Windows; on Linux: `sudo apt install python3-tk`)
+- The server must be running in an environment with a display (not a headless SSH session without X11 forwarding)
+- On Windows, Browse works out of the box
+
+### Upload — the right way for remote users
+
+The Upload zone (prominent drag-and-drop area in Step 1 of the sidebar) lets any user upload a video from their own device, regardless of where the server is running. The file is copied to the server's `data/uploads/` folder, and the input source path is updated automatically.
+
+Use Upload when:
+- You're accessing the server from a different machine on the same network
+- You're using ngrok or another tunnel to share the server with teammates outside your network
+- The server is running headless (no monitor)
+
+### ngrok — sharing outside your local network
+
+If teammates are outside your WiFi network, they cannot reach `http://192.168.x.x:5000` directly. Use ngrok to create a public HTTPS tunnel:
+
+```bash
+# Install: https://ngrok.com/download
+ngrok http 5000
+```
+
+This prints a public URL like `https://abc123.ngrok-free.app`. Share that URL with your team. The free tier shows a browser warning on first load — click "Visit Site" to proceed.
+
+To skip the warning on repeated visits, teammates can add `?ngrok-skip-browser-warning=true` to the URL.
+
+Your personal auth token lives in the ngrok dashboard at https://dashboard.ngrok.com/authtokens. If you accidentally share a screenshot with your token visible, regenerate it immediately at that page — old tokens stop working as soon as you regenerate.
+
+For a persistent domain or subdomain (so the URL stays the same across sessions), upgrade to a paid ngrok plan or use a self-hosted alternative like [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/).
+
+### EXE deployment — how file access changes
+
+When the app is packaged as a standalone `.exe` (planned — see ROADMAP), the Flask server runs embedded inside the executable on the user's own PC. In that case:
+- The "server" IS the user's machine
+- Browse opens a dialog on their own PC, so it works naturally
+- Upload is still available but less necessary
+- All paths resolve to the user's local file system
+
+The web app UI is the same in both modes. The only difference is that in EXE mode, Browse becomes fully functional for every user because there's no client/server separation — the app is self-contained.
+
+### Summary table
+
+| Scenario | Browse works? | Upload needed? |
+|---|---|---|
+| Running server on your own PC, accessing via localhost | Yes | No |
+| Running server on your PC, teammate on same WiFi | No (opens on your PC) | Yes |
+| Running server on your PC, teammate via ngrok | No (opens on your PC) | Yes |
+| EXE installed on user's own PC | Yes | Optional |
+
+---
+
+*Section 14 added April 2026 — Kheiven D'Haiti / Bloodawn.*
+
+---
+
+## 15. Smart Detection Filter — YOLO Classification Gate
+
+This section explains why the YOLO filter exists, what problem it solves, how to enable it, and what is happening under the hood.
+
+### The core problem: MOG2 cannot tell a leaf from a person
+
+MOG2 and KNN background subtraction detect ANY pixel change as foreground. On outdoor scenes with trees, flags, or water, this produces hundreds of bounding boxes per second from moving foliage. From MOG2's perspective, a branch swaying in the wind looks identical to a person walking — both cause pixel values to deviate from the background model.
+
+The consequence: modes 1, 2, and 3 all require `has_targets=True` to gate their recording logic. If every frame has MOG2 detections (because of leaves), the gate never closes, and all three modes behave exactly like mode 0 — they record everything, save the same file sizes, and produce identical results. This is why mode 2 and mode 3 showed no measurable difference on outdoor footage.
+
+### The fix: a classification gate after background subtraction
+
+After MOG2 produces bounding boxes, each box is cropped from the frame and run through YOLOv8-nano, a 6 MB object detector that runs at real-time speed on CPU. If YOLO finds a target-class object (person, vehicle, animal, or a carried item like a backpack or suitcase) inside that crop, the box is kept. Everything else — leaves, branches, shadows, lighting changes — is discarded.
+
+The pipeline only passes real detections downstream. This means mode 1 only records frames with actual targets. Mode 2's clean background keyframe refreshes properly during quiet periods. Mode 3 blacks out genuine background pixels instead of constantly blacking the whole frame.
+
+### GPU installation prerequisite
+
+YOLOv8-nano runs on whatever device is available. On the RTX 5060 Ti (or any CUDA GPU), it is effectively free — inference on a small crop takes under 1ms. On CPU it still runs at real-time for the small crops MOG2 produces.
+
+For the CUDA build to be available, PyTorch must be installed with CUDA support. The default `pip install torch` installs a CPU-only build. Force the CUDA build:
+
+```powershell
+pip install torch torchvision torchaudio `
+  --index-url https://download.pytorch.org/whl/cu128 `
+  --force-reinstall
+```
+
+Replace `cu128` with the CUDA version that matches your driver (check `nvidia-smi` — it shows the supported CUDA version in the top-right corner). Common values: `cu118`, `cu121`, `cu124`, `cu128`.
+
+Verify CUDA is now visible to PyTorch:
+```python
+import torch
+print(torch.cuda.is_available())   # should print True
+print(torch.cuda.get_device_name(0))  # should print your GPU name
+```
+
+If this still prints `False` after the force-reinstall, your CUDA driver is too old for the selected build. Download the latest NVIDIA driver from https://www.nvidia.com/drivers and try again.
+
+### Installing the ultralytics package
+
+The YOLO filter requires the `ultralytics` package. It is listed as an optional extra in `pyproject.toml` so it does not force every developer to download it.
+
+```bash
+# uv
+uv sync --extra yolo
+
+# pip
+pip install ultralytics
+```
+
+On first use, `ultralytics` automatically downloads `yolov8n.pt` (~6 MB) from the official model hub and caches it in your home directory. Subsequent runs load from cache — no internet required.
+
+If `ultralytics` is not installed, the pipeline detects this at startup and falls back to pass-through mode (all MOG2 boxes are kept, same as before the filter was added). A warning is logged. The pipeline continues normally.
+
+### Enabling the filter in the web app
+
+Open the dashboard → Step 3 Advanced Settings → expand "Detection Engine". Check the "Smart filter (ignore leaves & shadows)" checkbox. A confidence slider appears below it.
+
+The confidence threshold controls how certain YOLO must be before accepting a detection:
+- **0.20–0.25**: Very sensitive — catches distant or partially occluded targets, but may let through some borderline false positives
+- **0.30** (default): Balanced — works well for most outdoor surveillance scenes
+- **0.50–0.70**: Strict — only accepts high-confidence detections; may miss targets that are small or partially obscured
+
+Start at 0.30. If you still see false triggers from leaves, raise it. If you're missing real targets, lower it.
+
+### Enabling the filter from the CLI
+
+Pass `object_filter=True` and `filter_confidence=0.30` to `run_pipeline()` in your script:
+
+```python
+from src.pipeline.pipeline import run_pipeline
+
+run_pipeline(
+    input_source="data/samples/test_clip.mp4",
+    camera_id="cam_test",
+    output_dir="outputs/",
+    mode="mode3",
+    object_filter=True,
+    filter_confidence=0.30,
+)
+```
+
+### Static suppression grid
+
+The `ObjectFilter` class also maintains a 32×32 pixel suppression grid over the frame. Each cell tracks how many consecutive frames have produced only false detections in that spatial region. After 30 consecutive false-only frames, the cell is suppressed — MOG2 boxes whose center falls in a suppressed cell are skipped entirely, before YOLO even runs.
+
+When a real target appears in a previously suppressed region (e.g., a person walks through a section of frame that was all leaves), the suppression counter for those cells resets to zero immediately. The region comes back online for the next frame.
+
+This means the system learns the scene over time. A tree that always produces false detections gets suppressed within a few seconds. YOLO inference load drops because fewer crops need classification. And if someone actually walks under that tree, they will still be detected — the suppression reset guarantees this.
+
+The suppression grid is reset automatically when the pipeline closes (between runs or when a new source is loaded).
+
+### Target class list
+
+The default set of target classes (anything that triggers a kept detection) is defined in `src/detection/object_filter.py`:
+
+```python
+DEFAULT_TARGET_CLASSES = {
+    "person",
+    "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat",
+    "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe",
+    "backpack", "handbag", "suitcase",
+}
+```
+
+These are COCO dataset class names — the same vocabulary YOLOv8 was trained on. Everything outside this set (potted plant, kite, sports ball, bench, etc.) is treated as a false detection. If your deployment needs to detect something not in this list, pass a custom set to `ObjectFilter(target_classes={...})`.
+
+### Architecture summary
+
+```
+Frame
+  │
+  ▼
+BackgroundSubtractor.apply()   →  binary mask (MOG2/KNN)
+  │
+  ▼
+get_foreground_regions()       →  list of ForegroundRegion (x, y, w, h)
+  │
+  ▼
+ObjectFilter.filter()          →  filters the list
+  │  ├─ suppression grid: skip cells with only historical false detections
+  │  ├─ size gate: pass tiny boxes through unfiltered (too small to classify)
+  │  ├─ YOLOv8-nano: run on each remaining crop
+  │  │    └─ keep box only if a target-class object is found above threshold
+  │  └─ update suppression counters for false-only regions
+  │
+  ▼
+Filtered ForegroundRegion list
+  │
+  ▼
+get_mode_decision()            →  should this frame be buffered?
+  │
+  ▼
+ROIEncoder.write_frame()       →  encode to FFmpeg pipe
+```
+
+*Section 15 added April 2026 — Kheiven D'Haiti / Bloodawn.*

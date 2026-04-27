@@ -32,3 +32,29 @@ pytest-cov>=4.1.0
 # CPU-compatible. Required if --enhance flag is used in pipeline.py.
 basicsr>=1.4.2
 realesrgan>=0.3.0
+
+# YOLO smart detection filter
+# Filters MOG2 false detections (leaves, shadows, lighting) using YOLOv8-nano.
+# On first run, downloads yolov8n.pt (~6 MB) automatically to ~/.cache/ultralytics.
+# The pipeline falls back to pass-through mode if this package is missing.
+ultralytics>=8.0.0
+
+# GPU / CUDA support (PyTorch)
+# The default pip install of torch ships CPU-only. To get CUDA support for
+# the RTX 5060 Ti (or any NVIDIA GPU), you MUST force-reinstall with the
+# matching CUDA index URL. Run this AFTER pip install -r requirements.txt:
+#
+#   pip install torch torchvision torchaudio \
+#     --index-url https://download.pytorch.org/whl/cu128 \
+#     --force-reinstall
+#
+# Replace cu128 with the CUDA version shown by: nvidia-smi (top-right corner).
+# Common values: cu118, cu121, cu124, cu128.
+# Verify after install: python -c "import torch; print(torch.cuda.is_available())"
+#
+# torch is intentionally NOT listed here as a plain requirement because pip
+# would install the CPU-only build automatically, which then needs the
+# force-reinstall step anyway. Follow the manual step above instead.
+#
+# Without CUDA torch, YOLO runs on CPU (still real-time for small crops).
+# Without any torch, YOLO falls back to its own lightweight runtime.

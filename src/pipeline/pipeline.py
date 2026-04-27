@@ -20,6 +20,7 @@ Usage:
 
 import argparse
 import logging
+from concurrent.futures import ThreadPoolExecutor, Future
 from typing import Optional
 import re
 import sys
@@ -34,12 +35,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils.db import initialize_database                                    # fix: was 'from src.utils.db'
 from utils.frame_source import FrameSource                                  # fix: use FrameSource instead of raw VideoCapture
+from utils.metrics import compute_sharpness, estimate_perceptual_resolution
 from background_subtraction.background_subtraction import BackgroundSubtractor
 from compression.roi_encoder import ROIEncoder
 from enhancement.enhancer import Enhancer
 from demo.demo_metadata import DemoMetadataWriter
 from pipeline.modes import get_mode_decision, validate_mode
 from compression.roi_encoder import _MODE_LABELS
+from detection.object_filter import ObjectFilter
 
 def classify_object(roi_count):
     if roi_count > 10:
@@ -48,6 +51,36 @@ def classify_object(roi_count):
         return "person"
     else:
         return "unknown"
+
+
+def _compute_segment_sharpness(
+    frames: list,
+    regions_per_frame: list,
+) -> tuple:
+    """
+    Compute average Laplacian sharpness across all detected target ROI crops.
+
+    Only samples frames where at least one detection exists, and only samples
+    the ROI crops themselves (not the full frame) so background blur doesn't
+    dilute the score.
+
+    Returns:
+        (avg_sharpness, sharpness_label) — both None if no targets detected.
+    """
+    scores = []
+    for frame, regions in zip(frames, regions_per_frame):
+        for r in regions:
+            x, y, w, h = r.x, r.y, r.w, r.h
+            fh, fw = frame.shape[:2]
+            x1 = max(0, x); y1 = max(0, y)
+            x2 = min(fw, x + w); y2 = min(fh, y + h)
+            if x2 > x1 and y2 > y1:
+                crop = frame[y1:y2, x1:x2]
+                scores.append(compute_sharpness(crop))
+    if not scores:
+        return None, None
+    avg = sum(scores) / len(scores)
+    return round(avg, 1), estimate_perceptual_resolution(avg)
 
 
 def _stop_requested(stop_event) -> bool:
@@ -93,6 +126,11 @@ def run_pipeline(
     encrypt_password: Optional[str] = None,
     encrypt_key_file: Optional[str] = None,
     mode2_clean_seconds: float = 2.0,
+    enhance_every_n: int = 5,
+    enhance_max_roi_px: int = 200,
+    enhance_device: str = "auto",
+    object_filter: bool = False,
+    filter_confidence: float = 0.30,
     stop_event=None,
 ):
     """
@@ -212,20 +250,47 @@ def run_pipeline(
         )
 
     subtractor = BackgroundSubtractor(method=bg_method)
-    encoder = ROIEncoder(output_dir=output_dir, db_path=db_path)
+    # Mode 2/3 do extra per-frame compositing work; ultrafast encoding keeps
+    # overall CPU load manageable. Mode 0/1 can afford slightly better compression.
+    encode_preset = "ultrafast" if mode in ("mode2", "mode3") else "veryfast"
+    encoder = ROIEncoder(output_dir=output_dir, db_path=db_path, preset=encode_preset)
     initialize_database(db_path)
 
+    obj_filter: Optional[ObjectFilter] = None
+    if object_filter:
+        obj_filter = ObjectFilter(confidence=filter_confidence, device="auto")
+        if obj_filter.active:
+            log.info(
+                "ObjectFilter active (YOLOv8-nano, conf=%.2f). "
+                "Leaves/shadows/false MOG2 detections will be discarded.",
+                filter_confidence,
+            )
+        else:
+            log.warning(
+                "ObjectFilter requested but ultralytics not available — "
+                "running in pass-through mode (all boxes kept)."
+            )
+
     enhancer: Optional[Enhancer] = None
+    _enhance_executor: Optional[ThreadPoolExecutor] = None
+    _enhance_future: Optional[Future] = None
+    _enhance_frame_counter = 0          # counts post-warmup frames for N-frame sampling
+    _last_enhanced_frame = None         # cached result from the last enhancement pass
     if enhance:
         if enhance_model != "bicubic":
             log.info(
                 "enhance_model='%s' requested; current pipeline uses Enhancer backend auto-selection.",
                 enhance_model,
             )
-        enhancer = Enhancer(scale=enhance_scale)
+        _enh_device = None if enhance_device == "auto" else enhance_device
+        enhancer = Enhancer(scale=enhance_scale, device=_enh_device)
+        # One worker thread — enhancement is a serial CPU task so more workers
+        # would fight over cores and slow everything down further.
+        _enhance_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="enhance")
         log.info(
-            f"Enhancement enabled (backend={enhancer.backend}, scale={enhance_scale}). "
-            "Foreground ROIs will be sharpened before encoding."
+            "Enhancement enabled (backend=%s, scale=%d, every_n=%d, max_roi=%dpx). "
+            "ROIs will be enhanced in a background thread.",
+            enhancer.backend, enhance_scale, enhance_every_n, enhance_max_roi_px,
         )
 
     if encrypt:
@@ -244,16 +309,75 @@ def run_pipeline(
         demo_writer = DemoMetadataWriter(demo_jsonl)
         log.info(f"Demo metadata enabled: {demo_jsonl}")
 
-    segment_frames: list = []       # in-memory frame buffer (numpy arrays)
-    segment_regions: list = []
-    segment_background = None
+    # ── Streaming state ───────────────────────────────────────────────────────
+    # No frame buffer. FFmpeg is opened at segment start and frames are piped
+    # one-by-one as they come from the camera. Encoding and decoding run in
+    # parallel — no wait-then-burst, no 9GB of RAM copies.
     last_clean_background = None
-    clean_frame_streak = 0
-    source_frame_index = -1
+    clean_frame_streak    = 0
+    source_frame_index    = -1
+    frames_in_segment     = 0          # frames written to current open pipe
     target_frames_this_segment = 0
-    segment_index = 0
+    segment_index         = 0
+    segment_start_background = None   # background keyframe for current mode2 segment
+    mode_label            = _MODE_LABELS.get(mode, "")
+    object_only           = (mode == "mode3")
 
-    log.info("Pipeline running. Press Ctrl+C to stop.")
+    def _open_new_segment(first_frame, first_regions):
+        """Open FFmpeg pipe for a new segment.  Returns the background frame used."""
+        nonlocal segment_start_background
+        has_targets = len(first_regions) > 0
+        roi_count   = sum(1 for _ in first_regions)
+        obj_type    = classify_object(roi_count)
+        bg = None
+        if mode == "mode2":
+            bg = (last_clean_background.copy()
+                  if last_clean_background is not None
+                  else np.zeros_like(first_frame))
+            segment_start_background = bg
+        # Pass source path so the encoder can mux audio back in after encoding.
+        # Only meaningful for file sources — camera streams never have audio.
+        src_path = str(input_source) if isinstance(input_source, str) else None
+        encoder.begin_segment(
+            frame_shape=first_frame.shape,
+            fps=fps,
+            camera_id=camera_id,
+            has_targets=has_targets,
+            object_type=obj_type,
+            source_path=src_path,
+        )
+        return bg
+
+    def _close_segment(discard: bool = False):
+        """Close the current open pipe and save the segment.
+
+        Args:
+            discard: If True, kill FFmpeg immediately without waiting for the
+                     output file to flush. Used when a stop is requested so the
+                     thread can exit without waiting up to 30s for a full segment.
+        """
+        nonlocal frames_in_segment, target_frames_this_segment, segment_index
+        if discard:
+            encoder.abort_segment()
+            log.info("Segment %d aborted by stop request.", segment_index + 1)
+            frames_in_segment = 0
+            target_frames_this_segment = 0
+            segment_index += 1
+            return
+        out = encoder.finish_segment()
+        log.info("Saved segment %d: %s", segment_index + 1, out["file_path"])
+        if out.get("sharpness_label"):
+            log.info("Target ROI sharpness: %s (score=%.1f)",
+                     out["sharpness_label"], out["avg_sharpness"])
+        frames_in_segment = 0
+        target_frames_this_segment = 0
+        segment_index += 1
+
+    # Track whether we have an open pipe
+    segment_open      = False
+    current_bg_frame  = None   # background used for the current mode2 segment
+
+    log.info("Pipeline running (streaming encoder — no frame buffer). Press Ctrl+C to stop.")
 
     try:
         while True:
@@ -263,62 +387,114 @@ def run_pipeline(
 
             ret, frame = src.read()
             if not ret:
-                log.info("End of source. Flushing final segment.")
+                log.info("End of source. Closing final segment.")
                 break
 
             source_frame_index += 1
 
-            mask = subtractor.apply(frame)
-            regions = subtractor.get_foreground_regions(mask)
+            mask             = subtractor.apply(frame)
+            raw_regions      = subtractor.get_foreground_regions(mask)
+            raw_has_regions  = len(raw_regions) > 0
+
+            # YOLO classification gate — drop leaves/shadows/false detections.
+            # Tiny boxes (< min_box_px) are passed through unfiltered by ObjectFilter
+            # so real targets that are briefly small don't get silently dropped.
+            # NOTE: clean-background tracking uses raw_regions (before YOLO) so
+            # leaf-dominated scenes still eventually yield a usable background frame.
+            if obj_filter is not None:
+                regions = obj_filter.filter(frame, raw_regions)
+            else:
+                regions = raw_regions
+
             has_regions = len(regions) > 0
 
             # --- WARMUP GATE ---
             if source_frame_index < effective_warmup:
-                if has_regions:
+                # Track clean background during warmup using RAW regions so the
+                # background model captures a real scene frame, not a black canvas.
+                if raw_has_regions:
                     clean_frame_streak = 0
                 else:
                     clean_frame_streak += 1
                     if clean_frame_streak >= mode2_clean_frames:
                         last_clean_background = frame.copy()
+                # Always capture the last warmup frame as a fallback background.
+                # This guarantees mode2 never starts with a solid-black keyframe
+                # even on scenes with constant motion (leaves, flags, rain).
                 if source_frame_index + 1 == effective_warmup:
-                    log.info(f"Warmup complete after {effective_warmup} frames. Encoding started.")
+                    if last_clean_background is None:
+                        last_clean_background = frame.copy()
+                        log.info("Mode2 background: no clean frame found during warmup, using last warmup frame as fallback.")
+                    log.info("Warmup complete after %d frames. Encoding started.", effective_warmup)
                 continue
             # --- END WARMUP GATE ---
 
-            # Optional: sharpen foreground ROIs before writing to the buffer.
-            # Each detected region is enhanced in-place at original resolution.
+            # Optional: enhance foreground ROIs before encoding.
+            #
+            # Strategy: run enhancement in a background thread every N frames.
+            # On non-enhance frames, reuse the last enhanced result so the
+            # encode still sees sharpened output without waiting for SR every frame.
+            #
+            # Within each enhance frame, only process ROIs that are:
+            #  - small enough (w and h both ≤ enhance_max_roi_px) — huge boxes
+            #    cost proportional to area and add little over bicubic at that scale
+            #  - large enough (≥ 16px each dimension) — tiny chips gain nothing
+            #
+            # The async pattern: submit this frame to the executor, then
+            # immediately use the *previous* completed result for encoding.
+            # This hides the SR latency behind decoding the next frames.
             if enhancer is not None and regions:
-                for region in regions:
-                    frame = enhancer.upscale_roi(frame, (region.x, region.y, region.w, region.h))
+                _enhance_frame_counter += 1
+                is_enhance_frame = (_enhance_frame_counter % enhance_every_n) == 1
+
+                if is_enhance_frame:
+                    # Collect the eligible ROIs for this frame
+                    eligible = [
+                        r for r in regions
+                        if 16 <= r.w <= enhance_max_roi_px and 16 <= r.h <= enhance_max_roi_px
+                    ]
+
+                    if eligible:
+                        # Capture loop-locals for the closure
+                        _frame_to_enhance = frame.copy()
+                        _regions_to_enhance = eligible
+                        _enhancer_ref = enhancer
+
+                        def _do_enhance(f, regs, enh):
+                            result = f
+                            for r in regs:
+                                result = enh.upscale_roi(result, (r.x, r.y, r.w, r.h))
+                            return result
+
+                        # Collect previous result before submitting the next
+                        if _enhance_future is not None and _enhance_future.done():
+                            try:
+                                _last_enhanced_frame = _enhance_future.result()
+                            except Exception as _e:
+                                log.debug("Enhancement error (ignored): %s", _e)
+
+                        _enhance_future = _enhance_executor.submit(
+                            _do_enhance, _frame_to_enhance, _regions_to_enhance, _enhancer_ref
+                        )
+
+                # Use cached enhanced frame if we have one
+                if _last_enhanced_frame is not None and _last_enhanced_frame.shape == frame.shape:
+                    frame = _last_enhanced_frame
 
             mode_decision = get_mode_decision(mode, regions)
 
-            if has_regions:
+            # Track clean-background streak for mode2 keyframe refresh.
+            # Use RAW MOG2 regions (before YOLO filter) so that scenes with
+            # constant leaf/shadow detections still accumulate clean frames.
+            # YOLO removes leaves from `regions` for recording purposes, but
+            # a frame full of leaves is still a valid background keyframe
+            # because the leaves are part of the static scene context.
+            if raw_has_regions:
                 clean_frame_streak = 0
             else:
                 clean_frame_streak += 1
                 if clean_frame_streak >= mode2_clean_frames:
                     last_clean_background = frame.copy()
-
-            if mode_decision.buffer_frame:
-                if mode == "mode2" and not segment_frames:
-                    segment_background = (
-                        last_clean_background.copy()
-                        if last_clean_background is not None
-                        else None
-                    )
-                segment_frames.append(frame.copy())
-                segment_regions.append(regions)
-
-                if demo_writer is not None:
-                    demo_writer.write_record(
-                        source_frame_index=source_frame_index,
-                        source_time_seconds=(source_frame_index / fps) if fps > 0 else 0.0,
-                        mode=mode,
-                        segment_index=segment_index,
-                        frame_index_within_segment=len(segment_frames) - 1,
-                        regions=regions,
-                    )
 
             if mode_decision.target_detected:
                 target_frames_this_segment += 1
@@ -329,77 +505,80 @@ def run_pipeline(
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
 
-            if len(segment_frames) >= frames_per_segment:
-                log.info(
-                    f"Encoding segment {segment_index + 1} | "
-                    f"targets in {target_frames_this_segment}/{frames_per_segment} frames"
-                )
-                roi_count = sum(len(r) for r in segment_regions)
-                object_type = classify_object(roi_count)
-                mode2_background = None
-                if mode == "mode2":
-                    mode2_background = (
-                        segment_background
-                        if segment_background is not None
-                        else np.zeros_like(segment_frames[0])
-                    )
-                out = encoder.encode_segment(
-                    frames=segment_frames,
-                    bboxes_per_frame=[
-                        [r.to_tuple() for r in regions]
-                        for regions in segment_regions
-                    ],
-                    camera_id=camera_id,
-                    fps=fps,
-                    object_type=object_type,
-                    object_only=(mode == "mode3"),
-                    background_frame=mode2_background,
-                    mode_label=_MODE_LABELS.get(mode, ""),
-                )
-                log.info(f"Saved: {out}")
+            if not mode_decision.buffer_frame:
+                # This frame is not included in any segment (mode1/2/3 gate)
+                continue
 
-                segment_frames = []
-                segment_regions = []
-                segment_background = None
-                target_frames_this_segment = 0
-                segment_index += 1
+            # Open a new FFmpeg pipe when we start a fresh segment
+            if not segment_open:
+                current_bg_frame = _open_new_segment(frame, regions)
+                segment_open = True
+
+            # Check stop before writing (avoids writing a frame when we're about to abort)
+            if _stop_requested(stop_event):
+                log.info("Stop event received mid-segment. Ending pipeline loop.")
+                break
+
+            # Write frame directly to the open pipe — no copy into a list
+            boxes = [r.to_tuple() for r in regions]
+            encoder.write_frame(
+                frame=frame,
+                boxes=boxes,
+                background_frame=current_bg_frame,
+                object_only=object_only,
+                mode_label=mode_label,
+                measure_sharpness=(len(boxes) > 0),
+            )
+            frames_in_segment += 1
+
+            if demo_writer is not None:
+                demo_writer.write_record(
+                    source_frame_index=source_frame_index,
+                    source_time_seconds=(source_frame_index / fps) if fps > 0 else 0.0,
+                    mode=mode,
+                    segment_index=segment_index,
+                    frame_index_within_segment=frames_in_segment - 1,
+                    regions=regions,
+                )
+
+            # Close and save when segment is full
+            if frames_in_segment >= frames_per_segment:
+                log.info("Segment %d full (%d frames, %d target frames)",
+                         segment_index + 1, frames_in_segment, target_frames_this_segment)
+                _close_segment()
+                segment_open = False
+                current_bg_frame = None
 
     except KeyboardInterrupt:
         log.info("Interrupted by user.")
     finally:
-        # Flush any remaining buffered frames as a final partial segment.
-        if segment_frames:
-            log.info(
-                f"Flushing final partial segment ({len(segment_frames)} frames)."
-            )
-            roi_count = sum(len(r) for r in segment_regions)
-            object_type = classify_object(roi_count)
-            mode2_background = None
-            if mode == "mode2":
-                mode2_background = (
-                    segment_background
-                    if segment_background is not None
-                    else np.zeros_like(segment_frames[0])
-                )
-
-            out = encoder.encode_segment(
-                frames=segment_frames,
-                bboxes_per_frame=[
-                    [r.to_tuple() for r in regions]
-                    for regions in segment_regions
-                ],
-                camera_id=camera_id,
-                fps=fps,
-                object_type=object_type,
-                object_only=(mode == "mode3"),
-                background_frame=mode2_background,
-                mode_label=_MODE_LABELS.get(mode, ""),
-            )
-            log.info(f"Saved final segment: {out}")
+        stopping = _stop_requested(stop_event)
+        # Close any open pipe for the final partial segment
+        if segment_open and frames_in_segment > 0:
+            if stopping:
+                # User hit STOP — kill FFmpeg immediately, don't wait for flush
+                log.info("Stop requested: aborting open segment (%d frames).", frames_in_segment)
+                _close_segment(discard=True)
+            else:
+                log.info("Flushing final partial segment (%d frames).", frames_in_segment)
+                _close_segment()
+        elif segment_open:
+            # Pipe open but no frames written — discard cleanly
+            encoder.abort_segment()
 
         src.release()
+        if obj_filter is not None:
+            obj_filter.reset_suppression()
         if show_preview:
             cv2.destroyAllWindows()
+
+        # Shut down the enhancement thread pool — cancel any pending work.
+        # cancel_futures was added in Python 3.9; use try/except for 3.8 compat.
+        if _enhance_executor is not None:
+            try:
+                _enhance_executor.shutdown(wait=False, cancel_futures=True)
+            except TypeError:
+                _enhance_executor.shutdown(wait=False)
 
         report = encoder.get_storage_report()
         log.info("Storage report: " + str(report))

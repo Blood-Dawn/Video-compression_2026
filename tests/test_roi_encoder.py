@@ -82,21 +82,21 @@ class TestEncodeSegment:
 
     def test_returns_mp4_path(self, encoder, tiny_frames):
         out = encoder.encode_segment(tiny_frames, camera_id="cam_test", fps=10.0)
-        assert out.endswith(".mp4")
+        assert out["file_path"].endswith(".mp4")
 
     def test_output_file_exists(self, encoder, tiny_frames):
         out = encoder.encode_segment(tiny_frames, camera_id="cam_test", fps=10.0)
         from pathlib import Path
-        assert Path(out).exists()
+        assert Path(out["file_path"]).exists()
 
     def test_output_file_not_empty(self, encoder, tiny_frames):
         out = encoder.encode_segment(tiny_frames, camera_id="cam_test", fps=10.0)
         from pathlib import Path
-        assert Path(out).stat().st_size > 0
+        assert Path(out["file_path"]).stat().st_size > 0
 
     def test_camera_id_in_filename(self, encoder, tiny_frames):
         out = encoder.encode_segment(tiny_frames, camera_id="myCam", fps=10.0)
-        assert "myCam" in out
+        assert "myCam" in out["file_path"]
 
     def test_inserts_db_row(self, encoder, tiny_frames):
         encoder.encode_segment(tiny_frames, camera_id="cam_db", fps=10.0)
@@ -116,7 +116,7 @@ class TestEncodeSegment:
         out = encoder.encode_segment(tiny_frames, bboxes_per_frame=bboxes,
                                      camera_id="cam_fg", fps=10.0)
         from pathlib import Path
-        assert Path(out).exists()
+        assert Path(out["file_path"]).exists()
 
     def test_background_crf_used_when_no_bboxes(self, encoder, tiny_frames):
         """No bboxes → background CRF path — file still written successfully."""
@@ -124,7 +124,7 @@ class TestEncodeSegment:
         out = encoder.encode_segment(tiny_frames, bboxes_per_frame=bboxes,
                                      camera_id="cam_bg", fps=10.0)
         from pathlib import Path
-        assert Path(out).exists()
+        assert Path(out["file_path"]).exists()
 
     def test_target_detected_true_when_bboxes_nonempty(self, encoder, tiny_frames):
         bboxes = [[(0, 0, 4, 4)]] + [[] for _ in tiny_frames[1:]]
@@ -197,7 +197,7 @@ class TestEncodeSegmentErrors:
 class TestGetFileSize:
     def test_returns_size_for_existing_file(self, encoder, tiny_frames, tmp_path):
         out = encoder.encode_segment(tiny_frames, camera_id="cam_sz", fps=10.0)
-        size = encoder.get_file_size(out)
+        size = encoder.get_file_size(out["file_path"])
         assert size > 0
 
     def test_returns_zero_for_missing_file(self, encoder):

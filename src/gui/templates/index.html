@@ -132,13 +132,6 @@
     .pill.running { color: var(--green); }
     .pill.running .pill-dot { background: var(--green); }
     .pill.error { color: var(--red); }
-    .clock {
-      font-family: var(--mono);
-      font-size: 0.75rem;
-      color: var(--text-dim);
-      min-width: 80px;
-      text-align: right;
-    }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
     /* ─────────────── MAIN GRID ─────────────── */
@@ -300,6 +293,18 @@
       margin-bottom: 0.85rem;
     }
     .config-field:last-child { margin-bottom: 0; }
+    .config-hint {
+      margin: 0.35rem 0 0;
+      font-size: 0.72rem;
+      color: var(--text-dim, #888);
+      line-height: 1.4;
+    }
+    .config-hint code {
+      font-family: var(--mono);
+      background: rgba(255,255,255,0.07);
+      padding: 0 0.2em;
+      border-radius: 3px;
+    }
 
     input[type="text"], input[type="number"], input[type="password"],
     select, textarea {
@@ -588,6 +593,14 @@
       50%  { filter: brightness(1.3); }
       to   { filter: brightness(1); }
     }
+    .progress-pct {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--amber);
+      min-width: 42px;
+      text-align: right;
+      font-weight: 600;
+    }
     .progress-label {
       font-family: var(--mono);
       font-size: 0.62rem;
@@ -671,6 +684,70 @@
       display: inline-block;
       animation: blink 2s step-end infinite;
     }
+
+    /* ─────────────── UPLOAD ZONE ─────────────── */
+    .upload-zone {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+      padding: 1.1rem 0.75rem;
+      border: 2px dashed var(--border-bright);
+      border-radius: var(--radius);
+      background: var(--surface2);
+      cursor: pointer;
+      text-align: center;
+      transition: border-color 0.15s, background 0.15s;
+      user-select: none;
+    }
+    .upload-zone:hover,
+    .upload-zone.drag-over {
+      border-color: var(--amber);
+      background: var(--amber-glow);
+    }
+    .upload-zone-icon {
+      font-size: 1.8rem;
+      line-height: 1;
+      color: var(--amber);
+      font-weight: 700;
+    }
+    .upload-zone-text {
+      font-size: 0.72rem;
+      color: var(--text);
+      line-height: 1.5;
+    }
+    .upload-zone-text small {
+      color: var(--text-dim);
+      font-size: 0.65rem;
+    }
+
+    /* ─────────────── SOURCE ADVANCED TOGGLE ─────────────── */
+    .source-advanced {
+      margin-top: 0.6rem;
+    }
+    .source-advanced-summary {
+      font-family: var(--mono);
+      font-size: 0.62rem;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .source-advanced-summary::before {
+      content: '▶';
+      font-size: 0.5rem;
+      transition: transform 0.15s;
+    }
+    details[open] > .source-advanced-summary::before {
+      transform: rotate(90deg);
+    }
+    .source-advanced-summary::-webkit-details-marker { display: none; }
 
     /* ─────────────── BROWSE BUTTON ─────────────── */
     .btn-browse {
@@ -840,6 +917,325 @@
     }
     .mode-check-row.disabled label { color: var(--text-dim); }
     .mode-check-row.disabled input { opacity: 0.35; }
+
+    /* ─────────────── STEP INDICATOR ─────────────── */
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.6rem 1rem 0.4rem;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+    .step-num {
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: var(--amber-dim);
+      border: 1px solid var(--amber);
+      color: var(--amber);
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .step-label {
+      font-family: var(--display);
+      font-size: 0.85rem;
+      letter-spacing: 0.1em;
+      color: var(--text-bright);
+    }
+    .step-sub {
+      font-family: var(--mono);
+      font-size: 0.55rem;
+      letter-spacing: 0.12em;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      margin-left: auto;
+    }
+
+    /* ─────────────── PRESET CARDS ─────────────── */
+    .preset-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5rem;
+      padding: 0.75rem 1rem;
+    }
+    .preset-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 0.65rem 0.75rem;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+      position: relative;
+      overflow: hidden;
+      user-select: none;
+    }
+    .preset-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--border);
+      transition: background 0.15s;
+    }
+    .preset-card:hover {
+      border-color: var(--border-bright);
+      background: var(--surface2);
+    }
+    .preset-card.selected {
+      border-color: var(--amber);
+      background: var(--amber-glow);
+      box-shadow: 0 0 12px rgba(255,185,0,0.08);
+    }
+    .preset-card.selected::before { background: var(--amber); }
+    .preset-icon {
+      font-size: 1.2rem;
+      display: block;
+      margin-bottom: 0.3rem;
+      line-height: 1;
+    }
+    .preset-name {
+      font-family: var(--display);
+      font-size: 0.9rem;
+      letter-spacing: 0.06em;
+      color: var(--text-bright);
+      line-height: 1.2;
+      display: block;
+    }
+    .preset-card.selected .preset-name { color: var(--amber); }
+    .preset-desc {
+      font-family: var(--mono);
+      font-size: 0.58rem;
+      color: var(--text-dim);
+      letter-spacing: 0.05em;
+      line-height: 1.4;
+      display: block;
+      margin-top: 0.2rem;
+    }
+    .preset-badge {
+      position: absolute;
+      top: 0.3rem; right: 0.4rem;
+      font-family: var(--mono);
+      font-size: 0.5rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--amber);
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .preset-card.selected .preset-badge { opacity: 1; }
+
+    /* ─────────────── SENSITIVITY / QUALITY SLIDERS ─────────────── */
+    .slider-row {
+      padding: 0 1rem 0.75rem;
+    }
+    .slider-label-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.3rem;
+    }
+    .slider-label-row .config-label { margin-bottom: 0; }
+    .slider-value-badge {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--amber);
+      font-weight: 700;
+    }
+    .slider-endpoints {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 0.2rem;
+    }
+    .slider-endpoints span {
+      font-family: var(--mono);
+      font-size: 0.55rem;
+      color: var(--text-dim);
+      letter-spacing: 0.08em;
+    }
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--amber);
+      cursor: pointer;
+    }
+
+    /* ─────────────── ADVANCED TOGGLE ─────────────── */
+    .advanced-toggle {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.4rem 1rem;
+      cursor: pointer;
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      border-top: 1px solid var(--border);
+      transition: color 0.15s;
+      user-select: none;
+    }
+    .advanced-toggle:hover { color: var(--amber); }
+    .advanced-toggle::before {
+      content: '▶';
+      font-size: 0.45rem;
+      transition: transform 0.2s;
+    }
+    .advanced-toggle.open::before { transform: rotate(90deg); }
+    .advanced-panel {
+      display: none;
+    }
+    .advanced-panel.open { display: block; }
+
+    /* ─────────────── STATUS MESSAGE ─────────────── */
+    .status-message {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--text);
+      padding: 0.4rem 0;
+      letter-spacing: 0.04em;
+      min-height: 1.4rem;
+    }
+    .status-message.running { color: var(--teal); }
+    .status-message.done    { color: var(--green); }
+    .status-message.error   { color: var(--red); }
+
+    /* ─────────────── STORAGE SAVINGS CARD ─────────────── */
+    .stat-card.savings::before { background: var(--teal); }
+    .savings-ratio {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      color: var(--teal);
+      margin-top: 0.15rem;
+    }
+
+    /* ─────────────── HELP MODAL ─────────────── */
+    .help-overlay {
+      display: none;
+      position: fixed; inset: 0; z-index: 10000;
+      background: rgba(5, 10, 18, 0.92);
+      backdrop-filter: blur(4px);
+      align-items: flex-start;
+      justify-content: center;
+      padding: 2rem 1rem;
+      overflow-y: auto;
+    }
+    .help-overlay.open { display: flex; }
+    .help-modal {
+      background: var(--surface);
+      border: 1px solid var(--border-bright);
+      border-radius: 4px;
+      width: 100%;
+      max-width: 780px;
+      box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+      position: relative;
+    }
+    .help-modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+      position: sticky; top: 0;
+    }
+    .help-modal-title {
+      font-family: var(--display);
+      font-size: 1.4rem;
+      color: var(--amber);
+      letter-spacing: 0.08em;
+    }
+    .help-close-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      padding: 0.3rem 0.7rem;
+      cursor: pointer;
+      border-radius: 2px;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .help-close-btn:hover { border-color: var(--red); color: var(--red); }
+    .help-body {
+      padding: 1.5rem;
+      display: grid;
+      gap: 1.5rem;
+    }
+    .help-section {
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    .help-section-title {
+      font-family: var(--display);
+      font-size: 1rem;
+      letter-spacing: 0.1em;
+      color: var(--amber);
+      padding: 0.6rem 1rem;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+    }
+    .help-rows {
+      padding: 0.75rem 1rem;
+      display: grid;
+      gap: 0.6rem;
+    }
+    .help-row {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 1rem;
+      align-items: baseline;
+      font-size: 0.85rem;
+      line-height: 1.55;
+    }
+    .help-term {
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--teal);
+      letter-spacing: 0.06em;
+      font-weight: 700;
+    }
+    .help-def {
+      color: var(--text);
+      font-family: var(--body);
+    }
+    .help-def em { font-style: normal; color: var(--amber); }
+    .help-note {
+      margin: 0 1rem 0.75rem;
+      padding: 0.5rem 0.75rem;
+      background: var(--surface2);
+      border-left: 2px solid var(--amber);
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--text-dim);
+      line-height: 1.6;
+      border-radius: 0 2px 2px 0;
+    }
+    @media (max-width: 600px) {
+      .help-row { grid-template-columns: 1fr; gap: 0.15rem; }
+    }
+
+    /* ─────────────── SEGMENT COUNT BADGE ─────────────── */
+    .seg-count-badge {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      letter-spacing: 0.1em;
+      padding: 0.2rem 0.5rem;
+      border-radius: 1rem;
+      background: var(--surface3);
+      color: var(--text-dim);
+      border: 1px solid var(--border);
+    }
+    .seg-count-badge.has-data {
+      background: var(--amber-glow);
+      color: var(--amber);
+      border-color: var(--amber);
+    }
   </style>
 </head>
 
@@ -856,11 +1252,17 @@
       </div>
     </div>
     <div class="header-right">
-      <div id="status-pill" class="pill offline">
+<div id="status-pill" class="pill offline">
         <span class="pill-dot"></span>
         <span id="status-text">OFFLINE</span>
       </div>
-      <span id="clock" class="clock">--:--:--</span>
+      <button onclick="openHelp()" title="Help"
+              style="background:none;border:1px solid var(--border);border-radius:50%;
+                     width:26px;height:26px;color:var(--text-dim);font-family:var(--mono);
+                     font-size:0.75rem;cursor:pointer;display:flex;align-items:center;
+                     justify-content:center;flex-shrink:0;transition:border-color 0.15s,color 0.15s;"
+              onmouseover="this.style.borderColor='var(--amber)';this.style.color='var(--amber)'"
+              onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">?</button>
     </div>
   </header>
 
@@ -869,322 +1271,441 @@
 
     <!-- ════════ SIDEBAR — Configuration ════════ -->
     <aside class="sidebar">
-      <div class="panel-header">
-        <span class="panel-title">Configuration</span>
-        <span class="panel-badge">PIPELINE SETUP</span>
-      </div>
 
-      <!-- Input source -->
+      <!-- ── STEP 1: Source ─────────────────────── -->
+      <div class="step-header">
+        <span class="step-num">1</span>
+        <span class="step-label">Source</span>
+        <span class="step-sub">Upload your video</span>
+      </div>
       <div class="config-section">
-        <div class="config-field">
-          <label class="config-label" for="input-source">Input Source</label>
-          <div class="input-with-btn">
-            <input type="text" id="input-source" value="data/test_clip.mp4"
-                   placeholder="0 for camera, or path/to/file.mp4" />
-            <button class="btn-browse" onclick="browseFile()" title="Browse for video file">📂</button>
-            <button class="btn btn-ghost" onclick="scanVideos()" title="Scan data/ folder">⟳</button>
+
+        <!-- Primary: drag-and-drop / click-to-upload zone -->
+        <label class="upload-zone" for="upload-input" id="upload-zone">
+          <input type="file" id="upload-input" accept="video/*,.mp4,.avi,.mov,.mkv,.h264,.m4v"
+                 style="display:none" onchange="_uploadVideo(this)" />
+          <span class="upload-zone-icon">+</span>
+          <span class="upload-zone-text">Click to upload a video<br>
+            <small>MP4, AVI, MOV, MKV supported</small>
+          </span>
+        </label>
+        <div id="upload-status" style="font-size:0.65rem;color:var(--text-dim);margin-top:0.3rem;min-height:1.1em;"></div>
+        <div id="video-list" style="margin-top:0.3rem;"></div>
+
+        <!-- Secondary: server-side path / browse (advanced / server only) -->
+        <details class="source-advanced" id="source-advanced-toggle">
+          <summary class="source-advanced-summary">Server file path (advanced)</summary>
+          <div style="margin-top:0.5rem;">
+            <div class="config-label" style="margin-bottom:4px;">File path or camera index</div>
+            <div class="input-with-btn">
+              <input type="text" id="input-source" value="data/test_clip.mp4"
+                     placeholder="file path, 0 for webcam, rtsp://…"
+                     oninput="_onInputSourceChange(this.value)" />
+              <button class="btn-browse" onclick="browseFile()" title="Browse files on the server PC">…</button>
+              <button class="btn btn-ghost" onclick="scanVideos()" title="Scan data/ folder">⟳</button>
+            </div>
+            <div style="font-size:0.6rem;color:var(--text-dim);margin-top:3px;line-height:1.4;">
+              Browse opens a dialog on the <em>server PC</em>, not your device.<br>
+              Use Upload above if you're on a different machine.
+            </div>
           </div>
-          <div id="video-list" style="margin-top:0.4rem;"></div>
-        </div>
-        <div class="config-field">
+        </details>
+
+        <div class="config-field" id="camera-id-field" style="display:none;margin-top:0.5rem;">
           <label class="config-label" for="camera-id">Camera ID</label>
-          <input type="text" id="camera-id" value="cam_00" />
+          <input type="text" id="camera-id" value="cam_00" placeholder="e.g. cam_front, cam_01" />
+          <div style="font-size:0.62rem;color:var(--text-dim);margin-top:2px;">Used in output filenames.</div>
         </div>
+        <input type="hidden" id="camera-id-auto" value="" />
         <div class="config-field">
-          <label class="config-label" for="output-dir">Output Directory</label>
+          <label class="config-label" for="output-dir">Save To</label>
           <input type="text" id="output-dir" placeholder="Default: outputs/" />
         </div>
       </div>
 
-      <!-- Core settings -->
-      <div class="config-section">
-        <div class="config-field">
-          <label class="config-label" for="mode-select">Compression Mode</label>
-          <select id="mode-select">
-            <option value="mode0" selected>Mode 0 — 24/7 Continuous</option>
-            <option value="mode1">Mode 1 — Frame Gating</option>
-            <option value="mode2">Mode 2 — Background + Patches</option>
-            <option value="mode3">Mode 3 — Object Only</option>
-          </select>
+      <!-- ── STEP 2: Preset ─────────────────────── -->
+      <div class="step-header" style="margin-top:0;">
+        <span class="step-num">2</span>
+        <span class="step-label">Preset</span>
+        <span class="step-sub">Choose compression style</span>
+      </div>
+      <div class="preset-grid">
+        <!-- hidden select kept for backward compat with JS startPipeline() -->
+        <select id="mode-select" style="display:none;">
+          <option value="mode0" selected>Mode 0</option>
+          <option value="mode1">Mode 1</option>
+          <option value="mode2">Mode 2</option>
+          <option value="mode3">Mode 3</option>
+        </select>
+
+        <div class="preset-card selected" data-mode="mode0" onclick="selectPreset(this)">
+          <span class="preset-icon">●●●</span>
+          <span class="preset-name">Live Surveillance</span>
+          <span class="preset-desc">Full 24/7 recording. Maximum coverage, no frames dropped.</span>
+          <span class="preset-badge">✓</span>
         </div>
-        <div class="config-field">
-          <label class="config-label" for="bg-method">BG Subtraction Method</label>
-          <select id="bg-method">
-            <option value="MOG2" selected>MOG2 (recommended)</option>
-            <option value="KNN">KNN</option>
-          </select>
+        <div class="preset-card" data-mode="mode1" onclick="selectPreset(this)">
+          <span class="preset-icon">◈</span>
+          <span class="preset-name">Event Recording</span>
+          <span class="preset-desc">Save only when motion is detected. Skip empty footage.</span>
+          <span class="preset-badge">✓</span>
         </div>
-        <div class="config-field">
-          <label class="config-label" for="segment-seconds">Segment Length (seconds)</label>
-          <input type="number" id="segment-seconds" value="60" min="5" max="3600" />
+        <div class="preset-card" data-mode="mode2" onclick="selectPreset(this)">
+          <span class="preset-icon">◧</span>
+          <span class="preset-name">Smart Compress</span>
+          <span class="preset-desc">Full background + high-detail patches on moving objects.</span>
+          <span class="preset-badge">✓</span>
         </div>
-        <div class="config-field">
-          <label class="config-label" for="warmup-frames">Warmup Frames</label>
-          <input type="number" id="warmup-frames" value="120" min="0" max="9999" />
+        <div class="preset-card" data-mode="mode3" onclick="selectPreset(this)">
+          <span class="preset-icon">◉</span>
+          <span class="preset-name">Object Only</span>
+          <span class="preset-desc">Record only the detected objects. Smallest file size.</span>
+          <span class="preset-badge">✓</span>
         </div>
       </div>
 
-      <!-- Enhancement (collapsed by default) -->
-      <div class="config-section">
-        <details>
-          <summary>Super-Resolution Enhancement</summary>
-          <div style="padding-top:0.75rem;">
-            <div class="config-field">
-              <div class="toggle-row">
-                <input type="checkbox" id="enhance-toggle" onchange="updateEnhanceFields()" />
-                <label for="enhance-toggle">Enable Enhancement (--enhance)</label>
-              </div>
-            </div>
-            <div id="enhance-extra" style="opacity:0.4;pointer-events:none;">
-              <div class="config-field">
-                <label class="config-label" for="enhance-model">Model</label>
-                <select id="enhance-model">
-                  <option value="espcn" selected>ESPCN (fast CPU)</option>
-                  <option value="fsrcnn">FSRCNN (fast CPU)</option>
-                  <option value="edsr">EDSR (high quality)</option>
-                  <option value="lapsrn">LapSRN</option>
-                  <option value="realesrnet">RealESRNet (best quality)</option>
-                  <option value="realesrgan">Real-ESRGAN (GAN, slow)</option>
-                </select>
-              </div>
-              <div class="config-field">
-                <label class="config-label" for="enhance-scale">Scale Factor</label>
-                <select id="enhance-scale">
-                  <option value="2">2×</option>
-                  <option value="4" selected>4×</option>
-                </select>
-              </div>
-            </div>
+      <!-- ── STEP 3: Options + Start ────────────── -->
+      <div class="step-header">
+        <span class="step-num">3</span>
+        <span class="step-label">Options</span>
+        <span class="step-sub">Tune &amp; go</span>
+      </div>
+
+      <!-- Detection Sensitivity slider -->
+      <div class="slider-row" style="padding-top:0.75rem;">
+        <div class="slider-label-row">
+          <label class="config-label" for="sensitivity-slider">Detection Sensitivity</label>
+          <span class="slider-value-badge" id="sensitivity-label">Balanced</span>
+        </div>
+        <input type="range" id="sensitivity-slider" min="1" max="5" step="1" value="3"
+               oninput="_onSensitivityChange(this.value)" />
+        <div class="slider-endpoints">
+          <span>Low (less alerts)</span>
+          <span>High (catch everything)</span>
+        </div>
+      </div>
+
+      <!-- Segment length -->
+      <div class="config-section" style="padding-top:0.5rem;padding-bottom:0.5rem;">
+        <div class="config-field" style="margin-bottom:0;">
+          <label class="config-label" for="segment-seconds">Segment Length
+            <span style="color:var(--amber);font-size:0.7rem;margin-left:4px;" id="seg-len-val">60s</span>
+          </label>
+          <input type="range" id="segment-seconds-slider" min="10" max="300" step="10" value="60"
+                 oninput="_onSegLenChange(this.value)" />
+          <input type="hidden" id="segment-seconds" value="60" />
+          <div class="slider-endpoints">
+            <span>10s (many small files)</span>
+            <span>5min (few large files)</span>
           </div>
-        </details>
+        </div>
       </div>
 
-      <!-- Encryption (collapsed by default) -->
-      <div class="config-section">
-        <details>
-          <summary>AES-256 Encryption</summary>
-          <div style="padding-top:0.75rem;">
-            <div class="config-field">
-              <div class="toggle-row">
-                <input type="checkbox" id="encrypt-toggle" onchange="updateEncryptFields()" />
-                <label for="encrypt-toggle">Encrypt output segments</label>
+      <!-- Enhancement toggle (friendly) -->
+      <div class="config-section" style="padding-top:0.5rem;padding-bottom:0.5rem;">
+        <div class="toggle-row">
+          <input type="checkbox" id="enhance-toggle" onchange="updateEnhanceFields()" />
+          <label for="enhance-toggle" style="font-family:var(--mono);font-size:0.7rem;color:var(--text);cursor:pointer;">
+            SR  Sharpen detections (AI super-resolution)
+          </label>
+        </div>
+      </div>
+
+      <!-- Encryption toggle (friendly) -->
+      <div class="config-section" style="padding-top:0.5rem;padding-bottom:0.75rem;">
+        <div class="toggle-row">
+          <input type="checkbox" id="encrypt-toggle" onchange="updateEncryptFields()" />
+          <label for="encrypt-toggle" style="font-family:var(--mono);font-size:0.7rem;color:var(--text);cursor:pointer;">
+            AES  Encrypt output (AES-256)
+          </label>
+        </div>
+      </div>
+
+      <!-- ── ADVANCED (collapsed) ────────────────── -->
+      <div class="advanced-toggle" id="advanced-toggle" onclick="toggleAdvanced()">Advanced settings</div>
+      <div class="advanced-panel" id="advanced-panel">
+
+        <!-- Enhancement details -->
+        <div class="config-section">
+          <details>
+            <summary>Super-Resolution Details</summary>
+            <div style="padding-top:0.75rem;">
+              <div id="enhance-extra" style="opacity:0.4;pointer-events:none;">
+                <!-- GPU device selector -->
+                <div class="config-field">
+                  <label class="config-label" for="enhance-device">Compute Device</label>
+                  <select id="enhance-device">
+                    <option value="auto" selected>Auto-detect (recommended)</option>
+                    <option value="cuda">NVIDIA GPU (CUDA)</option>
+                    <option value="mps">Apple Silicon (MPS)</option>
+                    <option value="cpu">CPU only</option>
+                  </select>
+                  <div id="gpu-status-msg" style="font-family:var(--mono);font-size:0.6rem;
+                       color:var(--text-dim);margin-top:0.3rem;line-height:1.5;"></div>
+                  <button class="btn btn-ghost" style="margin-top:0.3rem;font-size:0.6rem;padding:0.2rem 0.6rem;"
+                          onclick="checkGpu()">Check GPU</button>
+                </div>
+                <div class="config-field">
+                  <label class="config-label" for="enhance-model">SR Model</label>
+                  <select id="enhance-model">
+                    <option value="espcn" selected>ESPCN (fast CPU)</option>
+                    <option value="fsrcnn">FSRCNN (fast CPU)</option>
+                    <option value="edsr">EDSR (high quality)</option>
+                    <option value="lapsrn">LapSRN</option>
+                    <option value="realesrnet">RealESRNet (best quality)</option>
+                    <option value="realesrgan">Real-ESRGAN (GAN, slow)</option>
+                  </select>
+                </div>
+                <div class="config-field">
+                  <label class="config-label" for="enhance-scale">Scale</label>
+                  <select id="enhance-scale">
+                    <option value="2">2×</option>
+                    <option value="4" selected>4×</option>
+                  </select>
+                </div>
+                <div class="config-field">
+                  <label class="config-label" for="enhance-every-n">
+                    Enhance every N frames <span id="enhance-every-n-val" style="color:var(--amber);margin-left:4px;">5</span>
+                  </label>
+                  <input type="range" id="enhance-every-n" min="1" max="25" step="1" value="5"
+                         oninput="document.getElementById('enhance-every-n-val').textContent=this.value" style="width:100%;margin-top:4px">
+                </div>
+                <div class="config-field">
+                  <label class="config-label" for="enhance-max-roi">
+                    Max ROI size (px) <span id="enhance-max-roi-val" style="color:var(--amber);margin-left:4px;">200</span>
+                  </label>
+                  <input type="range" id="enhance-max-roi" min="64" max="640" step="16" value="200"
+                         oninput="document.getElementById('enhance-max-roi-val').textContent=this.value" style="width:100%;margin-top:4px">
+                </div>
               </div>
             </div>
-            <div id="encrypt-extra" style="opacity:0.4;pointer-events:none;">
+          </details>
+        </div>
+
+        <!-- Encryption details -->
+        <div class="config-section">
+          <details>
+            <summary>Encryption Details</summary>
+            <div style="padding-top:0.75rem;">
+              <div id="encrypt-extra" style="opacity:0.4;pointer-events:none;">
+                <div class="config-field">
+                  <label class="config-label" for="encrypt-password">Passphrase</label>
+                  <input type="password" id="encrypt-password" placeholder="Leave blank to use key file" />
+                </div>
+                <div class="config-field">
+                  <label class="config-label" for="encrypt-keyfile">Key File Path</label>
+                  <input type="text" id="encrypt-keyfile" placeholder="path/to/camera.key" />
+                </div>
+                <p style="font-family:var(--mono);font-size:0.6rem;color:var(--amber);line-height:1.5;margin-top:0.5rem;">
+                  ⚠ Plaintext .mp4 deleted after encryption.<br>PBKDF2 · SHA-256 · 600k iters.
+                </p>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <!-- BG method + warmup (hidden advanced fields) -->
+        <div class="config-section">
+          <details>
+            <summary>Detection Engine</summary>
+            <div style="padding-top:0.75rem;">
               <div class="config-field">
-                <label class="config-label" for="encrypt-password">Passphrase</label>
-                <input type="password" id="encrypt-password" placeholder="Leave blank to use key file" />
+                <label class="config-label" for="bg-method">BG Subtraction Method</label>
+                <select id="bg-method">
+                  <option value="MOG2" selected>MOG2 (recommended)</option>
+                  <option value="KNN">KNN</option>
+                </select>
               </div>
               <div class="config-field">
-                <label class="config-label" for="encrypt-keyfile">Key File Path</label>
-                <input type="text" id="encrypt-keyfile" placeholder="path/to/camera.key" />
+                <label class="config-label" for="warmup-frames">Warmup Frames</label>
+                <input type="number" id="warmup-frames" value="120" min="0" max="9999" />
               </div>
-              <p style="font-family:var(--mono);font-size:0.6rem;color:var(--amber);line-height:1.5;margin-top:0.5rem;">
-                ⚠ Plaintext .mp4 deleted after encryption.<br>
-                PBKDF2 · SHA-256 · 600k iters.
+              <div class="config-field" style="margin-top:0.75rem;">
+                <label class="config-label" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+                  <input type="checkbox" id="object-filter-toggle" onchange="_onObjectFilterChange(this.checked)" />
+                  Smart filter (ignore leaves &amp; shadows)
+                </label>
+                <p class="config-hint">Uses YOLOv8-nano to confirm each moving region is a real target (person, vehicle, animal) before recording. Eliminates false triggers from trees, flags, and lighting changes. Requires <code>ultralytics</code> package.</p>
+              </div>
+              <div class="config-field" id="filter-confidence-row" style="display:none;">
+                <label class="config-label" for="filter-confidence">Filter Confidence</label>
+                <input type="range" id="filter-confidence" min="0.10" max="0.70" step="0.05" value="0.30"
+                       oninput="document.getElementById('filter-conf-val').textContent=(+this.value).toFixed(2)" />
+                <span id="filter-conf-val" class="slider-value-badge">0.30</span>
+                <p class="config-hint">Minimum YOLO confidence to keep a detection. Lower = more sensitive (may re-introduce false positives); higher = stricter (may miss distant targets).</p>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <!-- Demo / Compare Modes -->
+        <div class="config-section">
+          <details>
+            <summary>Demo / Compare Modes</summary>
+            <div style="padding-top:0.75rem;">
+              <p style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.5;">
+                Run side-by-side comparison of multiple modes with annotated output.
               </p>
-            </div>
-          </div>
-        </details>
-      </div>
-
-      <!-- Demo / Compare Modes -->
-      <div class="config-section">
-        <details>
-          <summary>Demo / Compare Modes</summary>
-          <div style="padding-top:0.75rem;">
-            <p style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.5;">
-              Select modes to run in demo comparison. Renders annotated output
-              with bounding boxes and optional side-by-side split-screen.
-            </p>
-            <div class="mode-check-row">
-              <input type="checkbox" id="demo-mode0" value="mode0" checked />
-              <label for="demo-mode0">Mode 0 — 24/7 Continuous</label>
-            </div>
-            <div class="mode-check-row">
-              <input type="checkbox" id="demo-mode1" value="mode1" />
-              <label for="demo-mode1">Mode 1 — Frame Gating</label>
-            </div>
-            <div class="mode-check-row">
-              <input type="checkbox" id="demo-mode2" value="mode2" />
-              <label for="demo-mode2">Mode 2 — Background + Patches</label>
-            </div>
-            <div class="mode-check-row">
-              <input type="checkbox" id="demo-mode3" value="mode3" />
-              <label for="demo-mode3">Mode 3 — Object Only</label>
-            </div>
-            <div class="config-field" style="margin-top:0.75rem;">
-              <label class="config-label" for="demo-output-dir">Demo Output Root</label>
-              <input type="text" id="demo-output-dir" placeholder="Default: outputs/" />
-            </div>
-            <div style="margin-top:0.5rem;display:flex;gap:0.5rem;">
-              <input type="checkbox" id="demo-no-boxes" />
-              <label for="demo-no-boxes" style="font-family:var(--mono);font-size:0.65rem;color:var(--text);cursor:pointer;">
-                Disable ROI boxes in render
-              </label>
-            </div>
-            <button class="btn btn-ghost btn-full" style="margin-top:0.75rem;"
-                    onclick="runDemo()" id="btn-run-demo">▶ RUN DEMO</button>
-          </div>
-        </details>
-      </div>
-
-      <!-- Live Stream — HLS (task 4.1) -->
-      <div class="config-section">
-        <details>
-          <summary>Live Stream (HLS)</summary>
-          <div style="padding-top:0.75rem;">
-            <p style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.5;">
-              Stream a live camera feed to the browser via HLS. Enter an RTSP
-              URL, webcam index (0, 1, …), or a video file path.
-            </p>
-            <div class="config-field">
-              <label class="config-label" for="hls-input">Input Source</label>
-              <input type="text" id="hls-input" placeholder="rtsp://… or 0 for webcam" />
-            </div>
-            <div class="config-field">
-              <label class="config-label" for="hls-camera-id">Camera ID</label>
-              <input type="text" id="hls-camera-id" value="cam_00" />
-            </div>
-            <div style="display:flex;gap:0.4rem;margin-top:0.5rem;">
-              <button class="btn btn-ghost" style="flex:1;" id="btn-hls-start"
-                      onclick="hlsStart()">▶ START STREAM</button>
-              <button class="btn btn-ghost" style="flex:1;opacity:0.4;" id="btn-hls-stop"
-                      onclick="hlsStop()" disabled>■ STOP</button>
-            </div>
-            <div id="hls-sidebar-msg" style="font-family:var(--mono);font-size:0.6rem;
-                 color:var(--text-dim);margin-top:0.5rem;"></div>
-          </div>
-        </details>
-      </div>
-
-      <!-- Local RTSP Server (optional MediaMTX integration) -->
-      <div class="config-section">
-        <details id="rtsp-server-details">
-          <summary>Local RTSP Server <span id="rtsp-server-badge" style="font-size:0.6rem;font-family:var(--mono);color:var(--text-dim);margin-left:0.3rem;"></span></summary>
-          <div style="padding-top:0.75rem;">
-            <p style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.5;">
-              Spin up a local <a href="https://github.com/bluenviron/mediamtx" target="_blank" style="color:var(--green);">MediaMTX</a>
-              RTSP server (MIT license) and push a video file into it — no external server needed.
-            </p>
-
-            <!-- Step 1: download binary -->
-            <div id="rtsp-dl-section">
-              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">
-                STEP 1 — DOWNLOAD BINARY
+              <div class="mode-check-row">
+                <input type="checkbox" id="demo-mode0" value="mode0" checked />
+                <label for="demo-mode0">Live Surveillance (Mode 0)</label>
               </div>
-              <div style="display:flex;gap:0.4rem;align-items:center;">
-                <button class="btn btn-ghost" style="flex:1;" id="btn-rtsp-dl"
-                        onclick="rtspDownload()">⬇ DOWNLOAD MediaMTX</button>
+              <div class="mode-check-row">
+                <input type="checkbox" id="demo-mode1" value="mode1" />
+                <label for="demo-mode1">Event Recording (Mode 1)</label>
               </div>
-              <div id="rtsp-dl-bar-wrap" style="display:none;margin-top:0.4rem;">
-                <div style="background:var(--surface2);border-radius:3px;height:6px;overflow:hidden;">
-                  <div id="rtsp-dl-bar" style="height:100%;width:0%;background:var(--green);transition:width 0.3s;"></div>
-                </div>
-                <div id="rtsp-dl-label" style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);margin-top:0.2rem;"></div>
+              <div class="mode-check-row">
+                <input type="checkbox" id="demo-mode2" value="mode2" />
+                <label for="demo-mode2">Smart Compress (Mode 2)</label>
               </div>
+              <div class="mode-check-row">
+                <input type="checkbox" id="demo-mode3" value="mode3" />
+                <label for="demo-mode3">Object Only (Mode 3)</label>
+              </div>
+              <div class="config-field" style="margin-top:0.75rem;">
+                <label class="config-label" for="demo-output-dir">Output Root</label>
+                <input type="text" id="demo-output-dir" placeholder="Default: outputs/" />
+              </div>
+              <div style="margin-top:0.5rem;display:flex;gap:0.5rem;">
+                <input type="checkbox" id="demo-no-boxes" />
+                <label for="demo-no-boxes" style="font-family:var(--mono);font-size:0.65rem;color:var(--text);cursor:pointer;">
+                  Disable ROI boxes in render
+                </label>
+              </div>
+              <button class="btn btn-ghost btn-full" style="margin-top:0.75rem;"
+                      onclick="runDemo()" id="btn-run-demo">▶ RUN DEMO</button>
             </div>
+          </details>
+        </div>
 
-            <!-- Step 2: start/stop server -->
-            <div style="margin-top:0.75rem;">
-              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">
-                STEP 2 — START SERVER
-              </div>
-              <div style="display:flex;gap:0.4rem;">
-                <button class="btn btn-ghost" style="flex:1;" id="btn-rtsp-start"
-                        onclick="rtspStart()" disabled>▶ START</button>
-                <button class="btn btn-ghost" style="flex:1;opacity:0.4;" id="btn-rtsp-stop"
-                        onclick="rtspStop()" disabled>■ STOP</button>
-              </div>
-              <div id="rtsp-server-msg" style="font-family:var(--mono);font-size:0.6rem;
-                   color:var(--text-dim);margin-top:0.3rem;"></div>
-            </div>
-
-            <!-- Step 3: push video -->
-            <div style="margin-top:0.75rem;" id="rtsp-push-section">
-              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">
-                STEP 3 — PUSH VIDEO
+        <!-- Live Stream — HLS -->
+        <div class="config-section">
+          <details>
+            <summary>Live Stream (HLS)</summary>
+            <div style="padding-top:0.75rem;">
+              <p style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.5;">
+                Stream a live camera feed to the browser via HLS.
+              </p>
+              <div class="config-field">
+                <label class="config-label" for="hls-input">Input Source</label>
+                <input type="text" id="hls-input" placeholder="rtsp://… or 0 for webcam" />
               </div>
               <div class="config-field">
-                <label class="config-label" for="rtsp-push-path">Video File</label>
-                <div style="display:flex;gap:0.25rem;">
-                  <input type="text" id="rtsp-push-path" placeholder="path/to/video.mp4" style="flex:1;" />
-                  <button class="btn btn-ghost" style="padding:0 0.5rem;font-size:0.65rem;"
-                          onclick="rtspBrowse()">…</button>
+                <label class="config-label" for="hls-camera-id">Camera ID</label>
+                <input type="text" id="hls-camera-id" value="cam_00" />
+              </div>
+              <div style="display:flex;gap:0.4rem;margin-top:0.5rem;">
+                <button class="btn btn-ghost" style="flex:1;" id="btn-hls-start"
+                        onclick="hlsStart()">▶ START STREAM</button>
+                <button class="btn btn-ghost" style="flex:1;opacity:0.4;" id="btn-hls-stop"
+                        onclick="hlsStop()" disabled>■ STOP</button>
+              </div>
+              <div id="hls-sidebar-msg" style="font-family:var(--mono);font-size:0.6rem;
+                   color:var(--text-dim);margin-top:0.5rem;"></div>
+            </div>
+          </details>
+        </div>
+
+        <!-- Local RTSP Server -->
+        <div class="config-section">
+          <details id="rtsp-server-details">
+            <summary>Local RTSP Server <span id="rtsp-server-badge" style="font-size:0.6rem;font-family:var(--mono);color:var(--text-dim);margin-left:0.3rem;"></span></summary>
+            <div style="padding-top:0.75rem;">
+              <p style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.5;">
+                Spin up a local <a href="https://github.com/bluenviron/mediamtx" target="_blank" style="color:var(--green);">MediaMTX</a> RTSP server and push a video into it.
+              </p>
+              <div id="rtsp-dl-section">
+                <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">STEP 1 — DOWNLOAD BINARY</div>
+                <div style="display:flex;gap:0.4rem;align-items:center;">
+                  <button class="btn btn-ghost" style="flex:1;" id="btn-rtsp-dl" onclick="rtspDownload()">⬇ DOWNLOAD MediaMTX</button>
+                </div>
+                <div id="rtsp-dl-bar-wrap" style="display:none;margin-top:0.4rem;">
+                  <div style="background:var(--surface2);border-radius:3px;height:6px;overflow:hidden;">
+                    <div id="rtsp-dl-bar" style="height:100%;width:0%;background:var(--green);transition:width 0.3s;"></div>
+                  </div>
+                  <div id="rtsp-dl-label" style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);margin-top:0.2rem;"></div>
                 </div>
               </div>
+              <div style="margin-top:0.75rem;">
+                <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">STEP 2 — START SERVER</div>
+                <div style="display:flex;gap:0.4rem;">
+                  <button class="btn btn-ghost" style="flex:1;" id="btn-rtsp-start" onclick="rtspStart()" disabled>▶ START</button>
+                  <button class="btn btn-ghost" style="flex:1;opacity:0.4;" id="btn-rtsp-stop" onclick="rtspStop()" disabled>■ STOP</button>
+                </div>
+                <div id="rtsp-server-msg" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:0.3rem;"></div>
+              </div>
+              <div style="margin-top:0.75rem;" id="rtsp-push-section">
+                <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">STEP 3 — PUSH VIDEO</div>
+                <div class="config-field">
+                  <label class="config-label" for="rtsp-push-path">Video File</label>
+                  <div style="display:flex;gap:0.25rem;">
+                    <input type="text" id="rtsp-push-path" placeholder="path/to/video.mp4" style="flex:1;" />
+                    <button class="btn btn-ghost" style="padding:0 0.5rem;font-size:0.65rem;" onclick="rtspBrowse()">…</button>
+                  </div>
+                </div>
+                <div class="config-field">
+                  <label class="config-label" for="rtsp-stream-name">Stream Name</label>
+                  <input type="text" id="rtsp-stream-name" value="live" placeholder="e.g. highway" style="width:100%;" />
+                </div>
+                <div style="display:flex;gap:0.4rem;margin-top:0.3rem;">
+                  <button class="btn btn-ghost" style="flex:1;" id="btn-rtsp-push" onclick="rtspPush()" disabled>▶ PUSH VIDEO</button>
+                  <button class="btn btn-ghost" style="flex:1;opacity:0.4;" id="btn-rtsp-stop-push" onclick="rtspStopPush()" disabled>■ STOP PUSH</button>
+                </div>
+                <div id="rtsp-push-msg" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:0.3rem;"></div>
+              </div>
+              <div id="rtsp-url-box" style="display:none;margin-top:0.75rem;padding:0.5rem;background:var(--surface2);border-radius:4px;border:1px solid var(--border);">
+                <div style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);margin-bottom:0.25rem;">RTSP URL</div>
+                <div style="display:flex;gap:0.3rem;align-items:center;">
+                  <code id="rtsp-url-text" style="font-family:var(--mono);font-size:0.65rem;color:var(--green);flex:1;word-break:break-all;"></code>
+                  <button class="btn btn-ghost" style="padding:0.2rem 0.4rem;font-size:0.6rem;white-space:nowrap;" onclick="rtspCopyUrl()">⧉ USE</button>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+
+        <!-- Query Archive -->
+        <div class="config-section">
+          <details>
+            <summary>Query Archive</summary>
+            <div style="padding-top:0.75rem;">
               <div class="config-field">
-                <label class="config-label" for="rtsp-stream-name">Stream Name</label>
-                <input type="text" id="rtsp-stream-name" value="live"
-                       placeholder="e.g. highway" style="width:100%;" />
+                <label class="config-label" for="q-object-type">Object Type</label>
+                <select id="q-object-type">
+                  <option value="">— any —</option>
+                  <option value="vehicle">Vehicle</option>
+                  <option value="person">Person</option>
+                  <option value="unknown">Unknown</option>
+                </select>
               </div>
-              <div style="display:flex;gap:0.4rem;margin-top:0.3rem;">
-                <button class="btn btn-ghost" style="flex:1;" id="btn-rtsp-push"
-                        onclick="rtspPush()" disabled>▶ PUSH VIDEO</button>
-                <button class="btn btn-ghost" style="flex:1;opacity:0.4;" id="btn-rtsp-stop-push"
-                        onclick="rtspStopPush()" disabled>■ STOP PUSH</button>
+              <div class="config-field">
+                <label class="config-label" for="q-camera-id">Camera ID (optional)</label>
+                <input type="text" id="q-camera-id" placeholder="e.g. cam_00" />
               </div>
-              <div id="rtsp-push-msg" style="font-family:var(--mono);font-size:0.6rem;
-                   color:var(--text-dim);margin-top:0.3rem;"></div>
-            </div>
-
-            <!-- RTSP URL display + copy to HLS input -->
-            <div id="rtsp-url-box" style="display:none;margin-top:0.75rem;padding:0.5rem;
-                 background:var(--surface2);border-radius:4px;border:1px solid var(--border);">
-              <div style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);
-                          margin-bottom:0.25rem;">RTSP URL (copy into Live Stream input)</div>
-              <div style="display:flex;gap:0.3rem;align-items:center;">
-                <code id="rtsp-url-text" style="font-family:var(--mono);font-size:0.65rem;
-                      color:var(--green);flex:1;word-break:break-all;"></code>
-                <button class="btn btn-ghost" style="padding:0.2rem 0.4rem;font-size:0.6rem;white-space:nowrap;"
-                        onclick="rtspCopyUrl()">⧉ USE</button>
+              <div class="config-field">
+                <label class="config-label" for="q-start-time">Start Time (optional)</label>
+                <input type="text" id="q-start-time" placeholder="20260401T000000Z" />
               </div>
+              <div class="config-field">
+                <label class="config-label" for="q-end-time">End Time (optional)</label>
+                <input type="text" id="q-end-time" placeholder="20260430T235959Z" />
+              </div>
+              <div style="display:flex;gap:0.4rem;margin-top:0.4rem;flex-wrap:wrap;">
+                <button class="btn btn-ghost" style="flex:1;min-width:80px;" onclick="runQuery()">SEARCH</button>
+                <button class="btn btn-ghost" style="flex:1;min-width:80px;" onclick="loadBusiest()">BUSIEST</button>
+                <button class="btn btn-ghost" style="flex:1;min-width:80px;" onclick="loadDailySummary()">DAILY</button>
+              </div>
+              <div id="query-results" style="margin-top:0.5rem;max-height:200px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border-bright) transparent;"></div>
             </div>
+          </details>
+        </div>
 
-          </div>
-        </details>
-      </div>
-
-      <!-- Query Archive (Ashleyn's DB queries) -->
-      <div class="config-section">
-        <details>
-          <summary>Query Archive</summary>
-          <div style="padding-top:0.75rem;">
-            <div class="config-field">
-              <label class="config-label" for="q-object-type">Object Type</label>
-              <select id="q-object-type">
-                <option value="">— any —</option>
-                <option value="vehicle">Vehicle</option>
-                <option value="person">Person</option>
-                <option value="unknown">Unknown</option>
-              </select>
-            </div>
-            <div class="config-field">
-              <label class="config-label" for="q-camera-id">Camera ID (optional)</label>
-              <input type="text" id="q-camera-id" placeholder="e.g. cam_00" />
-            </div>
-            <div class="config-field">
-              <label class="config-label" for="q-start-time">Start Time (optional)</label>
-              <input type="text" id="q-start-time" placeholder="20260401T000000Z" />
-            </div>
-            <div class="config-field">
-              <label class="config-label" for="q-end-time">End Time (optional)</label>
-              <input type="text" id="q-end-time" placeholder="20260430T235959Z" />
-            </div>
-            <div style="display:flex;gap:0.4rem;margin-top:0.4rem;flex-wrap:wrap;">
-              <button class="btn btn-ghost" style="flex:1;min-width:80px;" onclick="runQuery()">SEARCH</button>
-              <button class="btn btn-ghost" style="flex:1;min-width:80px;" onclick="loadBusiest()">BUSIEST</button>
-              <button class="btn btn-ghost" style="flex:1;min-width:80px;" onclick="loadDailySummary()">DAILY</button>
-            </div>
-            <div id="query-results" style="margin-top:0.5rem;max-height:200px;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border-bright) transparent;"></div>
-          </div>
-        </details>
-      </div>
+      </div><!-- /advanced-panel -->
 
       <!-- Action buttons -->
       <div class="btn-row" style="margin-top:auto;">
-        <button id="btn-start" class="btn btn-primary" onclick="startPipeline()">START</button>
-        <button id="btn-stop" class="btn btn-danger" onclick="stopPipeline()" disabled>STOP</button>
+        <button id="btn-start" class="btn btn-primary" onclick="startPipeline()">▶ START</button>
+        <button id="btn-stop" class="btn btn-danger" onclick="stopPipeline()" disabled>■ STOP</button>
       </div>
     </aside>
 
@@ -1199,36 +1720,40 @@
           <div class="stat-unit">total frames</div>
         </div>
         <div class="stat-card teal">
-          <div class="stat-label">Segments Encoded</div>
+          <div class="stat-label">Segments Saved</div>
           <div class="stat-value" id="stat-segments">0</div>
           <div class="stat-unit">output files</div>
         </div>
         <div class="stat-card green">
-          <div class="stat-label">Pipeline FPS</div>
+          <div class="stat-label">Speed</div>
           <div class="stat-value" id="stat-fps">—</div>
           <div class="stat-unit">frames / sec</div>
         </div>
-        <div class="stat-card">
-          <div class="stat-label">Storage Used</div>
+        <div class="stat-card savings">
+          <div class="stat-label">Storage Saved</div>
           <div class="stat-value" id="stat-storage">—</div>
-          <div class="stat-unit" id="stat-storage-unit">MB</div>
+          <div class="stat-unit" id="stat-storage-unit">MB used</div>
+          <div class="savings-ratio" id="stat-savings-ratio"></div>
         </div>
       </div>
 
       <div class="mode-bar">
-        <span class="mode-chip" data-mode="mode0" id="chip-mode0">MODE 0 · CONTINUOUS</span>
-        <span class="mode-chip" data-mode="mode1" id="chip-mode1">MODE 1 · FRAME GATE</span>
-        <span class="mode-chip" data-mode="mode2" id="chip-mode2">MODE 2 · PATCHES</span>
+        <span class="mode-chip" data-mode="mode0" id="chip-mode0">MODE 0 · LIVE SURVEILLANCE</span>
+        <span class="mode-chip" data-mode="mode1" id="chip-mode1">MODE 1 · EVENT RECORDING</span>
+        <span class="mode-chip" data-mode="mode2" id="chip-mode2">MODE 2 · SMART COMPRESS</span>
         <span class="mode-chip" data-mode="mode3" id="chip-mode3">MODE 3 · OBJECT ONLY</span>
         <span class="mode-chip" id="chip-enhance">SR ENHANCE</span>
         <span class="mode-chip" id="chip-encrypt">AES-256</span>
       </div>
 
-      <div class="progress-row">
+      <!-- Human-readable status message -->
+      <div class="status-message" id="status-message">Ready — configure a source and press Start.</div>
+
+      <div class="progress-row" style="margin-top:0.3rem;">
         <div class="progress-track">
           <div class="progress-fill" id="progress-fill"></div>
         </div>
-        <span class="progress-label" id="progress-label">—</span>
+        <span class="progress-pct" id="progress-pct"></span>
       </div>
 
       <!-- HLS Live Stream panel — shown when a stream is running -->
@@ -1256,8 +1781,30 @@
           <span class="panel-title">Demo Output</span>
           <button class="log-clear-btn" onclick="closeDemoPanel()">✕ CLOSE</button>
         </div>
-        <div id="demo-spinner" class="demo-spinner" style="display:none;">Rendering demo…</div>
-        <div id="demo-status-msg"></div>
+
+        <!-- Progress area (shown while running) -->
+        <div id="demo-running-wrap" style="display:none;padding:0.75rem;">
+          <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.5rem;">
+            <span id="demo-phase-badge" style="font-family:var(--mono);font-size:0.6rem;
+              letter-spacing:0.1em;text-transform:uppercase;padding:2px 6px;
+              border-radius:2px;background:var(--surface3);color:var(--amber);
+              border:1px solid var(--amber-dim);">RUNNING</span>
+            <span id="demo-step-label" style="font-family:var(--mono);font-size:0.65rem;
+              color:var(--text-dim);"></span>
+          </div>
+          <div id="demo-progress-msg" style="font-family:var(--mono);font-size:0.68rem;
+            color:var(--text);margin-bottom:0.5rem;line-height:1.4;"></div>
+          <!-- Indeterminate shimmer bar -->
+          <div style="height:3px;background:var(--surface3);border-radius:2px;overflow:hidden;">
+            <div id="demo-progress-bar" style="height:100%;width:0%;
+              background:linear-gradient(90deg,var(--amber),var(--teal));
+              border-radius:2px;transition:width 0.5s ease;"></div>
+          </div>
+        </div>
+
+        <div id="demo-status-msg" style="padding:0 0.75rem;font-family:var(--mono);
+          font-size:0.65rem;color:var(--text-dim);min-height:1.2em;"></div>
+
         <div id="demo-player-wrap" class="demo-player-wrap" style="display:none;">
           <video id="demo-video" controls playsinline></video>
           <div class="demo-mode-tabs" id="demo-tabs"></div>
@@ -1295,6 +1842,7 @@
           <div style="display:flex;gap:0.5rem;align-items:center;">
             <button class="btn btn-ghost" id="log-open-btn" onclick="toggleLogPanel()" title="Show log panel">▶ LOG</button>
             <button class="btn btn-ghost" onclick="loadSegments()">↻ REFRESH</button>
+            <button class="btn btn-ghost" style="color:var(--red);border-color:var(--red);" onclick="clearSegments()" title="Delete all output segments and clear the table">🗑 CLEAR</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -1308,11 +1856,12 @@
                 <th title="Number of Region-of-Interest detections across all frames in this segment. Higher = more activity.">ROIs ⓘ</th>
                 <th>Duration</th>
                 <th title="Compressed file size. Hover a row to see estimated compression ratio vs raw video.">Size ⓘ</th>
+                <th title="Perceptual sharpness of detected target ROIs, measured by Laplacian variance. Gives a rough sense of image clarity: ~480p = moderate, ~720p = sharp, ~1080p = very sharp. Background-only segments show —.">Quality ⓘ</th>
                 <th>Play</th>
               </tr>
             </thead>
             <tbody id="segments-tbody">
-              <tr><td colspan="8" class="empty-state">NO SEGMENTS YET</td></tr>
+              <tr><td colspan="9" class="empty-state">NO SEGMENTS YET</td></tr>
             </tbody>
           </table>
         </div>
@@ -1327,6 +1876,182 @@
 
 </div><!-- .page -->
 
+<!-- ═══════════════════ HELP MODAL ═══════════════════ -->
+<div class="help-overlay" id="help-overlay" onclick="_helpOverlayClick(event)">
+  <div class="help-modal">
+    <div class="help-modal-header">
+      <span class="help-modal-title">SVCS Help &amp; Reference</span>
+      <button class="help-close-btn" onclick="closeHelp()">ESC / CLOSE</button>
+    </div>
+    <div class="help-body">
+
+      <!-- Compression Presets -->
+      <div class="help-section">
+        <div class="help-section-title">Compression Presets</div>
+        <div class="help-rows">
+          <div class="help-row">
+            <span class="help-term">Live Surveillance (Mode 0)</span>
+            <span class="help-def">Records every frame continuously, 24/7. No footage is ever dropped. Produces the largest files. Use this when you need a complete uninterrupted record — e.g. legal evidence, entrance cameras.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Event Recording (Mode 1)</span>
+            <span class="help-def">Background subtraction runs on every frame. Segments where <em>no motion</em> was detected are discarded entirely. A segment with activity is kept whole. Good balance of coverage vs. storage.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Smart Compress (Mode 2)</span>
+            <span class="help-def">Encodes the full background frame at low bitrate, but detected object regions (ROIs) are encoded at <em>high quality</em> within the same video. Best for reviewing object detail while saving space.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Object Only (Mode 3)</span>
+            <span class="help-def">Only the bounding-box patches of detected objects are saved — background is not recorded at all. Extreme compression. Use only when you care about the objects and not the scene.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detection Settings -->
+      <div class="help-section">
+        <div class="help-section-title">Detection Settings</div>
+        <div class="help-rows">
+          <div class="help-row">
+            <span class="help-term">Detection Sensitivity</span>
+            <span class="help-def">Controls how easily motion is flagged. <em>Low</em> — only large, obvious movement triggers detection (fewer false alarms, misses small objects). <em>High</em> — flags subtle motion including leaves, lighting changes (catches everything, more false positives). Maps to background subtraction parameters automatically.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Segment Length</span>
+            <span class="help-def">How many seconds of video go into each output file. Shorter segments (10–30s) are easier to seek through but create many small files. Longer segments (2–5 min) are fewer files but harder to scrub.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">BG Subtraction Method</span>
+            <span class="help-def"><em>MOG2</em> — Mixture of Gaussians, adapts quickly to gradual lighting changes. Recommended for most scenes. <em>KNN</em> — K-Nearest Neighbours, more robust to sudden lighting shifts (e.g. clouds, flickering). Both are OpenCV implementations running on CPU.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Warmup Frames</span>
+            <span class="help-def">Number of frames the background model observes before it starts detecting motion. During warmup, everything is treated as background. Set higher (200+) for outdoor scenes with slow-changing lighting; lower (30–60) for static indoor scenes.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- AI Enhancement -->
+      <div class="help-section">
+        <div class="help-section-title">AI Super-Resolution Enhancement</div>
+        <div class="help-note">Enhancement sharpens detected object regions using a neural network upscaler. It runs in a background thread and only processes 1 out of every N frames to keep the pipeline fast.</div>
+        <div class="help-rows">
+          <div class="help-row">
+            <span class="help-term">Compute Device</span>
+            <span class="help-def"><em>Auto-detect</em> picks the fastest available option. <em>NVIDIA GPU (CUDA)</em> — requires an NVIDIA card with 2+ GB VRAM and PyTorch with CUDA installed; 5–20× faster than CPU. <em>Apple Silicon (MPS)</em> — M1/M2/M3 Macs only; 2–5× faster than CPU. <em>CPU</em> — works on any machine including laptops but is slowest. Phones and tablets are not supported.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">SR Model</span>
+            <span class="help-def"><em>ESPCN / FSRCNN</em> — fast, lightweight, good for real-time use. <em>EDSR</em> — higher quality, slower. <em>Real-ESRGAN</em> — best quality, requires the <code>RealESRGAN_x4plus.pth</code> weights file in the <code>models/</code> folder. See DEV.md for download instructions.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Enhance every N frames</span>
+            <span class="help-def">SR runs on 1 frame out of every N, then the result is reused for the remaining N-1 frames. N=1 gives the highest quality but can slow the pipeline. N=5 (default) is a good balance — at 25fps you get a fresh SR pass every 0.2 seconds.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Max ROI size (px)</span>
+            <span class="help-def">SR is skipped on any detection box wider or taller than this value in pixels. Very large boxes get little benefit from SR (the bicubic resize is already fine at that scale) and are expensive to process. 150–250px is the sweet spot.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Encryption -->
+      <div class="help-section">
+        <div class="help-section-title">AES-256 Encryption</div>
+        <div class="help-rows">
+          <div class="help-row">
+            <span class="help-term">How it works</span>
+            <span class="help-def">Each output segment is encrypted with AES-256-CBC after encoding. The plaintext <code>.mp4</code> is deleted. Encrypted files have a <code>.enc</code> extension. Key derivation uses PBKDF2-HMAC-SHA256 with 600,000 iterations.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Passphrase</span>
+            <span class="help-def">Enter a password to derive the encryption key. Keep this safe — there is no recovery without it.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Key File</span>
+            <span class="help-def">Alternative to a passphrase. Provide a path to a <code>.key</code> file containing raw key bytes. More secure than a password for automated deployments.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Output Segments Table -->
+      <div class="help-section">
+        <div class="help-section-title">Output Segments Table</div>
+        <div class="help-rows">
+          <div class="help-row">
+            <span class="help-term">Target</span>
+            <span class="help-def"><em>YES</em> — at least one ROI (motion region) was detected in this segment. <em>no</em> — only background, no movement. Mode 1 discards "no" segments entirely.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">ROIs</span>
+            <span class="help-def">Total number of Region-of-Interest detections across all frames in the segment. Higher = more activity. A single vehicle passing might produce 50–200 ROIs.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Quality</span>
+            <span class="help-def">Perceptual sharpness of the detected ROI regions, measured by Laplacian variance. Displayed as an approximate resolution equivalent (~480p, ~720p, ~1080p). Background-only segments show —.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Storage Saved</span>
+            <span class="help-def">Estimated compression ratio versus storing the raw uncompressed video. Calculated from segment metadata (resolution, fps, duration) vs. actual file size. A ratio of 20× means the compressed file is 95% smaller than raw.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Hover tooltip</span>
+            <span class="help-def">Hover over any row to see full metadata: camera ID, exact duration, ROI count, compressed size, estimated raw size, compression ratio, object type, and sharpness score.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- LAN / Networking -->
+      <div class="help-section">
+        <div class="help-section-title">Network Access (Teammates)</div>
+        <div class="help-note">The server binds to 0.0.0.0 so anyone on the same local network can open the dashboard — no extra setup needed.</div>
+        <div class="help-rows">
+          <div class="help-row">
+            <span class="help-term">Share with team</span>
+            <span class="help-def">Your LAN URL is shown in the top header. Anyone on the same Wi-Fi or Ethernet network can paste that URL into their browser and view the live dashboard — <em>without</em> running the server themselves. Only one person needs to run the server.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Different network?</span>
+            <span class="help-def">If your teammate is not on the same local network (e.g. off-campus), they need a VPN or port-forward. Forward TCP port 5000 on your router, or use a tool like <em>ngrok</em> (<code>ngrok http 5000</code>) to get a public URL.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Phones / tablets</span>
+            <span class="help-def">The dashboard works in any modern browser including mobile Safari and Chrome on phones. SR Enhancement GPU acceleration is <em>not</em> available on phones — the pipeline runs on the server's CPU/GPU, not the phone's hardware.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Port 5000 blocked?</span>
+            <span class="help-def">Start the server on a different port: <code>python run_gui.py --port 8080</code>. Update the LAN URL accordingly.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Demo / Compare -->
+      <div class="help-section">
+        <div class="help-section-title">Demo / Compare and Archive Query</div>
+        <div class="help-rows">
+          <div class="help-row">
+            <span class="help-term">Demo Compare</span>
+            <span class="help-def">Runs the same input video through multiple compression modes simultaneously and produces annotated side-by-side output with bounding boxes. Useful for showing clients or presentations. Found under Advanced Settings.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Query Archive</span>
+            <span class="help-def">Search the SQLite metadata database for segments by object type (vehicle, person), camera ID, or time range. The BUSIEST button returns the segments with the most ROI activity. DAILY shows storage used per camera per day.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Live Stream (HLS)</span>
+            <span class="help-def">Streams an RTSP camera or video file to the browser in real time using HTTP Live Streaming. Latency is ~4–6 seconds. Requires FFmpeg. The annotated overlay shows the active mode label and elapsed time.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Local RTSP Server</span>
+            <span class="help-def">Downloads and runs MediaMTX (open-source, MIT) locally to create an RTSP endpoint from any video file — useful for testing the HLS stream or integrating with external NVR software without needing a real IP camera.</span>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /help-body -->
+  </div><!-- /help-modal -->
+</div><!-- /help-overlay -->
+
 <script>
 /* ──────────────────────────────────────────────────────────────
    SVCS Dashboard — client-side logic
@@ -1337,16 +2062,87 @@ let statusInterval  = null;
 let storageInterval = null;
 let segmentsInterval = null;
 
-// ── Clock ─────────────────────────────────────────────────────
-function tickClock() {
-  const now = new Date();
-  const h = String(now.getHours()).padStart(2,'0');
-  const m = String(now.getMinutes()).padStart(2,'0');
-  const s = String(now.getSeconds()).padStart(2,'0');
-  document.getElementById('clock').textContent = `${h}:${m}:${s}`;
+
+// ── Preset card selection ──────────────────────────────────────
+function selectPreset(card) {
+  document.querySelectorAll('.preset-card').forEach(c => c.classList.remove('selected'));
+  card.classList.add('selected');
+  const mode = card.dataset.mode;
+  document.getElementById('mode-select').value = mode;
+  syncModeChips();
 }
-setInterval(tickClock, 1000);
-tickClock();
+
+// ── Advanced panel toggle ──────────────────────────────────────
+function toggleAdvanced() {
+  const toggle = document.getElementById('advanced-toggle');
+  const panel  = document.getElementById('advanced-panel');
+  const open   = panel.classList.contains('open');
+  if (open) {
+    panel.classList.remove('open');
+    toggle.classList.remove('open');
+  } else {
+    panel.classList.add('open');
+    toggle.classList.add('open');
+  }
+}
+
+// ── Sensitivity slider ─────────────────────────────────────────
+const _sensitivityLabels = ['Very Low', 'Low', 'Balanced', 'High', 'Very High'];
+const _sensitivityBgMethod = ['KNN', 'KNN', 'MOG2', 'MOG2', 'MOG2'];
+const _sensitivityWarmup   = [60, 90, 120, 60, 30];
+
+function _onSensitivityChange(val) {
+  const idx = parseInt(val) - 1;
+  document.getElementById('sensitivity-label').textContent = _sensitivityLabels[idx];
+  // Update hidden technical fields
+  document.getElementById('bg-method').value    = _sensitivityBgMethod[idx];
+  document.getElementById('warmup-frames').value = _sensitivityWarmup[idx];
+}
+
+function _onObjectFilterChange(enabled) {
+  document.getElementById('filter-confidence-row').style.display = enabled ? '' : 'none';
+}
+
+// ── Segment length slider ──────────────────────────────────────
+function _onSegLenChange(val) {
+  const v = parseInt(val);
+  document.getElementById('segment-seconds').value = v;
+  const label = v >= 60 ? `${Math.floor(v/60)}m ${v%60 > 0 ? (v%60)+'s' : ''}`.trim() : `${v}s`;
+  document.getElementById('seg-len-val').textContent = label;
+}
+
+// ── Human-readable status messages ────────────────────────────
+function _friendlyStatus(data) {
+  if (!data.running) {
+    if (data.segment_count > 0) {
+      const mb = _lastStorageMb || 0;
+      const ratio = _lastCompressionRatio;
+      if (ratio && ratio > 1) {
+        return { text: `Done — ${data.segment_count} segment${data.segment_count > 1 ? 's' : ''} saved · ${ratio}× smaller than raw`, cls: 'done' };
+      }
+      return { text: `Done — ${data.segment_count} segment${data.segment_count > 1 ? 's' : ''} saved`, cls: 'done' };
+    }
+    return { text: 'Ready — configure a source and press Start.', cls: '' };
+  }
+  // Running states
+  const seg = data.segment_count || 0;
+  const fps = data.fps != null ? ` · ${data.fps} fps` : '';
+  if (data.progress_pct != null) {
+    const pct = data.progress_pct;
+    if (pct < 2) return { text: `Warming up…${fps}`, cls: 'running' };
+    const eta = data.eta_seconds;
+    const etaStr = eta != null
+      ? (eta >= 60 ? `~${Math.ceil(eta/60)}min left` : `~${eta}s left`)
+      : '';
+    return { text: `Processing — segment ${seg + 1}  ·  ${pct.toFixed(0)}% through video${etaStr ? '  ·  ' + etaStr : ''}${fps}`, cls: 'running' };
+  }
+  // Live stream
+  const elapsed = data.elapsed_seconds != null ? fmtDuration(data.elapsed_seconds) : '';
+  return { text: `Recording live${elapsed ? ' — ' + elapsed : ''} · Segment ${seg + 1}${fps}`, cls: 'running' };
+}
+
+let _lastStorageMb = 0;
+let _lastCompressionRatio = null;
 
 // ── Toggle helpers ────────────────────────────────────────────
 function updateEnhanceFields() {
@@ -1362,7 +2158,7 @@ function updateEncryptFields() {
   el.style.pointerEvents = on ? 'all' : 'none';
 }
 
-// ── Mode select sync to mode chips ────────────────────────────
+// ── Mode select sync to mode chips + preset cards ──────────────
 document.getElementById('mode-select').addEventListener('change', syncModeChips);
 document.getElementById('enhance-toggle').addEventListener('change', syncModeChips);
 document.getElementById('encrypt-toggle').addEventListener('change', syncModeChips);
@@ -1375,6 +2171,10 @@ function syncModeChips() {
     'active', document.getElementById('enhance-toggle').checked);
   document.getElementById('chip-encrypt').classList.toggle(
     'active', document.getElementById('encrypt-toggle').checked);
+  // Sync preset cards
+  document.querySelectorAll('.preset-card').forEach(c => {
+    c.classList.toggle('selected', c.dataset.mode === mode);
+  });
 }
 syncModeChips();
 
@@ -1391,7 +2191,7 @@ async function scanVideos() {
     }
     listEl.innerHTML = data.videos.map(v => {
       const name = v.split('/').pop();
-      return `<div onclick="document.getElementById('input-source').value='${escHtml(v)}'"
+      return `<div onclick="document.getElementById('input-source').value='${escHtml(v)}';_onInputSourceChange('${escHtml(v)}')"
                    style="font-family:var(--mono);font-size:0.62rem;color:var(--amber);
                           cursor:pointer;padding:0.2rem 0;border-bottom:1px solid var(--border);"
                    title="${escHtml(v)}">▸ ${escHtml(name)}</div>`;
@@ -1401,12 +2201,98 @@ async function scanVideos() {
   }
 }
 
+// ── Input source helpers ──────────────────────────────────────
+function _isLiveSource(val) {
+  // Live = integer webcam index or URL scheme (rtsp/http/etc)
+  return /^\d+$/.test(val.trim()) ||
+         /^(rtsp|rtsps|rtmp|http|https):\/\//i.test(val.trim());
+}
+
+function _autoCamera(val) {
+  // Derive a short camera ID from filename, e.g. "cameraJitter_traffic" → "cameraJitter_traffic"
+  const fname = val.trim().split(/[\\/]/).pop().replace(/\.[^.]+$/, '');
+  // Sanitize to alphanum/underscore/hyphen
+  return fname.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40) || 'cam_00';
+}
+
+function _onInputSourceChange(val) {
+  const field = document.getElementById('camera-id-field');
+  if (_isLiveSource(val)) {
+    field.style.display = '';   // show Camera ID for live sources
+  } else {
+    field.style.display = 'none'; // hide for file sources
+    // Store the auto-derived ID in the hidden field
+    document.getElementById('camera-id-auto').value = _autoCamera(val);
+  }
+}
+
+// ── File upload from remote device ────────────────────────────
+async function _uploadVideoFile(file) {
+  const status = document.getElementById('upload-status');
+  status.textContent = `Uploading ${file.name}…`;
+  const form = new FormData();
+  form.append('file', file);
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: form });
+    const data = await res.json();
+    if (!res.ok) { status.textContent = `Error: ${data.error}`; return; }
+    document.getElementById('input-source').value = data.path;
+    _onInputSourceChange(data.path);
+    status.textContent = `✓ ${data.filename} ready`;
+  } catch(e) {
+    status.textContent = `Upload failed: ${e}`;
+  }
+}
+
+async function _uploadVideo(input) {
+  if (!input.files.length) return;
+  await _uploadVideoFile(input.files[0]);
+  input.value = '';  // reset so same file can be re-selected
+}
+
+// ── Drag-and-drop on upload zone ──────────────────────────────
+(function _initUploadZoneDnD() {
+  document.addEventListener('DOMContentLoaded', () => {
+    const zone = document.getElementById('upload-zone');
+    if (!zone) return;
+    zone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      zone.classList.add('drag-over');
+    });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      zone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) await _uploadVideoFile(file);
+    });
+  });
+})();
+
+// ── Clear output segments ─────────────────────────────────────
+async function clearSegments() {
+  if (!confirm('Hide all segments from the dashboard? Files on disk are kept — this only clears the view.')) return;
+  try {
+    const res = await fetch('/api/segments/clear', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Clear failed'); return; }
+    await loadSegments();
+  } catch(e) {
+    alert(`Clear failed: ${e}`);
+  }
+}
+
 // ── Start pipeline ────────────────────────────────────────────
 async function startPipeline() {
   clearError();
+  const inputSrc = document.getElementById('input-source').value.trim();
+  // Use Camera ID field for live sources, auto-derive from filename for files
+  const cameraId = _isLiveSource(inputSrc)
+    ? (document.getElementById('camera-id').value.trim() || 'cam_00')
+    : (document.getElementById('camera-id-auto').value || _autoCamera(inputSrc));
   const config = {
-    input_source:     document.getElementById('input-source').value.trim(),
-    camera_id:        document.getElementById('camera-id').value.trim(),
+    input_source:     inputSrc,
+    camera_id:        cameraId,
     output_dir:       document.getElementById('output-dir').value.trim(),
     segment_seconds:  parseInt(document.getElementById('segment-seconds').value),
     warmup_frames:    parseInt(document.getElementById('warmup-frames').value),
@@ -1415,9 +2301,14 @@ async function startPipeline() {
     enhance:          document.getElementById('enhance-toggle').checked,
     enhance_model:    document.getElementById('enhance-model').value,
     enhance_scale:    parseInt(document.getElementById('enhance-scale').value),
+    enhance_every_n:  parseInt(document.getElementById('enhance-every-n').value),
+    enhance_max_roi_px: parseInt(document.getElementById('enhance-max-roi').value),
+    enhance_device:   document.getElementById('enhance-device').value,
     encrypt:          document.getElementById('encrypt-toggle').checked,
     encrypt_password: document.getElementById('encrypt-password').value,
     encrypt_key_file: document.getElementById('encrypt-keyfile').value.trim(),
+    object_filter:    document.getElementById('object-filter-toggle').checked,
+    filter_confidence: parseFloat(document.getElementById('filter-confidence').value),
   };
 
   try {
@@ -1548,6 +2439,9 @@ function _showSegTooltip(evt, seg) {
   const rawMb = (seg.duration_s * (seg.width || 640) * (seg.height || 480) * 3 * (seg.fps || 25)) / 1e6;
   const compMb = seg.file_size_kb / 1024;
   const ratio = rawMb > 0 ? (rawMb / compMb).toFixed(1) : '?';
+  const sharpnessLine = seg.sharpness_label
+    ? `Quality:    ${seg.sharpness_label} (score: ${seg.avg_sharpness})`
+    : null;
   const lines = [
     `Camera:    ${seg.camera_id}`,
     `Duration:  ${seg.duration_s}s`,
@@ -1557,6 +2451,7 @@ function _showSegTooltip(evt, seg) {
     rawMb > 0 ? `Ratio:      ${ratio}× smaller` : null,
     seg.object_type !== 'unknown' ? `Object type: ${seg.object_type}` : null,
     `Mode target: ${seg.target_detected ? 'YES — motion detected' : 'NO — background only'}`,
+    sharpnessLine,
   ].filter(Boolean).join('\n');
 
   _tooltip.textContent = lines;
@@ -1598,19 +2493,34 @@ async function pollStatus() {
     document.getElementById('stat-segments').textContent = fmtNum(data.segment_count || 0);
     document.getElementById('stat-fps').textContent      = data.fps != null ? data.fps : '—';
 
-    if (data.elapsed_seconds != null) {
-      document.getElementById('progress-label').textContent =
-        fmtDuration(data.elapsed_seconds);
-    }
+    const fill  = document.getElementById('progress-fill');
+    const pctEl = document.getElementById('progress-pct');
 
-    const fill = document.getElementById('progress-fill');
     if (data.running) {
-      fill.classList.add('running');
-      fill.style.width = '100%';
+      const pct = data.progress_pct;   // null for live/unknown-length sources
+      if (pct != null) {
+        // Known-length file: show real percentage
+        fill.classList.remove('running');
+        fill.style.width = pct + '%';
+        pctEl.textContent = pct.toFixed(1) + '%';
+      } else {
+        // Live stream / unknown length: animated shimmer
+        fill.classList.add('running');
+        fill.style.width = '100%';
+        pctEl.textContent = '';
+      }
     } else {
       fill.classList.remove('running');
       fill.style.width = '0%';
-      document.getElementById('progress-label').textContent = '—';
+      pctEl.textContent = '';
+    }
+
+    // Human-readable status message
+    const statusEl = document.getElementById('status-message');
+    if (statusEl) {
+      const friendly = _friendlyStatus(data);
+      statusEl.textContent = friendly.text;
+      statusEl.className = 'status-message' + (friendly.cls ? ' ' + friendly.cls : '');
     }
 
     if (data.running !== lastRunning) {
@@ -1641,15 +2551,38 @@ async function pollStorage() {
     const data = await res.json();
     if (data.available) {
       const mb = data.total_mb;
+      _lastStorageMb = mb;
       if (mb >= 1000) {
         document.getElementById('stat-storage').textContent = (mb/1024).toFixed(2);
-        document.getElementById('stat-storage-unit').textContent = 'GB';
+        document.getElementById('stat-storage-unit').textContent = 'GB used';
       } else {
-        document.getElementById('stat-storage').textContent = mb.toFixed(1);
-        document.getElementById('stat-storage-unit').textContent = 'MB';
+        document.getElementById('stat-storage').textContent = mb > 0 ? mb.toFixed(1) : '—';
+        document.getElementById('stat-storage-unit').textContent = 'MB used';
       }
+      // Compression ratio from segments table
+      _updateCompressionRatio();
     }
   } catch(e) {}
+}
+
+function _updateCompressionRatio() {
+  const ratioEl = document.getElementById('stat-savings-ratio');
+  if (!ratioEl || !_segmentData.length) return;
+  // Estimate raw size from segment metadata and compare to actual file sizes
+  let totalRawMb = 0;
+  let totalCompMb = 0;
+  _segmentData.forEach(s => {
+    const rawMb = (s.duration_s * (s.width || 640) * (s.height || 480) * 3 * (s.fps || 25)) / 1e6;
+    const compMb = (s.file_size_kb || 0) / 1024;
+    totalRawMb += rawMb;
+    totalCompMb += compMb;
+  });
+  if (totalCompMb > 0 && totalRawMb > 0) {
+    const ratio = totalRawMb / totalCompMb;
+    _lastCompressionRatio = ratio.toFixed(1);
+    ratioEl.textContent = `~${_lastCompressionRatio}× smaller than raw`;
+    ratioEl.style.color = ratio >= 10 ? 'var(--green)' : ratio >= 3 ? 'var(--teal)' : 'var(--text-dim)';
+  }
 }
 
 // Store segment data for tooltip lookups (keyed by row index)
@@ -1666,6 +2599,7 @@ async function loadSegments() {
       return;
     }
     _segmentData = data.segments;
+    _updateCompressionRatio();
     tbody.innerHTML = data.segments.map((s, idx) => {
       const ts = formatTimestamp(s.timestamp);
       const targetClass = s.target_detected ? 'target-yes' : 'target-no';
@@ -1679,6 +2613,16 @@ async function loadSegments() {
       const sizeStr = compMb >= 1
         ? `${compMb.toFixed(1)} MB`
         : `${s.file_size_kb} KB`;
+      // Quality column: sharpness label, stripped to the resolution part only
+      // e.g. "~720p (sharp)" → shown as-is; null → "—"
+      const qualityStr = s.sharpness_label
+        ? escHtml(s.sharpness_label.split(' ')[0])   // just "~720p"
+        : '<span style="color:var(--text-dim)">—</span>';
+      const qualityColor = s.sharpness_label
+        ? (s.sharpness_label.includes('blurry') || s.sharpness_label.includes('240p') ? 'var(--red)'
+          : s.sharpness_label.includes('480p') ? 'var(--yellow)'
+          : 'var(--green)')
+        : '';
       return `<tr data-seg-idx="${idx}" onmouseenter="_onSegRowEnter(event,${idx})" onmousemove="_moveTooltip(event)" onmouseleave="_hideTooltip()">
         <td>${ts}</td>
         <td>${escHtml(s.camera_id)}</td>
@@ -1687,6 +2631,7 @@ async function loadSegments() {
         <td>${s.roi_count}</td>
         <td>${s.duration_s}s</td>
         <td>${sizeStr}</td>
+        <td style="color:${qualityColor};font-size:0.72rem">${qualityStr}</td>
         <td>${playBtn}</td>
       </tr>`;
     }).join('');
@@ -1712,13 +2657,14 @@ function playSegment(url, path) {
   wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
-// ── Browse for video file (native OS dialog) ──────────────────
+// ── Browse for video file (native OS dialog, local only) ──────
 async function browseFile() {
   try {
     const res = await fetch('/api/browse');
     const data = await res.json();
     if (data.path) {
       document.getElementById('input-source').value = data.path;
+      _onInputSourceChange(data.path);
     }
   } catch(e) {
     console.error('browseFile', e);
@@ -1762,7 +2708,8 @@ async function runDemo() {
       document.getElementById('btn-run-demo').disabled = false;
       return;
     }
-    showDemoPanel('running', 'Pipeline running for modes: ' + modes.join(', ') + '…');
+    _demoPct = 0;
+    showDemoPanel('running', 'Starting demo for: ' + modes.join(', ') + '…');
     pollDemoStatus();
   } catch(e) {
     alert('Demo failed: ' + e);
@@ -1770,15 +2717,61 @@ async function runDemo() {
   }
 }
 
-function showDemoPanel(state, msg) {
-  const section = document.getElementById('demo-section');
-  const spinner = document.getElementById('demo-spinner');
-  const statusMsg = document.getElementById('demo-status-msg');
-  const playerWrap = document.getElementById('demo-player-wrap');
+const _DEMO_PHASE_LABELS = {
+  start:    'STARTING',
+  pipeline: 'COMPRESSING',
+  render:   'RENDERING',
+  stitch:   'STITCHING',
+  done:     'COMPLETE',
+};
+
+// Track progress bar fill % — advances per callback so it feels alive
+let _demoPct = 0;
+
+function showDemoPanel(state, msg, detail) {
+  detail = detail || {};
+  const section     = document.getElementById('demo-section');
+  const runningWrap = document.getElementById('demo-running-wrap');
+  const statusMsg   = document.getElementById('demo-status-msg');
+  const playerWrap  = document.getElementById('demo-player-wrap');
   section.style.display = '';
-  statusMsg.textContent = msg;
-  spinner.style.display = (state === 'running') ? 'flex' : 'none';
-  playerWrap.style.display = (state === 'done') ? 'flex' : 'none';
+
+  if (state === 'running') {
+    runningWrap.style.display = '';
+    playerWrap.style.display  = 'none';
+    statusMsg.textContent = '';
+
+    // Phase badge
+    const phase = detail.demo_phase || 'running';
+    document.getElementById('demo-phase-badge').textContent =
+      _DEMO_PHASE_LABELS[phase] || phase.toUpperCase();
+
+    // Step label
+    const step = detail.demo_step || '';
+    const modeStr = detail.demo_mode ? ` — ${detail.demo_mode.toUpperCase()}` : '';
+    document.getElementById('demo-step-label').textContent = step + modeStr;
+
+    // Progress message
+    document.getElementById('demo-progress-msg').textContent = msg;
+
+    // Advance fake progress bar — pipeline phases are the heavy work
+    if (phase === 'pipeline' && _demoPct < 70) _demoPct = Math.min(_demoPct + 15, 70);
+    if (phase === 'render'   && _demoPct < 88) _demoPct = Math.min(_demoPct + 10, 88);
+    if (phase === 'stitch'   && _demoPct < 95) _demoPct = Math.min(_demoPct + 5,  95);
+    document.getElementById('demo-progress-bar').style.width = _demoPct + '%';
+
+  } else if (state === 'done') {
+    runningWrap.style.display = 'none';
+    playerWrap.style.display  = 'flex';
+    statusMsg.textContent = msg || 'Render complete.';
+    document.getElementById('demo-progress-bar').style.width = '100%';
+
+  } else {
+    // error or idle
+    runningWrap.style.display = 'none';
+    playerWrap.style.display  = 'none';
+    statusMsg.textContent = msg;
+  }
 }
 
 function closeDemoPanel() {
@@ -1793,13 +2786,13 @@ function pollDemoStatus() {
       const res = await fetch('/api/demo/status');
       const data = await res.json();
       if (data.status === 'running' || data.status === 'queued') {
-        showDemoPanel('running', data.progress || 'Running…');
+        showDemoPanel('running', data.progress || 'Running…', data);
         pollDemoStatus();
       } else if (data.status === 'done' && data.result) {
         renderDemoResult(data.result);
         document.getElementById('btn-run-demo').disabled = false;
       } else if (data.status === 'error') {
-        showDemoPanel('error', '⚠ Error: ' + (data.error || 'Unknown error'));
+        showDemoPanel('error', '⚠ ' + (data.error || 'Unknown error'));
         document.getElementById('btn-run-demo').disabled = false;
       } else {
         pollDemoStatus();
@@ -1807,15 +2800,27 @@ function pollDemoStatus() {
     } catch(e) {
       pollDemoStatus();
     }
-  }, 2000);
+  }, 1000);  // poll every 1s during demo for snappier updates
 }
 
 function renderDemoResult(result) {
-  showDemoPanel('done', 'Render complete.');
+  showDemoPanel('done', 'Render complete.', {});
   const tabs = document.getElementById('demo-tabs');
   tabs.innerHTML = '';
 
-  // Build tab list: split-screen first, then per-mode
+  const modesRan = result.modes || Object.keys(result.videos || {});
+  const multiMode = modesRan.length > 1;
+
+  // If multiple modes ran, show ONLY the split-screen — that's the comparison video.
+  // Individual mode tabs are available as fallback if split-screen is missing.
+  if (multiMode && result.split_screen) {
+    loadDemoVideo(result.split_screen);
+    document.getElementById('demo-status-msg').textContent =
+      'Split-screen comparison — ' + modesRan.map(m => m.toUpperCase()).join(' vs ');
+    return;
+  }
+
+  // Single mode or no split-screen: build tab list
   const tabDefs = [];
   if (result.split_screen) {
     tabDefs.push({ label: 'SPLIT SCREEN', url: result.split_screen });
@@ -1823,7 +2828,7 @@ function renderDemoResult(result) {
   for (const [mode, views] of Object.entries(result.videos || {})) {
     for (const [view, url] of Object.entries(views || {})) {
       if (url) {
-        const label = view === 'standard' ? mode.toUpperCase() : `${mode.toUpperCase()} · ${view}`;
+        const label = view === 'standard' ? mode.toUpperCase() : `${mode.toUpperCase()} / ${view}`;
         tabDefs.push({ label, url });
       }
     }
@@ -1952,9 +2957,15 @@ function setPipelineRunning(running) {
   const fields = document.querySelectorAll(
     '#input-source, #camera-id, #output-dir, #mode-select, #bg-method, ' +
     '#segment-seconds, #warmup-frames, #enhance-toggle, #enhance-model, ' +
-    '#enhance-scale, #encrypt-toggle, #encrypt-password, #encrypt-keyfile'
+    '#enhance-scale, #enhance-every-n, #enhance-max-roi, #enhance-device, #encrypt-toggle, #encrypt-password, #encrypt-keyfile, ' +
+    '#sensitivity-slider, #segment-seconds-slider'
   );
   fields.forEach(f => { f.disabled = running; });
+  // Grey out preset cards while running
+  document.querySelectorAll('.preset-card').forEach(c => {
+    c.style.pointerEvents = running ? 'none' : '';
+    c.style.opacity = running ? '0.6' : '';
+  });
 }
 
 function showError(msg) {
@@ -2405,6 +3416,73 @@ function rtspCopyUrl() {
 // Initial RTSP state load on page open
 window.addEventListener('DOMContentLoaded', () => { _rtspRefresh(); });
 
+// ── Help modal ────────────────────────────────────────────────
+function openHelp() {
+  document.getElementById('help-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeHelp() {
+  document.getElementById('help-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+function _helpOverlayClick(evt) {
+  if (evt.target === document.getElementById('help-overlay')) closeHelp();
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeHelp();
+});
+
+// ── GPU detection ─────────────────────────────────────────────
+async function checkGpu() {
+  const msgEl = document.getElementById('gpu-status-msg');
+  msgEl.textContent = 'Checking GPU…';
+  msgEl.style.color = 'var(--text-dim)';
+  try {
+    const res  = await fetch('/api/gpu_info');
+    const data = await res.json();
+    const sel  = document.getElementById('enhance-device');
+
+    // Auto-select best device
+    if (data.available && sel.value === 'auto') {
+      // leave as auto, just display info
+    }
+
+    const color = data.will_work ? 'var(--green)' : data.available ? 'var(--amber)' : 'var(--text-dim)';
+    msgEl.style.color = color;
+    let msg = data.note || '';
+    if (data.mobile_note) msg += ' ' + data.mobile_note;
+    if (data.torch_version) msg += ` (torch ${data.torch_version})`;
+    msgEl.textContent = msg || 'No GPU detected — CPU will be used.';
+  } catch(e) {
+    msgEl.textContent = 'GPU check failed: ' + e;
+    msgEl.style.color = 'var(--red)';
+  }
+}
+
+// ── LAN IP display ────────────────────────────────────────────
+async function _loadLanUrl() {
+  try {
+    const res  = await fetch('/api/network_info');
+    const data = await res.json();
+    const wrap = document.getElementById('lan-url-wrap');
+    const link = document.getElementById('lan-url-link');
+    if (data.url) {
+      link.textContent = data.url;
+      link.href = data.url;
+      wrap.style.display = 'flex';
+    }
+  } catch(e) {}
+}
+function _copyLanUrl() {
+  const link = document.getElementById('lan-url-link');
+  if (!link) return;
+  navigator.clipboard.writeText(link.href).then(() => {
+    const orig = link.title;
+    link.style.color = 'var(--green)';
+    setTimeout(() => { link.style.color = ''; }, 1200);
+  }).catch(() => {});
+}
+
 // ── Boot ─────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   startSSE();
@@ -2412,6 +3490,15 @@ window.addEventListener('DOMContentLoaded', () => {
   loadSegments();
   pollStorage();
   pollStatus();
+  // Evaluate initial input source so Camera ID field visibility is correct
+  const initSrc = document.getElementById('input-source').value;
+  _onInputSourceChange(initSrc);
+  // Initialize sensitivity slider display
+  _onSensitivityChange(document.getElementById('sensitivity-slider').value);
+  // Initialize segment length slider display
+  _onSegLenChange(document.getElementById('segment-seconds-slider').value);
+  // Load LAN IP for teammate sharing
+  _loadLanUrl();
 });
 </script>
 </body>

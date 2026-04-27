@@ -1,5 +1,5 @@
 [project]
-name = "capstone-compression"
+name = "Video-compression"
 version = "0.1.0"
 description = "Open-source selective video compression for static surveillance cameras"
 readme = "README.md"
@@ -34,6 +34,11 @@ dependencies = [
     # Testing
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
+    # YOLO smart detection filter
+    # YOLOv8-nano classifies MOG2 bounding boxes so leaves/shadows are not
+    # recorded. Falls back to pass-through if this package is missing at runtime.
+    # On first use, downloads yolov8n.pt (~6 MB) automatically.
+    "ultralytics>=8.0.0",
 ]
 
 [project.optional-dependencies]
@@ -59,7 +64,3 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-markers = [
-    "integration: real subprocess / network tests (may be slow)",
-    "slow: long-running stress tests",
-]

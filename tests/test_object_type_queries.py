@@ -57,16 +57,19 @@ def temp_db():
     os.remove(db_path)
 
 
+_OBJECT_TYPE_COL = 8  # SELECT * column order: id,timestamp,camera_id,target_detected,roi_count,file_size,duration,file_path,object_type,...
+
+
 def test_query_by_type_vehicle(temp_db):
     results = query_by_type("vehicle", db_path=temp_db)
     assert len(results) == 1
-    assert results[0][-1] == "vehicle"
+    assert results[0][_OBJECT_TYPE_COL] == "vehicle"
 
 
 def test_query_by_type_person(temp_db):
     results = query_by_type("person", db_path=temp_db)
     assert len(results) == 1
-    assert results[0][-1] == "person"
+    assert results[0][_OBJECT_TYPE_COL] == "person"
 
 def test_query_segments_by_target_count(temp_db):
     results = query_segments_by_target_count(db_path=temp_db)

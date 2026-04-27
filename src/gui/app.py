@@ -69,6 +69,7 @@ app.config["SECRET_KEY"] = os.urandom(24)
 _state_lock = threading.Lock()
 _pipeline_thread: threading.Thread | None = None
 _stop_event: threading.Event | None = None
+_active_encoder = None   # set by _patched_re_init so stop can abort a hung FFmpeg pipe
 
 _status: dict = {
     "running": False,
@@ -76,6 +77,7 @@ _status: dict = {
     "config": {},
     "frame_count": 0,
     "segment_count": 0,
+    "total_frames": 0,   # 0 = live/unknown, >0 = video file with known length
     "error": None,
 }
 
@@ -152,7 +154,15 @@ atexit.register(_write_shutdown_log)
 # without touching the core pipeline code.
 
 def _patch_frame_source(src_obj):
-    """Monkey-patch src.read() to increment _status['frame_count']."""
+    """Monkey-patch src.read() to increment _status['frame_count'].
+    Also reads total_frames from the source so the progress bar knows the denominator.
+    """
+    # Push total frame count into status so the progress bar has a denominator.
+    # total_frames == 0 for live cameras/RTSP — progress bar shows spinner instead.
+    total = getattr(src_obj, "total_frames", 0) or 0
+    with _state_lock:
+        _status["total_frames"] = int(total)
+
     original_read = src_obj.read
 
     def _counted_read():
@@ -191,6 +201,7 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
         _status["running"] = True
         _status["frame_count"] = 0
         _status["segment_count"] = 0
+        _status["total_frames"] = 0
         _status["error"] = None
         _status["start_time"] = time.time()
         _status["config"] = config
@@ -221,8 +232,10 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             _patch_frame_source(self_inner)
 
         def _patched_re_init(self_inner, *a, **kw):
+            global _active_encoder
             _orig_re_init(self_inner, *a, **kw)
             _patch_encoder(self_inner)
+            _active_encoder = self_inner   # expose to stop handler
 
         _fs.FrameSource.__init__ = _patched_fs_init
         _re.ROIEncoder.__init__ = _patched_re_init
@@ -240,9 +253,14 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             enhance=config.get("enhance", False),
             enhance_model=config.get("enhance_model", "bicubic"),
             enhance_scale=int(config.get("enhance_scale", 4)),
+            enhance_every_n=int(config.get("enhance_every_n", 5)),
+            enhance_max_roi_px=int(config.get("enhance_max_roi_px", 200)),
+            enhance_device=config.get("enhance_device", "auto"),
             encrypt=config.get("encrypt", False),
             encrypt_password=config.get("encrypt_password") or None,
             encrypt_key_file=config.get("encrypt_key_file") or None,
+            object_filter=config.get("object_filter", False),
+            filter_confidence=float(config.get("filter_confidence", 0.30)),
             stop_event=stop_event,
         )
 
@@ -268,6 +286,8 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
 
         with _state_lock:
             _status["running"] = False
+        global _active_encoder
+        _active_encoder = None
         log.info("Pipeline stopped.")
 
 
@@ -285,15 +305,24 @@ def api_status():
 
     elapsed = None
     fps = None
+    progress_pct = None
+    eta_seconds = None
     if snap["start_time"] and snap["running"]:
         elapsed = round(time.time() - snap["start_time"], 1)
         fc = snap["frame_count"]
         fps = round(fc / elapsed, 1) if elapsed > 0 else 0.0
+        total = snap.get("total_frames", 0)
+        if total and total > 0:
+            progress_pct = round(min(fc / total * 100, 100), 1)
+            remaining_frames = max(0, total - fc)
+            eta_seconds = round(remaining_frames / fps, 0) if fps and fps > 0 else None
 
     return jsonify({
         **snap,
         "elapsed_seconds": elapsed,
         "fps": fps,
+        "progress_pct": progress_pct,
+        "eta_seconds": int(eta_seconds) if eta_seconds is not None else None,
     })
 
 
@@ -328,9 +357,14 @@ def api_start():
         "enhance": bool(data.get("enhance", False)),
         "enhance_model": data.get("enhance_model", "bicubic"),
         "enhance_scale": data.get("enhance_scale", 4),
+        "enhance_every_n": int(data.get("enhance_every_n", 5)),
+        "enhance_max_roi_px": int(data.get("enhance_max_roi_px", 200)),
+        "enhance_device": data.get("enhance_device", "auto"),
         "encrypt": bool(data.get("encrypt", False)),
         "encrypt_password": data.get("encrypt_password", ""),
         "encrypt_key_file": data.get("encrypt_key_file", ""),
+        "object_filter": bool(data.get("object_filter", False)),
+        "filter_confidence": float(data.get("filter_confidence", 0.30)),
     }
 
     _stop_event = threading.Event()
@@ -355,7 +389,7 @@ def _segment_absolute_path(file_path: str, output_dir: str) -> Path:
 
 @app.route("/api/stop", methods=["POST"])
 def api_stop():
-    global _stop_event
+    global _stop_event, _active_encoder
     with _state_lock:
         if not _status["running"]:
             return jsonify({"error": "Pipeline not running"}), 409
@@ -363,6 +397,16 @@ def api_stop():
     if _stop_event:
         _stop_event.set()
         log.info("Stop signal sent to pipeline.")
+
+    # If the pipeline thread is blocked inside finish_segment() waiting for
+    # FFmpeg to flush, abort the pipe immediately so the thread can exit.
+    enc = _active_encoder
+    if enc is not None:
+        try:
+            enc.abort_segment()
+            log.info("Active FFmpeg pipe aborted.")
+        except Exception:
+            pass
 
     return jsonify({"ok": True})
 
@@ -384,8 +428,10 @@ def api_segments():
                 """
                 SELECT timestamp, camera_id, target_detected, roi_count,
                        file_size, duration, file_path,
-                       COALESCE(object_type, 'unknown') AS object_type
+                       COALESCE(object_type, 'unknown') AS object_type,
+                       avg_sharpness, sharpness_label
                 FROM segments
+                WHERE COALESCE(hidden, 0) = 0
                 ORDER BY timestamp DESC
                 LIMIT 50
                 """
@@ -411,6 +457,8 @@ def api_segments():
             "file_path": r[6],
             "object_type": r[7],
             "playable_url": playable_url,
+            "avg_sharpness": r[8],
+            "sharpness_label": r[9],
         })
 
     return jsonify({"segments": segs, "db_path": str(db_path)})
@@ -527,10 +575,14 @@ def media_file(rel_path: str):
 
 @app.route("/api/media")
 def api_media():
-    """Serve any local video file by absolute path (local tool only).
+    """Serve any local video file by absolute path with HTTP range support.
 
     Called as /api/media?path=<url-encoded-absolute-path>.
     Rejects non-video extensions and non-existent files.
+
+    Range request support is required for browser <video> elements to seek
+    and play without buffering the entire file. Flask's send_from_directory
+    does not handle Range headers — this implementation does.
     """
     path = unquote(request.args.get("path", "").strip())
     if not path:
@@ -538,17 +590,83 @@ def api_media():
     p = Path(path).resolve()
     if not p.exists() or not p.is_file():
         abort(404)
-    if p.suffix.lower() not in {".mp4", ".webm", ".mov", ".avi", ".mkv"}:
+    suffix = p.suffix.lower()
+    if suffix not in {".mp4", ".webm", ".mov", ".avi", ".mkv"}:
         abort(403)
-    return send_from_directory(str(p.parent), p.name, as_attachment=False)
+
+    mime_map = {
+        ".mp4": "video/mp4",
+        ".webm": "video/webm",
+        ".mov": "video/quicktime",
+        ".avi": "video/x-msvideo",
+        ".mkv": "video/x-matroska",
+    }
+    mime = mime_map.get(suffix, "video/mp4")
+    file_size = p.stat().st_size
+
+    range_header = request.headers.get("Range", None)
+    if range_header:
+        # Parse "bytes=start-end"
+        try:
+            byte_range = range_header.strip().replace("bytes=", "")
+            parts = byte_range.split("-")
+            start = int(parts[0]) if parts[0] else 0
+            end = int(parts[1]) if len(parts) > 1 and parts[1] else file_size - 1
+        except (ValueError, IndexError):
+            abort(416)
+
+        end = min(end, file_size - 1)
+        if start > end or start < 0:
+            abort(416)
+
+        length = end - start + 1
+
+        def _generate_range():
+            with open(p, "rb") as f:
+                f.seek(start)
+                remaining = length
+                chunk = 65536
+                while remaining > 0:
+                    data = f.read(min(chunk, remaining))
+                    if not data:
+                        break
+                    remaining -= len(data)
+                    yield data
+
+        resp = Response(
+            _generate_range(),
+            status=206,
+            mimetype=mime,
+            direct_passthrough=True,
+        )
+        resp.headers["Content-Range"] = f"bytes {start}-{end}/{file_size}"
+        resp.headers["Content-Length"] = str(length)
+        resp.headers["Accept-Ranges"] = "bytes"
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
+    # Full file response (no Range header)
+    def _generate_full():
+        with open(p, "rb") as f:
+            while True:
+                data = f.read(65536)
+                if not data:
+                    break
+                yield data
+
+    resp = Response(_generate_full(), status=200, mimetype=mime, direct_passthrough=True)
+    resp.headers["Content-Length"] = str(file_size)
+    resp.headers["Accept-Ranges"] = "bytes"
+    resp.headers["Cache-Control"] = "no-cache"
+    return resp
 
 
 @app.route("/api/browse")
 def api_browse():
-    """Open a native OS file-picker dialog and return the selected path.
+    """Open a native OS file-picker dialog on the HOST machine.
 
-    Uses subprocess so the tkinter dialog runs in its own process — tkinter
-    requires the OS main thread, which Flask request handlers are not on Windows.
+    Only useful when the browser is on the same machine as the server.
+    Remote users should use /api/upload instead.
     """
     script = (
         "import tkinter as tk; from tkinter import filedialog; "
@@ -570,6 +688,74 @@ def api_browse():
         log.warning(f"File picker failed: {exc}")
         path = ""
     return jsonify({"path": path})
+
+
+_UPLOAD_DIR = _ROOT / "data" / "uploads"
+_ALLOWED_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".h264", ".m4v"}
+
+
+@app.route("/api/upload", methods=["POST"])
+def api_upload():
+    """Accept a video file upload from a remote browser.
+
+    Saves the file into data/uploads/ on the server and returns the
+    server-side path so the pipeline can use it as input_source.
+    """
+    if "file" not in request.files:
+        return jsonify({"error": "No file in request"}), 400
+
+    f = request.files["file"]
+    if not f.filename:
+        return jsonify({"error": "Empty filename"}), 400
+
+    suffix = Path(f.filename).suffix.lower()
+    if suffix not in _ALLOWED_EXTENSIONS:
+        return jsonify({"error": f"File type {suffix} not allowed"}), 400
+
+    _UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    # Sanitize filename — strip any path components the client might inject
+    safe_name = Path(f.filename).name
+    dest = _UPLOAD_DIR / safe_name
+    # Avoid clobbering existing files by appending a counter
+    counter = 1
+    while dest.exists():
+        dest = _UPLOAD_DIR / f"{Path(safe_name).stem}_{counter}{suffix}"
+        counter += 1
+
+    f.save(str(dest))
+    log.info("Uploaded video saved: %s (%d bytes)", dest.name, dest.stat().st_size)
+    return jsonify({"path": str(dest), "filename": dest.name})
+
+
+@app.route("/api/segments/clear", methods=["POST"])
+def api_segments_clear():
+    """Hide all segments from the dashboard view by marking them hidden in the DB.
+
+    Files on disk are NOT deleted. The DB rows are kept but flagged so the
+    dashboard no longer shows them. Re-running the pipeline adds new rows
+    which appear as normal.
+    """
+    with _state_lock:
+        cfg = _status.get("config", {})
+
+    output_dir = Path(cfg.get("output_dir", str(_ROOT / "outputs")))
+    db_path = output_dir / "metadata.db"
+
+    if db_path.exists():
+        try:
+            with get_connection(str(db_path)) as conn:
+                # Add hidden column if upgrading from older DB
+                cols = [c[1] for c in conn.execute("PRAGMA table_info(segments)").fetchall()]
+                if "hidden" not in cols:
+                    conn.execute("ALTER TABLE segments ADD COLUMN hidden INTEGER DEFAULT 0")
+                conn.execute("UPDATE segments SET hidden = 1")
+                conn.commit()
+        except Exception as exc:
+            log.warning("Could not hide segments: %s", exc)
+            return jsonify({"error": str(exc)}), 500
+
+    log.info("Segment table cleared from dashboard view (files preserved on disk)")
+    return jsonify({"ok": True})
 
 
 # ── Archive query routes (Ashleyn's DB queries) ───────────────────────────────
@@ -686,6 +872,9 @@ _demo_state: dict = {
     "status": "idle",        # idle | running | done | error
     "modes": [],
     "progress": "",
+    "demo_phase": "",        # start | pipeline | render | stitch | done
+    "demo_mode": "",         # current mode being processed
+    "demo_step": "",         # e.g. "(1/2)"
     "result": None,          # populated on success
     "error": None,
 }
@@ -702,7 +891,36 @@ def _run_demo_thread(config: dict) -> None:
         with _demo_lock:
             _demo_state.update(kw)
 
-    _update(status="running", progress="Starting pipeline runs…", error=None, result=None)
+    def _progress_cb(message: str, detail: dict):
+        """Receive step updates from run_all_demos and push to demo state."""
+        phase = detail.get("phase", "")
+        mode = detail.get("mode", "")
+        mode_index = detail.get("mode_index")
+        mode_total = detail.get("mode_total")
+
+        # Build a concise progress string for the UI
+        if mode_total and mode_index is not None:
+            step_label = f"({mode_index + 1}/{mode_total})"
+        else:
+            step_label = ""
+
+        _update(
+            progress=message,
+            demo_phase=phase,
+            demo_mode=mode,
+            demo_step=step_label,
+        )
+        log.debug("Demo progress [%s]: %s", phase, message)
+
+    _update(
+        status="running",
+        progress="Starting demo…",
+        demo_phase="start",
+        demo_mode="",
+        demo_step="",
+        error=None,
+        result=None,
+    )
 
     try:
         run_all_demos(
@@ -712,6 +930,7 @@ def _run_demo_thread(config: dict) -> None:
             modes=config["modes"],
             views=config.get("views", ["standard"]),
             no_boxes=config.get("no_boxes", False),
+            progress_callback=_progress_cb,
         )
     except Exception as exc:
         log.error(f"Demo run failed: {exc}", exc_info=True)
@@ -1323,6 +1542,55 @@ def api_rtsp_stop_push():
     _rtsp_mgr.stop_push()
     log.info("RTSP push stopped.")
     return jsonify({"ok": True})
+
+
+# ── GPU info ─────────────────────────────────────────────────────────────────
+
+@app.route("/api/gpu_info")
+def api_gpu_info():
+    """Return GPU detection results for the SR enhancement device selector."""
+    try:
+        try:
+            from enhancement.enhancer import detect_gpu  # type: ignore
+        except ImportError:
+            from src.enhancement.enhancer import detect_gpu  # type: ignore
+        info = detect_gpu()
+    except Exception as exc:
+        info = {
+            "available": False,
+            "backend": "cpu",
+            "device_name": "CPU only",
+            "cuda_available": False,
+            "mps_available": False,
+            "will_work": False,
+            "note": f"GPU detection failed: {exc}",
+            "mobile_note": "",
+        }
+    return jsonify(info)
+
+
+# ── Network / LAN info ────────────────────────────────────────────────────────
+
+@app.route("/api/network_info")
+def api_network_info():
+    """Return the server's LAN IP so teammates can connect."""
+    import socket
+    lan_ip = "127.0.0.1"
+    try:
+        # Connect to an external address to find the default route interface
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        lan_ip = s.getsockname()[0]
+        s.close()
+    except Exception:
+        pass
+    port = 5000
+    return jsonify({
+        "lan_ip": lan_ip,
+        "port": port,
+        "url": f"http://{lan_ip}:{port}",
+        "localhost_url": f"http://localhost:{port}",
+    })
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

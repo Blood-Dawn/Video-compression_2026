@@ -84,14 +84,32 @@ class DummySubtractor:
 class DummyEncoder:
     """
     Fake ROIEncoder that records calls without writing any files.
+    Implements the streaming API: begin_segment / write_frame / finish_segment / abort_segment.
     """
     def __init__(self, call_log, *args, **kwargs):
         self.call_log = call_log
+        self._open = False
 
-    def encode_segment(self, frames, bboxes_per_frame, camera_id, fps,
-                       object_type=None, **kwargs):
+    def begin_segment(self, frame_shape, fps, camera_id="cam_unknown",
+                      has_targets=True, object_type="unknown", source_path=None):
+        self._open = True
+
+    def write_frame(self, frame, boxes=None, background_frame=None,
+                    object_only=False, mode_label="", draw_roi_boxes=None,
+                    measure_sharpness=True):
+        pass
+
+    def abort_segment(self):
+        self._open = False
+
+    def finish_segment(self, timeout=30.0):
+        self._open = False
         self.call_log["encode_segment"] += 1
-        return f"dummy_segment_{self.call_log['encode_segment']}.mp4"
+        return {
+            "file_path": f"dummy_segment_{self.call_log['encode_segment']}.mp4",
+            "avg_sharpness": None,
+            "sharpness_label": None,
+        }
 
     def get_storage_report(self):
         self.call_log["get_storage_report"] += 1
@@ -260,14 +278,32 @@ class TestMode1Behavior:
 
         class RecordingEncoder:
             def __init__(self, *args, **kwargs):
+                self._frame_count = 0
+                self._bbox_count = 0
+
+            def begin_segment(self, frame_shape, fps, camera_id="cam_unknown",
+                              has_targets=True, object_type="unknown", source_path=None):
+                self._frame_count = 0
+                self._bbox_count = 0
+
+            def write_frame(self, frame, boxes=None, background_frame=None,
+                            object_only=False, mode_label="", draw_roi_boxes=None,
+                            measure_sharpness=True):
+                self._frame_count += 1
+                self._bbox_count += 1  # one bboxes_per_frame entry per write_frame call
+
+            def abort_segment(self):
                 pass
 
-            def encode_segment(self, frames, bboxes_per_frame, camera_id, fps,
-                               object_type=None, **kwargs):
+            def finish_segment(self, timeout=30.0):
                 calls["encode_segment"] += 1
-                calls["encoded_frame_count"] = len(frames)
-                calls["encoded_bboxes_count"] = len(bboxes_per_frame)
-                return "dummy_mode1.mp4"
+                calls["encoded_frame_count"] = self._frame_count
+                calls["encoded_bboxes_count"] = self._bbox_count
+                return {
+                    "file_path": "dummy_mode1.mp4",
+                    "avg_sharpness": None,
+                    "sharpness_label": None,
+                }
 
             def get_storage_report(self):
                 calls["get_storage_report"] += 1
@@ -345,18 +381,42 @@ class TestMode2Behavior:
 
         class RecordingEncoder:
             def __init__(self, *args, **kwargs):
+                self._frame_count = 0
+                self._object_only = None
+                self._background_val = None
+
+            def begin_segment(self, frame_shape, fps, camera_id="cam_unknown",
+                              has_targets=True, object_type="unknown", source_path=None):
+                self._frame_count = 0
+                self._object_only = None
+                self._background_val = None
+
+            def write_frame(self, frame, boxes=None, background_frame=None,
+                            object_only=False, mode_label="", draw_roi_boxes=None,
+                            measure_sharpness=True):
+                self._frame_count += 1
+                # Capture the first frame's object_only and background value
+                if self._object_only is None:
+                    self._object_only = object_only
+                if self._background_val is None:
+                    self._background_val = (
+                        None if background_frame is None
+                        else int(background_frame[0, 0, 0])
+                    )
+
+            def abort_segment(self):
                 pass
 
-            def encode_segment(self, frames, bboxes_per_frame, camera_id, fps,
-                               object_type=None, **kwargs):
+            def finish_segment(self, timeout=30.0):
                 calls["encode_segment"] += 1
-                calls["encoded_frame_counts"].append(len(frames))
-                calls["object_only"].append(kwargs.get("object_only"))
-                background = kwargs.get("background_frame")
-                calls["background_values"].append(
-                    None if background is None else int(background[0, 0, 0])
-                )
-                return f"mode2_patch_{calls['encode_segment']}.mp4"
+                calls["encoded_frame_counts"].append(self._frame_count)
+                calls["object_only"].append(self._object_only)
+                calls["background_values"].append(self._background_val)
+                return {
+                    "file_path": f"mode2_patch_{calls['encode_segment']}.mp4",
+                    "avg_sharpness": None,
+                    "sharpness_label": None,
+                }
 
             def get_storage_report(self):
                 return {"total_segments": calls["encode_segment"]}
@@ -423,15 +483,37 @@ class TestMode3Behavior:
 
         class RecordingEncoder:
             def __init__(self, *args, **kwargs):
+                self._frame_count = 0
+                self._bbox_count = 0
+                self._object_only = None
+
+            def begin_segment(self, frame_shape, fps, camera_id="cam_unknown",
+                              has_targets=True, object_type="unknown", source_path=None):
+                self._frame_count = 0
+                self._bbox_count = 0
+                self._object_only = None
+
+            def write_frame(self, frame, boxes=None, background_frame=None,
+                            object_only=False, mode_label="", draw_roi_boxes=None,
+                            measure_sharpness=True):
+                self._frame_count += 1
+                self._bbox_count += 1
+                if self._object_only is None:
+                    self._object_only = object_only
+
+            def abort_segment(self):
                 pass
 
-            def encode_segment(self, frames, bboxes_per_frame, camera_id, fps,
-                               object_type=None, **kwargs):
+            def finish_segment(self, timeout=30.0):
                 calls["encode_segment"] += 1
-                calls["encoded_frame_count"] = len(frames)
-                calls["encoded_bboxes_count"] = len(bboxes_per_frame)
-                calls["object_only"] = kwargs.get("object_only")
-                return "mode3_object_only.mp4"
+                calls["encoded_frame_count"] = self._frame_count
+                calls["encoded_bboxes_count"] = self._bbox_count
+                calls["object_only"] = self._object_only
+                return {
+                    "file_path": "mode3_object_only.mp4",
+                    "avg_sharpness": None,
+                    "sharpness_label": None,
+                }
 
             def get_storage_report(self):
                 calls["get_storage_report"] += 1

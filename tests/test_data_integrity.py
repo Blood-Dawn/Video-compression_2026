@@ -145,12 +145,13 @@ def encode_decode_pair(tmp_path_factory):
     originals = _make_synthetic_frames(N_FRAMES)
     bboxes = [[(ROI_X, ROI_Y, ROI_W, ROI_H)] for _ in originals]
 
-    output_path = encoder.encode_segment(
+    result = encoder.encode_segment(
         frames=originals,
         bboxes_per_frame=bboxes,
         camera_id="integrity_test",
         fps=FPS,
     )
+    output_path = result["file_path"]
     assert Path(output_path).exists(), "Encoder produced no output file"
     assert Path(output_path).stat().st_size > 0, "Output file is empty"
 
@@ -280,7 +281,7 @@ class TestBackgroundCompression:
             bboxes_per_frame=[[(ROI_X, ROI_Y, ROI_W, ROI_H)] for _ in originals],
             camera_id="fg_crf18",
             fps=FPS,
-        )
+        )["file_path"]
 
         # Encode with no foreground (CRF 45)
         bg_path = encoder.encode_segment(
@@ -288,7 +289,7 @@ class TestBackgroundCompression:
             bboxes_per_frame=[[] for _ in originals],
             camera_id="bg_crf45",
             fps=FPS,
-        )
+        )["file_path"]
 
         fg_size = Path(fg_path).stat().st_size
         bg_size = Path(bg_path).stat().st_size
@@ -341,7 +342,7 @@ class TestIntegrityAcrossFrameCounts:
         frames = _make_synthetic_frames(n_frames)
         bboxes = [[(ROI_X, ROI_Y, ROI_W, ROI_H)] for _ in frames]
         output = encoder.encode_segment(frames=frames, bboxes_per_frame=bboxes,
-                                        camera_id="integrity_param", fps=FPS)
+                                        camera_id="integrity_param", fps=FPS)["file_path"]
         decoded = _decode_video_frames(output, FRAME_H, FRAME_W)
         assert len(decoded) == n_frames, (
             f"{n_frames}-frame segment: expected {n_frames} decoded frames, got {len(decoded)}"
@@ -357,7 +358,7 @@ class TestIntegrityAcrossFrameCounts:
         frames = [np.zeros((FRAME_H, FRAME_W, 3), dtype=np.uint8) for _ in range(10)]
         bboxes = [[(ROI_X, ROI_Y, ROI_W, ROI_H)] for _ in frames]
         output = encoder.encode_segment(frames=frames, bboxes_per_frame=bboxes,
-                                        camera_id="black_frames", fps=FPS)
+                                        camera_id="black_frames", fps=FPS)["file_path"]
         decoded = _decode_video_frames(output, FRAME_H, FRAME_W)
         assert len(decoded) == 10
 
@@ -371,6 +372,6 @@ class TestIntegrityAcrossFrameCounts:
         frames = [np.full((FRAME_H, FRAME_W, 3), 255, dtype=np.uint8) for _ in range(10)]
         bboxes = [[(ROI_X, ROI_Y, ROI_W, ROI_H)] for _ in frames]
         output = encoder.encode_segment(frames=frames, bboxes_per_frame=bboxes,
-                                        camera_id="white_frames", fps=FPS)
+                                        camera_id="white_frames", fps=FPS)["file_path"]
         decoded = _decode_video_frames(output, FRAME_H, FRAME_W)
         assert len(decoded) == 10

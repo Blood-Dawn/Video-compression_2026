@@ -151,6 +151,28 @@ Cody also raised a comparison question: our system isn't really comparable to H.
 
 ---
 
+## April 22 sponsor meeting
+
+Attendees: Riley Roberts, Cody Hayashi (NIWC Pacific), Geena Wann-Kung (NIWC Pacific). Kheiven was not present. Duration: approximately 35 minutes.
+
+Riley ran the demo from his machine. He walked Cody and Geena through Mode 2 and Mode 3, which were new since the last meeting. Cody's first reaction when he saw the mode selector: "That's good to see — mode two and three are new." Riley also showed the HLS live streaming panel and the local RTSP server, both of which landed since April 15. Cody's read on the overall product: it's starting to look like something real.
+
+The demo showed file sizes across all four modes on the same test clip: Mode 0 at 76 MB, Mode 1 at 67 MB, Mode 2 at 30 MB, Mode 3 at 17 MB. Cody's question after seeing Mode 2: how does the background update? Riley explained the current approach — capture the last clean frame during warmup, freeze it as the reference, and composite new object patches over it. Cody pushed on what happens when the background changes over a long run. His suggestion: rather than storing a live-updating background on the edge device, keep the last known clean state and stitch it back in at playback time on a more powerful machine. The edge device is constrained; the playback environment isn't.
+
+On Mode 3, Cody asked about the forensic use case. Riley confirmed it's the tightest compression and loses spatial context outside the bounding boxes. Cody framed the use case correctly: if you know something happened and you're looking for what was in the frame, Mode 3 gives you that at the smallest possible file size. If you need to understand the full scene, Mode 0 or 1 is the right call.
+
+Cody raised metrics as the main gap. The project has good compression numbers but no CPU, latency, or encode-time data broken out by mode. He specifically said good metrics could support academic publishing after the class ends. The data he wants: compression ratio per mode, CPU% per mode, encode time per mode, and latency from ingest to HLS output. He also wants tests run on a Raspberry Pi or equivalent low-power hardware to characterize the real deployment constraint.
+
+Geena asked about testing footage. She suggested using a camera with oncoming traffic rather than a side view, and pointed to a specific intersection near a Pearl City shopping center as a good candidate. Her reasoning: oncoming traffic shows varied vehicle sizes, colors, and speeds, which exercises the detector more than a side angle where everything is roughly the same shape. She and Cody both want footage showing high variance: the same camera at rush hour and at 2am, so the team can show Mode 1's storage advantage on a real scene rather than a synthetic benchmark.
+
+Cody also revisited detection accuracy. His framing: the question isn't just false positive rate, it's whether the false negatives matter. If the system misses a pedestrian who is too small and blurry to identify anyway, that's not a meaningful miss. The goal is to characterize what we catch and what we miss at a level of detail that lets operators make an informed choice about sensitivity settings. He suggested filtering by both confidence score and bounding box size together, since a high-confidence detection of a tiny box is often a false positive.
+
+Super-resolution came up briefly. Cody said he wants to see where the tech actually is on recovering a person from a low-resolution background. Not a sales pitch — an honest test on real footage. Riley noted the enhancer is already in the pipeline with bicubic fallback.
+
+Cody offered to attend the May 6 class presentation remotely if the team sends an invite. He asked for representative camera data to be ready before then.
+
+---
+
 
 
 These come from `notebooks/milestone1_benchmark.ipynb` run on the CDnet 2014 dataset (all 46 scenes, CPU-only hardware). The stress test numbers are from Jorge's 1-hour simulation in `tests/test_pipeline_stress.py`.
@@ -212,8 +234,3 @@ The roadmap has 10 days left. Ten days left. What still needs to happen:
 
 ## Repository state
 
-- **Branch:** `dev`
-- **Commits ahead of origin:** 11 (pending push after this report)
-- **Tests:** 274 passed, 0 failed
-- **Open PRs:** 0
-- **Tag:** `v1.0.0` not yet tagged — planned after final demo validation

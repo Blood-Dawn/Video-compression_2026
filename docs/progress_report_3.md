@@ -51,7 +51,7 @@ Both modes are selectable in the GUI.
 
 ---
 
-### Multi-type metadata query (Riley Roberts, branch `m3-metadata-query-fix` — merged)
+### Multi-type metadata query (Ashleyn Montano, branch `m3-metadata-query-fix` — merged)
 
 The original `query_by_type()` in `db.py` could only filter on a single object class. Operators reviewing footage routinely want compound queries — "show me all segments with vehicles or people in the last 12 hours." Riley extended the function to accept either a string or a list, using parameterized `IN (?, ?, ...)` placeholders (not string interpolation, so SQL injection safety is preserved). A new `min_roi_count` parameter lets callers filter out low-confidence detections.
 
@@ -180,11 +180,11 @@ The roadmap has 10 days left. Ten days left. What still needs to happen:
 
 **Victor Teixeira** — AES-256-GCM upgrade (PR #12), 24 encryption unit tests, tamper detection
 
-**Riley Roberts** — Mode 2/3 implementation (PR #11), mode dispatch repair, multi-type DB query fix (`m3-metadata-query-fix` branch)
+**Riley Roberts** — Mode 2/3 implementation (PR #11), mode dispatch repair
 
 **Jorge Sanchez** — Watchfolder daemon, MultiFrameSource (PR #13), 22 tests across both modules, threading gate fix for racy test
 
-**Ashleyn Montano** — DB schema ownership, `query_by_type()` stable API, object type queries test suite
+**Ashleyn Montano** — DB schema ownership, `query_by_type()` stable API, multi-type query + ROI filter (`m3-metadata-query-fix` branch), object type queries test suite
 
 ---
 

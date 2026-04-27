@@ -8,7 +8,7 @@
 
 ## Summary
 
-This session closed five open threads: merged and hardened Riley's Mode 2/3 implementation (PR #11), merged Victor's AES-256-GCM encryption upgrade (PR #12), pulled Jorge's watchfolder daemon and multi-source RTSP manager (PR #13), merged the `m3-metadata-query-fix` branch from Riley, and landed a new YOLO classification gate (PR #31) that filters out false positives from background subtraction. The full test suite was repaired to match the streaming encoder API that was introduced in a prior session; all 274 tests pass at the end of the session.
+This session closed five open threads: merged and hardened Riley Roberts' Mode 2/3 implementation (PR #11), merged Victor's AES-256-GCM encryption upgrade (PR #12), pulled Jorge's watchfolder daemon and multi-source RTSP manager (PR #13), merged the `m3-metadata-query-fix` branch from Ashleyn Montano, and landed a new YOLO classification gate (PR #31) that filters out false positives from background subtraction. The full test suite was repaired to match the streaming encoder API that was introduced in a prior session; all 274 tests pass at the end of the session.
 
 ---
 
@@ -32,7 +32,7 @@ Encryption format changed from AES-256-CBC to AES-256-GCM. Existing `.enc` files
 
 ## Changes by Area
 
-### Mode system repair — PR #11 (Riley Nakamura)
+### Mode system repair — PR #11 (Riley Roberts)
 
 **What:** Riley's `fix/repair-dev-mode-system` branch was pulled into `dev`. The branch restored the mode dispatch that had been broken during the streaming encoder refactor. `modes.py` now exports `VALID_MODES`, `ModeDecision`, and `decide_frame_fate()` as the single source of truth for per-mode frame routing. `pipeline.py` was updated to use the streaming API throughout (`begin_segment` → `write_frame` × N → `finish_segment`), with separate `raw_regions` (pre-filter) and `regions` (post-filter) paths so Mode 2 background keyframe selection uses the pre-YOLO region list.
 
@@ -81,7 +81,7 @@ Bytes 44 – end  : Ciphertext
 
 ---
 
-### Multi-type metadata query — branch `m3-metadata-query-fix` (Riley Nakamura)
+### Multi-type metadata query — branch `m3-metadata-query-fix` (Ashleyn Montano)
 
 **What:** `query_by_type()` in `src/utils/db.py` was extended to accept either a single string or a list of strings as `object_type`. When a list is passed, the query uses parameterized `IN (?, ?, ...)` placeholders — not string interpolation, so SQL injection safety is preserved. A new `min_roi_count` parameter filters out low-confidence detections. The CLI tool `src/utils/db_query.py` was rewritten to expose `--type` (multi-value), `--min-roi`, `--start-time`, and `--end-time`, with `--last-hours` as a convenience shorthand.
 

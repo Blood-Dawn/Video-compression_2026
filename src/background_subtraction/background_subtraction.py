@@ -80,8 +80,8 @@ class BackgroundSubtractor:
     # must deviate from the background model to be classified as foreground.
     # At night, ambient noise raises this baseline, so we need a higher threshold
     # to avoid flagging sensor grain and light flicker as foreground objects.
-    VAR_THRESHOLD_DAY = 16    # OpenCV default -- calibrated for daytime footage
-    VAR_THRESHOLD_NIGHT = 30  # Raised to reduce false positives from night noise
+    VAR_THRESHOLD_DAY = 50    # OpenCV default -- calibrated for daytime footage
+    VAR_THRESHOLD_NIGHT = 60  # Raised to reduce false positives from night noise
 
     def __init__(
         self,
@@ -161,7 +161,7 @@ class BackgroundSubtractor:
 
         if method == "MOG2":
             self._subtractor = cv2.createBackgroundSubtractorMOG2(
-                history=history, varThreshold=resolved_threshold, detectShadows=True
+                history=history, varThreshold=resolved_threshold, detectShadows=False
             )
         elif method == "KNN":
             self._subtractor = cv2.createBackgroundSubtractorKNN(
@@ -281,3 +281,9 @@ class BackgroundSubtractor:
         for r in regions:
             cv2.rectangle(vis, (r.x, r.y), (r.x + r.w, r.y + r.h), color, thickness)
         return vis
+
+cv2.createBackgroundSubtractorMOG2(
+    history=500,
+    varThreshold=50,
+    detectShadows=True
+)

@@ -70,12 +70,39 @@ class FrameSource:
         self.total_frames = 0
         self.temporal_roi: Optional[Tuple[int, int]] = None  # (start, end) frame numbers
 
+        # Network stream URLs must bypass filesystem checks — Path() may mangle
+        # RTSP URLs on Windows (backslash-separating the host/path portions).
+        _URL_SCHEMES = ("rtsp://", "rtsps://", "rtmp://", "http://", "https://")
+        if any(input_path.lower().startswith(s) for s in _URL_SCHEMES):
+            self._init_video_url(input_path)
+            return
+
         if path.is_dir():
             self._init_sequence(path)
         elif path.is_file():
             self._init_video(path)
         else:
             raise RuntimeError(f"Input path does not exist: {input_path}")
+
+    def _init_video_url(self, url: str):
+        """Set up reading from a network stream URL (RTSP, HTTP, RTMP, etc.).
+
+        cv2.VideoCapture can handle these natively; dimensions may read as 0×0
+        until the first frame arrives (normal for live RTSP streams — the caller
+        should probe the first frame to get real dimensions).
+        """
+        self.input_path = url
+        self._cap = cv2.VideoCapture(url)
+        if not self._cap.isOpened():
+            raise RuntimeError(f"Cannot open stream: {url}")
+        fps = self._cap.get(cv2.CAP_PROP_FPS)
+        self.fps = fps if (fps and 0 < fps <= 120) else 25.0
+        w = self._cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+        h = self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        self.width = int(w) if w > 0 else 0
+        self.height = int(h) if h > 0 else 0
+        self.total_frames = 0  # live stream — frame count unknown
+        self.is_sequence = False
 
     def _init_sequence(self, path: Path):
         """

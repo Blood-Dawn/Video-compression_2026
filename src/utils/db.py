@@ -26,7 +26,7 @@ from typing import List, Optional, Tuple, Union
 DB_NAME = "metadata.db"
 
 # Type alias for a row returned from the segments table.
-SegmentRow = Tuple[int, str, str, int, int, int, float, str]
+SegmentRow = Tuple[int, str, str, int, int, int, float, str, str]
 
 
 def get_connection(db_path: Union[str, Path] = DB_NAME) -> sqlite3.Connection:
@@ -68,9 +68,26 @@ def initialize_database(db_path: Union[str, Path] = DB_NAME) -> None:
                 roi_count       INTEGER NOT NULL DEFAULT 0,
                 file_size       INTEGER NOT NULL DEFAULT 0,
                 duration        REAL    NOT NULL DEFAULT 0.0,
-                file_path       TEXT    NOT NULL
+                file_path       TEXT    NOT NULL,
+                object_type     TEXT    NOT NULL DEFAULT 'unknown'
             )
         """)
+        # Add object_type column if upgrading from M1 DB
+        cursor = conn.execute("PRAGMA table_info(segments)")
+        columns = [col[1] for col in cursor.fetchall()]
+
+        if "object_type" not in columns:
+            conn.execute("ALTER TABLE segments ADD COLUMN object_type TEXT DEFAULT 'unknown'")
+
+        if "avg_sharpness" not in columns:
+            conn.execute("ALTER TABLE segments ADD COLUMN avg_sharpness REAL DEFAULT NULL")
+
+        if "sharpness_label" not in columns:
+            conn.execute("ALTER TABLE segments ADD COLUMN sharpness_label TEXT DEFAULT NULL")
+
+        if "hidden" not in columns:
+            conn.execute("ALTER TABLE segments ADD COLUMN hidden INTEGER DEFAULT 0")
+
         # Index on (camera_id, timestamp) makes query_recent_targets O(log n).
         # Without this, every query is a full table scan — a problem after weeks
         # of footage accumulate thousands of rows.
@@ -80,7 +97,7 @@ def initialize_database(db_path: Union[str, Path] = DB_NAME) -> None:
         """)
         conn.commit()
 
-
+      
 def insert_segment(
     timestamp: str,
     camera_id: str,
@@ -89,6 +106,9 @@ def insert_segment(
     file_size: int,
     duration: float,
     file_path: str,
+    object_type: str = "unknown",
+    avg_sharpness: Optional[float] = None,
+    sharpness_label: Optional[str] = None,
     db_path: Union[str, Path] = DB_NAME,
 ) -> None:
     """
@@ -105,6 +125,10 @@ def insert_segment(
         file_size: Compressed file size in bytes.
         duration: Segment duration in seconds.
         file_path: Absolute or relative path to the compressed output file.
+        avg_sharpness: Mean Laplacian variance across detected target ROIs.
+                       None for background-only segments.
+        sharpness_label: Human-readable perceptual resolution label,
+                         e.g. "~720p (sharp)". None for background-only segments.
         db_path: Path to the SQLite database file.
     """
     with get_connection(db_path) as conn:
@@ -112,9 +136,10 @@ def insert_segment(
             """
             INSERT INTO segments (
                 timestamp, camera_id, target_detected,
-                roi_count, file_size, duration, file_path
+                roi_count, file_size, duration, file_path, object_type,
+                avg_sharpness, sharpness_label
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 timestamp,
@@ -124,10 +149,12 @@ def insert_segment(
                 file_size,
                 duration,
                 file_path,
+                object_type,
+                avg_sharpness,
+                sharpness_label,
             ),
         )
         conn.commit()
-
 
 def query_recent_targets(
     camera_id: str,
@@ -147,7 +174,7 @@ def query_recent_targets(
 
     Returns:
         List of segment rows as tuples:
-        (id, timestamp, camera_id, target_detected, roi_count, file_size,
+        (id, timestamp, camera_id, target_detected, roi_count, file_size, object_type
          duration, file_path)
     """
     with get_connection(db_path) as conn:
@@ -221,4 +248,48 @@ def query_daily_storage_summary(
             ORDER BY date DESC, camera_id
             """
         )
+        return cursor.fetchall()
+
+def query_by_type(
+    object_type: Union[str, List[str]],
+    camera_id: Optional[str] = None,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
+    min_roi_count: Optional[int] = None,
+    db_path: Union[str, Path] = DB_NAME,
+) -> List[SegmentRow]:
+    """
+    Query segments filtered by object type, camera, time range, and ROI count.
+
+    object_type may be a single string or a list of strings for multi-type queries.
+    """
+
+    if isinstance(object_type, list):
+        placeholders = ",".join(["?"] * len(object_type))
+        query = f"SELECT * FROM segments WHERE object_type IN ({placeholders})"
+        params: list = list(object_type)
+    else:
+        query = "SELECT * FROM segments WHERE object_type = ?"
+        params = [object_type]
+
+    if camera_id:
+        query += " AND camera_id = ?"
+        params.append(camera_id)
+
+    if start_time:
+        query += " AND timestamp >= ?"
+        params.append(start_time)
+
+    if end_time:
+        query += " AND timestamp <= ?"
+        params.append(end_time)
+
+    if min_roi_count is not None:
+        query += " AND roi_count >= ?"
+        params.append(min_roi_count)
+
+    query += " ORDER BY timestamp DESC"
+
+    with get_connection(db_path) as conn:
+        cursor = conn.execute(query, params)
         return cursor.fetchall()

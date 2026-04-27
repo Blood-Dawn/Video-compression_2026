@@ -1,194 +1,153 @@
-# Open Source Selective Video Compression for Static Surveillance Cameras
-**EGN 4950C Capstone Project | Florida Atlantic University | Spring 2026**
-**Sponsor:** Defense Innovation Unit (DIU) | **Category:** AI / Video
+# Selective Video Compression for Surveillance Cameras
+**EGN 4950C Capstone | Florida Atlantic University | Spring 2026**
+Sponsored by the Defense Innovation Unit (DIU) / NIWC Pacific
 
 ---
 
-## Project Overview
+## What this is
 
-This project develops an open-source, hardware-lightweight software pipeline for
-selective video compression of static surveillance camera footage, primarily targeting
-Navy and DoD land surveillance use cases.
+Security cameras waste a lot of storage. A camera pointed at a parking lot records 24 hours of footage a day, but 23 of those hours are just an empty parking lot — nothing moving, nothing happening. Every pixel of that dead footage still gets saved.
 
-The core insight: static surveillance cameras produce enormous amounts of redundant
-data because most pixels in any given frame are identical to the previous frame.
-By applying background subtraction to isolate only the foreground objects of
-intelligence value (people walking, vehicles moving), and compressing only those
-regions at high quality while discarding or heavily compressing static background
-pixels, we demonstrated storage savings of approximately 6x compared to standard
-full-frame codec compression.
+This project fixes that. Instead of recording everything equally, the pipeline watches the video in real time and figures out what's actually moving. The moving parts — a person walking, a car pulling in — get saved at high quality. The static background gets compressed aggressively, or in some modes, skipped entirely. The result is the same useful footage at a fraction of the file size.
 
-The system is designed to run on commodity, low-cost hardware with no GPU requirement,
-making it deployable on existing DoD infrastructure without procurement of modern
-accelerators.
+**We tested this on the CDnet 2014 benchmark dataset (52 real surveillance clips).** On typical footage, we hit 6x smaller files compared to standard video compression. On scenes with little activity, that number climbs to 16x.
+
+The whole thing runs on a regular computer. No GPU required.
 
 ---
 
-## Problem Statement
+## What you can do with it
 
-Navy and DoD surveillance installations generate continuous video streams from static
-cameras that must be stored locally for approximately one week before being offloaded
-to longer-term storage. Current full-frame compression approaches (H.264/H.265) do not
-account for the fact that the overwhelming majority of pixels in static camera footage
-never change. The result is enormous storage overhead for data that contains no
-actionable intelligence value.
+There are four recording modes. You pick whichever fits how your cameras are used:
 
-The population of interest within these streams is small: people on foot and
-occupants of vehicles passing through the camera frame. Everything else is background.
+**Mode 0 — Keep everything, compress smarter.** The camera records continuously. Active frames (something moving) get saved at near-perfect quality. Quiet frames get compressed hard. You never have a gap in coverage, but quiet periods take up almost no space.
 
----
+**Mode 1 — Only save what matters.** The camera only writes a clip when something is actually moving. Way smaller files. The trade-off: if you need to prove nothing happened at 2am, you can't — there's no recording for that window.
 
-## Solution Architecture
+**Mode 2 — Motion + a reference frame.** Saves the moments something moved along with a single clean background frame for context. Even smaller than Mode 1.
 
-```
-[Static Camera Feed]
-        |
-        v
-[Background Subtraction]  <-- OpenCV MOG2 / KNN
-        |
-        v
-[Foreground Mask + Bounding Regions]
-        |
-   _____|______
-  |            |
-  v            v
-[Foreground   [Background]
- ROI Encode]   Heavy compression or keyframe-only
-  H.264 HQ    H.264 low bitrate / static JPEG
-  |            |
-  v            v
-[Multiplexed Compressed Stream]
-        |
-        v
-[Local Storage -- ~1 week retention]
-        |
-        v
-[Offload + Optional Enhancement]
-     Super-resolution / decompression
-```
+**Mode 3 — Just the moving object.** Strips everything except the foreground object itself. The smallest possible output. Designed for pipelines that do facial recognition or license plate reading downstream.
+
+On top of compression, the system also:
+- Tags every saved clip with what was detected (person, vehicle) and stores it in a searchable database. If something happened at a specific camera at 3am, you query it — you don't scrub through footage.
+- Encrypts every clip before it touches disk. Nobody reads it without the key.
+- Can sharpen low-quality footage after the fact using a neural network upscaler. Useful when a clip from an old camera comes in blurry and you need to read a face or a plate.
+- Streams live status to a browser-based dashboard. No terminal needed to operate it.
 
 ---
 
-## Key Design Constraints
+## How to run it
 
-- Must run on **legacy / low-spec hardware** (no modern GPU, minimal RAM)
-- All components must be **open source and royalty-free**
-- Target storage reduction: **6x or greater** vs. naive full-frame compression
-- Retention window: approximately **one week** of continuous footage
-- Primary targets: **people walking** and **people in vehicles**
-- Output must be **decompressable and enhanceable** after offload
+You'll need Python 3.10+ and FFmpeg installed on your machine.
 
----
+### Quick setup with uv (recommended)
 
-## Tech Stack
-
-| Layer | Technology | License |
-|---|---|---|
-| Background Subtraction | OpenCV MOG2 / KNN / GMG | Apache 2.0 |
-| Video I/O and Codec | FFmpeg + libx264 / libx265 | LGPL / GPL |
-| Pipeline Orchestration | Python 3.x | PSF |
-| ROI Encoding | FFmpeg with filter_complex ROI | LGPL |
-| Enhancement (post-offload) | Real-ESRGAN / BSRGAN (CPU mode) | BSD |
-| Metadata / Index | SQLite | Public Domain |
-| Testing | pytest | MIT |
-
----
-
-## Repository Structure
-
-```
-capstone-compression/
-├── src/
-│   ├── background_subtraction/   # MOG2, KNN, GMG wrappers
-│   ├── compression/              # FFmpeg ROI encoding pipeline
-│   ├── enhancement/              # Post-offload super-resolution
-│   ├── pipeline/                 # End-to-end orchestration
-│   └── utils/                    # Metrics, logging, file I/O
-├── data/
-│   └── samples/                  # Sample clips for testing (gitignored if large)
-├── notebooks/                    # Benchmarking and analysis notebooks
-├── tests/                        # Unit and integration tests
-├── docs/                         # Design documents and notes
-├── requirements.txt
-├── .gitignore
-└── README.md
-```
-
----
-
-## Quick Start
+[uv](https://astral.sh/uv) handles the virtual environment and dependency locking automatically.
 
 ```bash
-# 1. Clone
+# 1. Install uv (one-time)
+curl -LsSf https://astral.sh/uv/install.sh | sh   # Linux / macOS
+# Windows: winget install astral-sh.uv
+
+# 2. Clone the repo
 git clone https://github.com/Blood-Dawn/capstone-compression.git
 cd capstone-compression
 
-# 2. Create and activate virtual environment
-python3 -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\Activate.ps1
+# 3. Install dependencies and create virtualenv in one step
+uv sync
 
-# 3. Install Python dependencies
-pip install -r requirements.txt
+# 4. Install FFmpeg (still required as a system binary)
+sudo apt install ffmpeg -y    # Ubuntu/Debian/WSL2
+brew install ffmpeg            # macOS
 
-# 4. Install FFmpeg (system binary  -  required)
-# Ubuntu/Debian:
-sudo apt update && sudo apt install ffmpeg -y
-# macOS:
-brew install ffmpeg
-
-# 5. Check that everything is ready
-bash check_deps.sh
-
-# 6. Run the pipeline on a test clip
-python src/pipeline/pipeline.py \
+# 5. Run it on a clip
+uv run python src/pipeline/pipeline.py \
   --input data/samples/your_clip.mp4 \
-  --camera-id cam_test \
+  --camera-id cam_01 \
   --output outputs/ \
-  --preview
+  --mode mode0
+```
+
+To use the super-resolution enhancer (`--enhance` flag), install the optional extras:
+
+```bash
+uv sync --extra enhance
+```
+
+To open the dashboard:
+
+```bash
+uv run python run_gui.py
+# Then open http://localhost:5000 in your browser
+```
+
+### Alternative setup with pip
+
+```bash
+git clone https://github.com/Blood-Dawn/capstone-compression.git
+cd capstone-compression
+python3 -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 ```
 
 ---
 
-## Documentation
+## Standalone executable
 
-| Document | Description |
-|---|---|
-| [ROADMAP.md](ROADMAP.md) | Full milestone plan with team task assignments |
-| [DEV.md](DEV.md) | Developer setup guide, module explanations, Git workflow |
-| `check_deps.sh` | Run in terminal to verify your environment is ready |
+A packaged `.exe` / binary will be placed here once it's built:
 
----
+```
+dist/
+└── compression_pipeline.exe    ← Windows
+└── compression_pipeline        ← Linux
+```
 
-## Group Members
+No Python or FFmpeg installation needed to run the packaged version. Just the file.
 
-| Name | GitHub |
-|---|---|
-| Kheiven D'Haiti | [@Blood-Dawn](https://github.com/Blood-Dawn) |
-| Jorge Sanchez |  -  |
-| Ashleyn Montano |  -  |
-| Riley Roberts |  -  |
-| Victor De Souza Teixeira |  -  |
-
-**Course:** EGN 4950C Capstone | Florida Atlantic University | Spring 2026
-**Final Deadline:** May 6, 2026
+*(Build instructions will be added in DEV.md when the packaging step is complete.)*
 
 ---
 
-## Test Datasets and Attribution
+## The team
 
-This project uses the following publicly available datasets for benchmarking and development. All datasets are used strictly for non-commercial academic research in accordance with their respective terms.
+| Name | GitHub | What they built |
+|---|---|---|
+| Kheiven D'Haiti | [@Blood-Dawn](https://github.com/Blood-Dawn) | Pipeline orchestration, background subtraction tuning, dashboard, encryption, night-mode CLAHE, project lead |
+| Jorge Sanchez | [@sanchez-jorge](https://github.com/sanchez-jorge) | Video encoding (ROI encoder / FFmpeg integration), algorithm benchmarking, stress testing, storage extrapolation |
+| Ashleyn Montano | [@ashleyn07](https://github.com/ashleyn07) | SQLite metadata database — schema, pipeline integration, query system |
+| Riley Roberts | [@sRileyRoberts](https://github.com/sRileyRoberts) | Motion detection pipeline (Modes 2 and 3), object isolation |
+| Victor De Souza Teixeira | [@victort29](https://github.com/victort29) | Image enhancement module — Real-ESRGAN upscaler, CPU benchmark |
 
-**CDnet 2014 - Change Detection Benchmark**
-Used for background subtraction benchmarking across multiple lighting conditions (baseline, nightVideos, badWeather, shadow, lowFramerate). This dataset provides pixel-level ground truth foreground masks, making it the standard benchmark for evaluating background subtraction algorithms.
+---
 
-> Y. Wang, P.-M. Jodoin, F. Porikli, J. Konrad, Y. Benezeth, and P. Ishwar, "CDnet 2014: An Expanded Change Detection Benchmark Dataset," in *IEEE CVPR Workshops*, 2014.
-> Dataset: [www.changedetection.net](http://www.changedetection.net)
+## Credits and open resources used
 
-Original CDnet paper:
-> N. Goyette, P.-M. Jodoin, F. Porikli, J. Konrad, and P. Ishwar, "changedetection.net: A New Change Detection Benchmark Dataset," in *IEEE CVPR Workshops*, 2012.
+**CDnet 2014 — Change Detection Benchmark**
+52 real surveillance clips across 10 scene categories (normal lighting, night, bad weather, shadow, low frame rate, and more). This is the standard academic benchmark for background subtraction algorithms, and it's what we used to tune the detection and measure compression. Comes with pixel-level ground truth masks so you can measure accuracy, not just eyeball it.
+
+> Y. Wang, P.-M. Jodoin, F. Porikli, J. Konrad, Y. Benezeth, and P. Ishwar, "CDnet 2014: An Expanded Change Detection Benchmark Dataset," IEEE CVPR Workshops, 2014.
+> [changedetection.net](http://www.changedetection.net)
+
+> N. Goyette, P.-M. Jodoin, F. Porikli, J. Konrad, and P. Ishwar, "changedetection.net: A New Change Detection Benchmark Dataset," IEEE CVPR Workshops, 2012.
 
 **VIRAT Video Dataset**
-Used for person and vehicle activity recognition in outdoor surveillance scenarios. Annotations (in KPF format) provided by the IARPA DIVA program via Kitware (diva-te@kitware.com).
+Outdoor surveillance footage of people and vehicles in real-world scenarios. Used for testing detection on more varied activity. Annotations provided by the IARPA DIVA program via Kitware.
 
-> S. Oh, A. Hoogs, A. Perera, N. Cuntoor, C.-C. Chen, J. T. Lee, S. Mukherjee, J. K. Aggarwal, H. Lee, L. Davis, E. Swears, X. Wang, Q. Ji, K. Reddy, M. Shah, C. Vondrick, H. Pirsiavash, D. Ramanan, J. Yuen, A. Torralba, B. Song, A. Fong, A. Roy-Chowdhury, and M. Desai, "A Large-scale Benchmark Dataset for Event Recognition in Surveillance Video," in *Proc. IEEE Conf. CVPR*, Jun. 2011, pp. 3153-3160.
-> Dataset: [viratdata.org](https://viratdata.org) | Annotations: [IARPA DIVA / Kitware](https://github.com/kitware/viratannotations)
+> S. Oh et al., "A Large-scale Benchmark Dataset for Event Recognition in Surveillance Video," IEEE CVPR, 2011.
+> [viratdata.org](https://viratdata.org)
+
+**Libraries and tools**
+
+| What | License |
+|---|---|
+| OpenCV (MOG2 / KNN background subtraction) | Apache 2.0 |
+| FFmpeg + libx264 | LGPL / GPL |
+| Real-ESRGAN (super-resolution) | BSD 3-Clause |
+| SQLite | Public Domain |
+| Python 3 | PSF |
+| pytest | MIT |
+
+---
+
+*EGN 4950C Capstone | Florida Atlantic University | Spring 2026 | Final deadline: May 6, 2026*

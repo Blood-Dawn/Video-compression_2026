@@ -9,11 +9,11 @@
 
 | Member | Sections | Key open tasks |
 |---|---|---|
-| **Kheiven D'Haiti (KD)** | 2.4, 2.6, 3.4, 3.5, 3.6, 4.4, 4.5, 4.8 | GUI regression tests, HLS streaming, uv migration, final report numbers, demo prep, adaptive mode |
-| **Riley Roberts (RR)** | 2.2 (Mode 2/3), 2.5, 2.6 (partial) | Mode 2, Mode 3, extend test_pipeline.py, run_demo.py end-to-end, final benchmarks notebook |
-| **Victor Teixeira (VT)** | 3.1 | AES-256-GCM upgrade, IV/salt in DB, password export, encrypt/decrypt tests |
-| **Ashleyn Montano (AM)** | 3.2, 4.3 | Color detection + DB column, object classifier rewrite, full-text search, stable query API |
-| **Jorge Sanchez (JS)** | 2.5, 4.6 | CPU benchmark per mode, detection tuning (done), watchfolder ingestion |
+| **Kheiven D'Haiti (KD)** | 2.4, 2.6, 3.1 (partial), 3.4, 3.5, 3.6, 4.4, 4.5, 4.8 | YOLO gate, GPU enhancer, test suite repair, deployment packaging, final results notebook, adaptive mode |
+| **Riley Roberts (RR)** | 2.2 (Mode 2/3), 2.5, 2.6 (partial) | Extend test_pipeline.py, run_demo.py end-to-end, demo/concat mode |
+| **Victor Teixeira (VT)** | 3.1 | IV/salt in DB, password-protected export |
+| **Ashleyn Montano (AM)** | 3.2, 4.3 | Color detection + DB column, object classifier rewrite, full-text search |
+| **Jorge Sanchez (JS)** | 2.5, 3.3, 4.6 | CPU benchmark per mode, AV1 encoder work |
 
 ---
 
@@ -220,7 +220,20 @@ Victor — the AES-256-CBC implementation is in `src/utils/encryption.py` and wo
 | Upgrade AES-256-CBC to AES-256-GCM (authenticated encryption) | VT | 2026-04-18 | Important | Done | Merged via PR #12 on 2026-04-20. New header: nonce(12)+salt(16)+tag(16)+ciphertext. `InvalidTag` raised on any tamper. PKCS7 padding removed (GCM is stream mode). 24 unit tests in `tests/test_encryption.py`. |
 | Store IV + salt in DB per segment | VT | 2026-04-25 | Medium | Not Started | Required for per-segment decryption without re-prompting the user for their password. |
 | Password-protected incident clip export | VT | 2026-04-25 | Important | Not Started | Sponsor showed commercial systems charge extra for this. Include by default. |
-| Encrypt/decrypt round-trip unit tests | VT | 2026-04-25 | Important | Not Started | Verify `.enc` written; decryption recovers original bytes exactly; test both password and raw-key paths. |
+| Encrypt/decrypt round-trip unit tests | VT | 2026-04-25 | Important | Done | 24 tests in `tests/test_encryption.py`. Round-trips at 1 KB, 1 MB, and multi-chunk; tamper detection test (ciphertext modification raises `InvalidTag`). Shipped in PR #12. |
+
+### 3.1b — Detection hardening and pipeline fixes
+
+Work landed April 20–24 as part of the M3 sprint. Not in the original roadmap — added retrospectively.
+
+| Task | Assigned To | Due | Priority | Status | Notes |
+|---|---|---|---|---|---|
+| YOLO object classification gate | KD | 2026-04-24 | Important | Done | PR #31 merged 2026-04-24. `src/detection/object_filter.py`. YOLOv8-nano on each MOG2 bbox crop. 32-px static suppression grid (int16 counters, threshold=30 consecutive FP frames). Conf default 0.30 (use 0.10 for night). Optional: pipeline falls back gracefully if `ultralytics` not installed. |
+| GPU acceleration for enhancer (CUDA / MPS) | KD | 2026-04-22 | Medium | Done | `src/enhancement/enhancer.py`. Device selection: CUDA → MPS → CPU. `detect_gpu()` returns backend, device name, VRAM, `will_work`. Exposed via `/api/gpu_info`. M2 MPS: ~95 ms/frame vs ~420 ms CPU. COTS CPU-only deployments unaffected. |
+| Mode label + elapsed timer overlay | KD | 2026-04-20 | Medium | Done | `src/compression/roi_encoder.py` commit `5547564`. `cv2.putText` burns `MODE N \| HH:MM:SS` into top-left corner of every frame before FFmpeg pipe. Appeared in segments and HLS stream. Requested after April 22 sponsor test where mode was unidentifiable from thumbnails. |
+| Double-compositing fix in encode_segment | KD | 2026-04-20 | Important | Done | `src/compression/roi_encoder.py`, `src/pipeline/pipeline.py` commit `39fef25`. Background composite was applied twice per frame (once in `write_frame()`, once in outer loop). Removed outer composite. Mode 2 washed-out artifact eliminated. |
+| Test suite repair — streaming encoder API | KD | 2026-04-24 | Urgent | Done | All four dummy/recording encoder classes in `tests/test_pipeline.py` rewritten from old `encode_segment(frames, bboxes_per_frame)` API to `begin_segment()` → `write_frame()` × N → `finish_segment()` returning `dict`. Also fixed: `test_roi_encoder.py` (`out.endswith` → `out["file_path"].endswith`), `test_data_integrity.py` (same return value), `test_object_type_queries.py` (`_OBJECT_TYPE_COL = 8` constant replaces broken index). Final result: **274 passed, 0 failed**. |
+| Session log `docs/session_log_2026-04-26.md` | KD | 2026-04-26 | Medium | Done | Written and committed. Covers all M3 work April 20–26. Commit `61b1e75` (corrected `4ef6d0d`). |
 
 ### 3.2 — Searchable metadata index
 
@@ -229,6 +242,7 @@ Ashleyn — the query functions exist in `db.py` and are wired into the GUI. The
 | Task | Assigned To | Due | Priority | Status | Notes |
 |---|---|---|---|---|---|
 | Stable query API with full filtering (type, camera, time range) | AM | 2026-04-22 | Urgent | Done | `query_by_type(object_type, camera_id, start_time, end_time)` returns matching segment paths |
+| Multi-type query + ROI count filter | AM | 2026-04-22 | Important | Done | Branch `m3-metadata-query-fix` merged 2026-04-22. `query_by_type()` now accepts `Union[str, List[str]]` with parameterized `IN (?, ?, ...)` placeholders. New `min_roi_count` parameter filters low-confidence detections. CLI `db_query.py` rewritten: `--type vehicle person`, `--min-roi 5`, `--last-hours 12`, `--start-time`/`--end-time`. |
 | Full-text / tag search + README docs | AM | 2026-04-25 | Medium | Not Started | Extend query interface to support multi-tag filtering; document in README. |
 
 ### 3.3 — External input and ingestion
@@ -237,8 +251,8 @@ Jorge — these came from the sponsor's request to accept footage from body came
 
 | Task | Assigned To | Due | Priority | Status | Notes |
 |---|---|---|---|---|---|
-| Watchfolder daemon / drag-and-drop video import for external footage | JS | 2026-04-26 | Medium | Not Started | Watch a drop folder and auto-ingest new video files into the pipeline. Body camera support. |
-| Multi-source input support | JS | 2026-04-26 | Medium | Not Started | Extend `FrameSource` to handle multiple simultaneous RTSP inputs. |
+| Watchfolder daemon / drag-and-drop video import for external footage | JS | 2026-04-26 | Medium | Done | PR #13 merged 2026-04-24. `src/utils/watchfolder.py`. Polls drop folder every 5 s. Waits for file to stop growing (`_is_fully_written()`). Calls `run_pipeline()` per file. `.ingested` sentinel prevents double-processing on restart. Supports `.mp4 / .avi / .mov / .mkv / .ts / .mts / .m2ts`. `tests/test_watchfolder.py` included. |
+| Multi-source input support | JS | 2026-04-26 | Medium | Done | PR #13 merged 2026-04-24. `src/utils/multi_source.py`. `MultiFrameSource` manages N parallel RTSP streams via `_StreamReader` daemon threads. 2-frame ring buffer, 5 s stall timeout. API: `open()`, `read_all()`, `any_alive()`, `active_count()`, `get_metadata()`, `release()`, context manager. Racy test fixed with `threading.Event` gate. 22 tests total across both modules. |
 
 ### 3.4 — Deployment packaging
 
@@ -407,10 +421,16 @@ Cody asked: "Are there research papers for lossy compression that selectively dr
 | 2.6 | GUI dashboard — Flask app, SSE, all API endpoints | Done ✅ |
 | 2.6 | GUI regression tests + API integration tests | Done ✅ |
 | 3.1 | AES-256 encryption — initial CBC implementation | Done ✅ |
+| 3.1b | YOLO object classification gate (PR #31) | Done ✅ |
+| 3.1b | GPU acceleration for enhancer (CUDA/MPS) | Done ✅ |
+| 3.1b | Mode label + timer overlay in segments | Done ✅ |
+| 3.1b | Double-compositing fix in encode_segment | Done ✅ |
+| 3.1b | Test suite repair — streaming encoder API (274 passing) | Done ✅ |
+| 3.1b | Session log `docs/session_log_2026-04-26.md` | Done ✅ |
 | 3.4 | AI compression research | Done ✅ |
 | 3.4 | Deployment packaging research | Open 🔲 |
 | 3.5 | demo.sh one-click launcher | Done ✅ |
-| 3.5 | Confirm webcam / IP camera real-time input | Done ✅ |
+| 3.5 | Confirm webcam / IP camera real-time input | Open 🔲 |
 | 3.5 | No-GPU laptop test | Open 🔲 |
 | 3.6 | Final report (`docs/final_report.md`) | Done ✅ |
 | 3.6 | Final results notebook (`final_results.ipynb`) | Open 🔲 |
@@ -444,9 +464,9 @@ Cody asked: "Are there research papers for lossy compression that selectively dr
 | 1.3 | PSNR, SSIM, compression ratio metrics | Done ✅ |
 | 1.3 | `milestone1_benchmark.ipynb` | Done ✅ |
 | 3.1 | Upgrade AES-256-CBC to AES-256-GCM | Done ✅ |
+| 3.1 | Encrypt/decrypt round-trip unit tests (24 tests) | Done ✅ |
 | 3.1 | IV + salt storage in DB per segment | Open 🔲 |
 | 3.1 | Password-protected incident clip export | Open 🔲 |
-| 3.1 | Encrypt/decrypt round-trip unit tests | Open 🔲 |
 
 ### Ashleyn Montano (AM) — amontano2023@fau.edu
 
@@ -459,7 +479,8 @@ Cody asked: "Are there research papers for lossy compression that selectively dr
 | 2.3 | `query_by_type()` + daily storage summary + busiest CLI | Done ✅ |
 | 2.3 | Unit tests for new queries and CLI tool | Done ✅ |
 | 2.7 | Detection tuning — calibration research (w/ JS) | Done ✅ |
-| 3.2 | Stable query API + full-text search + README docs | Open 🔲 |
+| 3.2 | Multi-type query + `min_roi_count` filter (`m3-metadata-query-fix`) | Done ✅ |
+| 3.2 | Full-text / multi-tag search + README docs | Open 🔲 |
 | 4.3 | Color detection + DB column + updated object classifier | Open 🔲 |
 
 ### Jorge Sanchez (JS) — jorgesanchez2022@fau.edu
@@ -471,7 +492,8 @@ Cody asked: "Are there research papers for lossy compression that selectively dr
 | 2.5 | Algorithm comparison notebook + recommendation doc | Done ✅ |
 | 2.5 | Stress test + memory bounds + storage extrapolation | Done ✅ |
 | 2.7 | Detection tuning — calibration research (w/ AM) | Done ✅ |
-| 3.3 | Watchfolder daemon / external footage ingestion | Open 🔲 |
+| 3.3 | Watchfolder daemon (`watchfolder.py`) | Done ✅ |
+| 3.3 | Multi-source RTSP input (`multi_source.py`) | Done ✅ |
 | 4.2 | AV1 encoder check + `ROIEncoder` codec param | Open 🔲 |
 | 4.2 | AV1 vs H.264 benchmark | Open 🔲 |
 | 4.6 | CPU compute benchmarks per mode | Open 🔲 |

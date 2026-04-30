@@ -85,6 +85,7 @@ class LayerSegmentEncoder:
         fill_mask_holes: bool = True,
         mask_close_kernel_size: int = 7,
         write_preview: bool = True,
+        write_masks: bool = True,
     ) -> None:
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -97,6 +98,7 @@ class LayerSegmentEncoder:
         self.fill_mask_holes = bool(fill_mask_holes)
         self.mask_close_kernel_size = int(max(1, mask_close_kernel_size))
         self.write_preview = bool(write_preview)
+        self.write_masks = bool(write_masks)
         initialize_database(db_path)
         self._reset_segment_state()
 
@@ -133,9 +135,10 @@ class LayerSegmentEncoder:
         segment_name = f"{camera_id}_{timestamp}_mode3_seg{segment_index:04d}"
         segment_dir = self.output_dir / "mode3_segments" / segment_name
         crop_dir = segment_dir / "crops"
-        mask_dir = segment_dir / "masks"
+        mask_dir = segment_dir / "masks" if self.write_masks else None
         crop_dir.mkdir(parents=True, exist_ok=True)
-        mask_dir.mkdir(parents=True, exist_ok=True)
+        if mask_dir is not None:
+            mask_dir.mkdir(parents=True, exist_ok=True)
 
         h, w = frame_shape[:2]
         preview_path = segment_dir / "preview.mp4" if self.write_preview else None
@@ -164,8 +167,12 @@ class LayerSegmentEncoder:
             "frame_height": int(h),
             "fps": float(fps),
             "crop_format": "jpg" if self.crop_format == "jpeg" else self.crop_format,
-            "mask_format": "png",
-            "mask_policy": "filled_external_contours" if self.fill_mask_holes else "raw_foreground",
+            "mask_format": "png" if self.write_masks else None,
+            "mask_policy": (
+                "filled_external_contours"
+                if self.write_masks and self.fill_mask_holes
+                else "raw_foreground" if self.write_masks else "none"
+            ),
             "preview": "preview.mp4" if self.write_preview else None,
             "frames": self._frame_records,
         }
@@ -201,7 +208,6 @@ class LayerSegmentEncoder:
             )
 
         assert self._crop_dir is not None
-        assert self._mask_dir is not None
 
         frame_h, frame_w = frame.shape[:2]
         frame_record = {
@@ -220,42 +226,55 @@ class LayerSegmentEncoder:
                 continue
 
             crop = frame[y1:y2, x1:x2]
-            mask_crop = mask[y1:y2, x1:x2]
-            if self.fill_mask_holes:
-                binary_mask = _filled_object_mask(mask_crop, self.mask_close_kernel_size)
-            else:
-                _, binary_mask = cv2.threshold(mask_crop, 0, 255, cv2.THRESH_BINARY)
-            if not np.any(binary_mask):
-                binary_mask = np.full((y2 - y1, x2 - x1), 255, dtype=np.uint8)
+            binary_mask = None
+            if self.write_masks or preview is not None:
+                mask_crop = mask[y1:y2, x1:x2]
+                if self.fill_mask_holes:
+                    binary_mask = _filled_object_mask(mask_crop, self.mask_close_kernel_size)
+                else:
+                    _, binary_mask = cv2.threshold(mask_crop, 0, 255, cv2.THRESH_BINARY)
+                if not np.any(binary_mask):
+                    binary_mask = np.full((y2 - y1, x2 - x1), 255, dtype=np.uint8)
 
             object_id = self._object_count
             stem = f"f{source_frame_index:08d}_o{region_index:02d}"
             crop_ext = "jpg" if self.crop_format in {"jpg", "jpeg"} else "png"
             crop_name = f"{stem}.{crop_ext}"
-            mask_name = f"{stem}.png"
             crop_path = self._crop_dir / crop_name
-            mask_path = self._mask_dir / mask_name
 
             if crop_ext == "png":
                 crop_params = [int(cv2.IMWRITE_PNG_COMPRESSION), self.png_compression]
             else:
                 crop_params = [int(cv2.IMWRITE_JPEG_QUALITY), self.crop_quality]
+                if hasattr(cv2, "IMWRITE_JPEG_OPTIMIZE"):
+                    crop_params.extend([int(cv2.IMWRITE_JPEG_OPTIMIZE), 1])
             ok_crop = cv2.imwrite(str(crop_path), crop, crop_params)
-            ok_mask = cv2.imwrite(str(mask_path), binary_mask)
-            if not ok_crop or not ok_mask:
-                raise RuntimeError(f"Failed to write mode3 crop/mask for {stem}")
+            if not ok_crop:
+                raise RuntimeError(f"Failed to write mode3 crop for {stem}")
+
+            mask_name = None
+            if self.write_masks:
+                assert self._mask_dir is not None
+                assert binary_mask is not None
+                mask_name = f"{stem}.png"
+                mask_path = self._mask_dir / mask_name
+                ok_mask = cv2.imwrite(str(mask_path), binary_mask)
+                if not ok_mask:
+                    raise RuntimeError(f"Failed to write mode3 mask for {stem}")
 
             if preview is not None:
+                assert binary_mask is not None
                 roi = preview[y1:y2, x1:x2]
                 roi[binary_mask > 0] = crop[binary_mask > 0]
 
-            frame_record["objects"].append({
+            object_record = {
                 "object_id": int(object_id),
                 "bbox": [int(x1), int(y1), int(x2 - x1), int(y2 - y1)],
                 "crop_path": f"crops/{crop_name}",
-                "mask_path": f"masks/{mask_name}",
-                "area": int((binary_mask > 0).sum()),
-            })
+                "mask_path": f"masks/{mask_name}" if mask_name is not None else None,
+                "area": int((binary_mask > 0).sum()) if binary_mask is not None else int((x2 - x1) * (y2 - y1)),
+            }
+            frame_record["objects"].append(object_record)
             self._object_count += 1
 
         if frame_record["objects"]:
@@ -317,6 +336,10 @@ class LayerSegmentEncoder:
         if self._preview_writer is not None:
             self._preview_writer.release()
             self._preview_writer = None
+
+    def abort_segment(self) -> None:
+        self._close_writer()
+        self._reset_segment_state()
 
     def get_storage_report(self) -> dict:
         with get_connection(self.db_path) as conn:

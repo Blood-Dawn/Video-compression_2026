@@ -20,6 +20,7 @@ Usage:
 
 import argparse
 import logging
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor, Future
 from typing import Optional
 import re
@@ -125,7 +126,8 @@ def run_pipeline(
     encrypt: bool = False,
     encrypt_password: Optional[str] = None,
     encrypt_key_file: Optional[str] = None,
-    mode2_clean_seconds: float = 2.0,
+    mode2_clean_seconds: float = 1.0,
+    mode2_background_lag_seconds: float = 1.5,
     enhance_every_n: int = 5,
     enhance_max_roi_px: int = 200,
     enhance_device: str = "auto",
@@ -168,7 +170,7 @@ def run_pipeline(
                      latest clean background frame.
     mode3:           Object-only segment output. Only frames with foreground
                      detections are buffered, and pixels outside each detected
-                     bounding box are blacked out before normal MP4 encoding.
+                     bounding box are blacked out before MP4 encoding.
 
     Args:
         input_source: Camera index (int) or video file / CDnet scene path (str).
@@ -189,7 +191,7 @@ def run_pipeline(
         mode: Compression mode. "mode0" encodes all frames; "mode1" gates on
               foreground activity; "mode2" composites foreground bbox patches
               over a clean background; "mode3" encodes foreground bbox pixels
-              on a black canvas.
+              on a highly-compressible black canvas.
         enhance: When True, apply super-resolution sharpening to foreground ROIs
                  before writing each frame to the segment buffer. Requires
                  Real-ESRGAN weights in models/ (falls back to bicubic if absent).
@@ -205,9 +207,12 @@ def run_pipeline(
                           encrypt_key_file.
         encrypt_key_file: Path to a file containing a raw 32-byte AES-256 key.
                           Mutually exclusive with encrypt_password.
-        mode2_clean_seconds: Number of consecutive detection-free seconds
+        mode2_clean_seconds: Number of consecutive skipped/empty seconds
                              required before a frame can refresh the mode2
-                             background keyframe. Default 2.0 seconds.
+                             background keyframe. Default 1.0 seconds.
+        mode2_background_lag_seconds: When a clean skip ends, pick the clean
+                                      background frame from this many seconds
+                                      before the end of the skip. Default 1.5.
     """
     validate_mode(mode)
 
@@ -231,6 +236,8 @@ def run_pipeline(
     frame_h = src.height
     frames_per_segment = max(1, int(fps * segment_seconds))
     mode2_clean_frames = max(1, int(round(fps * mode2_clean_seconds)))
+    mode2_background_lag_frames = max(0, int(round(fps * mode2_background_lag_seconds)))
+    mode2_post_warmup_guard_frames = max(1, int(round(fps * 1.0)))
 
     # Single consistent database path: output_dir/metadata.db.
     # Previously pipeline.py called initialize_database() with no args, which
@@ -248,12 +255,29 @@ def run_pipeline(
             mode2_clean_seconds,
             mode2_clean_frames,
         )
+        log.info(
+            "Mode2 post-warmup background quarantine: 1.0s (%d frames)",
+            mode2_post_warmup_guard_frames,
+        )
+        log.info(
+            "Mode2 clean background capture lag: %.1fs (%d frames)",
+            mode2_background_lag_seconds,
+            mode2_background_lag_frames,
+        )
 
     subtractor = BackgroundSubtractor(method=bg_method)
-    # Mode 2/3 do extra per-frame compositing work; ultrafast encoding keeps
-    # overall CPU load manageable. Mode 0/1 can afford slightly better compression.
-    encode_preset = "ultrafast" if mode in ("mode2", "mode3") else "veryfast"
-    encoder = ROIEncoder(output_dir=output_dir, db_path=db_path, preset=encode_preset)
+    # Mode 2 writes full-size frames with a mostly static background plus moving
+    # patches. It needs an actual compression preset/CRF to beat an already
+    # compressed source MP4; ultrafast + CRF 18 can be larger than the input.
+    if mode in {"mode2", "mode3"}:
+        encoder = ROIEncoder(
+            output_dir=output_dir,
+            db_path=db_path,
+            preset="veryfast",
+            foreground_crf=23,
+        )
+    else:
+        encoder = ROIEncoder(output_dir=output_dir, db_path=db_path, preset="veryfast")
     initialize_database(db_path)
 
     obj_filter: Optional[ObjectFilter] = None
@@ -315,6 +339,8 @@ def run_pipeline(
     # parallel — no wait-then-burst, no 9GB of RAM copies.
     last_clean_background = None
     clean_frame_streak    = 0
+    clean_frame_buffer    = deque(maxlen=max(1, mode2_background_lag_frames + 1))
+    post_warmup_frame_count = 0
     source_frame_index    = -1
     frames_in_segment     = 0          # frames written to current open pipe
     target_frames_this_segment = 0
@@ -337,7 +363,7 @@ def run_pipeline(
             segment_start_background = bg
         # Pass source path so the encoder can mux audio back in after encoding.
         # Only meaningful for file sources — camera streams never have audio.
-        src_path = str(input_source) if isinstance(input_source, str) else None
+        src_path = str(input_source) if isinstance(input_source, str) and mode != "mode3" else None
         encoder.begin_segment(
             frame_shape=first_frame.shape,
             fps=fps,
@@ -394,40 +420,26 @@ def run_pipeline(
 
             mask             = subtractor.apply(frame)
             raw_regions      = subtractor.get_foreground_regions(mask)
-            raw_has_regions  = len(raw_regions) > 0
 
             # YOLO classification gate — drop leaves/shadows/false detections.
             # Tiny boxes (< min_box_px) are passed through unfiltered by ObjectFilter
             # so real targets that are briefly small don't get silently dropped.
-            # NOTE: clean-background tracking uses raw_regions (before YOLO) so
-            # leaf-dominated scenes still eventually yield a usable background frame.
             if obj_filter is not None:
                 regions = obj_filter.filter(frame, raw_regions)
             else:
                 regions = raw_regions
 
-            has_regions = len(regions) > 0
-
             # --- WARMUP GATE ---
             if source_frame_index < effective_warmup:
-                # Track clean background during warmup using RAW regions so the
-                # background model captures a real scene frame, not a black canvas.
-                if raw_has_regions:
-                    clean_frame_streak = 0
-                else:
-                    clean_frame_streak += 1
-                    if clean_frame_streak >= mode2_clean_frames:
-                        last_clean_background = frame.copy()
-                # Always capture the last warmup frame as a fallback background.
-                # This guarantees mode2 never starts with a solid-black keyframe
-                # even on scenes with constant motion (leaves, flags, rain).
                 if source_frame_index + 1 == effective_warmup:
-                    if last_clean_background is None:
-                        last_clean_background = frame.copy()
-                        log.info("Mode2 background: no clean frame found during warmup, using last warmup frame as fallback.")
-                    log.info("Warmup complete after %d frames. Encoding started.", effective_warmup)
+                    log.info(
+                        "Warmup complete after %d frames. Encoding started.",
+                        effective_warmup,
+                    )
                 continue
             # --- END WARMUP GATE ---
+
+            post_warmup_frame_count += 1
 
             # Optional: enhance foreground ROIs before encoding.
             #
@@ -484,17 +496,39 @@ def run_pipeline(
             mode_decision = get_mode_decision(mode, regions)
 
             # Track clean-background streak for mode2 keyframe refresh.
-            # Use RAW MOG2 regions (before YOLO filter) so that scenes with
-            # constant leaf/shadow detections still accumulate clean frames.
-            # YOLO removes leaves from `regions` for recording purposes, but
-            # a frame full of leaves is still a valid background keyframe
-            # because the leaves are part of the static scene context.
-            if raw_has_regions:
-                clean_frame_streak = 0
-            else:
-                clean_frame_streak += 1
-                if clean_frame_streak >= mode2_clean_frames:
-                    last_clean_background = frame.copy()
+            #
+            # A frame is only eligible if mode2 would skip it. That means the
+            # clean background comes from actual empty gaps between encoded
+            # events, including frames that were skipped after optional YOLO
+            # filtering. Never learn a clean keyframe during warmup or during
+            # the first second after warmup; that window is where the detector
+            # is most likely to briefly miss an object already on screen.
+            #
+            # The actual keyframe is chosen when the skip ends, not while the
+            # skip is still happening. This lets us pick a frame from before
+            # the detected object re-entered the scene, instead of the final
+            # skipped frame that may still contain a missed object.
+            if mode == "mode2":
+                in_post_warmup_quarantine = (
+                    post_warmup_frame_count <= mode2_post_warmup_guard_frames
+                )
+                if in_post_warmup_quarantine:
+                    clean_frame_streak = 0
+                    clean_frame_buffer.clear()
+                elif mode_decision.buffer_frame:
+                    if clean_frame_streak >= mode2_clean_frames and clean_frame_buffer:
+                        lag_index = max(
+                            0,
+                            len(clean_frame_buffer) - mode2_background_lag_frames - 1,
+                        )
+                        last_clean_background = clean_frame_buffer[lag_index].copy()
+                        if segment_open and current_bg_frame is not None:
+                            current_bg_frame = last_clean_background.copy()
+                    clean_frame_streak = 0
+                    clean_frame_buffer.clear()
+                else:
+                    clean_frame_streak += 1
+                    clean_frame_buffer.append(frame.copy())
 
             if mode_decision.target_detected:
                 target_frames_this_segment += 1
@@ -528,6 +562,7 @@ def run_pipeline(
                 object_only=object_only,
                 mode_label=mode_label,
                 measure_sharpness=(len(boxes) > 0),
+                compress_background=(mode == "mode0"),
             )
             frames_in_segment += 1
 
@@ -640,8 +675,14 @@ if __name__ == "__main__":
     parser.add_argument(
         "--mode2-clean-seconds",
         type=float,
-        default=2.0,
-        help="Consecutive detection-free seconds before mode2 refreshes the clean background.",
+        default=1.0,
+        help="Consecutive skipped/empty seconds before mode2 refreshes the clean background.",
+    )
+    parser.add_argument(
+        "--mode2-background-lag-seconds",
+        type=float,
+        default=1.5,
+        help="Seconds before the end of a clean skip to sample the mode2 background frame.",
     )
     parser.add_argument("--password", default=None, help="Encryption password placeholder.")
     parser.add_argument("--key-file", default=None, help="Encryption key file placeholder.")
@@ -668,4 +709,5 @@ if __name__ == "__main__":
         encrypt_password=args.password,
         encrypt_key_file=args.key_file,
         mode2_clean_seconds=args.mode2_clean_seconds,
+        mode2_background_lag_seconds=args.mode2_background_lag_seconds,
     )

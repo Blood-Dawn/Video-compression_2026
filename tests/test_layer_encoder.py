@@ -145,3 +145,43 @@ def test_layer_encoder_can_skip_preview_for_faster_mode3(tmp_path):
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     assert metadata["preview"] is None
     assert not (metadata_path.parent / "preview.mp4").exists()
+
+
+def test_layer_encoder_can_store_only_bbox_crops_without_masks_or_preview(tmp_path):
+    db_path = tmp_path / "metadata.db"
+    encoder = LayerSegmentEncoder(
+        output_dir=str(tmp_path),
+        db_path=str(db_path),
+        crop_format="jpg",
+        crop_quality=75,
+        write_preview=False,
+        write_masks=False,
+    )
+
+    frame = np.full((24, 24, 3), 10, dtype=np.uint8)
+    frame[6:14, 7:17] = (40, 120, 220)
+    mask = np.zeros((24, 24), dtype=np.uint8)
+    mask[6:14, 7:17] = 255
+
+    encoder.add_frame(
+        frame=frame,
+        mask=mask,
+        regions=[DummyRegion(7, 6, 10, 8)],
+        camera_id="cam_layer",
+        segment_index=0,
+        source_frame_index=3,
+        source_time_seconds=0.3,
+        fps=10.0,
+    )
+    metadata_path = Path(encoder.flush_segment(camera_id="cam_layer"))
+
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    obj = metadata["frames"][0]["objects"][0]
+
+    assert metadata["preview"] is None
+    assert metadata["mask_format"] is None
+    assert metadata["mask_policy"] == "none"
+    assert obj["mask_path"] is None
+    assert obj["crop_path"].endswith(".jpg")
+    assert (metadata_path.parent / obj["crop_path"]).exists()
+    assert not (metadata_path.parent / "masks").exists()

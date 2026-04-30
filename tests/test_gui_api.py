@@ -19,6 +19,8 @@ Author: KD
 import sys
 import time
 import threading
+import json
+import os
 from pathlib import Path
 
 import pytest
@@ -124,6 +126,88 @@ def db_with_segments(tmp_path):
         db_path=db_path,
     )
     return tmp_path
+
+
+@pytest.fixture
+def archive_dirs(tmp_path):
+    """
+    Separate active output and archive folders.
+
+    Archive queries should read the explicit archive folder, not the last
+    pipeline output_dir stored in GUI state.
+    """
+    active_dir = tmp_path / "active"
+    archive_dir = tmp_path / "archive"
+    active_dir.mkdir()
+    archive_dir.mkdir()
+
+    initialize_database(active_dir / "metadata.db")
+    initialize_database(archive_dir / "metadata.db")
+
+    insert_segment(
+        timestamp="20260415T120000Z",
+        camera_id="cam_active",
+        target_detected=True,
+        roi_count=99,
+        file_size=100,
+        duration=1.0,
+        file_path="active.mp4",
+        object_type="vehicle",
+        db_path=active_dir / "metadata.db",
+    )
+
+    segment_file = archive_dir / "archive_seg.mp4"
+    segment_file.write_bytes(b"not a real mp4, but enough for URL presence")
+    insert_segment(
+        timestamp="20260415T130000Z",
+        camera_id="cam_archive",
+        target_detected=True,
+        roi_count=7,
+        file_size=segment_file.stat().st_size,
+        duration=2.0,
+        file_path="archive_seg.mp4",
+        object_type="vehicle",
+        db_path=archive_dir / "metadata.db",
+    )
+
+    return active_dir, archive_dir
+
+
+@pytest.fixture
+def stitched_demo_root(tmp_path):
+    root = tmp_path / "demo"
+    old_dir = root / "demos_stitched"
+    new_dir = root / "demos_stitched_1"
+    old_dir.mkdir(parents=True)
+    new_dir.mkdir()
+
+    old_video = old_dir / "mode0_demo.mp4"
+    new_video = new_dir / "mode0_demo.mp4"
+    split_video = new_dir / "demo_splitscreen.mp4"
+    old_video.write_bytes(b"old")
+    new_video.write_bytes(b"new")
+    split_video.write_bytes(b"split")
+
+    old_manifest = old_dir / "manifest.json"
+    old_manifest.write_text(json.dumps({
+        "modes": ["mode0"],
+        "stitched_dir": str(old_dir),
+        "outputs": {"mode0": {"standard": str(old_video)}},
+    }), encoding="utf-8")
+
+    new_manifest = new_dir / "manifest.json"
+    new_manifest.write_text(json.dumps({
+        "modes": ["mode0"],
+        "stitched_dir": str(new_dir),
+        "outputs": {"mode0": {"standard": str(new_video)}},
+    }), encoding="utf-8")
+
+    old_time = time.time() - 10
+    new_time = time.time()
+    os.utime(old_manifest, (old_time, old_time))
+    os.utime(new_manifest, (new_time, new_time))
+
+    return root, new_manifest
 
 
 # ---------------------------------------------------------------------------
@@ -328,3 +412,83 @@ class TestApiStorage:
         data = client.get("/api/storage").get_json()
         assert data["total_bytes"] == 512_000 + 64_000
         assert data["total_mb"] == round((512_000 + 64_000) / 1e6, 2)
+
+
+# ---------------------------------------------------------------------------
+# /api/query_segments, /api/busiest, /api/daily_summary
+# ---------------------------------------------------------------------------
+
+class TestArchiveQueries:
+    def test_query_segments_uses_explicit_archive_dir(self, client, archive_dirs):
+        active_dir, archive_dir = archive_dirs
+        with gui_module._state_lock:
+            gui_module._status["config"]["output_dir"] = str(active_dir)
+
+        data = client.get(
+            "/api/query_segments",
+            query_string={
+                "archive_dir": str(archive_dir),
+                "object_type": "vehicle",
+            },
+        ).get_json()
+
+        assert data["db_path"] == str(archive_dir / "metadata.db")
+        assert len(data["segments"]) == 1
+        assert data["segments"][0]["camera_id"] == "cam_archive"
+        assert data["segments"][0]["playable_url"]
+
+    def test_busiest_uses_explicit_archive_dir(self, client, archive_dirs):
+        active_dir, archive_dir = archive_dirs
+        with gui_module._state_lock:
+            gui_module._status["config"]["output_dir"] = str(active_dir)
+
+        data = client.get(
+            "/api/busiest",
+            query_string={"archive_dir": str(archive_dir), "limit": 20},
+        ).get_json()
+
+        assert data["db_path"] == str(archive_dir / "metadata.db")
+        assert len(data["segments"]) == 1
+        assert data["segments"][0]["camera_id"] == "cam_archive"
+
+    def test_daily_summary_uses_explicit_archive_dir(self, client, archive_dirs):
+        active_dir, archive_dir = archive_dirs
+        with gui_module._state_lock:
+            gui_module._status["config"]["output_dir"] = str(active_dir)
+
+        data = client.get(
+            "/api/daily_summary",
+            query_string={"archive_dir": str(archive_dir)},
+        ).get_json()
+
+        assert data["db_path"] == str(archive_dir / "metadata.db")
+        assert len(data["rows"]) == 1
+        assert data["rows"][0]["camera_id"] == "cam_archive"
+
+
+# ---------------------------------------------------------------------------
+# /api/demo/latest
+# ---------------------------------------------------------------------------
+
+class TestDemoLatest:
+    def test_demo_latest_loads_newest_stitched_manifest(self, client, stitched_demo_root):
+        root, newest_manifest = stitched_demo_root
+
+        data = client.get(
+            "/api/demo/latest",
+            query_string={"output_root": str(root)},
+        ).get_json()
+
+        assert data["ok"] is True
+        assert data["result"]["manifest_path"] == str(newest_manifest)
+        assert data["result"]["videos"]["mode0"]["standard"].startswith("/api/media?path=")
+        assert data["result"]["split_screen"].startswith("/api/media?path=")
+
+    def test_demo_latest_404_when_no_manifest(self, client, tmp_path):
+        resp = client.get(
+            "/api/demo/latest",
+            query_string={"output_root": str(tmp_path)},
+        )
+
+        assert resp.status_code == 404
+        assert "error" in resp.get_json()

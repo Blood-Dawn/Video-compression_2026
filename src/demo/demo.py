@@ -58,6 +58,7 @@ NOTES:
 from __future__ import annotations
 
 import argparse
+import json
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
@@ -160,6 +161,7 @@ def build_roi_focus_frame(
     background_tint_strength: float = 0.08,
     roi_green_tint_strength: float = 0.12,
     draw_boxes: bool = True,
+    draw_tint: bool = True,
 ) -> np.ndarray:
     """
     Option A:
@@ -168,6 +170,19 @@ def build_roi_focus_frame(
 
     This keeps the scene readable while making the detected foreground pop.
     """
+    if not draw_tint:
+        out = frame.copy()
+        h, w = out.shape[:2]
+        if draw_boxes:
+            for bbox in regions:
+                if len(bbox) != 4:
+                    continue
+                clipped = clip_bbox(bbox[0], bbox[1], bbox[2], bbox[3], w, h)
+                if clipped is not None:
+                    x1, y1, x2, y2 = clipped
+                    cv2.rectangle(out, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        return out
+
     out = frame.copy()
     h, w = out.shape[:2]
 
@@ -190,10 +205,7 @@ def build_roi_focus_frame(
         if roi.size == 0:
             continue
 
-        roi_green = np.zeros_like(roi)
-        roi_green[:, :] = (0, 55, 0)
-        restored_roi = cv2.addWeighted(roi, 1.0 - roi_green_tint_strength, roi_green, roi_green_tint_strength, 0)
-        out[y1:y2, x1:x2] = restored_roi
+        out[y1:y2, x1:x2] = roi
 
         if draw_boxes:
             cv2.rectangle(out, (x1, y1), (x2, y2), (0, 255, 0), 2)
@@ -226,6 +238,28 @@ def draw_regions(frame: np.ndarray, regions: List[List[int]]) -> np.ndarray:
             tint = np.zeros_like(roi)
             tint[:, :] = (0, 60, 0)
             out[y1:y2, x1:x2] = cv2.addWeighted(roi, 0.8, tint, 0.2, 0)
+
+    return out
+
+
+
+def draw_region_boxes(frame: np.ndarray, regions: List[List[int]]) -> np.ndarray:
+    """
+    Draw ROI boxes from JSONL metadata without applying any tint.
+    """
+    out = frame.copy()
+    h, w = out.shape[:2]
+
+    for bbox in regions:
+        if len(bbox) != 4:
+            continue
+
+        clipped = clip_bbox(bbox[0], bbox[1], bbox[2], bbox[3], w, h)
+        if clipped is None:
+            continue
+
+        x1, y1, x2, y2 = clipped
+        cv2.rectangle(out, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
     return out
 
@@ -289,6 +323,91 @@ def make_hold_frames(previous_frame: np.ndarray, frame_count: int) -> List[np.nd
     return [previous_frame.copy() for _ in range(frame_count)]
 
 
+def format_metric_value(value: object, suffix: str = "") -> str:
+    if value is None:
+        return "N/A"
+    if isinstance(value, float):
+        return f"{value:.1f}{suffix}"
+    return f"{value}{suffix}"
+
+
+def format_compression_ratio(value: object) -> str:
+    if value is None:
+        return "N/A"
+    if value == float("inf"):
+        return "inf"
+    return f"{float(value):.2f}x"
+
+
+def format_storage_change(space_saved_pct: object) -> str:
+    if space_saved_pct is None:
+        return "N/A"
+    saved = float(space_saved_pct)
+    if saved < 0:
+        return f"{abs(saved):.1f}% larger"
+    return f"{saved:.1f}% saved"
+
+
+def make_metrics_card(
+    width: int,
+    height: int,
+    *,
+    mode: str,
+    metrics: dict,
+    frame_count: int,
+) -> List[np.ndarray]:
+    """
+    Create repeated end-card frames summarizing per-mode demo metrics.
+    """
+    if frame_count <= 0:
+        return []
+
+    cpu = metrics.get("cpu") or {}
+    latency = metrics.get("latency_ms")
+    latency_text = "N/A for file demo" if latency is None else format_metric_value(latency, " ms")
+
+    lines = [
+        f"{mode.upper()} METRICS",
+        f"Compression ratio: {format_compression_ratio(metrics.get('compression_ratio'))}",
+        f"Storage change: {format_storage_change(metrics.get('space_saved_pct'))}",
+        f"Original size: {format_metric_value(metrics.get('original_mb'), ' MB')}",
+        f"Compressed size: {format_metric_value(metrics.get('compressed_mb'), ' MB')}",
+        f"CPU cores used: {format_metric_value(cpu.get('cpu_core_equivalent'), '')} avg",
+        f"CPU time: {format_metric_value(cpu.get('cpu_seconds'), 's')}",
+        f"Pipeline wall time: {format_metric_value(cpu.get('wall_seconds'), 's')}",
+        f"Latency: {latency_text}",
+    ]
+
+    frames: List[np.ndarray] = []
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    title_scale = max(0.85, min(width, height) / 520)
+    body_scale = max(0.52, min(width, height) / 820)
+    title_thickness = 2
+    body_thickness = 1 if min(width, height) < 520 else 2
+    start_y = max(46, int(height * 0.18))
+    available_h = max(24, height - start_y - 24)
+    spacing = max(20, min(max(28, int(height * 0.07)), available_h // max(1, len(lines) - 1)))
+
+    for _ in range(frame_count):
+        img = np.zeros((height, width, 3), dtype=np.uint8)
+        cv2.rectangle(img, (0, 0), (width, height), (18, 24, 21), -1)
+        cv2.rectangle(img, (0, 0), (width, max(8, height // 44)), (0, 180, 90), -1)
+
+        for idx, line in enumerate(lines):
+            is_title = idx == 0
+            scale = title_scale if is_title else body_scale
+            thickness = title_thickness if is_title else body_thickness
+            color = (120, 255, 175) if is_title else (238, 246, 240)
+            (tw, th), _ = cv2.getTextSize(line, font, scale, thickness)
+            x = max(18, (width - tw) // 2 if is_title else int(width * 0.12))
+            y = start_y + idx * spacing
+            cv2.putText(img, line, (x, y), font, scale, color, thickness, cv2.LINE_AA)
+
+        frames.append(img)
+
+    return frames
+
+
 
 def load_segment_rows(db_path: str | Path, mode_records: List[dict]) -> List[Tuple[int, str]]:
     """
@@ -318,6 +437,80 @@ def load_segment_rows(db_path: str | Path, mode_records: List[dict]) -> List[Tup
     return [(i, file_path) for i, (_, file_path) in enumerate(needed)]
 
 
+def load_sparse_mode3_metadata(path: str | Path) -> tuple[Path, dict] | None:
+    """
+    Load a mode3 sparse artifact metadata file.
+
+    New mode3 segments store metadata.json directly in the DB. Older sparse
+    artifacts may point at preview.mp4, with metadata.json beside it.
+    """
+    p = Path(path)
+    metadata_path = p if p.name == "metadata.json" else p.parent / "metadata.json"
+    if not metadata_path.exists():
+        return None
+
+    with open(metadata_path, "r", encoding="utf-8") as f:
+        metadata = json.load(f)
+    if metadata.get("mode") != "mode3":
+        return None
+    return metadata_path.parent, metadata
+
+
+def build_sparse_frame_lookup(metadata: dict) -> dict[int, dict]:
+    return {
+        int(frame_record["source_frame_index"]): frame_record
+        for frame_record in metadata.get("frames", [])
+    }
+
+
+def render_sparse_mode3_frame(
+    artifact_dir: Path,
+    metadata: dict,
+    frame_record: dict | None,
+) -> np.ndarray:
+    """
+    Reconstruct a visual frame from mode3 sparse crops for demo playback.
+    """
+    width = int(metadata["frame_width"])
+    height = int(metadata["frame_height"])
+    canvas = np.zeros((height, width, 3), dtype=np.uint8)
+    if not frame_record:
+        return canvas
+
+    for obj in frame_record.get("objects", []):
+        bbox = obj.get("bbox", [])
+        if len(bbox) != 4:
+            continue
+        x, y, w, h = [int(v) for v in bbox]
+        x1 = max(0, x)
+        y1 = max(0, y)
+        x2 = min(width, x + max(0, w))
+        y2 = min(height, y + max(0, h))
+        if x2 <= x1 or y2 <= y1:
+            continue
+
+        crop_path = artifact_dir / obj["crop_path"]
+        crop = cv2.imread(str(crop_path), cv2.IMREAD_COLOR)
+        if crop is None:
+            continue
+        if crop.shape[1] != (x2 - x1) or crop.shape[0] != (y2 - y1):
+            crop = cv2.resize(crop, (x2 - x1, y2 - y1))
+
+        mask_path = obj.get("mask_path")
+        if mask_path:
+            mask = cv2.imread(str(artifact_dir / mask_path), cv2.IMREAD_GRAYSCALE)
+            if mask is not None:
+                if mask.shape[1] != (x2 - x1) or mask.shape[0] != (y2 - y1):
+                    mask = cv2.resize(mask, (x2 - x1, y2 - y1), interpolation=cv2.INTER_NEAREST)
+                roi = canvas[y1:y2, x1:x2]
+                roi[mask > 0] = crop[mask > 0]
+                continue
+
+        canvas[y1:y2, x1:x2] = crop
+
+    return canvas
+
+
 
 def compute_missing_frame_count(
     previous_time: float,
@@ -344,12 +537,18 @@ def render_view(
     *,
     view: str,
     draw_boxes: bool,
+    draw_tint: bool,
 ) -> np.ndarray:
-    if view == "roi_tint":
-        return build_roi_focus_frame(frame, regions, draw_boxes=draw_boxes)
+    if view == "roi_tint" or draw_tint:
+        return build_roi_focus_frame(
+            frame,
+            regions,
+            draw_boxes=draw_boxes,
+            draw_tint=draw_tint,
+        )
 
     if draw_boxes:
-        return draw_regions(frame, regions)
+        return draw_region_boxes(frame, regions)
 
     return frame.copy()
 
@@ -368,6 +567,9 @@ def render_demo(
     min_black_skip_seconds: float = 0.25,
     view: str = "standard",
     draw_boxes: bool = True,
+    draw_tint: bool = True,
+    metrics: dict | None = None,
+    metrics_screen_seconds: float = 4.0,
 ) -> str:
     """
     Render one stitched annotated demo video from segment DB + JSONL sidecar.
@@ -388,14 +590,21 @@ def render_demo(
         raise ValueError(f"No usable segment rows found in DB: {db_path}")
 
     first_path = segment_rows[0][1]
-    probe = cv2.VideoCapture(first_path)
-    if not probe.isOpened():
-        raise RuntimeError(f"Could not open segment video: {first_path}")
+    first_sparse = load_sparse_mode3_metadata(first_path)
+    if first_sparse is not None:
+        _, first_sparse_metadata = first_sparse
+        width = int(first_sparse_metadata["frame_width"])
+        height = int(first_sparse_metadata["frame_height"])
+        fps = fps_override or float(first_sparse_metadata.get("fps") or 30.0)
+    else:
+        probe = cv2.VideoCapture(first_path)
+        if not probe.isOpened():
+            raise RuntimeError(f"Could not open segment video: {first_path}")
 
-    width = int(probe.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(probe.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    fps = fps_override or probe.get(cv2.CAP_PROP_FPS) or 30.0
-    probe.release()
+        width = int(probe.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(probe.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = fps_override or probe.get(cv2.CAP_PROP_FPS) or 30.0
+        probe.release()
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     writer = cv2.VideoWriter(
@@ -416,18 +625,34 @@ def render_demo(
             if not segment_records:
                 continue
 
-            cap = cv2.VideoCapture(segment_path)
-            if not cap.isOpened():
-                raise RuntimeError(f"Could not open segment video: {segment_path}")
+            sparse = load_sparse_mode3_metadata(segment_path)
+            cap = None
+            sparse_artifact_dir = None
+            sparse_metadata = None
+            sparse_frames = None
+            if sparse is not None:
+                sparse_artifact_dir, sparse_metadata = sparse
+                sparse_frames = build_sparse_frame_lookup(sparse_metadata)
+            else:
+                cap = cv2.VideoCapture(segment_path)
+                if not cap.isOpened():
+                    raise RuntimeError(f"Could not open segment video: {segment_path}")
 
             try:
                 for record in segment_records:
-                    ok, frame = cap.read()
-                    if not ok:
-                        raise RuntimeError(
-                            f"Segment video ended early while reading {segment_path} "
-                            f"for segment_index={segment_index}"
+                    if sparse_metadata is not None:
+                        frame = render_sparse_mode3_frame(
+                            sparse_artifact_dir,
+                            sparse_metadata,
+                            sparse_frames.get(int(record["source_frame_index"])) if sparse_frames else None,
                         )
+                    else:
+                        ok, frame = cap.read()
+                        if not ok:
+                            raise RuntimeError(
+                                f"Segment video ended early while reading {segment_path} "
+                                f"for segment_index={segment_index}"
+                            )
 
                     current_time = record["source_time_seconds"]
 
@@ -460,6 +685,7 @@ def render_demo(
                         record["regions"],
                         view=view,
                         draw_boxes=draw_boxes,
+                        draw_tint=draw_tint,
                     )
                     rendered = add_bottom_right_labels(
                         rendered,
@@ -474,7 +700,19 @@ def render_demo(
                     previous_rendered_frame = rendered
 
             finally:
-                cap.release()
+                if cap is not None:
+                    cap.release()
+
+        if metrics is not None and metrics_screen_seconds > 0:
+            metric_frames = make_metrics_card(
+                width,
+                height,
+                mode=str(metrics.get("mode") or records[0].get("mode") or "mode"),
+                metrics=metrics,
+                frame_count=max(1, int(round(metrics_screen_seconds * fps))),
+            )
+            for metric_frame in metric_frames:
+                writer.write(metric_frame)
 
     finally:
         writer.release()
@@ -510,8 +748,30 @@ if __name__ == "__main__":
         action="store_true",
         help="Disable ROI bounding boxes in the rendered view.",
     )
+    parser.add_argument(
+        "--no-tint",
+        action="store_true",
+        help="Disable ROI tinting in the rendered view.",
+    )
+    parser.add_argument(
+        "--metrics-json",
+        default=None,
+        help="Optional JSON file containing metrics to append as an end card.",
+    )
+    parser.add_argument(
+        "--metrics-screen-seconds",
+        type=float,
+        default=4.0,
+        help="Duration of the metrics end card when --metrics-json is provided.",
+    )
 
     args = parser.parse_args()
+    metrics = None
+    if args.metrics_json:
+        import json
+
+        with open(args.metrics_json, "r", encoding="utf-8") as f:
+            metrics = json.load(f)
 
     out = render_demo(
         db_path=args.db,
@@ -521,5 +781,8 @@ if __name__ == "__main__":
         min_black_skip_seconds=args.min_black_skip,
         view=args.view,
         draw_boxes=not args.no_boxes,
+        draw_tint=not args.no_tint,
+        metrics=metrics,
+        metrics_screen_seconds=args.metrics_screen_seconds,
     )
     print(f"Saved demo video: {out}")

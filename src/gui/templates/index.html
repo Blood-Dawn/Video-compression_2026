@@ -1572,8 +1572,18 @@
                   Disable ROI boxes in render
                 </label>
               </div>
-              <button class="btn btn-ghost btn-full" style="margin-top:0.75rem;"
-                      onclick="runDemo()" id="btn-run-demo">▶ RUN DEMO</button>
+              <div style="margin-top:0.5rem;display:flex;gap:0.5rem;">
+                <input type="checkbox" id="demo-no-tint" />
+                <label for="demo-no-tint" style="font-family:var(--mono);font-size:0.65rem;color:var(--text);cursor:pointer;">
+                  Disable background tint in demo
+                </label>
+              </div>
+              <div style="margin-top:0.75rem;display:flex;gap:0.5rem;">
+                <button class="btn btn-ghost" style="flex:1;"
+                        onclick="runDemo()" id="btn-run-demo">▶ RUN DEMO</button>
+                <button class="btn btn-ghost" style="flex:1;"
+                        onclick="loadLatestDemo()" id="btn-load-demo">LOAD LATEST DEMO</button>
+              </div>
             </div>
           </details>
         </div>
@@ -1667,10 +1677,14 @@
         <!-- Query Archive -->
         <div class="config-section">
           <details>
-            <summary>Query Archive</summary>
-            <div style="padding-top:0.75rem;">
-              <div class="config-field">
-                <label class="config-label" for="q-object-type">Object Type</label>
+	            <summary>Query Archive</summary>
+	            <div style="padding-top:0.75rem;">
+	              <div class="config-field">
+	                <label class="config-label" for="q-archive-dir">Archive Folder</label>
+	                <input type="text" id="q-archive-dir" placeholder="Default: outputs/" />
+	              </div>
+	              <div class="config-field">
+	                <label class="config-label" for="q-object-type">Object Type</label>
                 <select id="q-object-type">
                   <option value="">— any —</option>
                   <option value="vehicle">Vehicle</option>
@@ -2690,6 +2704,7 @@ async function runDemo() {
   }
   const outputRoot = document.getElementById('demo-output-dir').value.trim() || 'outputs/';
   const noBoxes = document.getElementById('demo-no-boxes').checked;
+  const noTint = document.getElementById('demo-no-tint').checked;
   const cameraId = document.getElementById('camera-id').value.trim() || 'cam_00';
 
   document.getElementById('btn-run-demo').disabled = true;
@@ -2700,7 +2715,7 @@ async function runDemo() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ input_path: inputPath, output_root: outputRoot,
                              camera_id: cameraId, modes, views: ['standard'],
-                             no_boxes: noBoxes }),
+                             no_boxes: noBoxes, no_tint: noTint }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -2714,6 +2729,27 @@ async function runDemo() {
   } catch(e) {
     alert('Demo failed: ' + e);
     document.getElementById('btn-run-demo').disabled = false;
+  }
+}
+
+async function loadLatestDemo() {
+  const outputRoot = document.getElementById('demo-output-dir').value.trim() || 'outputs/';
+  const btn = document.getElementById('btn-load-demo');
+  btn.disabled = true;
+  showDemoPanel('running', 'Loading latest stitched demo…');
+  try {
+    const params = new URLSearchParams({ output_root: outputRoot });
+    const res = await fetch('/api/demo/latest?' + params);
+    const data = await res.json();
+    if (!res.ok) {
+      showDemoPanel('error', '⚠ ' + (data.error || res.status));
+      return;
+    }
+    renderDemoResult(data.result);
+  } catch(e) {
+    showDemoPanel('error', '⚠ ' + String(e));
+  } finally {
+    btn.disabled = false;
   }
 }
 
@@ -2894,9 +2930,11 @@ async function runQuery() {
   const cId = document.getElementById('q-camera-id').value.trim();
   const st  = document.getElementById('q-start-time').value.trim();
   const et  = document.getElementById('q-end-time').value.trim();
+  const archiveDir = document.getElementById('q-archive-dir').value.trim();
   if (cId) params.set('camera_id', cId);
   if (st)  params.set('start_time', st);
   if (et)  params.set('end_time', et);
+  if (archiveDir) params.set('archive_dir', archiveDir);
   try {
     const res  = await fetch('/api/query_segments?' + params);
     const data = await res.json();
@@ -2910,7 +2948,10 @@ async function loadBusiest() {
   const container = document.getElementById('query-results');
   container.innerHTML = '<div style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);padding:0.4rem;">Loading busiest clips…</div>';
   try {
-    const res  = await fetch('/api/busiest?limit=20');
+    const params = new URLSearchParams({ limit: '20' });
+    const archiveDir = document.getElementById('q-archive-dir').value.trim();
+    if (archiveDir) params.set('archive_dir', archiveDir);
+    const res  = await fetch('/api/busiest?' + params);
     const data = await res.json();
     _renderQueryResults(data.segments, container);
   } catch(e) {
@@ -2922,7 +2963,10 @@ async function loadDailySummary() {
   const container = document.getElementById('query-results');
   container.innerHTML = '<div style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);padding:0.4rem;">Loading daily summary…</div>';
   try {
-    const res  = await fetch('/api/daily_summary');
+    const params = new URLSearchParams();
+    const archiveDir = document.getElementById('q-archive-dir').value.trim();
+    if (archiveDir) params.set('archive_dir', archiveDir);
+    const res  = await fetch('/api/daily_summary?' + params);
     const data = await res.json();
     if (!data.rows || !data.rows.length) {
       container.innerHTML = '<div style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);padding:0.5rem;">No data yet.</div>';

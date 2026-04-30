@@ -767,13 +767,24 @@ def _get_db_path() -> Path:
     return Path(cfg.get("output_dir", str(_ROOT / "outputs"))) / "metadata.db"
 
 
-def _rows_to_segment_list(rows) -> list:
+def _get_archive_db_path() -> Path:
+    """Return metadata.db from an explicit archive folder, defaulting to outputs/."""
+    archive_dir = request.args.get("archive_dir", "").strip()
+    if archive_dir:
+        return Path(archive_dir).expanduser().resolve() / "metadata.db"
+    return (_ROOT / "outputs" / "metadata.db").resolve()
+
+
+def _rows_to_segment_list(rows, base_dir: Path | None = None) -> list:
     """Convert raw DB tuples to JSON-serialisable dicts."""
     segs = []
     for r in rows:
         # schema: id, timestamp, camera_id, target_detected, roi_count,
         #         file_size, duration, file_path, object_type
-        abs_path = Path(r[7]).resolve()
+        abs_path = Path(r[7])
+        if not abs_path.is_absolute() and base_dir is not None:
+            abs_path = base_dir / abs_path
+        abs_path = abs_path.resolve()
         playable_url = None
         if abs_path.exists() and abs_path.suffix.lower() in {".mp4", ".webm", ".mov", ".avi"}:
             playable_url = f"/api/media?path={quote(str(abs_path))}"
@@ -806,7 +817,7 @@ def api_query_segments():
     if not object_type:
         return jsonify({"error": "object_type is required"}), 400
 
-    db_path = _get_db_path()
+    db_path = _get_archive_db_path()
     if not db_path.exists():
         return jsonify({"segments": [], "db_path": str(db_path)})
 
@@ -821,13 +832,13 @@ def api_query_segments():
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
-    return jsonify({"segments": _rows_to_segment_list(rows), "db_path": str(db_path)})
+    return jsonify({"segments": _rows_to_segment_list(rows, db_path.parent), "db_path": str(db_path)})
 
 
 @app.route("/api/daily_summary")
 def api_daily_summary():
     """Return daily storage totals grouped by date and camera."""
-    db_path = _get_db_path()
+    db_path = _get_archive_db_path()
     if not db_path.exists():
         return jsonify({"rows": [], "db_path": str(db_path)})
 
@@ -851,7 +862,7 @@ def api_daily_summary():
 @app.route("/api/busiest")
 def api_busiest():
     """Return segments with the highest ROI/detection counts (busiest clips)."""
-    db_path = _get_db_path()
+    db_path = _get_archive_db_path()
     if not db_path.exists():
         return jsonify({"segments": [], "db_path": str(db_path)})
 
@@ -861,7 +872,7 @@ def api_busiest():
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
-    return jsonify({"segments": _rows_to_segment_list(rows), "db_path": str(db_path)})
+    return jsonify({"segments": _rows_to_segment_list(rows, db_path.parent), "db_path": str(db_path)})
 
 
 # ── Demo / comparison routes (Riley's render system) ─────────────────────────
@@ -878,6 +889,37 @@ _demo_state: dict = {
     "result": None,          # populated on success
     "error": None,
 }
+
+
+def _build_demo_result_from_manifest(manifest_path: Path) -> dict:
+    """Build the GUI demo result payload from a stitched demo manifest."""
+    with open(manifest_path, encoding="utf-8") as f:
+        manifest = json.load(f)
+
+    videos: dict = {}
+    for mode, view_map in manifest.get("outputs", {}).items():
+        videos[mode] = {}
+        for view, file_path in view_map.items():
+            p = Path(file_path).resolve()
+            if p.exists():
+                videos[mode][view] = f"/api/media?path={quote(str(p))}"
+            else:
+                videos[mode][view] = None
+
+    split_screen_url = None
+    stitched_dir = Path(manifest.get("stitched_dir", ""))
+    if stitched_dir.exists():
+        for candidate in stitched_dir.glob("demo_splitscreen*.mp4"):
+            split_screen_url = f"/api/media?path={quote(str(candidate.resolve()))}"
+            break
+
+    return {
+        "manifest_path": str(manifest_path),
+        "modes": manifest.get("modes", []),
+        "videos": videos,
+        "split_screen": split_screen_url,
+        "metrics": manifest.get("metrics", {}),
+    }
 
 
 def _run_demo_thread(config: dict) -> None:
@@ -930,6 +972,7 @@ def _run_demo_thread(config: dict) -> None:
             modes=config["modes"],
             views=config.get("views", ["standard"]),
             no_boxes=config.get("no_boxes", False),
+            no_tint=config.get("no_tint", False),
             progress_callback=_progress_cb,
         )
     except Exception as exc:
@@ -951,39 +994,12 @@ def _run_demo_thread(config: dict) -> None:
         _update(running=False, status="error", error="manifest.json not found after demo run")
         return
 
-    manifest_path = manifests[0]
     try:
-        with open(manifest_path, encoding="utf-8") as f:
-            manifest = json.load(f)
+        manifest_path = manifests[0]
+        result = _build_demo_result_from_manifest(manifest_path)
     except Exception as exc:
         _update(running=False, status="error", error=f"Could not read manifest: {exc}")
         return
-
-    # Build playable URL dict: {mode: {view: url}}
-    videos: dict = {}
-    for mode, view_map in manifest.get("outputs", {}).items():
-        videos[mode] = {}
-        for view, file_path in view_map.items():
-            p = Path(file_path).resolve()
-            if p.exists():
-                videos[mode][view] = f"/api/media?path={quote(str(p))}"
-            else:
-                videos[mode][view] = None
-
-    # Split-screen is in the same stitched dir if multiple modes ran
-    split_screen_url = None
-    stitched_dir = Path(manifest.get("stitched_dir", ""))
-    if stitched_dir.exists():
-        for candidate in stitched_dir.glob("demo_splitscreen*.mp4"):
-            split_screen_url = f"/api/media?path={quote(str(candidate.resolve()))}"
-            break
-
-    result = {
-        "manifest_path": str(manifest_path),
-        "modes": manifest.get("modes", []),
-        "videos": videos,
-        "split_screen": split_screen_url,
-    }
     _update(running=False, status="done", progress="Complete.", result=result)
     log.info(f"Demo run complete. Manifest: {manifest_path}")
 
@@ -999,6 +1015,7 @@ def api_demo():
         modes        – list of mode strings, e.g. ["mode0", "mode1", "mode2", "mode3"]
         views        – list of view strings (default ["standard"])
         no_boxes     – bool, suppress ROI box overlays (default false)
+        no_tint      – bool, suppress ROI tint overlays (default false)
     """
     with _demo_lock:
         if _demo_state["running"]:
@@ -1022,6 +1039,7 @@ def api_demo():
         "modes": modes,
         "views": data.get("views", ["standard"]),
         "no_boxes": bool(data.get("no_boxes", False)),
+        "no_tint": bool(data.get("no_tint", False)),
     }
 
     with _demo_lock:
@@ -1038,6 +1056,25 @@ def api_demo_status():
     """Return the current state of the background demo run."""
     with _demo_lock:
         return jsonify(dict(_demo_state))
+
+
+@app.route("/api/demo/latest")
+def api_demo_latest():
+    """Load the newest demos_stitched*/manifest.json from a demo output root."""
+    output_root = request.args.get("output_root", "").strip() or str(_ROOT / "outputs")
+    root = Path(output_root).expanduser().resolve()
+    manifests = sorted(
+        root.glob("demos_stitched*/manifest.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if not manifests:
+        return jsonify({"error": f"No stitched demo manifest found in {root}"}), 404
+    try:
+        result = _build_demo_result_from_manifest(manifests[0])
+    except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"ok": True, "result": result})
 
 
 # ── HLS live streaming (task 4.1) ────────────────────────────────────────────

@@ -210,6 +210,40 @@ class ROIEncoder:
                 composed[y1:y2, x1:x2] = frame[y1:y2, x1:x2]
         return composed
 
+    @staticmethod
+    def _compress_background_outside_bboxes(
+        frame: np.ndarray,
+        boxes: List[Tuple[int, int, int, int]],
+        *,
+        downscale: int = 8,
+    ) -> np.ndarray:
+        """
+        Visually degrade pixels outside ROI boxes while preserving ROI pixels.
+
+        H.264 cannot use two CRFs inside a single frame in this pipeline. This
+        preprocessing creates the practical equivalent for normal MP4 output:
+        background pixels are made low-detail/easy to compress, then foreground
+        boxes are copied back at full detail before encoding.
+        """
+        if not boxes or downscale <= 1:
+            return frame
+
+        h, w = frame.shape[:2]
+        small_w = max(1, w // downscale)
+        small_h = max(1, h // downscale)
+        low_detail = cv2.resize(frame, (small_w, small_h), interpolation=cv2.INTER_AREA)
+        low_detail = cv2.resize(low_detail, (w, h), interpolation=cv2.INTER_LINEAR)
+        out = low_detail
+
+        for bx, by, bw, bh in boxes:
+            x1 = max(0, int(bx))
+            y1 = max(0, int(by))
+            x2 = min(w, int(bx) + int(bw))
+            y2 = min(h, int(by) + int(bh))
+            if x2 > x1 and y2 > y1:
+                out[y1:y2, x1:x2] = frame[y1:y2, x1:x2]
+        return out
+
     # ------------------------------------------------------------------
     # Primary API: encode raw numpy frames (no lossy intermediate file)
     # ------------------------------------------------------------------
@@ -486,6 +520,7 @@ class ROIEncoder:
         mode_label: str = "",
         draw_roi_boxes: Optional[bool] = None,
         measure_sharpness: bool = True,
+        compress_background: bool = False,
     ) -> None:
         """Write one frame to the open streaming segment.
 
@@ -507,6 +542,8 @@ class ROIEncoder:
             frame_out = self._copy_bboxes_to_black_frame(frame, boxes)
         elif background_frame is not None:
             frame_out = self._copy_bboxes_to_background_frame(background_frame, frame, boxes)
+        elif compress_background and boxes:
+            frame_out = self._compress_background_outside_bboxes(frame, boxes)
         else:
             frame_out = frame
 

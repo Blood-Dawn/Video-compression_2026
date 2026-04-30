@@ -225,7 +225,7 @@ class ROIEncoder:
         background pixels are made low-detail/easy to compress, then foreground
         boxes are copied back at full detail before encoding.
         """
-        if not boxes or downscale <= 1:
+        if downscale <= 1:
             return frame
 
         h, w = frame.shape[:2]
@@ -542,7 +542,7 @@ class ROIEncoder:
             frame_out = self._copy_bboxes_to_black_frame(frame, boxes)
         elif background_frame is not None:
             frame_out = self._copy_bboxes_to_background_frame(background_frame, frame, boxes)
-        elif compress_background and boxes:
+        elif compress_background:
             frame_out = self._compress_background_outside_bboxes(frame, boxes)
         else:
             frame_out = frame

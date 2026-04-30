@@ -269,14 +269,7 @@ def run_pipeline(
     # Mode 2 writes full-size frames with a mostly static background plus moving
     # patches. It needs an actual compression preset/CRF to beat an already
     # compressed source MP4; ultrafast + CRF 18 can be larger than the input.
-    if mode == "mode2":
-        encoder = ROIEncoder(
-            output_dir=output_dir,
-            db_path=db_path,
-            preset="veryfast",
-            foreground_crf=23,
-        )
-    elif mode == "mode3":
+    if mode in {"mode2", "mode3"}:
         encoder = ROIEncoder(
             output_dir=output_dir,
             db_path=db_path,

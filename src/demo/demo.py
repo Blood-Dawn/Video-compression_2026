@@ -467,6 +467,7 @@ def render_sparse_mode3_frame(
     artifact_dir: Path,
     metadata: dict,
     frame_record: dict | None,
+    image_cache: dict[Path, np.ndarray] | None = None,
 ) -> np.ndarray:
     """
     Reconstruct a visual frame from mode3 sparse crops for demo playback.
@@ -489,8 +490,13 @@ def render_sparse_mode3_frame(
         if x2 <= x1 or y2 <= y1:
             continue
 
-        crop_path = artifact_dir / obj["crop_path"]
-        crop = cv2.imread(str(crop_path), cv2.IMREAD_COLOR)
+        crop_path = (artifact_dir / obj["crop_path"]).resolve()
+        if image_cache is not None and crop_path in image_cache:
+            crop = image_cache[crop_path]
+        else:
+            crop = cv2.imread(str(crop_path), cv2.IMREAD_COLOR)
+            if image_cache is not None and crop is not None:
+                image_cache[crop_path] = crop
         if crop is None:
             continue
         if crop.shape[1] != (x2 - x1) or crop.shape[0] != (y2 - y1):
@@ -498,7 +504,13 @@ def render_sparse_mode3_frame(
 
         mask_path = obj.get("mask_path")
         if mask_path:
-            mask = cv2.imread(str(artifact_dir / mask_path), cv2.IMREAD_GRAYSCALE)
+            resolved_mask_path = (artifact_dir / mask_path).resolve()
+            if image_cache is not None and resolved_mask_path in image_cache:
+                mask = image_cache[resolved_mask_path]
+            else:
+                mask = cv2.imread(str(resolved_mask_path), cv2.IMREAD_GRAYSCALE)
+                if image_cache is not None and mask is not None:
+                    image_cache[resolved_mask_path] = mask
             if mask is not None:
                 if mask.shape[1] != (x2 - x1) or mask.shape[0] != (y2 - y1):
                     mask = cv2.resize(mask, (x2 - x1, y2 - y1), interpolation=cv2.INTER_NEAREST)
@@ -630,9 +642,11 @@ def render_demo(
             sparse_artifact_dir = None
             sparse_metadata = None
             sparse_frames = None
+            sparse_image_cache = None
             if sparse is not None:
                 sparse_artifact_dir, sparse_metadata = sparse
                 sparse_frames = build_sparse_frame_lookup(sparse_metadata)
+                sparse_image_cache = {}
             else:
                 cap = cv2.VideoCapture(segment_path)
                 if not cap.isOpened():
@@ -645,6 +659,7 @@ def render_demo(
                             sparse_artifact_dir,
                             sparse_metadata,
                             sparse_frames.get(int(record["source_frame_index"])) if sparse_frames else None,
+                            sparse_image_cache,
                         )
                     else:
                         ok, frame = cap.read()

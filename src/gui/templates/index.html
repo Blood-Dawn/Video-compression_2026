@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SVCS — Surveillance Video Compression System</title>
+  <title>SVCS: Surveillance Video Compression System</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
@@ -1248,7 +1248,6 @@
       <span class="logo-main">SVCS</span>
       <div>
         <div class="logo-sub">Surveillance Video Compression System</div>
-        <div class="logo-sub" style="color: var(--text-dim); font-size:0.5rem">EGN 4950C · FAU · DIU / NIWC Pacific</div>
       </div>
     </div>
     <div class="header-right">
@@ -1477,6 +1476,12 @@
                   <input type="range" id="enhance-max-roi" min="64" max="640" step="16" value="200"
                          oninput="document.getElementById('enhance-max-roi-val').textContent=this.value" style="width:100%;margin-top:4px">
                 </div>
+                <div class="toggle-row" style="margin-top:0.75rem;">
+                  <input type="checkbox" id="upscale-output-toggle" />
+                  <label for="upscale-output-toggle" style="font-family:var(--mono);font-size:0.7rem;color:var(--text);cursor:pointer;">
+                    ↑ Upscale output resolution (×scale factor)
+                  </label>
+                </div>
               </div>
             </div>
           </details>
@@ -1615,7 +1620,7 @@
                 Spin up a local <a href="https://github.com/bluenviron/mediamtx" target="_blank" style="color:var(--green);">MediaMTX</a> RTSP server and push a video into it.
               </p>
               <div id="rtsp-dl-section">
-                <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">STEP 1 — DOWNLOAD BINARY</div>
+                <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">STEP 1: DOWNLOAD BINARY</div>
                 <div style="display:flex;gap:0.4rem;align-items:center;">
                   <button class="btn btn-ghost" style="flex:1;" id="btn-rtsp-dl" onclick="rtspDownload()">⬇ DOWNLOAD MediaMTX</button>
                 </div>
@@ -1627,7 +1632,7 @@
                 </div>
               </div>
               <div style="margin-top:0.75rem;">
-                <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">STEP 2 — START SERVER</div>
+                <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">STEP 2: START SERVER</div>
                 <div style="display:flex;gap:0.4rem;">
                   <button class="btn btn-ghost" style="flex:1;" id="btn-rtsp-start" onclick="rtspStart()" disabled>▶ START</button>
                   <button class="btn btn-ghost" style="flex:1;opacity:0.4;" id="btn-rtsp-stop" onclick="rtspStop()" disabled>■ STOP</button>
@@ -1635,7 +1640,7 @@
                 <div id="rtsp-server-msg" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:0.3rem;"></div>
               </div>
               <div style="margin-top:0.75rem;" id="rtsp-push-section">
-                <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">STEP 3 — PUSH VIDEO</div>
+                <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">STEP 3: PUSH VIDEO</div>
                 <div class="config-field">
                   <label class="config-label" for="rtsp-push-path">Video File</label>
                   <div style="display:flex;gap:0.25rem;">
@@ -1672,7 +1677,7 @@
               <div class="config-field">
                 <label class="config-label" for="q-object-type">Object Type</label>
                 <select id="q-object-type">
-                  <option value="">— any —</option>
+                  <option value="">any</option>
                   <option value="vehicle">Vehicle</option>
                   <option value="person">Person</option>
                   <option value="unknown">Unknown</option>
@@ -1707,6 +1712,17 @@
         <button id="btn-start" class="btn btn-primary" onclick="startPipeline()">▶ START</button>
         <button id="btn-stop" class="btn btn-danger" onclick="stopPipeline()" disabled>■ STOP</button>
       </div>
+      <div style="margin-top:0.4rem;display:flex;gap:0.4rem;">
+        <button id="btn-save-config" class="btn btn-ghost" style="flex:1;"
+                title="Download current pipeline settings as a JSON file"
+                onclick="saveConfig()">⬇ SAVE</button>
+        <button id="btn-load-config" class="btn btn-ghost" style="flex:1;"
+                title="Load settings from a previously saved config JSON"
+                onclick="loadConfig()">⬆ LOAD</button>
+      </div>
+      <!-- Hidden file picker for config import -->
+      <input type="file" id="config-import-input" accept=".json"
+             style="display:none;" onchange="_onConfigFileSelected(event)" />
     </aside>
 
     <!-- ════════ CONTENT TOP — Stats + Mode ════════ -->
@@ -1747,7 +1763,7 @@
       </div>
 
       <!-- Human-readable status message -->
-      <div class="status-message" id="status-message">Ready — configure a source and press Start.</div>
+      <div class="status-message" id="status-message">Ready. Configure a source and press Start.</div>
 
       <div class="progress-row" style="margin-top:0.3rem;">
         <div class="progress-track">
@@ -1851,12 +1867,12 @@
               <tr>
                 <th>Timestamp</th>
                 <th>Camera</th>
-                <th title="TARGET — whether this segment contains motion/objects detected by background subtraction. YES = at least one ROI was found; used by Mode 1 to decide whether to save the segment at all.">Target ⓘ</th>
+                <th title="TARGET: whether this segment contains motion/objects detected by background subtraction. YES = at least one ROI was found; used by Mode 1 to decide whether to save the segment at all.">Target ⓘ</th>
                 <th>Type</th>
                 <th title="Number of Region-of-Interest detections across all frames in this segment. Higher = more activity.">ROIs ⓘ</th>
                 <th>Duration</th>
                 <th title="Compressed file size. Hover a row to see estimated compression ratio vs raw video.">Size ⓘ</th>
-                <th title="Perceptual sharpness of detected target ROIs, measured by Laplacian variance. Gives a rough sense of image clarity: ~480p = moderate, ~720p = sharp, ~1080p = very sharp. Background-only segments show —.">Quality ⓘ</th>
+                <th title="Perceptual sharpness of detected target ROIs, measured by Laplacian variance. Gives a rough sense of image clarity: ~480p = moderate, ~720p = sharp, ~1080p = very sharp. Background-only segments show no value.">Quality ⓘ</th>
                 <th>Play</th>
               </tr>
             </thead>
@@ -1891,7 +1907,7 @@
         <div class="help-rows">
           <div class="help-row">
             <span class="help-term">Live Surveillance (Mode 0)</span>
-            <span class="help-def">Records every frame continuously, 24/7. No footage is ever dropped. Produces the largest files. Use this when you need a complete uninterrupted record — e.g. legal evidence, entrance cameras.</span>
+            <span class="help-def">Records every frame continuously, 24/7. No footage is ever dropped. Produces the largest files. Use this when you need a complete uninterrupted record (legal evidence, entrance cameras).</span>
           </div>
           <div class="help-row">
             <span class="help-term">Event Recording (Mode 1)</span>
@@ -1903,7 +1919,7 @@
           </div>
           <div class="help-row">
             <span class="help-term">Object Only (Mode 3)</span>
-            <span class="help-def">Only the bounding-box patches of detected objects are saved — background is not recorded at all. Extreme compression. Use only when you care about the objects and not the scene.</span>
+            <span class="help-def">Only the bounding-box patches of detected objects are saved. Background is not recorded at all. Extreme compression. Use only when you care about the objects and not the scene.</span>
           </div>
         </div>
       </div>
@@ -1914,7 +1930,7 @@
         <div class="help-rows">
           <div class="help-row">
             <span class="help-term">Detection Sensitivity</span>
-            <span class="help-def">Controls how easily motion is flagged. <em>Low</em> — only large, obvious movement triggers detection (fewer false alarms, misses small objects). <em>High</em> — flags subtle motion including leaves, lighting changes (catches everything, more false positives). Maps to background subtraction parameters automatically.</span>
+            <span class="help-def">Controls how easily motion is flagged. <em>Low</em> catches only large, obvious movement (fewer false alarms but misses small objects). <em>High</em> flags subtle motion including leaves and lighting changes (catches everything, more false positives). Maps to background subtraction parameters automatically.</span>
           </div>
           <div class="help-row">
             <span class="help-term">Segment Length</span>
@@ -1922,7 +1938,7 @@
           </div>
           <div class="help-row">
             <span class="help-term">BG Subtraction Method</span>
-            <span class="help-def"><em>MOG2</em> — Mixture of Gaussians, adapts quickly to gradual lighting changes. Recommended for most scenes. <em>KNN</em> — K-Nearest Neighbours, more robust to sudden lighting shifts (e.g. clouds, flickering). Both are OpenCV implementations running on CPU.</span>
+            <span class="help-def"><em>MOG2</em> (Mixture of Gaussians) adapts quickly to gradual lighting changes and is recommended for most scenes. <em>KNN</em> (K-Nearest Neighbours) is more robust to sudden lighting shifts like clouds or flickering. Both are OpenCV implementations running on CPU.</span>
           </div>
           <div class="help-row">
             <span class="help-term">Warmup Frames</span>
@@ -1938,15 +1954,15 @@
         <div class="help-rows">
           <div class="help-row">
             <span class="help-term">Compute Device</span>
-            <span class="help-def"><em>Auto-detect</em> picks the fastest available option. <em>NVIDIA GPU (CUDA)</em> — requires an NVIDIA card with 2+ GB VRAM and PyTorch with CUDA installed; 5–20× faster than CPU. <em>Apple Silicon (MPS)</em> — M1/M2/M3 Macs only; 2–5× faster than CPU. <em>CPU</em> — works on any machine including laptops but is slowest. Phones and tablets are not supported.</span>
+            <span class="help-def"><em>Auto-detect</em> picks the fastest available option. <em>NVIDIA GPU (CUDA)</em> requires an NVIDIA card with 2+ GB VRAM and PyTorch with CUDA installed; 5–20x faster than CPU. <em>Apple Silicon (MPS)</em> works on M1/M2/M3 Macs only; 2–5x faster than CPU. <em>CPU</em> works on any machine including laptops but is slowest. Phones and tablets are not supported.</span>
           </div>
           <div class="help-row">
             <span class="help-term">SR Model</span>
-            <span class="help-def"><em>ESPCN / FSRCNN</em> — fast, lightweight, good for real-time use. <em>EDSR</em> — higher quality, slower. <em>Real-ESRGAN</em> — best quality, requires the <code>RealESRGAN_x4plus.pth</code> weights file in the <code>models/</code> folder. See DEV.md for download instructions.</span>
+            <span class="help-def"><em>ESPCN / FSRCNN</em> are fast and lightweight, good for real-time use. <em>EDSR</em> gives higher quality but runs slower. <em>Real-ESRGAN</em> gives the best quality and requires the <code>RealESRGAN_x4plus.pth</code> weights file in the <code>models/</code> folder. See DEV.md for download instructions.</span>
           </div>
           <div class="help-row">
             <span class="help-term">Enhance every N frames</span>
-            <span class="help-def">SR runs on 1 frame out of every N, then the result is reused for the remaining N-1 frames. N=1 gives the highest quality but can slow the pipeline. N=5 (default) is a good balance — at 25fps you get a fresh SR pass every 0.2 seconds.</span>
+            <span class="help-def">SR runs on 1 frame out of every N, then the result is reused for the remaining N-1 frames. N=1 gives the highest quality but can slow the pipeline. N=5 (default) is a good balance. At 25fps you get a fresh SR pass every 0.2 seconds.</span>
           </div>
           <div class="help-row">
             <span class="help-term">Max ROI size (px)</span>
@@ -1965,7 +1981,7 @@
           </div>
           <div class="help-row">
             <span class="help-term">Passphrase</span>
-            <span class="help-def">Enter a password to derive the encryption key. Keep this safe — there is no recovery without it.</span>
+            <span class="help-def">Enter a password to derive the encryption key. Keep this safe. There is no recovery without it.</span>
           </div>
           <div class="help-row">
             <span class="help-term">Key File</span>
@@ -1980,7 +1996,7 @@
         <div class="help-rows">
           <div class="help-row">
             <span class="help-term">Target</span>
-            <span class="help-def"><em>YES</em> — at least one ROI (motion region) was detected in this segment. <em>no</em> — only background, no movement. Mode 1 discards "no" segments entirely.</span>
+            <span class="help-def"><em>YES</em> means at least one ROI (motion region) was detected in this segment. <em>no</em> means only background, no movement. Mode 1 discards "no" segments entirely.</span>
           </div>
           <div class="help-row">
             <span class="help-term">ROIs</span>
@@ -1988,7 +2004,7 @@
           </div>
           <div class="help-row">
             <span class="help-term">Quality</span>
-            <span class="help-def">Perceptual sharpness of the detected ROI regions, measured by Laplacian variance. Displayed as an approximate resolution equivalent (~480p, ~720p, ~1080p). Background-only segments show —.</span>
+            <span class="help-def">Perceptual sharpness of the detected ROI regions, measured by Laplacian variance. Displayed as an approximate resolution equivalent (~480p, ~720p, ~1080p). Background-only segments show no value.</span>
           </div>
           <div class="help-row">
             <span class="help-term">Storage Saved</span>
@@ -2004,11 +2020,11 @@
       <!-- LAN / Networking -->
       <div class="help-section">
         <div class="help-section-title">Network Access (Teammates)</div>
-        <div class="help-note">The server binds to 0.0.0.0 so anyone on the same local network can open the dashboard — no extra setup needed.</div>
+        <div class="help-note">The server binds to 0.0.0.0 so anyone on the same local network can open the dashboard. No extra setup needed.</div>
         <div class="help-rows">
           <div class="help-row">
             <span class="help-term">Share with team</span>
-            <span class="help-def">Your LAN URL is shown in the top header. Anyone on the same Wi-Fi or Ethernet network can paste that URL into their browser and view the live dashboard — <em>without</em> running the server themselves. Only one person needs to run the server.</span>
+            <span class="help-def">Your LAN URL is shown in the top header. Anyone on the same Wi-Fi or Ethernet network can paste that URL into their browser and view the live dashboard <em>without</em> running the server themselves. Only one person needs to run the server.</span>
           </div>
           <div class="help-row">
             <span class="help-term">Different network?</span>
@@ -2016,7 +2032,7 @@
           </div>
           <div class="help-row">
             <span class="help-term">Phones / tablets</span>
-            <span class="help-def">The dashboard works in any modern browser including mobile Safari and Chrome on phones. SR Enhancement GPU acceleration is <em>not</em> available on phones — the pipeline runs on the server's CPU/GPU, not the phone's hardware.</span>
+            <span class="help-def">The dashboard works in any modern browser including mobile Safari and Chrome on phones. SR Enhancement GPU acceleration is <em>not</em> available on phones. The pipeline runs on the server's CPU/GPU, not the phone's hardware.</span>
           </div>
           <div class="help-row">
             <span class="help-term">Port 5000 blocked?</span>
@@ -2043,7 +2059,7 @@
           </div>
           <div class="help-row">
             <span class="help-term">Local RTSP Server</span>
-            <span class="help-def">Downloads and runs MediaMTX (open-source, MIT) locally to create an RTSP endpoint from any video file — useful for testing the HLS stream or integrating with external NVR software without needing a real IP camera.</span>
+            <span class="help-def">Downloads and runs MediaMTX (open-source, MIT) locally to create an RTSP endpoint from any video file. Useful for testing the HLS stream or integrating with external NVR software without needing a real IP camera.</span>
           </div>
         </div>
       </div>
@@ -2054,7 +2070,7 @@
 
 <script>
 /* ──────────────────────────────────────────────────────────────
-   SVCS Dashboard — client-side logic
+   SVCS Dashboard: client-side logic
    ────────────────────────────────────────────────────────────── */
 
 let logEventSource = null;
@@ -2118,11 +2134,11 @@ function _friendlyStatus(data) {
       const mb = _lastStorageMb || 0;
       const ratio = _lastCompressionRatio;
       if (ratio && ratio > 1) {
-        return { text: `Done — ${data.segment_count} segment${data.segment_count > 1 ? 's' : ''} saved · ${ratio}× smaller than raw`, cls: 'done' };
+        return { text: `Done: ${data.segment_count} segment${data.segment_count > 1 ? 's' : ''} saved · ${ratio}× smaller than raw`, cls: 'done' };
       }
-      return { text: `Done — ${data.segment_count} segment${data.segment_count > 1 ? 's' : ''} saved`, cls: 'done' };
+      return { text: `Done: ${data.segment_count} segment${data.segment_count > 1 ? 's' : ''} saved`, cls: 'done' };
     }
-    return { text: 'Ready — configure a source and press Start.', cls: '' };
+    return { text: 'Ready. Configure a source and press Start.', cls: '' };
   }
   // Running states
   const seg = data.segment_count || 0;
@@ -2134,11 +2150,11 @@ function _friendlyStatus(data) {
     const etaStr = eta != null
       ? (eta >= 60 ? `~${Math.ceil(eta/60)}min left` : `~${eta}s left`)
       : '';
-    return { text: `Processing — segment ${seg + 1}  ·  ${pct.toFixed(0)}% through video${etaStr ? '  ·  ' + etaStr : ''}${fps}`, cls: 'running' };
+    return { text: `Processing: segment ${seg + 1}  ·  ${pct.toFixed(0)}% through video${etaStr ? '  ·  ' + etaStr : ''}${fps}`, cls: 'running' };
   }
   // Live stream
   const elapsed = data.elapsed_seconds != null ? fmtDuration(data.elapsed_seconds) : '';
-  return { text: `Recording live${elapsed ? ' — ' + elapsed : ''} · Segment ${seg + 1}${fps}`, cls: 'running' };
+  return { text: `Recording live${elapsed ? ' (' + elapsed + ')' : ''} · Segment ${seg + 1}${fps}`, cls: 'running' };
 }
 
 let _lastStorageMb = 0;
@@ -2271,7 +2287,7 @@ async function _uploadVideo(input) {
 
 // ── Clear output segments ─────────────────────────────────────
 async function clearSegments() {
-  if (!confirm('Hide all segments from the dashboard? Files on disk are kept — this only clears the view.')) return;
+  if (!confirm('Hide all segments from the dashboard? Files on disk are kept. This only clears the view.')) return;
   try {
     const res = await fetch('/api/segments/clear', { method: 'POST' });
     const data = await res.json();
@@ -2304,6 +2320,7 @@ async function startPipeline() {
     enhance_every_n:  parseInt(document.getElementById('enhance-every-n').value),
     enhance_max_roi_px: parseInt(document.getElementById('enhance-max-roi').value),
     enhance_device:   document.getElementById('enhance-device').value,
+    upscale_output:   document.getElementById('upscale-output-toggle').checked,
     encrypt:          document.getElementById('encrypt-toggle').checked,
     encrypt_password: document.getElementById('encrypt-password').value,
     encrypt_key_file: document.getElementById('encrypt-keyfile').value.trim(),
@@ -2336,6 +2353,208 @@ async function stopPipeline() {
     await fetch('/api/stop', { method: 'POST' });
   } catch(e) {
     console.error('stop', e);
+  }
+}
+
+// ── Config export ─────────────────────────────────────────────
+function saveConfig() {
+  window.location.href = '/api/config/export';
+}
+
+// ── Config import ─────────────────────────────────────────────
+function loadConfig() {
+  document.getElementById('config-import-input').value = '';
+  document.getElementById('config-import-input').click();
+}
+
+async function _onConfigFileSelected(evt) {
+  const file = evt.target.files[0];
+  if (!file) return;
+
+  let raw;
+  try {
+    raw = await file.text();
+  } catch (e) {
+    _configImportToast('Could not read file: ' + e.message, true);
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    _configImportToast('Not valid JSON: ' + e.message, true);
+    return;
+  }
+
+  // Send to backend for validation and storage as last_config
+  let cfg;
+  try {
+    const resp = await fetch('/api/config/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(parsed),
+    });
+    const result = await resp.json();
+    if (!resp.ok || result.error) {
+      _configImportToast('Import error: ' + (result.error || resp.statusText), true);
+      return;
+    }
+    cfg = result.config;
+  } catch (e) {
+    _configImportToast('Server error: ' + e.message, true);
+    return;
+  }
+
+  // Apply each field to the form
+  _applyImportedConfig(cfg);
+  _configImportToast('Config loaded from ' + file.name);
+}
+
+function _applyImportedConfig(cfg) {
+  // Input source + camera + output dir
+  if (cfg.input_source != null) document.getElementById('input-source').value = cfg.input_source;
+  if (cfg.camera_id   != null) document.getElementById('camera-id').value    = cfg.camera_id;
+  if (cfg.output_dir  != null) document.getElementById('output-dir').value   = cfg.output_dir;
+
+  // Mode: click the matching preset card
+  if (cfg.mode) {
+    const card = document.querySelector(`.preset-card[data-mode="${cfg.mode}"]`);
+    if (card) selectPreset(card);
+  }
+
+  // Segment length: drive both slider and hidden input
+  if (cfg.segment_seconds != null) {
+    const slider = document.getElementById('segment-seconds-slider');
+    slider.value = cfg.segment_seconds;
+    _onSegLenChange(cfg.segment_seconds);
+  }
+
+  // BG method + warmup: try to find matching sensitivity slider position,
+  // otherwise set the hidden fields directly and open Advanced settings so
+  // the operator can see they were applied.
+  if (cfg.bg_method != null) {
+    const bgMethodEl = document.getElementById('bg-method');
+    if (bgMethodEl) bgMethodEl.value = cfg.bg_method;
+    const wfEl = document.getElementById('warmup-frames');
+    if (cfg.warmup_frames != null && wfEl) wfEl.value = cfg.warmup_frames;
+
+    // Try to snap sensitivity slider to nearest equivalent position
+    const bgMethods  = ['KNN', 'KNN', 'MOG2', 'MOG2', 'MOG2'];
+    const warmupVals = [60, 90, 120, 60, 30];
+    let bestIdx = 2; // default "Balanced"
+    for (let i = 0; i < bgMethods.length; i++) {
+      if (bgMethods[i] === cfg.bg_method &&
+          (cfg.warmup_frames == null || warmupVals[i] === cfg.warmup_frames)) {
+        bestIdx = i;
+        break;
+      }
+    }
+    const sensitivityEl = document.getElementById('sensitivity-slider');
+    if (sensitivityEl) {
+      sensitivityEl.value = bestIdx + 1;
+      _onSensitivityChange(bestIdx + 1);
+    }
+  }
+
+  // Enhancement
+  const enhToggle = document.getElementById('enhance-toggle');
+  if (enhToggle && cfg.enhance != null) {
+    enhToggle.checked = !!cfg.enhance;
+    updateEnhanceFields();
+  }
+  if (cfg.enhance_model != null) {
+    const el = document.getElementById('enhance-model');
+    if (el) el.value = cfg.enhance_model;
+  }
+  if (cfg.enhance_scale != null) {
+    const el = document.getElementById('enhance-scale');
+    if (el) el.value = String(cfg.enhance_scale);
+  }
+  if (cfg.enhance_every_n != null) {
+    const el = document.getElementById('enhance-every-n');
+    if (el) el.value = String(cfg.enhance_every_n);
+  }
+  if (cfg.enhance_device != null) {
+    const el = document.getElementById('enhance-device');
+    if (el) el.value = cfg.enhance_device;
+  }
+  const upscaleOutToggle = document.getElementById('upscale-output-toggle');
+  if (upscaleOutToggle && cfg.upscale_output != null) {
+    upscaleOutToggle.checked = !!cfg.upscale_output;
+  }
+
+  // Object filter
+  const filterToggle = document.getElementById('object-filter-toggle');
+  if (filterToggle && cfg.object_filter != null) {
+    filterToggle.checked = !!cfg.object_filter;
+    _onObjectFilterChange(filterToggle.checked);
+  }
+  if (cfg.filter_confidence != null) {
+    const el = document.getElementById('filter-confidence');
+    if (el) el.value = String(cfg.filter_confidence);
+  }
+
+  // Encryption (toggle only — credentials are never in the config file)
+  const encToggle = document.getElementById('encrypt-toggle');
+  if (encToggle && cfg.encrypt != null) {
+    encToggle.checked = !!cfg.encrypt;
+    updateEncryptFields();
+  }
+
+  // Sync mode indicator chips
+  syncModeChips();
+
+  // Open Advanced settings if any advanced field was set so the operator
+  // can see what was applied
+  const advancedWasSet = cfg.enhance || cfg.object_filter || cfg.encrypt ||
+    cfg.bg_method !== 'MOG2' || (cfg.warmup_frames != null && cfg.warmup_frames !== 120);
+  if (advancedWasSet) {
+    const panel = document.getElementById('advanced-panel');
+    if (panel && !panel.classList.contains('open')) toggleAdvanced();
+  }
+}
+
+// Small toast message for import feedback (reuses error-banner element)
+function _configImportToast(msg, isError = false) {
+  const banner = document.getElementById('error-banner');
+  if (!banner) { console.log('[config-import]', msg); return; }
+  banner.textContent = msg;
+  banner.style.display = 'block';
+  banner.style.background = isError ? 'var(--red-dim, #4a1f1f)' : 'var(--surface3)';
+  banner.style.color = isError ? 'var(--red)' : 'var(--green)';
+  banner.style.padding = '0.4rem 0.75rem';
+  banner.style.borderRadius = '4px';
+  banner.style.fontFamily = 'var(--mono)';
+  banner.style.fontSize = '0.65rem';
+  banner.style.marginBottom = '0.5rem';
+  clearTimeout(banner._toastTimer);
+  banner._toastTimer = setTimeout(() => {
+    banner.style.display = 'none';
+    banner.textContent = '';
+  }, 4000);
+}
+
+// ── HLS latency poller ────────────────────────────────────────
+// Polls /api/hls/latency after the manifest parses, retrying up to 15 times
+// (once per second) until the server-side watcher reports a result.
+async function _pollHlsLatency(camId, attempt) {
+  const MAX = 15;
+  if (attempt > MAX) return;
+  try {
+    const r = await fetch('/api/hls/latency');
+    const d = await r.json();
+    if (d.measuring) {
+      setTimeout(() => _pollHlsLatency(camId, attempt + 1), 1000);
+      return;
+    }
+    const msgEl = document.getElementById('hls-status-msg');
+    if (!msgEl) return;
+    if (d.ingest_latency_s !== null && d.ingest_latency_s !== undefined) {
+      msgEl.textContent = `● LIVE: ${camId}  (ingest latency: ${d.ingest_latency_s}s)`;
+    }
+  } catch (_e) {
+    // Non-fatal: status message stays as-is
   }
 }
 
@@ -2380,7 +2599,7 @@ let isResizingV = false;
 let startY = 0;
 let startHeight = 0;
 
-// Vertical drag — resizes content-top by updating the main grid's first row height
+// Vertical drag: resizes content-top by updating the main grid's first row height
 document.getElementById('resize-divider-v')?.addEventListener('mousedown', (e) => {
   isResizingV = true;
   startY = e.clientY;
@@ -2450,7 +2669,7 @@ function _showSegTooltip(evt, seg) {
     rawMb > 0 ? `Raw (est):  ${rawMb.toFixed(1)} MB` : null,
     rawMb > 0 ? `Ratio:      ${ratio}× smaller` : null,
     seg.object_type !== 'unknown' ? `Object type: ${seg.object_type}` : null,
-    `Mode target: ${seg.target_detected ? 'YES — motion detected' : 'NO — background only'}`,
+    `Mode target: ${seg.target_detected ? 'YES (motion detected)' : 'NO (background only)'}`,
     sharpnessLine,
   ].filter(Boolean).join('\n');
 
@@ -2614,7 +2833,7 @@ async function loadSegments() {
         ? `${compMb.toFixed(1)} MB`
         : `${s.file_size_kb} KB`;
       // Quality column: sharpness label, stripped to the resolution part only
-      // e.g. "~720p (sharp)" → shown as-is; null → "—"
+      // e.g. "~720p (sharp)" shown as-is; null shows nothing
       const qualityStr = s.sharpness_label
         ? escHtml(s.sharpness_label.split(' ')[0])   // just "~720p"
         : '<span style="color:var(--text-dim)">—</span>';
@@ -2725,7 +2944,7 @@ const _DEMO_PHASE_LABELS = {
   done:     'COMPLETE',
 };
 
-// Track progress bar fill % — advances per callback so it feels alive
+// Track progress bar fill %: advances per callback so it feels alive
 let _demoPct = 0;
 
 function showDemoPanel(state, msg, detail) {
@@ -2748,13 +2967,13 @@ function showDemoPanel(state, msg, detail) {
 
     // Step label
     const step = detail.demo_step || '';
-    const modeStr = detail.demo_mode ? ` — ${detail.demo_mode.toUpperCase()}` : '';
+    const modeStr = detail.demo_mode ? ` (${detail.demo_mode.toUpperCase()})` : '';
     document.getElementById('demo-step-label').textContent = step + modeStr;
 
     // Progress message
     document.getElementById('demo-progress-msg').textContent = msg;
 
-    // Advance fake progress bar — pipeline phases are the heavy work
+    // Advance fake progress bar (pipeline phases are the heavy work)
     if (phase === 'pipeline' && _demoPct < 70) _demoPct = Math.min(_demoPct + 15, 70);
     if (phase === 'render'   && _demoPct < 88) _demoPct = Math.min(_demoPct + 10, 88);
     if (phase === 'stitch'   && _demoPct < 95) _demoPct = Math.min(_demoPct + 5,  95);
@@ -2811,12 +3030,12 @@ function renderDemoResult(result) {
   const modesRan = result.modes || Object.keys(result.videos || {});
   const multiMode = modesRan.length > 1;
 
-  // If multiple modes ran, show ONLY the split-screen — that's the comparison video.
+  // If multiple modes ran, show ONLY the split-screen. That is the comparison video.
   // Individual mode tabs are available as fallback if split-screen is missing.
   if (multiMode && result.split_screen) {
     loadDemoVideo(result.split_screen);
     document.getElementById('demo-status-msg').textContent =
-      'Split-screen comparison — ' + modesRan.map(m => m.toUpperCase()).join(' vs ');
+      'Split-screen comparison: ' + modesRan.map(m => m.toUpperCase()).join(' vs ');
     return;
   }
 
@@ -3047,9 +3266,9 @@ async function hlsStart() {
     }
 
     // Show the main panel and update its title
-    document.getElementById('hls-panel-title').textContent = 'Live Stream — ' + camId;
+    document.getElementById('hls-panel-title').textContent = 'Live Stream: ' + camId;
     document.getElementById('hls-section').style.display = 'block';
-    sideMsg.textContent = '● Streaming — see main panel';
+    sideMsg.textContent = '● Streaming (see main panel)';
     sideMsg.style.color = 'var(--green)';
     msgEl.textContent = 'Waiting for first segment…';
     msgEl.style.color = 'var(--text-dim)';
@@ -3083,7 +3302,7 @@ async function _attachHlsPlayer(playlistUrl, camId, attempt) {
   const video  = document.getElementById('hls-video');
   const msgEl  = document.getElementById('hls-status-msg');
 
-  // Probe the playlist — if it doesn't exist yet, wait and retry
+  // Probe the playlist. If it does not exist yet, wait and retry.
   try {
     const probe = await fetch(playlistUrl);
     if (!probe.ok) {
@@ -3106,7 +3325,7 @@ async function _attachHlsPlayer(playlistUrl, camId, attempt) {
     return;
   }
 
-  // Playlist is ready — attach hls.js
+  // Playlist is ready. Attach hls.js.
   if (Hls.isSupported()) {
     if (_hlsInstance) { _hlsInstance.destroy(); }
     _hlsInstance = new Hls({ enableWorker: false });
@@ -3114,8 +3333,9 @@ async function _attachHlsPlayer(playlistUrl, camId, attempt) {
     _hlsInstance.attachMedia(video);
     _hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
       video.play().catch(() => {});
-      msgEl.textContent = '● LIVE — ' + camId;
+      msgEl.textContent = '● LIVE: ' + camId;
       msgEl.style.color = 'var(--green)';
+      _pollHlsLatency(camId, 0);
     });
     _hlsInstance.on(Hls.Events.ERROR, (_evt, data) => {
       if (data.fatal) {
@@ -3127,7 +3347,7 @@ async function _attachHlsPlayer(playlistUrl, camId, attempt) {
     // Safari native HLS
     video.src = playlistUrl;
     video.play().catch(() => {});
-    msgEl.textContent = '● LIVE (native HLS) — ' + camId;
+    msgEl.textContent = '● LIVE (native HLS): ' + camId;
     msgEl.style.color = 'var(--green)';
   } else {
     msgEl.textContent = '⚠ HLS not supported in this browser.';
@@ -3452,7 +3672,7 @@ async function checkGpu() {
     let msg = data.note || '';
     if (data.mobile_note) msg += ' ' + data.mobile_note;
     if (data.torch_version) msg += ` (torch ${data.torch_version})`;
-    msgEl.textContent = msg || 'No GPU detected — CPU will be used.';
+    msgEl.textContent = msg || 'No GPU detected. CPU will be used.';
   } catch(e) {
     msgEl.textContent = 'GPU check failed: ' + e;
     msgEl.style.color = 'var(--red)';

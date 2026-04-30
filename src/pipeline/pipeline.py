@@ -65,7 +65,7 @@ def _compute_segment_sharpness(
     dilute the score.
 
     Returns:
-        (avg_sharpness, sharpness_label) — both None if no targets detected.
+        (avg_sharpness, sharpness_label). Both are None if no targets detected.
     """
     scores = []
     for frame, regions in zip(frames, regions_per_frame):
@@ -129,6 +129,7 @@ def run_pipeline(
     enhance_every_n: int = 5,
     enhance_max_roi_px: int = 200,
     enhance_device: str = "auto",
+    upscale_output: bool = False,
     object_filter: bool = False,
     filter_confidence: float = 0.30,
     stop_event=None,
@@ -234,7 +235,7 @@ def run_pipeline(
 
     # Single consistent database path: output_dir/metadata.db.
     # Previously pipeline.py called initialize_database() with no args, which
-    # defaulted to "metadata.db" in the cwd — a different file than the encoder's
+    # defaulted to "metadata.db" in the cwd (a different file than the encoder's
     # "outputs/metadata.db". Now both use the same explicit path.
     db_path = str(Path(output_dir) / "metadata.db")
 
@@ -267,7 +268,7 @@ def run_pipeline(
             )
         else:
             log.warning(
-                "ObjectFilter requested but ultralytics not available — "
+                "ObjectFilter requested but ultralytics not available. "
                 "running in pass-through mode (all boxes kept)."
             )
 
@@ -276,7 +277,7 @@ def run_pipeline(
     _enhance_future: Optional[Future] = None
     _enhance_frame_counter = 0          # counts post-warmup frames for N-frame sampling
     _last_enhanced_frame = None         # cached result from the last enhancement pass
-    if enhance:
+    if enhance or upscale_output:
         if enhance_model != "bicubic":
             log.info(
                 "enhance_model='%s' requested; current pipeline uses Enhancer backend auto-selection.",
@@ -284,13 +285,14 @@ def run_pipeline(
             )
         _enh_device = None if enhance_device == "auto" else enhance_device
         enhancer = Enhancer(scale=enhance_scale, device=_enh_device)
-        # One worker thread — enhancement is a serial CPU task so more workers
+        # One worker thread. Enhancement is a serial CPU task so more workers
         # would fight over cores and slow everything down further.
-        _enhance_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="enhance")
+        if enhance:
+            _enhance_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="enhance")
         log.info(
-            "Enhancement enabled (backend=%s, scale=%d, every_n=%d, max_roi=%dpx). "
+            "Enhancement enabled (backend=%s, scale=%d, every_n=%d, max_roi=%dpx, upscale_output=%s). "
             "ROIs will be enhanced in a background thread.",
-            enhancer.backend, enhance_scale, enhance_every_n, enhance_max_roi_px,
+            enhancer.backend, enhance_scale, enhance_every_n, enhance_max_roi_px, upscale_output,
         )
 
     if encrypt:
@@ -312,7 +314,7 @@ def run_pipeline(
     # ── Streaming state ───────────────────────────────────────────────────────
     # No frame buffer. FFmpeg is opened at segment start and frames are piped
     # one-by-one as they come from the camera. Encoding and decoding run in
-    # parallel — no wait-then-burst, no 9GB of RAM copies.
+    # parallel. No wait-then-burst, no 9GB of RAM copies.
     last_clean_background = None
     clean_frame_streak    = 0
     source_frame_index    = -1
@@ -331,12 +333,18 @@ def run_pipeline(
         obj_type    = classify_object(roi_count)
         bg = None
         if mode == "mode2":
-            bg = (last_clean_background.copy()
-                  if last_clean_background is not None
-                  else np.zeros_like(first_frame))
+            raw_bg = (last_clean_background.copy()
+                      if last_clean_background is not None
+                      else np.zeros_like(first_frame))
+            # If output is being upscaled, the background must match the upscaled
+            # frame dimensions. last_clean_background is always stored pre-upscale.
+            if upscale_output and enhancer is not None and last_clean_background is not None:
+                bg = enhancer.upscale_frame(raw_bg)
+            else:
+                bg = raw_bg
             segment_start_background = bg
         # Pass source path so the encoder can mux audio back in after encoding.
-        # Only meaningful for file sources — camera streams never have audio.
+        # Only meaningful for file sources. Camera streams never have audio.
         src_path = str(input_source) if isinstance(input_source, str) else None
         encoder.begin_segment(
             frame_shape=first_frame.shape,
@@ -377,7 +385,7 @@ def run_pipeline(
     segment_open      = False
     current_bg_frame  = None   # background used for the current mode2 segment
 
-    log.info("Pipeline running (streaming encoder — no frame buffer). Press Ctrl+C to stop.")
+    log.info("Pipeline running (streaming encoder, no frame buffer). Press Ctrl+C to stop.")
 
     try:
         while True:
@@ -396,7 +404,7 @@ def run_pipeline(
             raw_regions      = subtractor.get_foreground_regions(mask)
             raw_has_regions  = len(raw_regions) > 0
 
-            # YOLO classification gate — drop leaves/shadows/false detections.
+            # YOLO classification gate: drop leaves/shadows/false detections.
             # Tiny boxes (< min_box_px) are passed through unfiltered by ObjectFilter
             # so real targets that are briefly small don't get silently dropped.
             # NOTE: clean-background tracking uses raw_regions (before YOLO) so
@@ -436,9 +444,9 @@ def run_pipeline(
             # encode still sees sharpened output without waiting for SR every frame.
             #
             # Within each enhance frame, only process ROIs that are:
-            #  - small enough (w and h both ≤ enhance_max_roi_px) — huge boxes
+            #  - small enough (w and h both ≤ enhance_max_roi_px); huge boxes
             #    cost proportional to area and add little over bicubic at that scale
-            #  - large enough (≥ 16px each dimension) — tiny chips gain nothing
+            #  - large enough (≥ 16px each dimension); tiny chips gain nothing
             #
             # The async pattern: submit this frame to the executor, then
             # immediately use the *previous* completed result for encoding.
@@ -509,6 +517,12 @@ def run_pipeline(
                 # This frame is not included in any segment (mode1/2/3 gate)
                 continue
 
+            # Full-frame output upscale — increases the output video resolution.
+            # Runs synchronously (bicubic is ~microseconds; Real-ESRGAN if installed).
+            # Bounding box coordinates are scaled to match the upscaled frame.
+            if enhancer is not None and upscale_output:
+                frame = enhancer.upscale_frame(frame)
+
             # Open a new FFmpeg pipe when we start a fresh segment
             if not segment_open:
                 current_bg_frame = _open_new_segment(frame, regions)
@@ -519,8 +533,11 @@ def run_pipeline(
                 log.info("Stop event received mid-segment. Ending pipeline loop.")
                 break
 
-            # Write frame directly to the open pipe — no copy into a list
+            # Write frame directly to the open pipe. No copy into a list.
             boxes = [r.to_tuple() for r in regions]
+            if upscale_output and enhance_scale > 1 and boxes:
+                s = enhance_scale
+                boxes = [(x * s, y * s, w * s, h * s) for x, y, w, h in boxes]
             encoder.write_frame(
                 frame=frame,
                 boxes=boxes,
@@ -556,14 +573,14 @@ def run_pipeline(
         # Close any open pipe for the final partial segment
         if segment_open and frames_in_segment > 0:
             if stopping:
-                # User hit STOP — kill FFmpeg immediately, don't wait for flush
+                # User hit STOP. Kill FFmpeg immediately, no flush wait.
                 log.info("Stop requested: aborting open segment (%d frames).", frames_in_segment)
                 _close_segment(discard=True)
             else:
                 log.info("Flushing final partial segment (%d frames).", frames_in_segment)
                 _close_segment()
         elif segment_open:
-            # Pipe open but no frames written — discard cleanly
+            # Pipe open but no frames written. Discard cleanly.
             encoder.abort_segment()
 
         src.release()
@@ -572,7 +589,7 @@ def run_pipeline(
         if show_preview:
             cv2.destroyAllWindows()
 
-        # Shut down the enhancement thread pool — cancel any pending work.
+        # Shut down the enhancement thread pool. Cancel any pending work.
         # cancel_futures was added in Python 3.9; use try/except for 3.8 compat.
         if _enhance_executor is not None:
             try:

@@ -21,13 +21,13 @@ from skimage.metrics import peak_signal_noise_ratio as psnr_fn
 Enhancement metrics
 -------------------
 Note on "resolution" equivalence:
-  The enhancer does NOT change frame resolution — upscale_roi() runs SR then
+  The enhancer does NOT change frame resolution. upscale_roi() runs SR then
   downsamples back to the original bbox dimensions. So we measure *sharpness*
   (Laplacian variance) instead of pixel count, and map it to a rough
   perceptual label so log output reads like "480p → 720p".
 
 Laplacian variance thresholds were tuned against CDnet clips at various blur
-levels. Treat the labels as approximate — they convey trend, not ground truth.
+levels. Treat the labels as approximate. They convey trend, not ground truth.
 """
 
 
@@ -80,7 +80,7 @@ def foreground_coverage(mask: np.ndarray) -> float:
 
 def compute_sharpness(frame: np.ndarray) -> float:
     """
-    Laplacian variance — a measure of perceived sharpness.
+    Laplacian variance (a measure of perceived sharpness).
 
     Higher values mean sharper / more detailed. A blurry 480p clip typically
     scores < 200; a sharp 1080p clip typically scores > 800.
@@ -101,7 +101,7 @@ def estimate_perceptual_resolution(sharpness: float) -> str:
     """
     Map a Laplacian variance score to a rough perceptual resolution label.
 
-    These thresholds are empirical — they give a human-readable sense of
+    These thresholds are empirical. They give a human-readable sense of
     whether a region looks blurry or crisp, not a true resolution measurement.
     """
     if sharpness < 50:
@@ -125,7 +125,7 @@ def compute_enhancement_gain(
     Measure the sharpness improvement from a super-resolution pass.
 
     Call this with the ROI crop *before* and *after* enhancement (both at the
-    same spatial dimensions — the enhancer resizes back to original bbox size).
+    same spatial dimensions (the enhancer resizes back to original bbox size).
 
     Returns a dict with:
         sharpness_before  – Laplacian variance of the input crop
@@ -153,7 +153,7 @@ def storage_savings_report(original_size_bytes: int, compressed_size_bytes: int)
     Summarise storage savings from a single encode.
 
     Uses compute_compression_ratio() for consistent handling of zero/negative
-    inputs — same rules as the rest of this module.
+    inputs. Same rules as the rest of this module.
 
     Raises ValueError if either size is negative (delegated to
     compute_compression_ratio).

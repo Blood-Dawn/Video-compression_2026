@@ -95,17 +95,9 @@ pip install -r requirements.txt
 
 ## Standalone executable
 
-A packaged `.exe` / binary will be placed here once it's built:
+The primary deployment target is a server-hosted web app — one machine runs Flask, everyone connects from a browser. For field use without a network (laptop directly connected to a camera), we're evaluating an Electron shell that wraps Flask as a subprocess.
 
-```
-dist/
-└── compression_pipeline.exe    ← Windows
-└── compression_pipeline        ← Linux
-```
-
-No Python or FFmpeg installation needed to run the packaged version. Just the file.
-
-*(Build instructions will be added in DEV.md when the packaging step is complete.)*
+See `docs/deployment_packaging.md` for the full analysis of Docker, Electron, PyInstaller, and tarball options with DoD compliance notes.
 
 ---
 

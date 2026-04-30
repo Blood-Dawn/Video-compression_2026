@@ -49,7 +49,7 @@ Disable bounding boxes:
 ------------------------------------------------------------
 NOTES:
 
-- This does NOT recompress video — it only reads existing segments.
+- This does NOT recompress video. It only reads existing segments.
 - Frame timing is reconstructed from source timestamps.
 - Designed for demo/visualization, not benchmarking.
 - Benchmarking should use raw segment sizes from metadata.db instead.

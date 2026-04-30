@@ -41,10 +41,10 @@ class FrameSource:
                 # ... process frame
     """
 
-    def __init__(self, input_path: str):
+    def __init__(self, input_path):
         """
         Initializes the frame source by detecting whether input_path is a
-        video file or a CDnet image sequence folder.
+        video file, CDnet image sequence folder, network URL, or device index.
 
         For CDnet folders, automatically finds the input/ subfolder if the
         top-level scene folder is provided. Also reads temporalROI.txt to
@@ -52,14 +52,13 @@ class FrameSource:
         ground truth annotations).
 
         Args:
-            input_path: Path to a video file, CDnet scene folder, or CDnet
-                        input/ subfolder.
+            input_path: An integer camera device index (e.g. 0 for the first
+                        webcam), a network URL string (rtsp://, http://, etc.),
+                        a video file path, or a CDnet scene folder path.
 
         Raises:
             RuntimeError: If the path cannot be opened or no frames are found.
         """
-        path = Path(input_path)
-        self.input_path = str(path)
         self.is_sequence = False
         self.frame_files = []
         self._seq_idx = 0
@@ -70,11 +69,27 @@ class FrameSource:
         self.total_frames = 0
         self.temporal_roi: Optional[Tuple[int, int]] = None  # (start, end) frame numbers
 
-        # Network stream URLs must bypass filesystem checks — Path() may mangle
+        # Integer device index (e.g. 0 for the built-in webcam)
+        if isinstance(input_path, int):
+            self.input_path = str(input_path)
+            self._init_device(input_path)
+            return
+
+        input_path = str(input_path)
+        path = Path(input_path)
+        self.input_path = str(path)
+
+        # Network stream URLs must bypass filesystem checks. Path() may mangle
         # RTSP URLs on Windows (backslash-separating the host/path portions).
         _URL_SCHEMES = ("rtsp://", "rtsps://", "rtmp://", "http://", "https://")
         if any(input_path.lower().startswith(s) for s in _URL_SCHEMES):
             self._init_video_url(input_path)
+            return
+
+        # Numeric string "0", "1", ... also treated as a device index so the
+        # GUI can pass camera_index as a plain string.
+        if input_path.strip().isdigit():
+            self._init_device(int(input_path.strip()))
             return
 
         if path.is_dir():
@@ -84,11 +99,30 @@ class FrameSource:
         else:
             raise RuntimeError(f"Input path does not exist: {input_path}")
 
+    def _init_device(self, index: int):
+        """Set up reading from a local camera device by index (e.g. 0 for webcam).
+
+        cv2.VideoCapture reports 0x0 dimensions on some platforms until the
+        first frame is read; callers should read a probe frame if exact
+        dimensions are needed before the main loop starts.
+        """
+        self._cap = cv2.VideoCapture(index)
+        if not self._cap.isOpened():
+            raise RuntimeError(f"Cannot open camera device {index}")
+        fps = self._cap.get(cv2.CAP_PROP_FPS)
+        self.fps = fps if (fps and 0 < fps <= 120) else 30.0
+        w = self._cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+        h = self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        self.width = int(w) if w > 0 else 0
+        self.height = int(h) if h > 0 else 0
+        self.total_frames = 0  # live device; frame count unknown
+        self.is_sequence = False
+
     def _init_video_url(self, url: str):
         """Set up reading from a network stream URL (RTSP, HTTP, RTMP, etc.).
 
         cv2.VideoCapture can handle these natively; dimensions may read as 0×0
-        until the first frame arrives (normal for live RTSP streams — the caller
+        until the first frame arrives (normal for live RTSP streams; the caller
         should probe the first frame to get real dimensions).
         """
         self.input_path = url
@@ -101,7 +135,7 @@ class FrameSource:
         h = self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
         self.width = int(w) if w > 0 else 0
         self.height = int(h) if h > 0 else 0
-        self.total_frames = 0  # live stream — frame count unknown
+        self.total_frames = 0  # live stream; frame count unknown
         self.is_sequence = False
 
     def _init_sequence(self, path: Path):

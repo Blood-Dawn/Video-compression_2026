@@ -158,7 +158,7 @@ def run_all_demos(
     suffix = get_next_run_suffix(output_root_path, modes)
     mode_total = len(modes)
 
-    _cb(f"Starting demo run — {mode_total} mode(s)", phase="start", mode_total=mode_total)
+    _cb(f"Starting demo run: {mode_total} mode(s)", phase="start", mode_total=mode_total)
 
     mode_output_dirs: dict[str, Path] = {}
 
@@ -181,7 +181,7 @@ def run_all_demos(
         )
 
         _cb(
-            f"Pipeline done: {mode} — rendering annotated video…",
+            f"Pipeline done: {mode}. Rendering annotated video…",
             phase="pipeline", mode=mode,
             mode_index=mode_index, mode_total=mode_total, done=True,
         )

@@ -4,8 +4,8 @@ object_filter.py
 YOLO-based classification gate for the surveillance pipeline.
 
 Problem it solves:
-    MOG2/KNN background subtraction detects ANY pixel change — leaves blowing
-    in wind, shadows shifting, light flickering — as foreground regions. On
+    MOG2/KNN background subtraction detects ANY pixel change. Leaves blowing
+    in wind, shadows shifting, light flickering as foreground regions. On
     videos with dynamic backgrounds (trees, flags, water) this produces
     thousands of false ROIs, making mode1/2/3 behave exactly like mode0
     (every frame has "detections").
@@ -13,16 +13,16 @@ Problem it solves:
 Solution:
     After MOG2 produces bounding boxes, run each box crop through YOLOv8-nano.
     Only pass boxes through to the encoder if YOLO confirms a target class
-    (person, vehicle, animal, etc.). Everything else — leaves, branches,
-    shadows — gets discarded.
+    (person, vehicle, animal, etc.). Everything else (leaves, branches,
+    shadows get discarded.
 
 Architecture:
-    - Uses YOLOv8-nano (yolov8n.pt, ~6 MB) — fast enough to run on CPU at
+    - Uses YOLOv8-nano (yolov8n.pt, ~6 MB) (fast enough to run on CPU at
       real-time on small crops. On CUDA it's essentially free.
     - Crops each MOG2 bounding box from the frame and classifies it.
     - Boxes below a minimum size are skipped (YOLO gains nothing on tiny chips).
     - Results are cached per frame so multiple calls don't re-run inference.
-    - Falls back transparently if ultralytics is not installed — all boxes pass.
+    - Falls back transparently if ultralytics is not installed. All boxes pass.
 
 Static suppression mask (optional):
     Regions that have ONLY ever produced false detections can be added to a
@@ -71,7 +71,7 @@ DEFAULT_TARGET_CLASSES = {
 }
 
 # Minimum bbox dimension (px) to bother running YOLO on.
-# Boxes smaller than this are too small for meaningful classification —
+# Boxes smaller than this are too small for meaningful classification.
 # pass them through unfiltered so tiny but real targets aren't silently lost.
 _MIN_CLASSIFY_PX = 20
 
@@ -85,7 +85,7 @@ class ObjectFilter:
     boxes that don't contain a target-class object.
 
     Falls back to pass-through (all boxes kept) if ultralytics is not installed
-    or the model can't be loaded — the pipeline continues working, just without
+    or the model can't be loaded. The pipeline continues working without
     the leaf/shadow filtering.
 
     Args:
@@ -130,7 +130,7 @@ class ObjectFilter:
         self._available = False
         self._load_model()
 
-        # Suppression state — grid of counters, built lazily on first frame
+        # Suppression state: grid of counters, built lazily on first frame
         self._suppress_grid: Optional[np.ndarray] = None  # (rows, cols) int16
         self._suppress_mask: Optional[np.ndarray] = None  # (H, W) bool
         self._grid_cell = 32   # px per grid cell
@@ -145,7 +145,7 @@ class ObjectFilter:
             from ultralytics import YOLO  # type: ignore
         except ImportError:
             log.warning(
-                "ultralytics not installed — ObjectFilter disabled (all boxes pass). "
+                "ultralytics not installed. ObjectFilter disabled (all boxes pass). "
                 "To enable: pip install ultralytics"
             )
             return
@@ -158,7 +158,7 @@ class ObjectFilter:
             self._available = True
             log.info("ObjectFilter: YOLOv8-nano loaded on %s", self._device.upper())
         except Exception as exc:
-            log.warning("ObjectFilter: failed to load YOLOv8-nano (%s) — pass-through mode.", exc)
+            log.warning("ObjectFilter: failed to load YOLOv8-nano (%s) (pass-through mode).", exc)
 
     # ------------------------------------------------------------------
     # Public API
@@ -179,7 +179,7 @@ class ObjectFilter:
             regions: List of ForegroundRegion from BackgroundSubtractor.
 
         Returns:
-            Filtered list — may be empty if all regions are false detections.
+            Filtered list. May be empty if all regions are false detections.
         """
         if not self._available or not regions:
             return regions
@@ -197,7 +197,7 @@ class ObjectFilter:
             if self.use_suppression and self._is_suppressed(x, y, w, h):
                 continue
 
-            # Pass tiny boxes through — too small to classify reliably
+            # Pass tiny boxes through (too small to classify reliably)
             if w < self.min_box_px or h < self.min_box_px:
                 kept.append(region)
                 continue
@@ -219,7 +219,7 @@ class ObjectFilter:
         return kept
 
     def reset_suppression(self) -> None:
-        """Clear the suppression mask — call when the source changes."""
+        """Clear the suppression mask. Call when the source changes."""
         self._suppress_grid = None
         self._suppress_mask = None
         self._frame_shape = None

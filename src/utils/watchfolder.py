@@ -216,7 +216,7 @@ def run_watchfolder(
     log.info(f"Interval : {poll_interval}s")
     log.info(f"Formats  : {', '.join(sorted(SUPPORTED_EXTENSIONS))}")
     if dry_run:
-        log.info("DRY RUN mode — no encoding will occur.")
+        log.info("DRY RUN mode. No encoding will occur.")
 
     total_ingested = 0
 
@@ -242,7 +242,7 @@ def run_watchfolder(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Watchfolder daemon — auto-ingest external video files into the compression pipeline."
+        description="Watchfolder daemon: auto-ingest external video files into the compression pipeline."
     )
     parser.add_argument(
         "--watch-dir",

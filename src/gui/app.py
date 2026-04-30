@@ -105,30 +105,30 @@ class _QueueLogHandler(logging.Handler):
         try:
             _log_queue.put_nowait(item)
         except queue.Full:
-            pass  # drop oldest — client will re-fetch on reconnect
+            pass  # drop oldest; client will re-fetch on reconnect
 
 
 # ── Log formatter and handlers ────────────────────────────────────────────────
-_LOG_FMT = logging.Formatter("%(asctime)s  %(levelname)-8s  %(name)s — %(message)s")
+_LOG_FMT = logging.Formatter("%(asctime)s  %(levelname)-8s  %(name)s: %(message)s")
 
-# Queue handler — forwards records to the SSE stream for the browser
+# Queue handler: forwards records to the SSE stream for the browser
 _queue_handler = _QueueLogHandler()
 _queue_handler.setFormatter(logging.Formatter("%(asctime)s  %(levelname)s  %(message)s"))
 
-# File handler — writes all records to outputs/svcs.log for offline debugging
+# File handler: writes all records to outputs/svcs.log for offline debugging
 _LOG_FILE = _ROOT / "outputs" / "svcs.log"
 _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 _file_handler = logging.FileHandler(str(_LOG_FILE), encoding="utf-8")
 _file_handler.setFormatter(_LOG_FMT)
 
-# Console handler — mirrors to terminal
+# Console handler: mirrors to terminal
 _console_handler = logging.StreamHandler(sys.stderr)
 _console_handler.setFormatter(_LOG_FMT)
 
 _root_logger = logging.getLogger()
 _root_logger.addHandler(_queue_handler)
 _root_logger.addHandler(_file_handler)
-_root_logger.setLevel(logging.DEBUG)   # capture DEBUG level — filter per-handler below
+_root_logger.setLevel(logging.DEBUG)   # capture DEBUG level; filter per-handler below
 
 # Only forward INFO+ to browser SSE and terminal (DEBUG goes to file only)
 _queue_handler.setLevel(logging.INFO)
@@ -141,7 +141,7 @@ log = logging.getLogger(__name__)
 def _write_shutdown_log():
     """Write a clean shutdown marker to the log file on process exit."""
     log.info("=" * 60)
-    log.info("SVCS SERVER SHUTDOWN — %s", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
+    log.info("SVCS SERVER SHUTDOWN: %s", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
     log.info("=" * 60)
     # Flush file handler so nothing is lost if Python exits abruptly
     _file_handler.flush()
@@ -158,7 +158,7 @@ def _patch_frame_source(src_obj):
     Also reads total_frames from the source so the progress bar knows the denominator.
     """
     # Push total frame count into status so the progress bar has a denominator.
-    # total_frames == 0 for live cameras/RTSP — progress bar shows spinner instead.
+    # total_frames == 0 for live cameras/RTSP; progress bar shows a spinner instead.
     total = getattr(src_obj, "total_frames", 0) or 0
     with _state_lock:
         _status["total_frames"] = int(total)
@@ -216,7 +216,7 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
     _orig_fs_init = None
     _orig_re_init = None
     try:
-        # Patch FrameSource and ROIEncoder lazily — import here so we can wrap.
+        # Patch FrameSource and ROIEncoder lazily. Import here so we can wrap.
         try:
             import utils.frame_source as _fs
             import compression.roi_encoder as _re
@@ -256,6 +256,7 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             enhance_every_n=int(config.get("enhance_every_n", 5)),
             enhance_max_roi_px=int(config.get("enhance_max_roi_px", 200)),
             enhance_device=config.get("enhance_device", "auto"),
+            upscale_output=config.get("upscale_output", False),
             encrypt=config.get("encrypt", False),
             encrypt_password=config.get("encrypt_password") or None,
             encrypt_key_file=config.get("encrypt_key_file") or None,
@@ -360,6 +361,7 @@ def api_start():
         "enhance_every_n": int(data.get("enhance_every_n", 5)),
         "enhance_max_roi_px": int(data.get("enhance_max_roi_px", 200)),
         "enhance_device": data.get("enhance_device", "auto"),
+        "upscale_output": bool(data.get("upscale_output", False)),
         "encrypt": bool(data.get("encrypt", False)),
         "encrypt_password": data.get("encrypt_password", ""),
         "encrypt_key_file": data.get("encrypt_key_file", ""),
@@ -375,6 +377,9 @@ def api_start():
         name="pipeline-worker",
     )
     _pipeline_thread.start()
+
+    with _state_lock:
+        _status["last_config"] = config
 
     return jsonify({"ok": True, "config": config})
 
@@ -502,7 +507,7 @@ def api_storage():
 
 @app.route("/api/logs")
 def api_logs():
-    """Server-Sent Events stream — delivers live log lines to the browser.
+    """Server-Sent Events stream: delivers live log lines to the browser.
 
     Supports Last-Event-ID resume: on reconnect the browser sends the last
     event ID it received, and the server replays only newer entries so no
@@ -582,7 +587,7 @@ def api_media():
 
     Range request support is required for browser <video> elements to seek
     and play without buffering the entire file. Flask's send_from_directory
-    does not handle Range headers — this implementation does.
+    does not handle Range headers. This implementation does.
     """
     path = unquote(request.args.get("path", "").strip())
     if not path:
@@ -713,7 +718,7 @@ def api_upload():
         return jsonify({"error": f"File type {suffix} not allowed"}), 400
 
     _UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    # Sanitize filename — strip any path components the client might inject
+    # Sanitize filename: strip any path components the client might inject
     safe_name = Path(f.filename).name
     dest = _UPLOAD_DIR / safe_name
     # Avoid clobbering existing files by appending a counter
@@ -939,7 +944,7 @@ def _run_demo_thread(config: dict) -> None:
 
     _update(progress="Locating manifest…")
 
-    # Find the manifest written by run_all_demos() — it picks a suffix to avoid
+    # Find the manifest written by run_all_demos(). It picks a suffix to avoid
     # overwriting previous runs, so we glob for the newest one.
     output_root = Path(config["output_root"]).resolve()
     manifests = sorted(
@@ -1058,6 +1063,8 @@ _hls_state: dict = {
     "playlist_url": None,
     "hls_dir": None,
     "error": None,
+    "stream_start_time": None,   # epoch float: when FFmpeg process launched
+    "ingest_latency_s": None,    # float: seconds from FFmpeg launch to first .ts segment
 }
 _hls_process: subprocess.Popen | None = None
 _hls_thread: threading.Thread | None = None
@@ -1069,7 +1076,7 @@ def _hls_dir_for(camera_id: str, output_dir: str) -> Path:
 
 
 def _draw_corner_overlay(frame, mode_label: str, elapsed_s: int) -> None:
-    """Thin wrapper — delegates to the shared roi_encoder.draw_corner_overlay.
+    """Thin wrapper: delegates to the shared roi_encoder.draw_corner_overlay.
 
     Kept as a module-level name so the HLS annotator thread can call it
     without changes.
@@ -1089,7 +1096,7 @@ def _hls_annotator_thread(
         cv2.VideoCapture  →  BackgroundSubtractor  →  green ROI rectangles
         + corner overlay  →  proc.stdin (rawvideo bgr24)  →  FFmpeg HLS muxer
     """
-    import numpy as np  # noqa: F401 — needed for tobytes on numpy array
+    import numpy as np  # noqa: F401 (needed for tobytes on numpy array)
 
     try:
         from background_subtraction.background_subtraction import BackgroundSubtractor
@@ -1103,7 +1110,7 @@ def _hls_annotator_thread(
         cap_src = input_source
 
     is_rtsp = isinstance(cap_src, str) and cap_src.lower().startswith("rtsp://")
-    CONNECT_TIMEOUT = 10  # seconds — Python-level timeout for VideoCapture.open()
+    CONNECT_TIMEOUT = 10  # seconds (Python-level timeout for VideoCapture.open()
 
     # cv2.VideoCapture.open() blocks until the OS-level RTSP timeout fires
     # (~30s on Windows with pip opencv-python).  CAP_PROP_OPEN_TIMEOUT_MSEC is
@@ -1116,7 +1123,7 @@ def _hls_annotator_thread(
 
     def _do_open():
         c = cv2.VideoCapture()
-        # Try to set the property anyway — no-op on most builds but harmless
+        # Try to set the property anyway (no-op on most builds but harmless)
         c.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, CONNECT_TIMEOUT * 1000)
         c.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)
         ok = c.open(cap_src)
@@ -1129,11 +1136,11 @@ def _hls_annotator_thread(
         _open_thread = threading.Thread(target=_do_open, daemon=True)
         _open_thread.start()
         if not _open_done.wait(timeout=CONNECT_TIMEOUT):
-            # Timeout fired before cv2 returned — the thread is still blocked
+            # Timeout fired before cv2 returned. The thread is still blocked
             # in the OS network stack and we cannot kill it; it will
             # self-terminate when the 30s OS timeout fires in the background.
             err = (f"RTSP connection timed out after {CONNECT_TIMEOUT}s "
-                   f"— server unreachable or stream not found: {input_source}")
+                   f"server unreachable or stream not found: {input_source}")
             with _hls_lock:
                 _hls_state["error"] = err
                 _hls_state["running"] = False
@@ -1163,7 +1170,7 @@ def _hls_annotator_thread(
 
     first_frame = None
     if w == 0 or h == 0:
-        log.info("HLS: frame dimensions unknown from stream header — reading first frame…")
+        log.info("HLS: frame dimensions unknown from stream header. Reading first frame…")
         for _ in range(30):        # try up to 30 frames (handles buffered RTSP)
             if stop_event.is_set():
                 cap.release()
@@ -1222,8 +1229,32 @@ def _hls_annotator_thread(
         return
 
     global _hls_process
+    ffmpeg_launch_time = time.time()
     with _hls_lock:
         _hls_process = proc
+        _hls_state["stream_start_time"] = ffmpeg_launch_time
+        _hls_state["ingest_latency_s"] = None
+
+    # Watch for the first .ts segment to appear and record ingest latency
+    def _watch_first_segment(hls_dir: Path, launch_time: float) -> None:
+        deadline = launch_time + 30.0  # give up after 30 s
+        while time.time() < deadline:
+            ts_files = list(hls_dir.glob("*.ts"))
+            if ts_files:
+                latency = round(time.time() - launch_time, 2)
+                with _hls_lock:
+                    _hls_state["ingest_latency_s"] = latency
+                log.info(f"HLS: first segment appeared in {latency}s")
+                return
+            time.sleep(0.25)
+        log.warning("HLS: first segment not seen within 30 s; latency unknown")
+
+    threading.Thread(
+        target=_watch_first_segment,
+        args=(hls_dir, ffmpeg_launch_time),
+        daemon=True,
+        name="hls-latency-watcher",
+    ).start()
 
     # ── frame loop ────────────────────────────────────────────────────────────
     subtractor = BackgroundSubtractor(var_threshold=50)
@@ -1383,6 +1414,7 @@ def api_hls_stop():
         _hls_state.update(
             running=False, camera_id=None,
             input_source=None, playlist_url=None,
+            stream_start_time=None, ingest_latency_s=None,
         )
 
     log.info("HLS stream stopped.")
@@ -1396,6 +1428,28 @@ def api_hls_status():
         snap = dict(_hls_state)
 
     return jsonify(snap)
+
+
+@app.route("/api/hls/latency")
+def api_hls_latency():
+    """Return ingest latency for the current or most recent HLS session.
+
+    Response fields:
+        stream_start_time  – epoch timestamp when FFmpeg launched (float or null)
+        ingest_latency_s   – seconds from FFmpeg launch to first .ts file (float or null)
+        measuring          – true if the watcher is still polling (latency not yet known)
+    """
+    with _hls_lock:
+        start = _hls_state.get("stream_start_time")
+        latency = _hls_state.get("ingest_latency_s")
+        running = _hls_state.get("running", False)
+
+    measuring = running and start is not None and latency is None
+    return jsonify({
+        "stream_start_time": start,
+        "ingest_latency_s": latency,
+        "measuring": measuring,
+    })
 
 
 @app.route("/api/hls/<camera_id>/playlist.m3u8")
@@ -1428,7 +1482,7 @@ def api_hls_segment(camera_id: str, ts_file: str):
     if not hls_dir or state_cam != camera_id:
         abort(404)
 
-    # Only serve .ts files — reject anything else
+    # Only serve .ts files. Reject anything else.
     if not ts_file.endswith(".ts"):
         abort(403)
 
@@ -1471,7 +1525,7 @@ def api_rtsp_status():
 def api_rtsp_download():
     """Start downloading the MediaMTX binary in the background.
 
-    Idempotent — safe to call again if the binary is already present
+    Idempotent. Safe to call again if the binary is already present
     (returns ok without re-downloading).
     """
     if _rtsp_mgr.binary_present():
@@ -1495,7 +1549,7 @@ def api_rtsp_start():
         return jsonify({"error": str(exc)}), 409
 
     state = _rtsp_mgr.get_state()
-    log.info("Local RTSP server started — listening on rtsp://localhost:8554/")
+    log.info("Local RTSP server started. Listening on rtsp://localhost:8554/")
     return jsonify({"ok": True, "rtsp_url": state["rtsp_url"]})
 
 
@@ -1524,7 +1578,7 @@ def api_rtsp_push():
     if not Path(video_path).exists():
         return jsonify({"error": f"File not found: {video_path}"}), 400
     if not _rtsp_mgr.is_running():
-        return jsonify({"error": "RTSP server is not running — start it first"}), 409
+        return jsonify({"error": "RTSP server is not running. Start it first"}), 409
 
     try:
         _rtsp_mgr.push(video_path, stream_name)
@@ -1593,6 +1647,140 @@ def api_network_info():
     })
 
 
+# ── Config import / export ────────────────────────────────────────────────────
+
+_VALID_MODES   = {"mode0", "mode1", "mode2", "mode3"}
+_VALID_BG      = {"MOG2", "KNN", "GMG"}
+_VALID_DEVICES = {"auto", "cuda", "mps", "cpu"}
+_VALID_MODELS  = {"espcn", "fsrcnn", "edsr", "lapsrn", "realesrnet", "realesrgan", "bicubic"}
+
+
+@app.route("/api/config/import", methods=["POST"])
+def api_config_import():
+    """Accept a previously exported SVCS config JSON and store it as last_config.
+
+    The front-end reads the returned ``config`` object and applies each value
+    to the appropriate form field.  Fields not present in the JSON are left at
+    their current defaults.  Credentials (encrypt_password, encrypt_key_file)
+    are never stored by this route even if the client accidentally sends them.
+
+    Returns:
+        {"ok": true, "config": { ... normalised fields ... }}
+        {"error": "..."} with 400 on bad input
+    """
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data, dict):
+        return jsonify({"error": "Request body must be a JSON object"}), 400
+
+    version = data.get("svcs_config_version")
+    if version is None:
+        return jsonify({"error": "Not a valid SVCS config file (missing svcs_config_version)"}), 400
+
+    def _str(key, default=""):
+        return str(data.get(key, default)).strip() or default
+
+    def _int(key, default, lo=None, hi=None):
+        try:
+            v = int(data[key])
+        except (KeyError, TypeError, ValueError):
+            return default
+        if lo is not None:
+            v = max(lo, v)
+        if hi is not None:
+            v = min(hi, v)
+        return v
+
+    def _float(key, default, lo=None, hi=None):
+        try:
+            v = float(data[key])
+        except (KeyError, TypeError, ValueError):
+            return default
+        if lo is not None:
+            v = max(lo, v)
+        if hi is not None:
+            v = min(hi, v)
+        return v
+
+    def _bool(key, default=False):
+        val = data.get(key, default)
+        if isinstance(val, bool):
+            return val
+        return str(val).lower() in ("true", "1", "yes")
+
+    def _choice(key, valid_set, default):
+        v = str(data.get(key, default))
+        return v if v in valid_set else default
+
+    cfg = {
+        "input_source":     _str("input_source", "0"),
+        "camera_id":        _str("camera_id", "cam_00"),
+        "output_dir":       _str("output_dir", "outputs/"),
+        "mode":             _choice("mode", _VALID_MODES, "mode0"),
+        "segment_seconds":  _int("segment_seconds", 60, lo=10, hi=3600),
+        "bg_method":        _choice("bg_method", _VALID_BG, "MOG2"),
+        "warmup_frames":    _int("warmup_frames", 120, lo=0, hi=9999),
+        "enhance":          _bool("enhance"),
+        "enhance_model":    _choice("enhance_model", _VALID_MODELS, "bicubic"),
+        "enhance_scale":    _int("enhance_scale", 4, lo=2, hi=4),
+        "enhance_every_n":  _int("enhance_every_n", 5, lo=1, hi=25),
+        "enhance_max_roi_px": _int("enhance_max_roi_px", 200, lo=32),
+        "enhance_device":   _choice("enhance_device", _VALID_DEVICES, "auto"),
+        "upscale_output":   _bool("upscale_output"),
+        "object_filter":    _bool("object_filter"),
+        "filter_confidence":_float("filter_confidence", 0.30, lo=0.05, hi=0.95),
+        "encrypt":          _bool("encrypt"),
+        # NOTE: credentials (encrypt_password, encrypt_key_file) are never stored
+    }
+
+    with _state_lock:
+        _status["last_config"] = cfg
+
+    log.info("Config imported: mode=%s segment=%ss enhance=%s", cfg["mode"], cfg["segment_seconds"], cfg["enhance"])
+    return jsonify({"ok": True, "config": cfg})
+
+
+@app.route("/api/config/export", methods=["GET"])
+def api_config_export():
+    """Return the last-used pipeline config as a downloadable JSON file.
+
+    If the pipeline has not been run yet in this session, returns the
+    default config values so the operator still gets a valid starting point.
+    """
+    with _state_lock:
+        cfg = _status.get("last_config") or {}
+
+    export = {
+        "svcs_config_version": "1.0",
+        "saved_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "input_source": str(cfg.get("input_source", "0")),
+        "camera_id": cfg.get("camera_id", "cam_00"),
+        "output_dir": cfg.get("output_dir", "outputs/"),
+        "mode": cfg.get("mode", "mode0"),
+        "segment_seconds": cfg.get("segment_seconds", 60),
+        "bg_method": cfg.get("bg_method", "MOG2"),
+        "warmup_frames": cfg.get("warmup_frames", 120),
+        "enhance": cfg.get("enhance", False),
+        "enhance_model": cfg.get("enhance_model", "bicubic"),
+        "enhance_scale": cfg.get("enhance_scale", 4),
+        "enhance_every_n": cfg.get("enhance_every_n", 5),
+        "enhance_max_roi_px": cfg.get("enhance_max_roi_px", 200),
+        "enhance_device": cfg.get("enhance_device", "auto"),
+        "upscale_output": cfg.get("upscale_output", False),
+        "object_filter": cfg.get("object_filter", False),
+        "filter_confidence": cfg.get("filter_confidence", 0.30),
+        "encrypt": cfg.get("encrypt", False),
+    }
+
+    filename = f"svcs_config_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+    response = app.response_class(
+        response=json.dumps(export, indent=2),
+        status=200,
+        mimetype="application/json",
+    )
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def create_app() -> Flask:
@@ -1601,7 +1789,7 @@ def create_app() -> Flask:
 
 if __name__ == "__main__":
     log.info("=" * 60)
-    log.info("SVCS SERVER STARTUP — %s", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
+    log.info("SVCS SERVER STARTUP: %s", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
     log.info("Project root:  %s", _ROOT)
     log.info("Dashboard:     http://localhost:5000")
     log.info("Log file:      %s", _LOG_FILE)

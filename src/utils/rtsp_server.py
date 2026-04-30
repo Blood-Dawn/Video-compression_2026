@@ -10,7 +10,7 @@ and cached in <project_root>/tools/mediamtx/.
 
 Typical flow:
     mgr = RtspServerManager(tools_dir=Path("tools"))
-    mgr.download()              # first time — pulls the right binary for the OS
+    mgr.download()              # first time: pulls the right binary for the OS
     mgr.start()                 # starts mediamtx on rtsp://localhost:8554/
     mgr.push("highway.mp4")    # FFmpeg loops the file into rtsp://localhost:8554/live
     # point the HLS panel at rtsp://localhost:8554/live
@@ -172,7 +172,7 @@ class RtspServerManager:
             if self._server_running:
                 raise RuntimeError("RTSP server is already running")
         if not self.binary_present():
-            raise RuntimeError("MediaMTX binary not found — run download first")
+            raise RuntimeError("MediaMTX binary not found. Run download first.")
 
         # MediaMTX works fine with no config file; defaults open port 8554
         proc = subprocess.Popen(
@@ -228,10 +228,10 @@ class RtspServerManager:
         rtsp_dest = f"rtsp://localhost:{RTSP_PORT}/{stream_name}"
         cmd = [
             "ffmpeg", "-y",
-            "-re",               # real-time pacing — simulate live camera
+            "-re",               # real-time pacing (simulate live camera)
             "-stream_loop", "-1",  # loop indefinitely
             "-i", video_path,
-            "-vcodec", "copy",   # passthrough — no re-encode needed
+            "-vcodec", "copy",   # passthrough (no re-encode needed)
             "-an",               # drop audio
             "-f", "rtsp",
             rtsp_dest,

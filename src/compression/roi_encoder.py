@@ -56,7 +56,7 @@ def draw_corner_overlay(frame: np.ndarray, mode_label: str, elapsed_s: int) -> N
     overlay so saved segments and the live preview look identical.
 
     Args:
-        frame:      BGR uint8 numpy array — modified in-place.
+        frame:      BGR uint8 numpy array (modified in-place).
         mode_label: Short mode string, e.g. "MODE 0 · 24/7".
         elapsed_s:  Seconds elapsed since the segment started.
     """
@@ -125,7 +125,7 @@ class ROIEncoder:
             output_dir: Where to write compressed output files.
             foreground_crf: CRF for foreground ROIs. 18 is visually lossless.
             background_crf: CRF for background. 40 gives heavy compression.
-            preset: FFmpeg speed preset. ultrafast is the default — it trades
+            preset: FFmpeg speed preset. ultrafast is the default. It trades
                     a modest file-size increase for significantly faster encoding,
                     which matters most for Mode 2/3 where per-frame compositing
                     already uses CPU. Use veryfast/fast for archival runs where
@@ -141,11 +141,11 @@ class ROIEncoder:
         self.preset = preset
         self.db_path = db_path
         self.draw_roi_boxes = draw_roi_boxes
-        # db.py owns the schema — delegate initialization so encoder and
+        # db.py owns the schema. Delegate initialization so encoder and
         # pipeline always agree on column names and indexes.
         initialize_database(db_path)
 
-        # Streaming API state — None when no segment is open
+        # Streaming API state. None when no segment is open
         self._stream_process: Optional[object] = None
         self._stream_path: Optional[Path] = None
         self._stream_timestamp: Optional[str] = None
@@ -232,7 +232,7 @@ class ROIEncoder:
         """
         Encode a list of raw BGR numpy frames into a compressed MP4.
 
-        Frames are piped directly to FFmpeg via stdin — no intermediate file,
+        Frames are piped directly to FFmpeg via stdin. No intermediate file,
         no quality loss from a lossy codec like XVID. The CRF is chosen based
         on whether any bounding boxes are present: foreground_crf when targets
         are detected, background_crf otherwise.
@@ -336,7 +336,7 @@ class ROIEncoder:
                 # Step 2: draw green ROI boxes if requested.
                 # For mode 0/1 (frame_to_write is frame) we need a copy before
                 # drawing. For mode 2/3 the compositing above already produced a
-                # fresh array — no need to re-composite.
+                # fresh array, no re-composite needed.
                 if should_draw_boxes and boxes:
                     if frame_to_write is frame:
                         frame_to_write = frame.copy()
@@ -391,7 +391,7 @@ class ROIEncoder:
         file_size = output_path.stat().st_size
         duration = len(frames) / fps
 
-        # Mux audio from source file (if it has audio) — pipeline pipes video-only
+        # Mux audio from source file (if it has audio). The pipeline pipes video only
         if source_path:
             self._mux_audio_from_source(output_path, source_path)
             file_size = output_path.stat().st_size  # update after mux
@@ -419,7 +419,7 @@ class ROIEncoder:
     # ------------------------------------------------------------------
     # Streaming API: open → write frames one-by-one → close
     # Use this instead of encode_segment() to avoid buffering all frames
-    # in RAM. Encoding runs in parallel with decoding — much faster.
+    # in RAM. Encoding runs in parallel with decoding. Much faster.
     # ------------------------------------------------------------------
 
     def begin_segment(
@@ -547,7 +547,7 @@ class ROIEncoder:
     def abort_segment(self) -> None:
         """Kill the FFmpeg process immediately, discarding the current segment.
 
-        Safe to call from any thread — used by the stop handler to unblock
+        Safe to call from any thread. Used by the stop handler to unblock
         a finish_segment() call that is waiting for FFmpeg to flush output.
         """
         proc = self._stream_process
@@ -584,8 +584,8 @@ class ROIEncoder:
         try:
             return_code = proc.wait(timeout=timeout)
         except Exception:
-            # Timed out or other error — kill FFmpeg and give up on this segment
-            log.warning("FFmpeg did not exit within %.0fs — killing process.", timeout)
+            # Timed out or other error. Kill FFmpeg and give up on this segment
+            log.warning("FFmpeg did not exit within %.0fs. Killing process.", timeout)
             try:
                 proc.kill()
                 proc.wait()
@@ -607,7 +607,7 @@ class ROIEncoder:
             raise RuntimeError(f"FFmpeg produced no output for segment {self._stream_timestamp}")
 
         # Mux audio from the original source file (AAC 128k) if it has audio.
-        # The streaming pipe sends only raw video bytes — audio must be re-attached here.
+        # The streaming pipe sends only raw video bytes. Audio must be re-attached here.
         if self._stream_source_path:
             self._mux_audio_from_source(output_path, self._stream_source_path)
 
@@ -731,7 +731,7 @@ class ROIEncoder:
         """
         Mux audio from source_path into video_path (in-place replacement).
 
-        The pipeline pipes only raw video frames to FFmpeg — audio is stripped
+        The pipeline pipes only raw video frames to FFmpeg. Audio is stripped
         at that stage.  This post-processing step re-attaches the original audio
         track so output segments contain sound.
 
@@ -744,7 +744,7 @@ class ROIEncoder:
                       temp_with_audio.mp4
           3. Replace video_path with the muxed file.
 
-        AAC at 128 kbps is chosen for universal browser compatibility —
+        AAC at 128 kbps is chosen for universal browser compatibility.
         most MP4/H.264 files served from a web app need AAC audio to play
         inline in Chrome/Safari/Firefox without extra codec installs.
 
@@ -756,20 +756,20 @@ class ROIEncoder:
             self._source_has_audio = self._probe_has_audio(source_path)
 
         if not self._source_has_audio:
-            return  # Source has no audio — nothing to mux
+            return  # Source has no audio. Nothing to mux
 
         temp_path = video_path.with_suffix(".audio_tmp.mp4")
         try:
             mux_args = [
                 "ffmpeg",
                 "-y",                         # overwrite temp
-                "-i", str(video_path),        # input 0 — video only
-                "-i", str(source_path),       # input 1 — source with audio
+                "-i", str(video_path),        # input 0 (video only)
+                "-i", str(source_path),       # input 1 (source with audio)
                 "-map", "0:v:0",              # take video stream from input 0
                 "-map", "1:a:0",              # take audio stream from input 1
                 "-c:v", "copy",               # copy video bitstream unchanged
                 "-c:a", "aac",                # re-encode audio to AAC
-                "-b:a", "128k",               # 128 kbps — good quality, small size
+                "-b:a", "128k",               # 128 kbps (good quality, small size)
                 "-shortest",                  # trim to shorter of the two streams
                 str(temp_path),
             ]
@@ -780,7 +780,7 @@ class ROIEncoder:
             )
             if proc.returncode != 0:
                 log.warning(
-                    "Audio mux failed (exit %d) for %s — keeping video-only output.",
+                    "Audio mux failed (exit %d) for %s. Keeping video-only output.",
                     proc.returncode, video_path.name,
                 )
                 if temp_path.exists():
@@ -793,7 +793,7 @@ class ROIEncoder:
 
         except Exception as exc:
             log.warning(
-                "Audio mux raised %s for %s — keeping video-only output. Error: %s",
+                "Audio mux raised %s for %s. Keeping video-only output. Error: %s",
                 type(exc).__name__, video_path.name, exc,
             )
             if temp_path.exists():

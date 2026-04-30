@@ -39,6 +39,11 @@ dependencies = [
     # recorded. Falls back to pass-through if this package is missing at runtime.
     # On first use, downloads yolov8n.pt (~6 MB) automatically.
     "ultralytics>=8.0.0",
+    # PyTorch — pinned to CUDA 12.8 build via [tool.uv.sources] below.
+    # CPU-only builds are pulled in by ultralytics/basicsr if torch is not
+    # listed explicitly here, which breaks GPU detection and SR enhancement.
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
 ]
 
 [project.optional-dependencies]
@@ -64,3 +69,19 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+# ── PyTorch CUDA index ────────────────────────────────────────────────────────
+# Tell uv to always fetch torch and torchvision from the CUDA 12.8 wheel index
+# instead of PyPI. Without this, uv/pip installs the CPU-only build because
+# that is what PyPI serves by default.
+#
+# To upgrade CUDA version: change both the index URL and the index name here,
+# then run: uv pip install torch torchvision --reinstall
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

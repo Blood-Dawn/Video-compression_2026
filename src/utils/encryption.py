@@ -14,8 +14,8 @@ File format (.enc):
     Bytes 44 – end  : Ciphertext (AES-256-GCM, no padding)
 
 Key modes:
-    Password mode  — `password` arg; key = PBKDF2-HMAC-SHA256(password, salt, 600_000 iters)
-    Raw-key mode   — `key` arg; must be exactly 32 bytes (256-bit); salt field is zeros
+    Password mode: `password` arg; key = PBKDF2-HMAC-SHA256(password, salt, 600_000 iters)
+    Raw-key mode: `key` arg; must be exactly 32 bytes (256-bit); salt field is zeros
 
 GCM authenticates the ciphertext with a 128-bit tag.  Any bit-flip or
 truncation in the ciphertext is detected before a single byte of plaintext
@@ -45,10 +45,10 @@ Security notes:
     - In password mode use a strong passphrase; PBKDF2 with 600k iterations makes
       brute-force expensive but a weak password is still a weak password.
     - Raw keys must be stored securely (HSM, encrypted key store, environment
-      variable — NOT hard-coded in source).
+      variable (NOT hard-coded in source).
 
-Author: Bloodawn (KheivenD) — CBC implementation
-        victort29 — GCM upgrade (authenticated encryption)
+Author: Bloodawn (KheivenD), CBC implementation
+        victort29, GCM upgrade (authenticated encryption)
 """
 
 import os
@@ -56,7 +56,7 @@ from pathlib import Path
 from typing import Optional, Union
 
 # ---------------------------------------------------------------------------
-# Dependency guard — give a helpful error if `cryptography` is missing.
+# Dependency guard: give a helpful error if `cryptography` is missing.
 # ---------------------------------------------------------------------------
 try:
     from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -251,11 +251,11 @@ def decrypt_file(
         plaintext = _aes_gcm_decrypt(ciphertext, aes_key, nonce, tag)
     except InvalidTag:
         raise RuntimeError(
-            "decrypt_file: authentication failed — wrong key or file has been tampered with."
+            "decrypt_file: authentication failed. Wrong key or file has been tampered with."
         )
     except Exception as exc:
         raise RuntimeError(
-            f"decrypt_file: decryption failed — wrong key or corrupted file. "
+            f"decrypt_file: decryption failed. Wrong key or corrupted file. "
             f"({type(exc).__name__}: {exc})"
         ) from exc
 

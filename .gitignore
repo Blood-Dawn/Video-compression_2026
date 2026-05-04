@@ -90,3 +90,32 @@ ffmpeg_tmp/
 
 # MediaMTX binary (downloaded on demand — not committed)
 tools/mediamtx/
+
+# Flask persistent secret key (generated on first run)
+.flask_secret
+# AES key files
+*.key
+
+# uv sync stamp (tracks pyproject hash for the run_gui.py auto-installer;
+# regenerated on first launch on any new clone)
+.uv_sync_stamp
+
+# Per-mode CPU benchmarks (running averages from "CPU Usage by Mode" card,
+# rebuilt on every demo run — never committed)
+.mode_cpu_avgs.json
+
+# QA artifacts (generated exports / slides)
+qa_pdf/
+qa_slides/
+qa_plates/
+qa plates/
+
+# Dot-prefixed QA artifact dirs (some tools create dot-prefixed folders)
+.qa_pdf/
+.qa_slides/
+.qa_plates/
+
+# SVCS deliverables (presentations / proposals / reports)
+SVCS_*.pptx
+SVCS_*.docx
+SVCS_*.pdf

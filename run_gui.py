@@ -7,15 +7,31 @@ Usage:
     python run_gui.py --port 8080  # custom port
     python run_gui.py --host 0.0.0.0 --port 5000  # accessible over LAN
 
-The dashboard opens in your browser at http://localhost:5000
+The dashboard opens in your browser at http://localhost:5000.
 Drop your test videos into the data/ folder and click the ⟳ button
 to find them automatically.
+
+On first start (or whenever pyproject.toml has changed), this script
+runs ``uv sync --extra enhance --extra plates`` to install the
+Real-ESRGAN super-resolution stack and the PaddleOCR plate-reading
+backend. Both are needed for the AI enhancement pipeline and the
+``READ PLATES`` button. If ``uv`` isn't on PATH or the install fails,
+the dashboard still launches — the relevant features just degrade
+gracefully (Real-ESRGAN falls back to bicubic, plate reader returns
+"OCR backend not installed" warnings).
+
+Pass ``--no-sync`` to skip the dependency check entirely.
 
 Author: Bloodawn (KheivenD)
 """
 
 import argparse
+import hashlib
+import os
+import shutil
+import subprocess
 import sys
+import time
 import webbrowser
 from pathlib import Path
 from threading import Timer
@@ -23,7 +39,127 @@ from threading import Timer
 # Make src/ importable regardless of working directory
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from gui.app import app
+# Note: do NOT import gui.app at module load time. We want the optional
+# `enhance` and `plates` extras installed first (see _ensure_extras_installed
+# below) so that gui.app's lazy imports of paddleocr / realesrgan find them
+# on the first request after a fresh clone.
+# Author: Bloodawn (KheivenD), 2026-05-03.
+
+_REPO_ROOT = Path(__file__).parent
+_PYPROJECT = _REPO_ROOT / "pyproject.toml"
+_UV_LOCK   = _REPO_ROOT / "uv.lock"
+_SYNC_STAMP = _REPO_ROOT / ".uv_sync_stamp"   # tracks last successful sync
+
+
+def _pyproject_fingerprint() -> str:
+    """Hash the inputs that would change what `uv sync` resolves.
+
+    If pyproject.toml or uv.lock changes, we need to re-sync. Otherwise
+    we can skip the sync entirely on subsequent launches.
+    """
+    h = hashlib.sha256()
+    for f in (_PYPROJECT, _UV_LOCK):
+        try:
+            h.update(f.read_bytes())
+        except FileNotFoundError:
+            h.update(f"missing:{f.name}".encode())
+    return h.hexdigest()
+
+
+def _running_inside_uv() -> bool:
+    """Best-effort detection of whether we were spawned by ``uv run``.
+
+    When the user runs ``uv run python run_gui.py`` instead of plain
+    ``python run_gui.py``, uv has already sync'd the venv before
+    handing us control. Spawning *another* ``uv sync`` from inside
+    that uv-managed process can:
+      • print a redundant lock-acquired/released noise wall, or
+      • on Windows, briefly fail with "the process cannot access the file
+        because it is being used by another process" while uv still holds
+        the project lock — which surfaces to the user as an error message
+        even though the dashboard would otherwise start fine.
+
+    uv exposes ``UV_PROJECT_ENVIRONMENT`` (and reliably sets ``VIRTUAL_ENV``
+    + ``UV``) when invoking commands via ``uv run``. We treat presence of
+    either as a strong hint and skip the recursive sync — uv has already
+    installed whatever the lockfile says, including extras passed on the
+    command line.
+
+    Author: Bloodawn (KheivenD), 2026-05-03 (run_gui hardening).
+    """
+    if os.environ.get("UV_PROJECT_ENVIRONMENT"):
+        return True
+    # `uv run` exports its own binary path so children can invoke it back.
+    if os.environ.get("UV"):
+        return True
+    # Fallback: if VIRTUAL_ENV points inside the repo's .venv AND the
+    # parent process command line mentions uv. Cheap heuristic.
+    venv = os.environ.get("VIRTUAL_ENV", "")
+    if venv and Path(venv).resolve().parent == _REPO_ROOT:
+        # We're already inside the project venv — running another sync
+        # would just churn for nothing.
+        return True
+    return False
+
+
+def _ensure_extras_installed(extras: list[str], skip: bool = False) -> None:
+    """Run ``uv sync --extra X --extra Y`` once when inputs change.
+
+    Idempotent: writes a stamp file with the pyproject+lock hash and
+    skips on subsequent launches if nothing relevant changed. Best-effort
+    — failures log a warning and never block dashboard startup.
+
+    Skips entirely when invoked under ``uv run`` (see _running_inside_uv);
+    that path expects extras to be passed on the uv-run command line, e.g.:
+        uv run --extra enhance --extra plates python run_gui.py
+
+    Author: Bloodawn (KheivenD)
+    """
+    if skip:
+        print("  [skip] --no-sync passed, not running uv sync")
+        return
+
+    if _running_inside_uv():
+        # uv already managed the venv — don't recurse. Print a hint about
+        # how to pull in the AI extras under uv run.
+        print("  [skip] running inside `uv run` — uv already sync'd the venv")
+        print("         If AI features ('enhance', 'plates') are missing, exit and run:")
+        print("           uv run --extra enhance --extra plates python run_gui.py")
+        return
+
+    fingerprint = _pyproject_fingerprint()
+    last = _SYNC_STAMP.read_text().strip() if _SYNC_STAMP.exists() else ""
+    if last == fingerprint:
+        # Inputs unchanged since last successful sync — nothing to do.
+        print(f"  [ok]   extras already in sync ({', '.join(extras)})")
+        return
+
+    uv = shutil.which("uv")
+    if not uv:
+        print("  [warn] 'uv' not on PATH; skipping auto-install of extras")
+        print("         Install uv from https://astral.sh/uv to enable AI features,")
+        print("         or run `pip install paddleocr realesrgan basicsr` manually.")
+        return
+
+    cmd = [uv, "sync"]
+    for ex in extras:
+        cmd.extend(["--extra", ex])
+    print(f"  [sync] {' '.join(cmd)}")
+    print( "         (one-time install — only re-runs when pyproject/uv.lock changes)")
+    t0 = time.perf_counter()
+    try:
+        # Inherit stdout/stderr so the operator can see download progress.
+        result = subprocess.run(cmd, cwd=_REPO_ROOT, check=False)
+        dt = time.perf_counter() - t0
+        if result.returncode == 0:
+            _SYNC_STAMP.write_text(fingerprint)
+            print(f"  [ok]   uv sync finished in {dt:.1f}s")
+        else:
+            print(f"  [warn] uv sync exited {result.returncode} after {dt:.1f}s — "
+                  "extras may not be installed. Dashboard will start anyway.")
+    except Exception as exc:  # noqa: BLE001
+        print(f"  [warn] uv sync raised {type(exc).__name__}: {exc}")
+        print(f"         Dashboard will start anyway with missing extras.")
 
 
 def _open_browser(host: str, port: int):
@@ -39,18 +175,60 @@ if __name__ == "__main__":
     parser.add_argument("--port", type=int, default=5000, help="Port (default: 5000)")
     parser.add_argument("--no-browser", action="store_true",
                         help="Don't auto-open browser")
+    parser.add_argument("--no-sync", action="store_true",
+                        help="Skip the auto `uv sync --extra enhance --extra plates` "
+                             "check that runs when pyproject.toml has changed.")
     args = parser.parse_args()
 
     print(f"\n{'━'*55}")
     print(f"  SVCS Dashboard")
     print(f"  http://{args.host}:{args.port}")
     print(f"{'━'*55}")
+    # Make sure the AI extras are installed before we load the Flask app
+    # (gui.app imports modules that lazily reference paddleocr/realesrgan).
+    # First-run: ~1-3 minutes for the heavy installs; subsequent launches
+    # are instant because the stamp file matches.
+    _ensure_extras_installed(["enhance", "plates"], skip=args.no_sync)
+
+    print(f"{'━'*55}")
     print(f"  Drop test videos into:  {Path('data').resolve()}")
     print(f"  Outputs written to:     {Path('outputs').resolve()}")
     print(f"  Press Ctrl+C to stop.")
     print(f"{'━'*55}\n")
 
+    # Import the Flask app NOW (after extras are installed) so any
+    # top-level imports inside gui.app see the new packages. Wrapped
+    # with a friendly error message because a missing core dep here
+    # used to surface as an opaque ImportError dump.
+    # Author: Bloodawn (KheivenD), 2026-05-03 (run_gui hardening).
+    try:
+        from gui.app import app  # noqa: E402
+    except ModuleNotFoundError as exc:
+        missing = exc.name or str(exc)
+        print(f"\n  [fatal] Could not import gui.app — missing module: {missing!r}")
+        print( "          Most likely a core dependency wasn't installed in this venv.")
+        print( "          Try one of:")
+        print( "            • uv sync                                  (installs core deps)")
+        print( "            • uv run --extra enhance --extra plates python run_gui.py")
+        print( "            • pip install -e .                          (if not using uv)")
+        print(f"          Full error: {exc}")
+        sys.exit(2)
+    except Exception as exc:  # noqa: BLE001
+        print(f"\n  [fatal] Could not import gui.app — {type(exc).__name__}: {exc}")
+        print( "          Run with PYTHONFAULTHANDLER=1 or python -X dev for more detail.")
+        raise
+
     if not args.no_browser:
         Timer(1.2, _open_browser, args=[args.host, args.port]).start()
 
-    app.run(host=args.host, port=args.port, debug=False, threaded=True)
+    try:
+        app.run(host=args.host, port=args.port, debug=False, threaded=True)
+    except OSError as exc:
+        # Port already in use is the most common Flask startup failure.
+        # Win32 reports it as WinError 10048; Linux/macOS as EADDRINUSE.
+        if "10048" in str(exc) or "Address already in use" in str(exc):
+            print(f"\n  [fatal] Port {args.port} is already in use on {args.host}.")
+            print( "          Either close the other process, or pass a different port:")
+            print(f"            python run_gui.py --port {args.port + 1}")
+            sys.exit(3)
+        raise

@@ -42,15 +42,24 @@ from enhancement.enhancer import Enhancer
 from demo.demo_metadata import DemoMetadataWriter
 from pipeline.modes import get_mode_decision, validate_mode
 from compression.roi_encoder import _MODE_LABELS
-from detection.object_filter import ObjectFilter
+from detection.object_filter import (
+    ObjectFilter,
+    detect_dominant_color,
+    detect_scene_type,
+    _VEHICLE_CLASSES,
+    _PERSON_CLASSES,
+)
 
-def classify_object(roi_count):
-    if roi_count > 10:
-        return "vehicle"
-    elif roi_count > 2:
-        return "person"
-    else:
-        return "unknown"
+import json as _json
+
+
+def _time_of_day(hour: int) -> str:
+    """Map UTC hour to a time-of-day label."""
+    if 5 <= hour < 8 or 18 <= hour < 21:
+        return "dusk_dawn"
+    if 8 <= hour < 18:
+        return "day"
+    return "night"
 
 
 def _compute_segment_sharpness(
@@ -133,6 +142,8 @@ def run_pipeline(
     object_filter: bool = False,
     filter_confidence: float = 0.30,
     stop_event=None,
+    codec: str = "libsvtav1",
+    crf: int = None,
 ):
     """
     Main pipeline loop.
@@ -242,7 +253,8 @@ def run_pipeline(
     log.info(f"Source: {input_source} | {frame_w}x{frame_h} @ {fps:.1f}fps")
     log.info(f"Segment length: {segment_seconds}s ({frames_per_segment} frames)")
     log.info(f"Mode: {mode}")
-    log.info(f"Warmup: {effective_warmup} frames (~{effective_warmup/fps:.1f}s)")
+    warmup_secs = (effective_warmup / fps) if fps > 0 else 0.0
+    log.info(f"Warmup: {effective_warmup} frames (~{warmup_secs:.1f}s)")
     if mode == "mode2":
         log.info(
             "Mode2 clean background guard: %.1fs (%d consecutive frames)",
@@ -254,7 +266,28 @@ def run_pipeline(
     # Mode 2/3 do extra per-frame compositing work; ultrafast encoding keeps
     # overall CPU load manageable. Mode 0/1 can afford slightly better compression.
     encode_preset = "ultrafast" if mode in ("mode2", "mode3") else "veryfast"
-    encoder = ROIEncoder(output_dir=output_dir, db_path=db_path, preset=encode_preset)
+
+    # CRF resolution. Mode 3 zeros out everything outside the moving-object
+    # ROIs and then encodes the whole frame at a much higher CRF than
+    # Mode 0 (default 38 vs 18). The blacked-out background takes near-zero
+    # bits at any CRF; the win comes from compressing the ROI pixels harder.
+    # User-supplied `crf` overrides the mode default. Author: Bloodawn (KheivenD).
+    if crf is not None:
+        resolved_crf = int(crf)
+    elif mode == "mode3":
+        resolved_crf = 38
+    else:
+        resolved_crf = 18
+
+    encoder = ROIEncoder(
+        output_dir=output_dir,
+        db_path=db_path,
+        preset=encode_preset,
+        codec=codec,
+        foreground_crf=resolved_crf,
+    )
+    log.info("Encoder: codec=%s, foreground_crf=%d (mode=%s)",
+             codec, resolved_crf, mode)
     initialize_database(db_path)
 
     obj_filter: Optional[ObjectFilter] = None
@@ -296,14 +329,14 @@ def run_pipeline(
         )
 
     if encrypt:
-        log.warning(
-            "encrypt=True requested but encryption is not wired in run_pipeline yet; output will remain unencrypted."
-        )
-
-    if encrypt_password or encrypt_key_file:
-        log.warning(
-            "Encryption credentials provided but encryption is not wired in run_pipeline yet; values are ignored."
-        )
+        if not encrypt_password and not encrypt_key_file:
+            log.warning(
+                "encrypt=True but no password or key file provided. "
+                "Segments will not be encrypted until one is supplied."
+            )
+        else:
+            _kmode = "key file" if encrypt_key_file else "password"
+            log.info("Encryption enabled (AES-256-GCM, %s mode).", _kmode)
 
     demo_writer: Optional[DemoMetadataWriter] = None
     if demo:
@@ -325,12 +358,32 @@ def run_pipeline(
     mode_label            = _MODE_LABELS.get(mode, "")
     object_only           = (mode == "mode3")
 
+    # ── Per-segment metadata accumulators ────────────────────────────────────
+    _seg_all_classes:   set   = set()   # union of YOLO classes seen this segment
+    _seg_colors:        list  = []      # dominant_color strings sampled this segment
+    _seg_motion_vecs:   list  = []      # (dx, dy) vectors for scene-type heuristic
+    _seg_prev_centroids: list = []      # centroids from previous frame for motion deltas
+
     def _open_new_segment(first_frame, first_regions):
         """Open FFmpeg pipe for a new segment.  Returns the background frame used."""
-        nonlocal segment_start_background
+        nonlocal segment_start_background, _seg_all_classes, _seg_colors, _seg_motion_vecs, _seg_prev_centroids
+        # Reset per-segment accumulators
+        _seg_all_classes  = set()
+        _seg_colors       = []
+        _seg_motion_vecs  = []
+        _seg_prev_centroids = []
+
         has_targets = len(first_regions) > 0
         roi_count   = sum(1 for _ in first_regions)
-        obj_type    = classify_object(roi_count)
+
+        # Use real YOLO labels if available, otherwise fall back to unknown
+        if obj_filter is not None and hasattr(obj_filter, "last_detected_classes"):
+            obj_type = obj_filter.classify_detected_objects()
+            for labels in obj_filter.last_detected_classes.values():
+                _seg_all_classes |= labels
+        else:
+            obj_type = "unknown"
+
         bg = None
         if mode == "mode2":
             raw_bg = (last_clean_background.copy()
@@ -353,6 +406,9 @@ def run_pipeline(
             has_targets=has_targets,
             object_type=obj_type,
             source_path=src_path,
+            encrypt=encrypt,
+            encrypt_password=encrypt_password,
+            encrypt_key_file=encrypt_key_file,
         )
         return bg
 
@@ -365,6 +421,7 @@ def run_pipeline(
                      thread can exit without waiting up to 30s for a full segment.
         """
         nonlocal frames_in_segment, target_frames_this_segment, segment_index
+
         if discard:
             encoder.abort_segment()
             log.info("Segment %d aborted by stop request.", segment_index + 1)
@@ -372,8 +429,43 @@ def run_pipeline(
             target_frames_this_segment = 0
             segment_index += 1
             return
-        out = encoder.finish_segment()
-        log.info("Saved segment %d: %s", segment_index + 1, out["file_path"])
+
+        # ── Compute segment-level rich metadata ───────────────────────────────
+        # Dominant color: most frequent color label seen across all ROI samples
+        from collections import Counter as _Counter
+        _dom_color = None
+        if _seg_colors:
+            _dom_color = _Counter(_seg_colors).most_common(1)[0][0]
+
+        # Scene type via motion vector heuristic
+        _fh, _fw = frame.shape[:2] if frame is not None else (0, 0)
+        _scene = detect_scene_type(_seg_motion_vecs, target_frames_this_segment, _fh * _fw)
+
+        # Time of day from current UTC hour
+        import datetime as _dt
+        _tod = _time_of_day(_dt.datetime.utcnow().hour)
+
+        # Per-type counts
+        _vcls = _VEHICLE_CLASSES
+        _pcls = _PERSON_CLASSES
+        _vcount = sum(1 for c in _seg_all_classes if c in _vcls)
+        _pcount = sum(1 for c in _seg_all_classes if c in _pcls)
+
+        # object_classes JSON array (sorted for consistent storage)
+        _obj_cls_json = _json.dumps(sorted(_seg_all_classes)) if _seg_all_classes else None
+
+        out = encoder.finish_segment(
+            object_classes = _obj_cls_json,
+            dominant_color = _dom_color,
+            scene_type     = _scene,
+            time_of_day    = _tod,
+            vehicle_count  = _vcount,
+            person_count   = _pcount,
+        )
+        log.info("Saved segment %d: %s [type=%s color=%s scene=%s %s]",
+                 segment_index + 1, out["file_path"],
+                 encoder._stream_object_type if hasattr(encoder, "_stream_object_type") else "?",
+                 _dom_color or "?", _scene, _tod)
         if out.get("sharpness_label"):
             log.info("Target ROI sharpness: %s (score=%.1f)",
                      out["sharpness_label"], out["avg_sharpness"])
@@ -411,10 +503,36 @@ def run_pipeline(
             # leaf-dominated scenes still eventually yield a usable background frame.
             if obj_filter is not None:
                 regions = obj_filter.filter(frame, raw_regions)
+                # Accumulate YOLO labels for this segment's metadata
+                if segment_open and hasattr(obj_filter, "last_detected_classes"):
+                    for labels in obj_filter.last_detected_classes.values():
+                        _seg_all_classes |= labels
             else:
                 regions = raw_regions
 
             has_regions = len(regions) > 0
+
+            # ── Per-frame metadata accumulation ──────────────────────────────
+            if segment_open and has_regions:
+                # Color: sample the dominant color of each detected ROI
+                for r in regions:
+                    color = detect_dominant_color(frame, r.x, r.y, r.w, r.h)
+                    if color != "unknown":
+                        _seg_colors.append(color)
+
+                # Motion vectors: compare centroids to previous frame
+                curr_centroids = [(r.x + r.w // 2, r.y + r.h // 2) for r in regions]
+                if _seg_prev_centroids and curr_centroids:
+                    # Match by nearest centroid (simple greedy)
+                    for cx, cy in curr_centroids:
+                        best_dx, best_dy, best_dist = 0, 0, float("inf")
+                        for px, py in _seg_prev_centroids:
+                            d = ((cx - px) ** 2 + (cy - py) ** 2) ** 0.5
+                            if d < best_dist:
+                                best_dist, best_dx, best_dy = d, cx - px, cy - py
+                        if best_dist < 80:   # px threshold — ignore teleporting blobs
+                            _seg_motion_vecs.append((best_dx, best_dy))
+                _seg_prev_centroids = curr_centroids
 
             # --- WARMUP GATE ---
             if source_frame_index < effective_warmup:
@@ -652,7 +770,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--encrypt",
         action="store_true",
-        help="Accepted for GUI/CLI compatibility; encryption is not wired in run_pipeline yet.",
+        help="Encrypt each output segment with AES-256-GCM. Requires --password or --key-file.",
     )
     parser.add_argument(
         "--mode2-clean-seconds",
@@ -660,8 +778,8 @@ if __name__ == "__main__":
         default=2.0,
         help="Consecutive detection-free seconds before mode2 refreshes the clean background.",
     )
-    parser.add_argument("--password", default=None, help="Encryption password placeholder.")
-    parser.add_argument("--key-file", default=None, help="Encryption key file placeholder.")
+    parser.add_argument("--password", default=None, help="Passphrase for AES-256-GCM encryption (PBKDF2).")
+    parser.add_argument("--key-file", default=None, help="Path to raw 32-byte AES-256 key file.")
     args = parser.parse_args()
 
     input_src = args.input

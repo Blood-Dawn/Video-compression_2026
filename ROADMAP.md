@@ -503,6 +503,51 @@ Cody flagged that if there's prior academic work on ROI-based or event-driven vi
 
 ---
 
+## Milestone 6 — Sponsor feedback May 1 — future directions
+**Added:** May 1, 2026
+**Source:** NIWC security personnel review forwarded by Cody Hayashi — three operators who view this footage daily. Overall reaction: strongly positive. These are the two actionable feature requests from their feedback.
+
+### 6.1 — Reference-object height/weight estimation
+
+The request: once the system can tell a green car from a red car, use objects with known real-world dimensions (a Honda Civic is ~4.5 m long, ~1.8 m wide) as an in-scene ruler to calibrate pixel-to-meter scale. Apply that scale to estimate the height — and, roughly, the weight — of a nearby person. Operators want this for characterizing persons of interest: if there's a confirmed threat, being able to say "approximately 5'10\", stocky build" without footage that's clear enough to run facial recognition is a significant capability.
+
+Implementation sketch:
+- Maintain a lookup table of known vehicle make/model dimensions
+- When a vehicle is classified with high confidence and the scene has a calibration reference, compute pixels-per-meter from the bounding box
+- Use that scale on nearby person bounding boxes to estimate standing height
+- Weight estimation from height uses population-average BMI (rough, statistical, explicitly flagged as estimate)
+- Store estimate + confidence in DB; surface in segment detail view
+
+| Task | Assigned To | Due | Priority | Status | Notes |
+|---|---|---|---|---|---|
+| Research pixel-to-real-world calibration from bounding boxes for static cameras | KD | TBD | Important | Not Started | Homography or simple perspective divide depending on camera angle. Needs camera height/tilt metadata or auto-calibration from ground-plane assumption. |
+| Build reference-object dimension lookup table (vehicle make/model → L×W×H in meters) | KD | TBD | Important | Not Started | Start with common COTS vehicles: sedan ~4.5 m, SUV ~4.8 m, pickup ~5.8 m. Lookup by YOLO class label (car, truck, bus). |
+| Implement `estimate_person_dimensions(frame, person_bbox, reference_bbox, reference_class)` | KD | TBD | Important | Not Started | Returns estimated height in meters + confidence score. Weight from height via population-average BMI range. Flag all outputs as statistical estimates. |
+| Add `estimated_height_m`, `estimated_weight_kg_range` columns to DB | KD | TBD | Medium | Not Started | ALTER TABLE migration. NULL when no calibration reference visible in segment. |
+| Surface height/weight estimate in segment detail view in GUI | KD | TBD | Medium | Not Started | Show in metadata card alongside object_type. Display confidence and "statistical estimate" disclaimer. |
+| Unit tests for calibration and estimation functions | KD | TBD | Medium | Not Started | Synthetic test: known bbox sizes at known scale → verify output is within 10% of ground truth. |
+
+### 6.2 — Parked / stationary object alert (configurable dwell time)
+
+The request: detect when an object (vehicle in particular) has been stationary in the scene for longer than a user-configured threshold. A car parked in a lot for months is potentially suspicious. Operators want to set a dwell-time alarm — e.g., alert if any vehicle hasn't moved in 48 hours, or flag a frame as "long-term stationary" in the DB.
+
+Implementation sketch:
+- Track object centroids across segments using camera_id + approximate spatial position
+- When a new segment is written, check whether a same-class object appeared in the same bounding-box region in all prior segments back to the configurable window
+- If yes and elapsed time ≥ threshold → write a `stationary_alert` record to DB and optionally push a notification
+- Background: this is different from background subtraction — MOG2 will eventually absorb a stationary object into the background and stop detecting it. The dwell tracker needs to work from the DB record of when the object was last detected moving, not from live mask output
+
+| Task | Assigned To | Due | Priority | Status | Notes |
+|---|---|---|---|---|---|
+| Design `stationary_object_tracker` schema — what to store per detection to enable retrospective dwell queries | KD | TBD | Important | Not Started | Proposed: `object_tracks` table with `(camera_id, first_seen, last_seen, bbox_centroid_x, bbox_centroid_y, object_class, dwell_s)`. Upsert on each segment write when centroid matches within N px tolerance. |
+| Implement `update_object_tracks(camera_id, segment_timestamp, detections)` — upsert centroid-matched tracks | KD | TBD | Important | Not Started | Called from pipeline after each `finish_segment()`. Spatial match: centroid within configurable px radius (default 50 px for 640×480). |
+| Implement `query_stationary_alerts(camera_id, dwell_threshold_s)` — return objects dwell > threshold | KD | TBD | Important | Not Started | SQL: `SELECT * FROM object_tracks WHERE dwell_s >= ? AND camera_id = ? ORDER BY dwell_s DESC`. |
+| Expose dwell threshold as user-configurable parameter in GUI (sidebar or settings) | KD | TBD | Medium | Not Started | Input: dwell threshold (hours). Default: 24 h. "Check for parked objects" button triggers `query_stationary_alerts()` and shows results in panel. |
+| Push GUI notification when a stationary alert fires during a live pipeline run | KD | TBD | Medium | Not Started | Use existing `pushNotif()` system. Fire when `dwell_s` crosses threshold mid-run. Dismiss-able card with centroid thumbnail. |
+| Unit tests for track upsert, spatial matching, and dwell query | KD | TBD | Medium | Not Started | Tests: same centroid across 10 segments → single track, correct dwell_s; centroid drift > tolerance → new track; threshold query returns correct rows. |
+
+---
+
 ## Team assignments
 
 ### Kheiven D'Haiti (KD) — kdhaiti2024@fau.edu
@@ -546,6 +591,8 @@ Cody flagged that if there's prior academic work on ROI-based or event-driven vi
 | 5.5 | Pull diverse footage from gookami.org (rush hour + 2am) | Open 🔲 |
 | 5.6 | Send Cody invite for May 6 presentation | Open 🔲 |
 | 5.7 | Literature review on selective compression (same as 4.8) | Open 🔲 |
+| 6.1 | Reference-object calibration + person height/weight estimation | Open 🔲 |
+| 6.2 | Stationary object / parked-car dwell tracker + alert system | Open 🔲 |
 
 ### Riley Roberts (RR) — robertsr2022@fau.edu
 
@@ -642,3 +689,4 @@ Rules: never commit directly to `main`. Always branch from `dev`. Every PR into 
 | Milestone 3 | Encryption, watchfolder, multi-source, YOLO gate, test repair | Apr 26, 2026 | ✅ Complete |
 | Milestone 4 (Apr 15 meeting) | HLS streaming, uv migration, color detection, benchmarks | May 6, 2026 | In Progress |
 | Milestone 5 (Apr 22 meeting) | Per-mode metrics, object type split, GUI demo viewer, benchmarks, footage | May 6, 2026 | In Progress |
+| Milestone 6 (May 1 feedback) | Reference-object height estimation, parked-car dwell alert | Post-M3 / TBD | Not Started |

@@ -138,11 +138,17 @@ def build_composite_frame(
     total_cells = rows * cols
     blank = np.zeros((cell_h, cell_w, 3), dtype=np.uint8)
 
+    # Each per-mode demo video is rendered with corner labels already
+    # stamped by add_bottom_right_labels() in src/demo/demo.py
+    # (top-left "MODE N · SEG N", top-right "TIME"). If we call
+    # draw_label() again here we get a second small "M0" badge stacked
+    # on top of the existing "MODE 0 · SEG 1" label, which is the
+    # "modes on top of each other" defect Riley flagged 2026-05-04.
+    # Skip the second draw and just stitch the already-labeled cells.
+    # Author: Bloodawn (KheivenD), 2026-05-04 (split-screen label fix).
     prepared: list[np.ndarray] = []
-    for mode, frame in labeled_frames:
-        fitted = fit_frame(frame, cell_w, cell_h)
-        draw_label(fitted, mode)
-        prepared.append(fitted)
+    for _mode, frame in labeled_frames:
+        prepared.append(fit_frame(frame, cell_w, cell_h))
 
     while len(prepared) < total_cells:
         prepared.append(blank.copy())

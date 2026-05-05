@@ -230,6 +230,60 @@ except Exception as _exc:  # noqa: BLE001
     pass
 
 
+# ── GUI state persistence ─────────────────────────────────────────────
+# After a server restart the in-memory _status["config"]["output_dir"]
+# and _demo_state["last_output_root"] are blank, so /api/segments only
+# walks <repo>/outputs/. If the user's last pipeline run or demo wrote
+# to OneDrive/SVCS or another folder, those segments become invisible
+# in the GUI even though the files still exist on disk.
+#
+# Store the last-known roots in a tiny JSON next to .flask_secret so
+# they survive a restart. No secrets in this file, just paths.
+# Author: Bloodawn (KheivenD), 2026-05-04 (output-dir persistence).
+_GUI_STATE_FILE = _ROOT / ".svcs_gui_state.json"
+
+
+def _load_gui_state() -> None:
+    """Seed _status['config'] and _demo_state['last_output_root'] from disk."""
+    try:
+        if not _GUI_STATE_FILE.exists():
+            return
+        data = json.loads(_GUI_STATE_FILE.read_text())
+        if not isinstance(data, dict):
+            return
+        out_dir = data.get("output_dir") or ""
+        demo_root = data.get("last_demo_output_root") or ""
+        if out_dir:
+            with _state_lock:
+                # Only seed config.output_dir if nothing real has set it yet.
+                cfg = _status.setdefault("config", {})
+                cfg.setdefault("output_dir", str(out_dir))
+        if demo_root:
+            with _demo_lock:
+                _demo_state.setdefault("last_output_root", str(demo_root))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _save_gui_state() -> None:
+    """Snapshot the current output_dir + last_demo_output_root to disk."""
+    try:
+        with _state_lock:
+            cfg = _status.get("config", {})
+            out_dir = cfg.get("output_dir", "")
+        with _demo_lock:
+            demo_root = _demo_state.get("last_output_root", "")
+        payload = {
+            "output_dir": str(out_dir or ""),
+            "last_demo_output_root": str(demo_root or ""),
+            "saved_at": time.time(),
+        }
+        _GUI_STATE_FILE.write_text(json.dumps(payload, indent=2))
+    except Exception:  # noqa: BLE001
+        # Persistence is best effort. Never block a route on it.
+        pass
+
+
 def _cpu_sampler_loop(mode_key: str, output_dir: str | None = None) -> None:
     """Background thread: sample CPU/RAM/battery every 2 s while pipeline runs.
 
@@ -517,6 +571,10 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
         _status["error"] = None
         _status["start_time"] = time.time()
         _status["config"] = config
+
+    # Persist the chosen output_dir so the GUI can re-find segments after
+    # a server restart. See _save_gui_state() up top.
+    _save_gui_state()
 
     # Start CPU/RAM/battery sampler (labels samples under the active mode
     # AND attributes them to this run's output folder so the per-clip
@@ -1666,6 +1724,13 @@ _demo_state: dict = {
 }
 
 
+# Now that _demo_state exists, replay any persisted output paths from disk
+# so the GUI can find the user's last pipeline + demo segments after a
+# server restart. See _load_gui_state() above for details.
+# Author: Bloodawn (KheivenD), 2026-05-04 (output-dir persistence).
+_load_gui_state()
+
+
 def _run_demo_thread(config: dict) -> None:
     """Background thread: run multi-mode pipeline + render demo videos."""
     try:
@@ -1841,6 +1906,10 @@ def api_demo():
     with _demo_lock:
         _demo_state.update(running=True, modes=modes, result=None, error=None, status="queued",
                            last_output_root=resolved_root)
+
+    # Persist the demo output root so /api/segments can still find these
+    # files after a server restart.
+    _save_gui_state()
 
     t = threading.Thread(target=_run_demo_thread, args=(config,), daemon=True, name="demo-worker")
     t.start()

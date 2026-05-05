@@ -19,6 +19,14 @@ from pathlib import Path
 from datetime import datetime
 from typing import List, Optional, Tuple
 
+# Encryption is imported lazily in finish_segment so the encoder still works
+# on machines where the `cryptography` package is not installed.
+try:
+    from utils.encryption import encrypt_file as _encrypt_file, generate_key as _generate_key
+    _CRYPTO_AVAILABLE = True
+except ImportError:
+    _CRYPTO_AVAILABLE = False
+
 log = logging.getLogger(__name__)
 
 
@@ -56,7 +64,7 @@ def draw_corner_overlay(frame: np.ndarray, mode_label: str, elapsed_s: int) -> N
     overlay so saved segments and the live preview look identical.
 
     Args:
-        frame:      BGR uint8 numpy array — modified in-place.
+        frame:      BGR uint8 numpy array (modified in-place).
         mode_label: Short mode string, e.g. "MODE 0 · 24/7".
         elapsed_s:  Seconds elapsed since the segment started.
     """
@@ -96,6 +104,40 @@ _MODE_LABELS = {
 }
 
 
+# Cached encoder availability — `_ffmpeg_has_encoder()` checks the ffmpeg
+# binary on PATH for a given encoder name and caches the result. Used by
+# ROIEncoder to fall back from libsvtav1 → libx264 when the running ffmpeg
+# build doesn't ship libsvtav1 (Ubuntu 22.04 stock, basic Windows ffmpeg).
+# Author: Bloodawn (KheivenD), 2026-05-03 (codec-default flip).
+_ENCODER_CACHE: dict = {}
+
+
+def _ffmpeg_has_encoder(name: str) -> bool:
+    """Return True if `ffmpeg -encoders` lists the given encoder name.
+
+    Cached per process. Falls back to False on any error so a missing
+    ffmpeg binary doesn't crash callers — they'll just see "encoder not
+    available" and switch to libx264.
+    """
+    name = (name or "").strip().lower()
+    if not name:
+        return False
+    if name in _ENCODER_CACHE:
+        return _ENCODER_CACHE[name]
+    import subprocess
+    try:
+        out = subprocess.check_output(
+            ["ffmpeg", "-hide_banner", "-encoders"],
+            stderr=subprocess.DEVNULL, timeout=5,
+        ).decode(errors="replace")
+        # Each encoder line looks like " V..... libsvtav1            SVT-AV1 ..."
+        present = any(name in line for line in out.splitlines())
+    except Exception:
+        present = False
+    _ENCODER_CACHE[name] = present
+    return present
+
+
 class ROIEncoder:
     """
     Encodes video with separate quality tiers for foreground and background.
@@ -119,33 +161,68 @@ class ROIEncoder:
         preset: str = "ultrafast",
         db_path: str = "outputs/metadata.db",
         draw_roi_boxes: bool = False,
+        codec: str = "libsvtav1",
     ):
         """
         Args:
             output_dir: Where to write compressed output files.
-            foreground_crf: CRF for foreground ROIs. 18 is visually lossless.
-            background_crf: CRF for background. 40 gives heavy compression.
-            preset: FFmpeg speed preset. ultrafast is the default — it trades
-                    a modest file-size increase for significantly faster encoding,
-                    which matters most for Mode 2/3 where per-frame compositing
-                    already uses CPU. Use veryfast/fast for archival runs where
-                    you can afford more encoding time.
+            foreground_crf: CRF for foreground ROIs. 18 is visually lossless
+                            on libx264; the equivalent for AV1 codecs is
+                            roughly 23 (auto-translated when codec is AV1).
+            background_crf: CRF for background. 40 on libx264 gives heavy
+                            compression; for AV1 we map to ~50 internally.
+            preset: FFmpeg speed preset. ``ultrafast`` is the libx264 default;
+                    for AV1 codecs we translate to ``cpu-used 8`` (libaom-av1)
+                    or ``preset 10`` (libsvtav1).
             db_path: SQLite database path for the metadata index.
             draw_roi_boxes: When True, burn green ROI boxes into encoded output.
                             Keep False for archival/integrity-preserving output.
+            codec: One of "libx264" (default, royalty-free patents mostly
+                   expired), "libaom-av1" (Alliance for Open Media reference
+                   AV1, royalty-free), or "libsvtav1" (Intel SVT-AV1, faster
+                   AV1 encoder when available). Author: Bloodawn (KheivenD),
+                   2026-05-02 — adds ROADMAP 4.2 codec selector.
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.foreground_crf = foreground_crf
-        self.background_crf = background_crf
+
+        # Codec resolution with safe fallback. Default is libsvtav1 (set as
+        # of 2026-05-03 — gives ~25 % smaller output than libx264). If the
+        # running ffmpeg doesn't ship libsvtav1 we silently fall back to
+        # libx264 so a fresh clone on a stock Ubuntu / basic Windows ffmpeg
+        # install keeps working without the user knowing what to do.
+        # Author: Bloodawn (KheivenD).
+        wanted = (codec or "libsvtav1").strip().lower()
+        if wanted == "libsvtav1" and not _ffmpeg_has_encoder("libsvtav1"):
+            log.warning(
+                "Requested codec libsvtav1 not found in ffmpeg; "
+                "falling back to libx264. Install a recent ffmpeg "
+                "(Gyan.FFmpeg on Windows, BtbN builds elsewhere) to enable AV1."
+            )
+            wanted = "libx264"
+        elif wanted == "libaom-av1" and not _ffmpeg_has_encoder("libaom-av1"):
+            log.warning("Requested codec libaom-av1 not available; falling back to libx264.")
+            wanted = "libx264"
+        self.codec = wanted
+
+        # CRF scales differ between H.264 (0-51) and AV1 (0-63). Auto-translate
+        # the user-supplied "H.264-style" CRFs into the target codec's range
+        # so callers don't have to know the difference.
+        if self.codec in ("libaom-av1", "libsvtav1", "av1"):
+            # Heuristic mapping: H.264 CRF n -> AV1 CRF n + 5
+            self.foreground_crf = min(63, foreground_crf + 5)
+            self.background_crf = min(63, background_crf + 5)
+        else:
+            self.foreground_crf = foreground_crf
+            self.background_crf = background_crf
         self.preset = preset
         self.db_path = db_path
         self.draw_roi_boxes = draw_roi_boxes
-        # db.py owns the schema — delegate initialization so encoder and
+        # db.py owns the schema. Delegate initialization so encoder and
         # pipeline always agree on column names and indexes.
         initialize_database(db_path)
 
-        # Streaming API state — None when no segment is open
+        # Streaming API state. None when no segment is open
         self._stream_process: Optional[object] = None
         self._stream_path: Optional[Path] = None
         self._stream_timestamp: Optional[str] = None
@@ -156,6 +233,11 @@ class ROIEncoder:
         self._stream_roi_count: int = 0
         self._stream_has_targets: bool = False
         self._stream_sharpness_scores: list = []
+
+        # Encryption state (set by begin_segment, applied in finish_segment)
+        self._stream_encrypt: bool = False
+        self._stream_encrypt_password: Optional[str] = None
+        self._stream_encrypt_key_file: Optional[str] = None
 
         # Cache the audio-presence check so we don't probe every segment.
         # Surveillance cameras virtually never have audio; probing is wasted I/O.
@@ -266,7 +348,7 @@ class ROIEncoder:
         """
         Encode a list of raw BGR numpy frames into a compressed MP4.
 
-        Frames are piped directly to FFmpeg via stdin — no intermediate file,
+        Frames are piped directly to FFmpeg via stdin. No intermediate file,
         no quality loss from a lossy codec like XVID. The CRF is chosen based
         on whether any bounding boxes are present: foreground_crf when targets
         are detected, background_crf otherwise.
@@ -370,7 +452,7 @@ class ROIEncoder:
                 # Step 2: draw green ROI boxes if requested.
                 # For mode 0/1 (frame_to_write is frame) we need a copy before
                 # drawing. For mode 2/3 the compositing above already produced a
-                # fresh array — no need to re-composite.
+                # fresh array, no re-composite needed.
                 if should_draw_boxes and boxes:
                     if frame_to_write is frame:
                         frame_to_write = frame.copy()
@@ -425,7 +507,7 @@ class ROIEncoder:
         file_size = output_path.stat().st_size
         duration = len(frames) / fps
 
-        # Mux audio from source file (if it has audio) — pipeline pipes video-only
+        # Mux audio from source file (if it has audio). The pipeline pipes video only
         if source_path:
             self._mux_audio_from_source(output_path, source_path)
             file_size = output_path.stat().st_size  # update after mux
@@ -453,7 +535,7 @@ class ROIEncoder:
     # ------------------------------------------------------------------
     # Streaming API: open → write frames one-by-one → close
     # Use this instead of encode_segment() to avoid buffering all frames
-    # in RAM. Encoding runs in parallel with decoding — much faster.
+    # in RAM. Encoding runs in parallel with decoding. Much faster.
     # ------------------------------------------------------------------
 
     def begin_segment(
@@ -464,11 +546,22 @@ class ROIEncoder:
         has_targets: bool = True,
         object_type: str = "unknown",
         source_path: Optional[str] = None,
+        encrypt: bool = False,
+        encrypt_password: Optional[str] = None,
+        encrypt_key_file: Optional[str] = None,
     ) -> None:
         """Open an FFmpeg pipe and start a new streaming segment.
 
         Must be followed by one or more write_frame() calls and exactly
         one finish_segment() call. Raises if a segment is already open.
+
+        Args:
+            encrypt: If True, AES-256-GCM encrypt the .mp4 after encoding.
+                     The plaintext is deleted; only the .mp4.enc file is kept.
+            encrypt_password: Passphrase for PBKDF2 key derivation.
+                              Mutually exclusive with encrypt_key_file.
+            encrypt_key_file: Path to a raw 32-byte key file.
+                              Mutually exclusive with encrypt_password.
         """
         if hasattr(self, "_stream_process") and self._stream_process is not None:
             raise RuntimeError("begin_segment() called while a segment is already open")
@@ -477,6 +570,29 @@ class ROIEncoder:
         crf = self.foreground_crf if has_targets else self.background_crf
         timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         output_path = self.output_dir / f"{camera_id}_{timestamp}.mp4"
+
+        # Build codec-specific output kwargs. AV1 encoders use different
+        # speed-knob names ("cpu-used" for libaom-av1, "preset" for
+        # libsvtav1) and the AV1 CRF range is 0-63 not 0-51, so the CRFs
+        # were already translated in __init__. We also drop pix_fmt for
+        # AV1 because libaom requires "yuv420p" but accepts no override
+        # without breaking on some builds.
+        # Author: Bloodawn (KheivenD), 2026-05-02 (ROADMAP 4.2 — AV1).
+        codec = (self.codec or "libx264").lower()
+        out_kwargs = {
+            "vcodec":  codec,
+            "crf":     crf,
+            "pix_fmt": "yuv420p",
+        }
+        if codec in ("libaom-av1", "av1"):
+            # libaom-av1 ignores -preset, takes -cpu-used 0..8.
+            out_kwargs["cpu-used"] = 8     # fastest
+            out_kwargs["row-mt"]   = 1     # multi-threaded rows
+        elif codec == "libsvtav1":
+            # SVT-AV1 takes -preset 0..13. 10+ is fast.
+            out_kwargs["preset"] = 10
+        else:
+            out_kwargs["preset"] = self.preset
 
         _ffmpeg_args = (
             ffmpeg
@@ -487,13 +603,7 @@ class ROIEncoder:
                 s=f"{w}x{h}",
                 framerate=fps,
             )
-            .output(
-                str(output_path),
-                vcodec="libx264",
-                crf=crf,
-                preset=self.preset,
-                pix_fmt="yuv420p",
-            )
+            .output(str(output_path), **out_kwargs)
             .overwrite_output()
             .compile()
         )
@@ -510,6 +620,11 @@ class ROIEncoder:
         self._stream_has_targets = has_targets
         self._stream_sharpness_scores: list = []
         self._stream_source_path = source_path  # for audio mux after finish
+
+        # Encryption: store params, apply in finish_segment after file is written
+        self._stream_encrypt          = encrypt
+        self._stream_encrypt_password = encrypt_password
+        self._stream_encrypt_key_file = encrypt_key_file
 
     def write_frame(
         self,
@@ -584,7 +699,7 @@ class ROIEncoder:
     def abort_segment(self) -> None:
         """Kill the FFmpeg process immediately, discarding the current segment.
 
-        Safe to call from any thread — used by the stop handler to unblock
+        Safe to call from any thread. Used by the stop handler to unblock
         a finish_segment() call that is waiting for FFmpeg to flush output.
         """
         proc = self._stream_process
@@ -599,7 +714,16 @@ class ROIEncoder:
         except Exception:
             pass
 
-    def finish_segment(self, timeout: float = 30.0) -> dict:
+    def finish_segment(
+        self,
+        timeout: float = 30.0,
+        object_classes: str | None = None,
+        dominant_color: str | None = None,
+        scene_type: str = "unknown",
+        time_of_day: str | None = None,
+        vehicle_count: int = 0,
+        person_count: int = 0,
+    ) -> dict:
         """Close the FFmpeg pipe, save DB record, and return segment metadata.
 
         Args:
@@ -621,8 +745,8 @@ class ROIEncoder:
         try:
             return_code = proc.wait(timeout=timeout)
         except Exception:
-            # Timed out or other error — kill FFmpeg and give up on this segment
-            log.warning("FFmpeg did not exit within %.0fs — killing process.", timeout)
+            # Timed out or other error. Kill FFmpeg and give up on this segment
+            log.warning("FFmpeg did not exit within %.0fs. Killing process.", timeout)
             try:
                 proc.kill()
                 proc.wait()
@@ -644,7 +768,7 @@ class ROIEncoder:
             raise RuntimeError(f"FFmpeg produced no output for segment {self._stream_timestamp}")
 
         # Mux audio from the original source file (AAC 128k) if it has audio.
-        # The streaming pipe sends only raw video bytes — audio must be re-attached here.
+        # The streaming pipe sends only raw video bytes. Audio must be re-attached here.
         if self._stream_source_path:
             self._mux_audio_from_source(output_path, self._stream_source_path)
 
@@ -660,24 +784,83 @@ class ROIEncoder:
             avg_sharpness = None
             sharpness_label = None
 
+        # ── Encryption ───────────────────────────────────────────────────────────
+        # Encrypt AFTER audio mux so the final .mp4 is what gets locked.
+        # The plaintext .mp4 is deleted by encrypt_file (delete_original=True).
+        # On failure we keep the plaintext and log a warning — never lose footage.
+        final_path = output_path
+        if self._stream_encrypt:
+            if not _CRYPTO_AVAILABLE:
+                log.warning(
+                    "encrypt=True but the `cryptography` package is not installed. "
+                    "Segment %s will not be encrypted. "
+                    "Install it with: pip install cryptography",
+                    output_path.name,
+                )
+            else:
+                _raw_key: Optional[bytes] = None
+                if self._stream_encrypt_key_file:
+                    try:
+                        with open(self._stream_encrypt_key_file, "rb") as _kf:
+                            _raw_key = _kf.read()
+                    except OSError as _e:
+                        log.warning(
+                            "Could not read key file %s: %s. Segment will not be encrypted.",
+                            self._stream_encrypt_key_file, _e,
+                        )
+
+                _can_encrypt = (
+                    self._stream_encrypt_password is not None
+                    or _raw_key is not None
+                )
+                if not _can_encrypt:
+                    log.warning(
+                        "encrypt=True but neither password nor valid key file provided. "
+                        "Segment %s will not be encrypted.",
+                        output_path.name,
+                    )
+                else:
+                    try:
+                        enc_path = _encrypt_file(
+                            output_path,
+                            password=self._stream_encrypt_password,
+                            key=_raw_key,
+                            delete_original=True,    # removes plaintext .mp4
+                        )
+                        final_path = enc_path
+                        file_size  = enc_path.stat().st_size   # update to encrypted size
+                        log.info("Encrypted segment → %s", enc_path.name)
+                    except Exception as _enc_err:
+                        log.warning(
+                            "Encryption failed for %s: %s. Keeping plaintext output.",
+                            output_path.name, _enc_err,
+                        )
+
         insert_segment(
-            timestamp    = self._stream_timestamp,
-            camera_id    = self._stream_camera_id,
+            timestamp       = self._stream_timestamp,
+            camera_id       = self._stream_camera_id,
             target_detected = self._stream_has_targets,
-            roi_count    = self._stream_roi_count,
-            file_size    = file_size,
-            duration     = duration,
-            file_path    = str(output_path),
-            object_type  = self._stream_object_type,
+            roi_count       = self._stream_roi_count,
+            file_size       = file_size,
+            duration        = duration,
+            file_path       = str(final_path),   # .mp4.enc when encrypted
+            object_type     = self._stream_object_type,
             avg_sharpness   = avg_sharpness,
             sharpness_label = sharpness_label,
-            db_path      = self.db_path,
+            object_classes  = object_classes,
+            dominant_color  = dominant_color,
+            scene_type      = scene_type,
+            time_of_day     = time_of_day,
+            vehicle_count   = vehicle_count,
+            person_count    = person_count,
+            db_path         = self.db_path,
         )
 
         return {
-            "file_path":       str(output_path),
+            "file_path":       str(final_path),
             "avg_sharpness":   avg_sharpness,
             "sharpness_label": sharpness_label,
+            "encrypted":       final_path.suffix == ".enc",
         }
 
     # ------------------------------------------------------------------
@@ -768,7 +951,7 @@ class ROIEncoder:
         """
         Mux audio from source_path into video_path (in-place replacement).
 
-        The pipeline pipes only raw video frames to FFmpeg — audio is stripped
+        The pipeline pipes only raw video frames to FFmpeg. Audio is stripped
         at that stage.  This post-processing step re-attaches the original audio
         track so output segments contain sound.
 
@@ -781,7 +964,7 @@ class ROIEncoder:
                       temp_with_audio.mp4
           3. Replace video_path with the muxed file.
 
-        AAC at 128 kbps is chosen for universal browser compatibility —
+        AAC at 128 kbps is chosen for universal browser compatibility.
         most MP4/H.264 files served from a web app need AAC audio to play
         inline in Chrome/Safari/Firefox without extra codec installs.
 
@@ -793,20 +976,20 @@ class ROIEncoder:
             self._source_has_audio = self._probe_has_audio(source_path)
 
         if not self._source_has_audio:
-            return  # Source has no audio — nothing to mux
+            return  # Source has no audio. Nothing to mux
 
         temp_path = video_path.with_suffix(".audio_tmp.mp4")
         try:
             mux_args = [
                 "ffmpeg",
                 "-y",                         # overwrite temp
-                "-i", str(video_path),        # input 0 — video only
-                "-i", str(source_path),       # input 1 — source with audio
+                "-i", str(video_path),        # input 0 (video only)
+                "-i", str(source_path),       # input 1 (source with audio)
                 "-map", "0:v:0",              # take video stream from input 0
                 "-map", "1:a:0",              # take audio stream from input 1
                 "-c:v", "copy",               # copy video bitstream unchanged
                 "-c:a", "aac",                # re-encode audio to AAC
-                "-b:a", "128k",               # 128 kbps — good quality, small size
+                "-b:a", "128k",               # 128 kbps (good quality, small size)
                 "-shortest",                  # trim to shorter of the two streams
                 str(temp_path),
             ]
@@ -817,7 +1000,7 @@ class ROIEncoder:
             )
             if proc.returncode != 0:
                 log.warning(
-                    "Audio mux failed (exit %d) for %s — keeping video-only output.",
+                    "Audio mux failed (exit %d) for %s. Keeping video-only output.",
                     proc.returncode, video_path.name,
                 )
                 if temp_path.exists():
@@ -830,7 +1013,7 @@ class ROIEncoder:
 
         except Exception as exc:
             log.warning(
-                "Audio mux raised %s for %s — keeping video-only output. Error: %s",
+                "Audio mux raised %s for %s. Keeping video-only output. Error: %s",
                 type(exc).__name__, video_path.name, exc,
             )
             if temp_path.exists():

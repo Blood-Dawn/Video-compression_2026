@@ -292,47 +292,65 @@ capstone-compression/
 │
 ├── src/                              ← All application source code lives here
 │   ├── background_subtraction/
-│   │   ├── __init__.py
-│   │   └── background_subtraction.py ← BackgroundSubtractor class
+│   │   └── background_subtraction.py ← BackgroundSubtractor class (MOG2/KNN)
 │   │
 │   ├── compression/
-│   │   ├── __init__.py
-│   │   └── roi_encoder.py            ← ROIEncoder class (FFmpeg wrapper)
+│   │   └── roi_encoder.py            ← ROIEncoder (FFmpeg wrapper, all 4 modes)
+│   │
+│   ├── demo/
+│   │   └── demo.py                   ← Side-by-side demo renderer
+│   │
+│   ├── detection/
+│   │   └── object_filter.py          ← YOLO classification gate (PR #31)
 │   │
 │   ├── enhancement/
-│   │   ├── __init__.py
-│   │   └── enhancer.py               ← Enhancer class (Milestone 2, not yet complete)
+│   │   └── enhancer.py               ← Enhancer class (Real-ESRGAN, bicubic fallback)
+│   │
+│   ├── gui/
+│   │   ├── app.py                    ← Flask server, all API routes, HLS streaming
+│   │   └── templates/index.html      ← Single-page dashboard (vanilla HTML/JS)
 │   │
 │   ├── pipeline/
-│   │   ├── __init__.py
 │   │   └── pipeline.py               ← Main entry point, orchestrates everything
 │   │
 │   └── utils/
-│       ├── __init__.py
-│       ├── metrics.py                ← PSNR, SSIM, compression ratio calculations
-│       └── db.py                     ← SQLite metadata database (Milestone 1)
+│       ├── db.py                     ← SQLite metadata database
+│       ├── db_query.py               ← Archive query helpers
+│       ├── encryption.py             ← AES-256 segment encryption
+│       ├── frame_source.py           ← Unified reader (file, CDnet, URL, webcam)
+│       ├── metrics.py                ← PSNR, SSIM, compression ratio
+│       ├── multi_source.py           ← Multi-camera pipeline runner
+│       ├── rtsp_server.py            ← MediaMTX RTSP server manager
+│       └── watchfolder.py            ← Watch-folder mode
 │
 ├── data/
-│   └── samples/                      ← Put your test .mp4 clips here (gitignored)
+│   └── samples/                      ← Test clips (gitignored)
+│       └── cdnet_mp4/                ← CDnet clips converted to MP4
 │
-├── notebooks/                        ← Jupyter notebooks for analysis and benchmarking
-│   ├── milestone1_benchmark.ipynb
-│   └── algorithm_comparison.ipynb
+├── scripts/
+│   ├── pull_traffic_footage.py       ← Download live HLS traffic cam clips
+│   ├── test_sr_honest.py             ← PSNR/SSIM benchmark for SR vs bicubic
+│   └── recalc.py                     ← LibreOffice formula recalculation helper
 │
-├── tests/                            ← Unit and integration tests
-│   ├── __init__.py
-│   └── test_background_subtraction.py
+├── tests/                            ← Unit and integration tests (20+ files)
+│   └── test_webcam_cpu.py            ← Webcam device-index tests (hardware + mocked)
 │
-├── docs/                             ← Design documents, meeting notes, results
+├── docs/
+│   ├── compression_literature.md     ← Literature review (task 4.8)
+│   ├── deployment_packaging.md       ← Docker / Electron / tarball analysis
+│   ├── sponsor_meeting_2026-04-15.md ← April 15 meeting notes
+│   ├── sponsor_meeting_2026-04-22.md ← April 22 meeting notes
+│   └── test_results.md               ← Combined test suite summary
 │
-├── outputs/                          ← Compressed video outputs go here (gitignored)
-├── logs/                             ← Log files (gitignored)
+├── results/                          ← SR test outputs, benchmark CSVs (gitignored)
+├── outputs/                          ← Compressed video segments (gitignored)
+├── models/                           ← ML model weights (.pth files, gitignored)
 │
-├── check_deps.sh                     ← Dependency verification script
-├── requirements.txt                  ← Python dependencies
-├── .gitignore
-├── README.md                         ← Project overview
+├── pyproject.toml                    ← uv/pip dependencies (replaces requirements.txt)
+├── uv.lock                           ← Locked dependency versions
+├── run_gui.py                        ← Shortcut to launch Flask server
 ├── ROADMAP.md                        ← Milestone plan with team task assignments
+├── README.md                         ← Project overview
 └── DEV.md                            ← This file
 ```
 
@@ -710,8 +728,9 @@ models/
 
 ```python
 from src.enhancement.enhancer import Enhancer
-e = Enhancer()
-print(e.backend)   # should print "realesrgan" if weights + packages are present
+e = Enhancer(scale=4, device="cpu")
+print(e.backend)   # "realesrgan" if weights + packages present, else "bicubic"
+print(e.device)    # "cpu", "cuda", or "mps"
 ```
 
 If it prints `"bicubic"`, either the packages are not installed or the weights file is missing. The pipeline will still run — just without AI sharpening.
@@ -1124,3 +1143,53 @@ ROIEncoder.write_frame()       →  encode to FFmpeg pipe
 ```
 
 *Section 15 added April 2026 — Kheiven D'Haiti / Bloodawn.*
+
+---
+
+## 16. Milestone 4 Features Reference (April 2026)
+
+A quick reference for features added in the final sprint.
+
+### Config export (`/api/config/export`)
+
+Downloads the current pipeline's settings as a timestamped JSON file. In the dashboard: **SAVE CONFIG** button below START/STOP. On the command line, `GET /api/config/export` returns a `svcs_config_YYYYMMDD_HHMMSS.json` download. The JSON includes all encoding, detection, and enhancement parameters but deliberately excludes the encryption passphrase.
+
+Use this to save a working configuration on one machine and reproduce it exactly on another — the scenario Cody described in the April 15 meeting.
+
+### HLS ingest latency measurement (`/api/hls/latency`)
+
+After `hlsStart()` is called, a background thread polls for the first `.ts` segment file. When it appears, `ingest_latency_s` is stored in the HLS state. The dashboard status bar updates to show the measured latency (e.g., "LIVE: cam_00 (ingest latency: 3.4s)") once the manifest is ready. The `/api/hls/latency` endpoint can be polled directly. A `measuring: true` field indicates the watcher is still running.
+
+### Webcam / device-index input
+
+`FrameSource` now accepts integer device indices (e.g., `FrameSource(0)`) and numeric strings (`FrameSource("0")`). The pipeline has always accepted `--input 0` at the CLI; this fix ensures FrameSource handles it correctly rather than trying to resolve `0` as a file path.
+
+To run the pipeline on a webcam:
+```bash
+uv run python src/pipeline/pipeline.py --input 0 --camera-id webcam_test --output outputs/ --mode mode0
+```
+
+Hardware test (requires real camera + `SVCS_TEST_WEBCAM=1`):
+```bash
+SVCS_TEST_WEBCAM=1 uv run pytest tests/test_webcam_cpu.py::TestWebcamHardware -v
+```
+
+### SR honest test script
+
+`scripts/test_sr_honest.py` runs a PSNR/SSIM comparison of SR (Real-ESRGAN or bicubic fallback) against bicubic-only upscaling on CDnet ROI crops. Outputs JSON + Markdown to `results/`. Run with:
+```bash
+uv run python scripts/test_sr_honest.py
+```
+
+Results from the sandbox run (bicubic baseline, no Real-ESRGAN installed): PSNR 21.30 dB bicubic vs 21.26 dB SR — identical, as expected when both paths use bicubic. Run with `pip install basicsr realesrgan` and the real model weights for a meaningful comparison.
+
+### Live traffic footage (`scripts/pull_traffic_footage.py`)
+
+Attempts to scrape HLS stream URLs from gookami.org (Hawaii DOT traffic cameras, Cody's recommendation) and record 2-minute clips using FFmpeg. Falls back to known public HLS streams if the site is unreachable. Run:
+```bash
+uv run python scripts/pull_traffic_footage.py
+```
+
+Clips are saved to `data/samples/traffic/`.
+
+*Section 16 added April 2026 — Kheiven D'Haiti / Bloodawn.*

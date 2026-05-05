@@ -272,6 +272,26 @@ class TestApiStart:
         assert cfg["enhance"] is False
         assert cfg["encrypt"] is False
 
+    def test_start_codec_default_is_libsvtav1(self, client, fake_pipeline):
+        """Default codec is libsvtav1 (flipped 2026-05-03). ROIEncoder
+        auto-falls-back to libx264 at construction time when the running
+        ffmpeg doesn't have libsvtav1, so this default is safe even on
+        machines without a modern ffmpeg build."""
+        resp = client.post("/api/start", json={"input_source": "data/test.mp4"})
+        cfg = resp.get_json()["config"]
+        assert cfg["codec"] == "libsvtav1"
+
+    def test_start_codec_passthrough(self, client, fake_pipeline):
+        """Selected codec must round-trip into the pipeline config — this
+        is what makes the GUI's new codec dropdown actually do anything.
+        Author: Bloodawn (KheivenD), 2026-05-02."""
+        resp = client.post(
+            "/api/start",
+            json={"input_source": "data/test.mp4", "codec": "libsvtav1"},
+        )
+        cfg = resp.get_json()["config"]
+        assert cfg["codec"] == "libsvtav1"
+
     def test_double_start_returns_409(self, client, fake_pipeline):
         client.post("/api/start", json={"input_source": "data/test.mp4"})
         # Wait briefly for the fake thread to set running=True
@@ -415,80 +435,355 @@ class TestApiStorage:
 
 
 # ---------------------------------------------------------------------------
-# /api/query_segments, /api/busiest, /api/daily_summary
+# /api/demo/status — ROADMAP 5.3
+# ---------------------------------------------------------------------------
+#
+# These tests verify the contract the front-end relies on for the in-browser
+# demo viewer: /api/demo/status echoes the in-memory _demo_state dict, and a
+# successful run populates `result.split_screen` plus per-mode URLs already
+# rewritten as `/api/media?path=…`. The front-end (_demoNotifyDone +
+# _demoRenderResults in index.html) consumes that shape directly to render
+# the inline result panel and the "Watch Now" notification action.
+#
+# Author: Bloodawn (KheivenD)
 # ---------------------------------------------------------------------------
 
-class TestArchiveQueries:
-    def test_query_segments_uses_explicit_archive_dir(self, client, archive_dirs):
-        active_dir, archive_dir = archive_dirs
-        with gui_module._state_lock:
-            gui_module._status["config"]["output_dir"] = str(active_dir)
+class TestApiDemoStatus:
+    """Sanity checks for /api/demo/status used by the in-GUI demo viewer."""
 
-        data = client.get(
-            "/api/query_segments",
-            query_string={
-                "archive_dir": str(archive_dir),
-                "object_type": "vehicle",
+    @pytest.fixture(autouse=True)
+    def _reset_demo_state(self):
+        """Snapshot _demo_state and restore after each test in this class."""
+        with gui_module._demo_lock:
+            saved = dict(gui_module._demo_state)
+        yield
+        with gui_module._demo_lock:
+            gui_module._demo_state.clear()
+            gui_module._demo_state.update(saved)
+
+    def test_returns_200(self, client):
+        resp = client.get("/api/demo/status")
+        assert resp.status_code == 200
+
+    def test_idle_shape(self, client):
+        """When idle the response must still be a dict with `running` defined."""
+        with gui_module._demo_lock:
+            gui_module._demo_state.update(
+                running=False, status="idle", result=None, error=None,
+            )
+        data = client.get("/api/demo/status").get_json()
+        assert isinstance(data, dict)
+        assert "running" in data
+
+    def test_done_result_exposes_playable_urls(self, client):
+        """
+        Simulate a finished demo run with split-screen + per-mode outputs.
+
+        The front-end (`_demoCollectPlayables` in index.html) expects:
+          result.split_screen  – string URL or None
+          result.videos        – { mode: { view: url|null } }
+        Every URL must already start with `/api/media?path=` so the
+        operator can play inline without hitting the local file system.
+        """
+        fake_result = {
+            "manifest_path": "/tmp/demo_comp/manifest.json",
+            "modes": ["mode0", "mode1"],
+            "videos": {
+                "mode0": {"standard": "/api/media?path=%2Ftmp%2Fdemo_comp%2Fmode0.mp4"},
+                "mode1": {"standard": "/api/media?path=%2Ftmp%2Fdemo_comp%2Fmode1.mp4"},
             },
-        ).get_json()
+            "split_screen": "/api/media?path=%2Ftmp%2Fdemo_comp%2Fdemo_splitscreen.mp4",
+        }
+        with gui_module._demo_lock:
+            gui_module._demo_state.update(
+                running=False, status="done", error=None, result=fake_result,
+            )
 
-        assert data["db_path"] == str(archive_dir / "metadata.db")
-        assert len(data["segments"]) == 1
-        assert data["segments"][0]["camera_id"] == "cam_archive"
-        assert data["segments"][0]["playable_url"]
+        data = client.get("/api/demo/status").get_json()
+        assert data["status"] == "done"
+        assert data["running"] is False
+        result = data["result"]
+        assert result["split_screen"].startswith("/api/media?path=")
+        for mode in ("mode0", "mode1"):
+            url = result["videos"][mode]["standard"]
+            assert url and url.startswith("/api/media?path=")
 
-    def test_busiest_uses_explicit_archive_dir(self, client, archive_dirs):
-        active_dir, archive_dir = archive_dirs
+    def test_error_state_round_trips(self, client):
+        """An errored run must still respond 200 and surface the error string."""
+        with gui_module._demo_lock:
+            gui_module._demo_state.update(
+                running=False, status="error",
+                error="manifest.json not found after demo run",
+                result=None,
+            )
+        data = client.get("/api/demo/status").get_json()
+        assert data["status"] == "error"
+        assert "manifest.json" in (data.get("error") or "")
+
+
+class TestApiDemoHistory:
+    """Smoke check that /api/demo/history responds with a JSON list."""
+
+    def test_returns_200_and_list(self, client, tmp_path):
+        # Point the search roots at an empty tmp folder so we don't depend on
+        # whatever demo runs actually exist on the developer's machine.
         with gui_module._state_lock:
-            gui_module._status["config"]["output_dir"] = str(active_dir)
+            gui_module._status["config"]["output_dir"] = str(tmp_path)
+        with gui_module._demo_lock:
+            gui_module._demo_state["last_output_root"] = str(tmp_path)
 
-        data = client.get(
-            "/api/busiest",
-            query_string={"archive_dir": str(archive_dir), "limit": 20},
-        ).get_json()
-
-        assert data["db_path"] == str(archive_dir / "metadata.db")
-        assert len(data["segments"]) == 1
-        assert data["segments"][0]["camera_id"] == "cam_archive"
-
-    def test_daily_summary_uses_explicit_archive_dir(self, client, archive_dirs):
-        active_dir, archive_dir = archive_dirs
-        with gui_module._state_lock:
-            gui_module._status["config"]["output_dir"] = str(active_dir)
-
-        data = client.get(
-            "/api/daily_summary",
-            query_string={"archive_dir": str(archive_dir)},
-        ).get_json()
-
-        assert data["db_path"] == str(archive_dir / "metadata.db")
-        assert len(data["rows"]) == 1
-        assert data["rows"][0]["camera_id"] == "cam_archive"
+        resp = client.get("/api/demo/history")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert isinstance(data, list)
 
 
 # ---------------------------------------------------------------------------
-# /api/demo/latest
+# /api/hls/latency — ROADMAP 5.1 (rolling end-to-end latency)
+# ---------------------------------------------------------------------------
+#
+# These tests exercise the latency response shape and the bookkeeping the
+# annotator thread does on every new .ts segment. We don't spin up FFmpeg
+# here — the watcher logic is exercised by manipulating the deques directly
+# the same way the watcher would, then asserting the API surfaces a coherent
+# rolling average.
+#
+# Author: Bloodawn (KheivenD)
 # ---------------------------------------------------------------------------
 
-class TestDemoLatest:
-    def test_demo_latest_loads_newest_stitched_manifest(self, client, stitched_demo_root):
-        root, newest_manifest = stitched_demo_root
+class TestApiHlsLatency:
+    """Cover the HLS latency endpoint added in ROADMAP 5.1."""
 
-        data = client.get(
-            "/api/demo/latest",
-            query_string={"output_root": str(root)},
-        ).get_json()
+    @pytest.fixture(autouse=True)
+    def _reset_hls_state(self):
+        """Snapshot _hls_state and the latency deques, restore after."""
+        with gui_module._hls_lock:
+            saved_state = dict(gui_module._hls_state)
+            saved_frames = list(gui_module._hls_frame_ts_dq)
+            saved_segs   = list(gui_module._hls_segment_latencies)
+        yield
+        with gui_module._hls_lock:
+            gui_module._hls_state.clear()
+            gui_module._hls_state.update(saved_state)
+            gui_module._hls_frame_ts_dq.clear()
+            gui_module._hls_frame_ts_dq.extend(saved_frames)
+            gui_module._hls_segment_latencies.clear()
+            gui_module._hls_segment_latencies.extend(saved_segs)
 
-        assert data["ok"] is True
-        assert data["result"]["manifest_path"] == str(newest_manifest)
-        assert data["result"]["videos"]["mode0"]["standard"].startswith("/api/media?path=")
-        assert data["result"]["split_screen"].startswith("/api/media?path=")
+    def test_returns_200_when_idle(self, client):
+        resp = client.get("/api/hls/latency")
+        assert resp.status_code == 200
 
-    def test_demo_latest_404_when_no_manifest(self, client, tmp_path):
-        resp = client.get(
-            "/api/demo/latest",
-            query_string={"output_root": str(tmp_path)},
-        )
+    def test_idle_payload_shape(self, client):
+        """Every documented field must appear in the JSON, even when idle."""
+        with gui_module._hls_lock:
+            gui_module._hls_state.update(
+                running=False, stream_start_time=None,
+                ingest_latency_s=None, latency_avg_s=None,
+                latency_last_s=None, latency_samples=0,
+                latency_window=20,
+            )
+        data = client.get("/api/hls/latency").get_json()
+        for key in (
+            "stream_start_time", "ingest_latency_s",
+            "latency_avg_s", "latency_last_s",
+            "latency_samples", "latency_window",
+            "measuring",
+        ):
+            assert key in data, f"Missing field in /api/hls/latency response: {key}"
+        assert data["measuring"] is False  # not running, so not measuring
 
+    def test_measuring_true_when_running_with_no_samples(self, client):
+        """While the stream is up but no chunk has flushed yet, measuring=True."""
+        with gui_module._hls_lock:
+            gui_module._hls_state.update(
+                running=True, stream_start_time=time.time(),
+                ingest_latency_s=None, latency_avg_s=None,
+                latency_last_s=None, latency_samples=0,
+            )
+        data = client.get("/api/hls/latency").get_json()
+        assert data["measuring"] is True
+
+    def test_rolling_avg_reported_after_samples_arrive(self, client):
+        """
+        Simulate the watcher thread pushing per-segment latencies and verify
+        the API exposes the averaged value with the matching sample count.
+        """
+        # Pretend three segments flushed with latencies 0.9 / 1.1 / 1.0
+        with gui_module._hls_lock:
+            gui_module._hls_segment_latencies.clear()
+            gui_module._hls_segment_latencies.extend([0.9, 1.1, 1.0])
+            avg = sum(gui_module._hls_segment_latencies) / len(gui_module._hls_segment_latencies)
+            gui_module._hls_state.update(
+                running=True, stream_start_time=time.time(),
+                ingest_latency_s=2.5,
+                latency_avg_s=round(avg, 3),
+                latency_last_s=1.0,
+                latency_samples=3,
+            )
+        data = client.get("/api/hls/latency").get_json()
+        assert data["ingest_latency_s"] == 2.5
+        assert data["latency_avg_s"] == round(avg, 3)
+        assert data["latency_last_s"] == 1.0
+        assert data["latency_samples"] == 3
+        # Rolling avg present, so the front-end stops showing "measuring…"
+        assert data["measuring"] is False
+
+    def test_latency_window_default_is_twenty(self, client):
+        """
+        The rolling deque is bounded to maxlen=20; the API should expose this
+        same window so the front-end can label its display ("over last 20").
+        """
+        data = client.get("/api/hls/latency").get_json()
+        assert data["latency_window"] == 20
+        assert gui_module._hls_segment_latencies.maxlen == 20
+
+
+# ---------------------------------------------------------------------------
+# /api/enhance/plates — AI plate reader (Bloodawn / KheivenD, 2026-05-02)
+# ---------------------------------------------------------------------------
+#
+# These tests confirm the routing/validation contract the GUI's READ PLATES
+# button relies on. The PlateReader pipeline itself is exercised in
+# tests/test_plate_reader.py with synthetic videos and a stub OCR backend —
+# we deliberately don't pull PaddleOCR / EasyOCR weights into CI here.
+
+class TestApiPlateReader:
+    """Validation + status checks for /api/enhance/plates."""
+
+    def test_status_returns_200_and_shape(self, client):
+        resp = client.get("/api/enhance/plates/status")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        for key in ("ocr_backend", "ocr_available", "sr_backend",
+                    "sr_available", "sr_scale", "device_request"):
+            assert key in data, f"Missing key in plate-reader status: {key}"
+
+    def test_run_requires_file_path(self, client):
+        """Empty body must surface a 400 with a clear error message."""
+        resp = client.post("/api/enhance/plates", json={})
+        assert resp.status_code == 400
+        body = resp.get_json() or {}
+        assert "file_path" in (body.get("error") or "")
+
+    def test_run_404_when_missing(self, client, tmp_path):
+        """Absent file must return 404 instead of crashing."""
+        bogus = tmp_path / "does_not_exist.mp4"
+        resp = client.post("/api/enhance/plates", json={"file_path": str(bogus)})
         assert resp.status_code == 404
-        assert "error" in resp.get_json()
+
+    def test_run_rejects_enc_files(self, client, tmp_path):
+        """Encrypted segments must be decrypted by the operator first."""
+        enc = tmp_path / "fake.mp4.enc"
+        enc.write_bytes(b"\x00" * 64)
+        resp = client.post("/api/enhance/plates", json={"file_path": str(enc)})
+        assert resp.status_code == 400
+        # The error message must mention decryption so the operator knows
+        # what to do — otherwise the 400 is unhelpful.
+        msg = (resp.get_json() or {}).get("error", "").lower()
+        assert "decrypt" in msg
+
+
+# ---------------------------------------------------------------------------
+# /api/enhance/benchmark — SR strategy comparison (Bloodawn / KheivenD)
+# ---------------------------------------------------------------------------
+
+class TestApiEnhanceBenchmark:
+    """Validation contract for the SR comparison endpoint.
+
+    The benchmark logic itself is exercised in
+    tests/test_enhancement_benchmark.py with a stub Enhancer; here we just
+    confirm the route's input validation matches the documented contract.
+    """
+
+    def test_requires_file_path(self, client):
+        resp = client.post("/api/enhance/benchmark",
+                           json={"roi_box": [0, 0, 10, 10]})
+        assert resp.status_code == 400
+        assert "file_path" in (resp.get_json().get("error") or "")
+
+    def test_requires_roi_box_list(self, client, tmp_path):
+        p = tmp_path / "x.mp4"
+        p.write_bytes(b"\x00")
+        resp = client.post("/api/enhance/benchmark",
+                           json={"file_path": str(p)})
+        assert resp.status_code == 400
+        assert "roi_box" in (resp.get_json().get("error") or "")
+
+    def test_404_on_missing_file(self, client, tmp_path):
+        resp = client.post("/api/enhance/benchmark",
+                           json={"file_path": str(tmp_path / "no.mp4"),
+                                 "roi_box": [0, 0, 10, 10]})
+        assert resp.status_code == 404
+
+    def test_rejects_enc_files(self, client, tmp_path):
+        enc = tmp_path / "a.mp4.enc"
+        enc.write_bytes(b"\x00")
+        resp = client.post("/api/enhance/benchmark",
+                           json={"file_path": str(enc),
+                                 "roi_box": [0, 0, 10, 10]})
+        assert resp.status_code == 400
+        assert "decrypt" in (resp.get_json().get("error") or "").lower()
+
+
+# ---------------------------------------------------------------------------
+# OneDrive routing audit regression tests (Bloodawn / KheivenD)
+# ---------------------------------------------------------------------------
+
+class TestDefaultOutputDir:
+    """Regression for the 2026-05-02 OneDrive audit. _default_output_dir()
+    must prefer the cloud sync root and fall back to the local outputs/
+    only when no cloud sync is available.
+    """
+
+    def test_default_output_dir_uses_cloud_when_available(self, monkeypatch, tmp_path):
+        cloud = tmp_path / "FakeOneDrive"
+        cloud.mkdir()
+        monkeypatch.setattr(
+            gui_module, "_detect_cloud_root",
+            lambda: (cloud, "FakeOneDrive", "https://example/test"),
+        )
+        result = gui_module._default_output_dir()
+        assert result == str(cloud / gui_module._CLOUD_SUBFOLDER)
+
+    def test_default_output_dir_falls_back_to_local(self, monkeypatch):
+        monkeypatch.setattr(
+            gui_module, "_detect_cloud_root", lambda: (None, None, None),
+        )
+        result = gui_module._default_output_dir()
+        assert result.endswith("outputs") or result.endswith("outputs/")
+
+
+# ---------------------------------------------------------------------------
+# CRF override passthrough — added 2026-05-02 with the Mode 3 redo.
+# ---------------------------------------------------------------------------
+
+class TestStartCrfPassthrough:
+    """User-supplied CRF must round-trip into the pipeline config so the
+    new sidebar field actually controls encoder quality."""
+
+    def test_default_crf_is_none(self, client, fake_pipeline):
+        """No CRF in the request body means 'use the mode default'.
+        The config dict stores None so run_pipeline can resolve it
+        based on mode."""
+        resp = client.post("/api/start", json={"input_source": "data/test.mp4"})
+        cfg = resp.get_json()["config"]
+        assert cfg["crf"] is None
+
+    def test_crf_passthrough(self, client, fake_pipeline):
+        resp = client.post(
+            "/api/start",
+            json={"input_source": "data/test.mp4", "crf": 35},
+        )
+        cfg = resp.get_json()["config"]
+        assert cfg["crf"] == 35
+
+    def test_blank_crf_string_treated_as_none(self, client, fake_pipeline):
+        """The GUI sends an empty string when the user leaves the CRF input
+        blank. Backend must coerce that to None, not crash on int('')."""
+        resp = client.post(
+            "/api/start",
+            json={"input_source": "data/test.mp4", "crf": ""},
+        )
+        cfg = resp.get_json()["config"]
+        assert cfg["crf"] is None

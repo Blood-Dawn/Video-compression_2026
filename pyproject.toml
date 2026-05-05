@@ -31,6 +31,8 @@ dependencies = [
     "jupyter>=1.0.0",
     "matplotlib>=3.7.0",
     "pandas>=2.0.0",
+    # System metrics (CPU, RAM, battery monitoring)
+    "psutil>=5.9.0",
     # Testing
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
@@ -39,6 +41,19 @@ dependencies = [
     # recorded. Falls back to pass-through if this package is missing at runtime.
     # On first use, downloads yolov8n.pt (~6 MB) automatically.
     "ultralytics>=8.0.0",
+    # PyTorch — pinned to CUDA 12.8 build via [tool.uv.sources] below.
+    # CPU-only builds are pulled in by ultralytics/basicsr if torch is not
+    # listed explicitly here, which breaks GPU detection and SR enhancement.
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
+    # AES-256-GCM segment encryption (the ENCRYPT tab in the dashboard).
+    # Was previously imported lazily in src/utils/encryption.py without
+    # being declared here, so a fresh `uv sync` left users without it
+    # and the dashboard would fail with:
+    #     "[!] Encryption failed: The 'cryptography' package is required"
+    # Pinning >=41 because PBKDF2HMAC-from-bytes lives in the modern API.
+    # Author: Bloodawn (KheivenD), 2026-05-03 (encrypt fix).
+    "cryptography>=41.0.0",
 ]
 
 [project.optional-dependencies]
@@ -47,6 +62,22 @@ dependencies = [
 enhance = [
     "basicsr>=1.4.2",
     "realesrgan>=0.3.0",
+]
+
+# AI license-plate reader (post-process). Pulls a permissive-licensed OCR
+# engine + lightweight image-processing deps. Both candidate engines are
+# Apache-2.0; PaddleOCR has a dedicated plate-recognition model and is the
+# primary backend, EasyOCR is the fallback when paddle wheels can't install.
+# OpenALPR is intentionally NOT included — its AGPL-3.0 license would force
+# the rest of the repo into AGPL.
+# Install with: uv sync --extra plates
+# Author: Bloodawn (KheivenD), 2026-05-02
+plates = [
+    "paddleocr>=2.7.0",
+    "paddlepaddle>=2.6.0",
+]
+plates-fallback = [
+    "easyocr>=1.7.0",
 ]
 
 [project.scripts]
@@ -64,3 +95,19 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+# ── PyTorch CUDA index ────────────────────────────────────────────────────────
+# Tell uv to always fetch torch and torchvision from the CUDA 12.8 wheel index
+# instead of PyPI. Without this, uv/pip installs the CPU-only build because
+# that is what PyPI serves by default.
+#
+# To upgrade CUDA version: change both the index URL and the index name here,
+# then run: uv pip install torch torchvision --reinstall
+[tool.uv.sources]
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

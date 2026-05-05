@@ -49,7 +49,7 @@ Disable bounding boxes:
 ------------------------------------------------------------
 NOTES:
 
-- This does NOT recompress video — it only reads existing segments.
+- This does NOT recompress video. It only reads existing segments.
 - Frame timing is reconstructed from source timestamps.
 - Designed for demo/visualization, not benchmarking.
 - Benchmarking should use raw segment sizes from metadata.db instead.
@@ -68,6 +68,11 @@ import cv2
 import numpy as np
 
 from src.demo.demo_metadata import load_demo_metadata
+
+try:
+    from demo.video_writer import H264Writer
+except ImportError:
+    from src.demo.video_writer import H264Writer
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +95,46 @@ def format_time_hhmmss(seconds: float) -> str:
 
 
 
+def _draw_corner_label(
+    frame: np.ndarray,
+    text: str,
+    *,
+    corner: str,
+    font_scale: float = 0.45,
+    thickness: int = 1,
+) -> None:
+    """Stamp a single small label into one corner of `frame` (in-place).
+
+    Tight padding, semi-transparent background pad, white text — designed
+    to take up almost no real estate so the user can actually see the
+    underlying video. Author: Bloodawn (KheivenD), 2026-05-04 (corner overlays).
+    """
+    h, w = frame.shape[:2]
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    (tw, th), baseline = cv2.getTextSize(text, font, font_scale, thickness)
+    pad_x, pad_y = 6, 4
+    box_w = tw + 2 * pad_x
+    box_h = th + baseline + 2 * pad_y
+
+    if corner == "tl":
+        x1, y1 = 8, 8
+    elif corner == "tr":
+        x1, y1 = w - box_w - 8, 8
+    elif corner == "bl":
+        x1, y1 = 8, h - box_h - 8
+    else:  # "br"
+        x1, y1 = w - box_w - 8, h - box_h - 8
+    x2, y2 = x1 + box_w, y1 + box_h
+
+    overlay = frame.copy()
+    cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, dst=frame)
+
+    text_y = y1 + pad_y + th
+    cv2.putText(frame, text, (x1 + pad_x, text_y), font, font_scale,
+                (255, 255, 255), thickness, cv2.LINE_AA)
+
+
 def add_bottom_right_labels(
     frame: np.ndarray,
     *,
@@ -98,42 +143,38 @@ def add_bottom_right_labels(
     segment_index: int,
     view: str,
 ) -> np.ndarray:
-    """
-    Draw bottom-right stacked labels.
+    """Stamp small unobtrusive labels in the corners.
+
+    Was a single big bottom-right block (TIME/MODE/SEGMENT/VIEW stacked
+    in one large box that covered ~25% of the frame). The user could
+    barely see the actual video. Now:
+
+      • Top-LEFT corner:  ``MODE  ·  SEGMENT N``
+      • Top-RIGHT corner: ``TIME``  (only — view is implicit when standard)
+
+    Function name kept for backward compatibility with run_demo.py
+    even though it no longer draws bottom-right.
+
+    Author: Bloodawn (KheivenD), 2026-05-04 (corner overlays).
     """
     out = frame.copy()
-    h, w = out.shape[:2]
 
-    lines = [
-        f"TIME: {time_text}",
-        f"MODE: {mode}",
-        f"SEGMENT: {segment_index + 1}",
-        f"VIEW: {view.upper()}",
-    ]
+    # Compact mode label — strips the leading "mode" prefix when present
+    # so "mode0" → "MODE 0", "splitscreen" stays as-is.
+    raw_mode = str(mode or "").strip()
+    if raw_mode.lower().startswith("mode"):
+        mode_short = "MODE " + raw_mode[4:]
+    else:
+        mode_short = raw_mode.upper()
 
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.65
-    thickness = 2
-    line_height = 28
-    padding = 12
+    seg_label = f"SEG {segment_index + 1}"
+    view_str  = (view or "").upper()
+    tl_text = f"{mode_short}  ·  {seg_label}"
+    if view_str and view_str != "STANDARD":
+        tl_text += f"  ·  {view_str}"
 
-    sizes = [cv2.getTextSize(line, font, font_scale, thickness)[0] for line in lines]
-    box_w = max(size[0] for size in sizes) + 2 * padding
-    box_h = len(lines) * line_height + 2 * padding
-
-    x1 = w - box_w - 16
-    y1 = h - box_h - 16
-    x2 = w - 16
-    y2 = h - 16
-
-    overlay = out.copy()
-    cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 0), -1)
-    out = cv2.addWeighted(overlay, 0.55, out, 0.45, 0)
-
-    y = y1 + padding + 18
-    for line in lines:
-        cv2.putText(out, line, (x1 + padding, y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
-        y += line_height
+    _draw_corner_label(out, tl_text,    corner="tl")
+    _draw_corner_label(out, time_text,  corner="tr")
 
     return out
 
@@ -619,12 +660,7 @@ def render_demo(
         probe.release()
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    writer = cv2.VideoWriter(
-        output_path,
-        cv2.VideoWriter_fourcc(*"mp4v"),
-        fps,
-        (width, height),
-    )
+    writer = H264Writer(output_path, fps, width, height)
     if not writer.isOpened():
         raise RuntimeError(f"Could not open output writer: {output_path}")
 

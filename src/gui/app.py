@@ -34,6 +34,13 @@ from pathlib import Path
 from urllib.parse import quote, unquote
 
 import cv2
+try:
+    import psutil as _psutil
+    _PSUTIL_OK = True
+except ImportError:
+    _psutil = None       # type: ignore
+    _PSUTIL_OK = False
+
 from flask import Flask, Response, jsonify, render_template, request, send_from_directory, abort
 
 # ── path setup ────────────────────────────────────────────────────────────────
@@ -51,6 +58,12 @@ try:
         query_segments_by_target_count,
     )
     from compression.roi_encoder import draw_corner_overlay             # noqa: E402
+    from utils.encryption import (                                      # noqa: E402
+        decrypt_file as _decrypt_file,
+        encrypt_file as _encrypt_file,
+        generate_key as _generate_key,
+    )
+    _CRYPTO_AVAILABLE = True
 except ModuleNotFoundError:
     from src.pipeline.pipeline import run_pipeline                      # noqa: E402
     from src.utils.db import (                                          # noqa: E402
@@ -60,16 +73,113 @@ except ModuleNotFoundError:
         query_segments_by_target_count,
     )
     from src.compression.roi_encoder import draw_corner_overlay         # noqa: E402
+    try:
+        from src.utils.encryption import (                              # noqa: E402
+            decrypt_file as _decrypt_file,
+            encrypt_file as _encrypt_file,
+            generate_key as _generate_key,
+        )
+        _CRYPTO_AVAILABLE = True
+    except ImportError:
+        _CRYPTO_AVAILABLE = False
+except ImportError:
+    # cryptography package not installed — encryption endpoints disabled
+    _CRYPTO_AVAILABLE = False
+    _decrypt_file = None
+    _encrypt_file = None
+    _generate_key = None
 
 # ── Flask app ─────────────────────────────────────────────────────────────────
 app = Flask(__name__, template_folder="templates")
-app.config["SECRET_KEY"] = os.urandom(24)
+
+# Persist SECRET_KEY so signed cookies/sessions survive restarts.
+# File is created with mode 0600 on first run.
+_SK_FILE = _ROOT / ".flask_secret"
+try:
+    app.config["SECRET_KEY"] = _SK_FILE.read_bytes()
+except FileNotFoundError:
+    _sk = os.urandom(32)
+    _SK_FILE.write_bytes(_sk)
+    try:
+        _SK_FILE.chmod(0o600)
+    except Exception:
+        pass
+    app.config["SECRET_KEY"] = _sk
 
 # ── Shared pipeline state (protected by _state_lock) ─────────────────────────
 _state_lock = threading.Lock()
 _pipeline_thread: threading.Thread | None = None
 _stop_event: threading.Event | None = None
 _active_encoder = None   # set by _patched_re_init so stop can abort a hung FFmpeg pipe
+
+# ── Security helpers ──────────────────────────────────────────────────────────
+import re as _re
+
+def _safe_output_dir(raw: str) -> Path:
+    """Resolve output_dir and verify it stays within the project root or is absolute
+    and already trusted (e.g. a cloud sync folder outside the repo).
+
+    We don't restrict to project root because legitimate use cases include pointing
+    at OneDrive/Google Drive mounts. Instead we block path traversal tricks and
+    require the directory to be absolute or resolvable.
+    """
+    p = Path(raw).resolve()
+    # Block traversal sequences that survived resolution (should never happen after
+    # resolve(), but guard explicitly)
+    if ".." in p.parts:
+        raise ValueError(f"output_dir contains traversal: {raw!r}")
+    return p
+
+
+def _default_output_dir() -> str:
+    """Return the canonical default output directory.
+
+    Prefers ``<cloud sync root>/SVCS`` (OneDrive school → personal → Google
+    Drive), falls back to ``<project root>/outputs/`` only if no cloud sync
+    folder is detected. Used by every route that accepts a user-supplied
+    ``output_dir`` so segments always land in the cloud-synced folder when
+    one is available, even if the front-end's pre-fill hadn't resolved yet
+    (or the user cleared the field).
+
+    Returns an absolute string path so call sites can pass it straight to
+    ``Path(...)``.
+
+    Author: Bloodawn (KheivenD), 2026-05-02 — fixes the audit finding that
+    ``api_start`` / ``api_hls_start`` were defaulting to local ``outputs/``
+    instead of OneDrive when the field was empty.
+    """
+    try:
+        cloud_root, _label, _url = _detect_cloud_root()
+    except Exception:
+        cloud_root = None
+    if cloud_root is not None:
+        return str(cloud_root / _CLOUD_SUBFOLDER)
+    return str(_ROOT / "outputs")
+
+
+def _assert_within_output(file_path: str, output_dir: str) -> Path:
+    """Resolve file_path and verify it lives inside output_dir.
+
+    Raises ValueError if path traversal is detected.
+    """
+    out = Path(output_dir).resolve()
+    fp  = Path(file_path).resolve()
+    if out != fp and out not in fp.parents:
+        raise ValueError(
+            f"Path {fp} is outside the output directory {out}. "
+            "Access denied."
+        )
+    return fp
+
+
+_SAFE_FILENAME_RE = _re.compile(r"^[a-zA-Z0-9_\-\.]+$")
+
+def _safe_filename(name: str) -> str:
+    """Strip directory components and validate the filename is safe."""
+    name = Path(name).name   # strip any directory component
+    if not _SAFE_FILENAME_RE.match(name):
+        raise ValueError(f"Unsafe filename: {name!r}")
+    return name
 
 _status: dict = {
     "running": False,
@@ -80,6 +190,262 @@ _status: dict = {
     "total_frames": 0,   # 0 = live/unknown, >0 = video file with known length
     "error": None,
 }
+
+# ── Power / hardware metrics ───────────────────────────────────────────────────
+# Sampled by a background thread every 2 s while the pipeline is running.
+_power_lock = threading.Lock()
+_power_state: dict = {
+    "cpu_pct":        0.0,   # current process+system CPU %
+    "ram_pct":        0.0,   # system RAM %
+    "ram_used_mb":    0,
+    "ram_total_mb":   0,
+    "battery_pct":    None,  # None if no battery / not detectable
+    "battery_plugged": None,
+    "battery_mins_left": None,
+    # Per-mode running averages: {"mode0": {"cpu_sum": 0, "n": 0, "avg": 0.0}, ...}
+    "mode_avgs": {},
+}
+_cpu_sampler_thread: threading.Thread | None = None
+_cpu_sampler_stop = threading.Event()
+
+# Per-mode CPU benchmarks live here so they persist across server
+# restarts. Lives next to .flask_secret in the project root, mode 0644
+# (no secrets — just a tiny JSON of running averages).
+# Author: Bloodawn (KheivenD), 2026-05-03 (cpu-by-mode persistence).
+_MODE_AVG_FILE = _ROOT / ".mode_cpu_avgs.json"
+try:
+    if _MODE_AVG_FILE.exists():
+        _saved_avgs = json.loads(_MODE_AVG_FILE.read_text())
+        if isinstance(_saved_avgs, dict):
+            with _power_lock:
+                # Sanity-check structure — only accept entries that look
+                # like {"cpu_sum": x, "n": y, "avg": z}
+                for k, v in _saved_avgs.items():
+                    if (isinstance(v, dict)
+                        and "cpu_sum" in v and "n" in v and "avg" in v
+                        and isinstance(v["n"], int) and v["n"] > 0):
+                        _power_state["mode_avgs"][k] = v
+except Exception as _exc:  # noqa: BLE001
+    # Corrupt file — ignore, will be overwritten on next sampler stop
+    pass
+
+
+# ── GUI state persistence ─────────────────────────────────────────────
+# After a server restart the in-memory _status["config"]["output_dir"]
+# and _demo_state["last_output_root"] are blank, so /api/segments only
+# walks <repo>/outputs/. If the user's last pipeline run or demo wrote
+# to OneDrive/SVCS or another folder, those segments become invisible
+# in the GUI even though the files still exist on disk.
+#
+# Store the last-known roots in a tiny JSON next to .flask_secret so
+# they survive a restart. No secrets in this file, just paths.
+# Author: Bloodawn (KheivenD), 2026-05-04 (output-dir persistence).
+_GUI_STATE_FILE = _ROOT / ".svcs_gui_state.json"
+
+
+def _load_gui_state() -> None:
+    """Seed _status['config'] and _demo_state['last_output_root'] from disk."""
+    try:
+        if not _GUI_STATE_FILE.exists():
+            return
+        data = json.loads(_GUI_STATE_FILE.read_text())
+        if not isinstance(data, dict):
+            return
+        out_dir = data.get("output_dir") or ""
+        demo_root = data.get("last_demo_output_root") or ""
+        if out_dir:
+            with _state_lock:
+                # Only seed config.output_dir if nothing real has set it yet.
+                cfg = _status.setdefault("config", {})
+                cfg.setdefault("output_dir", str(out_dir))
+        if demo_root:
+            with _demo_lock:
+                _demo_state.setdefault("last_output_root", str(demo_root))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _save_gui_state() -> None:
+    """Snapshot the current output_dir + last_demo_output_root to disk."""
+    try:
+        with _state_lock:
+            cfg = _status.get("config", {})
+            out_dir = cfg.get("output_dir", "")
+        with _demo_lock:
+            demo_root = _demo_state.get("last_output_root", "")
+        payload = {
+            "output_dir": str(out_dir or ""),
+            "last_demo_output_root": str(demo_root or ""),
+            "saved_at": time.time(),
+        }
+        _GUI_STATE_FILE.write_text(json.dumps(payload, indent=2))
+    except Exception:  # noqa: BLE001
+        # Persistence is best effort. Never block a route on it.
+        pass
+
+
+def _cpu_sampler_loop(mode_key: str, output_dir: str | None = None) -> None:
+    """Background thread: sample CPU/RAM/battery every 2 s while pipeline runs.
+
+    On stop, writes a per-clip ``cpu_stats.json`` into ``output_dir`` so
+    the metrics tab can show the CPU% for *this specific* recording
+    instead of a global rolling average. The global mode_avgs dict is
+    still updated (for backward compat / fleet-level view) but the
+    detail panel reads the per-clip file.
+    Author: Bloodawn (KheivenD), 2026-05-03 (per-clip CPU stats).
+    """
+    samples: list[float] = []
+    started_at = time.time()
+    while not _cpu_sampler_stop.is_set():
+        try:
+            cpu = _psutil.cpu_percent(interval=1.0)   # 1-s blocking measurement
+            mem = _psutil.virtual_memory()
+            bat = _psutil.sensors_battery() if hasattr(_psutil, "sensors_battery") else None
+
+            with _power_lock:
+                _power_state["cpu_pct"]      = cpu
+                _power_state["ram_pct"]      = mem.percent
+                _power_state["ram_used_mb"]  = mem.used // (1024 * 1024)
+                _power_state["ram_total_mb"] = mem.total // (1024 * 1024)
+
+                if bat is not None:
+                    _power_state["battery_pct"]     = round(bat.percent, 1)
+                    _power_state["battery_plugged"] = bat.power_plugged
+                    # secsleft: -1 = unknown, -2 = plugged in
+                    sl = getattr(bat, "secsleft", -1)
+                    _power_state["battery_mins_left"] = round(sl / 60, 1) if sl > 0 else None
+                else:
+                    _power_state["battery_pct"]     = None
+                    _power_state["battery_plugged"] = None
+                    _power_state["battery_mins_left"] = None
+
+            samples.append(cpu)
+
+        except Exception:
+            pass
+        # Non-blocking 1-s wait so we can stop promptly
+        _cpu_sampler_stop.wait(timeout=1.0)
+
+    # Session ended — update per-mode running average and persist it so
+    # the benchmark survives server restarts (was previously lost every
+    # time the user closed the app).
+    # Author: Bloodawn (KheivenD), 2026-05-03 (cpu-by-mode persistence).
+    if samples:
+        ended_at = time.time()
+        clip_avg = round(sum(samples) / len(samples), 1)
+        clip_max = round(max(samples), 1)
+        clip_min = round(min(samples), 1)
+        with _power_lock:
+            avgs = _power_state["mode_avgs"]
+            prev = avgs.get(mode_key, {"cpu_sum": 0.0, "n": 0, "avg": 0.0})
+            new_n   = prev["n"] + len(samples)
+            new_sum = prev["cpu_sum"] + sum(samples)
+            avgs[mode_key] = {
+                "cpu_sum": new_sum,
+                "n":       new_n,
+                "avg":     round(new_sum / new_n, 1),
+            }
+            # Snapshot for write-out below
+            snapshot = {k: dict(v) for k, v in avgs.items()}
+        # Persist global running avg outside the lock
+        try:
+            _MODE_AVG_FILE.parent.mkdir(parents=True, exist_ok=True)
+            _MODE_AVG_FILE.write_text(json.dumps(snapshot, indent=2))
+        except Exception as exc:  # noqa: BLE001
+            log.debug("Could not persist mode_avgs: %s", exc)
+        # Per-clip stats: this is what the metrics detail panel reads.
+        # Author: Bloodawn (KheivenD), 2026-05-03 (per-clip CPU stats).
+        if output_dir:
+            try:
+                stats_path = Path(output_dir) / "cpu_stats.json"
+                stats_path.parent.mkdir(parents=True, exist_ok=True)
+                stats_path.write_text(json.dumps({
+                    "mode":       mode_key,
+                    "avg":        clip_avg,
+                    "max":        clip_max,
+                    "min":        clip_min,
+                    "samples":    len(samples),
+                    "started_at": started_at,
+                    "ended_at":   ended_at,
+                    "duration_s": round(ended_at - started_at, 1),
+                }, indent=2))
+                log.info("CPU stats for %s: avg=%.1f%% max=%.1f%% n=%d → %s",
+                         mode_key, clip_avg, clip_max, len(samples), stats_path)
+            except Exception as exc:  # noqa: BLE001
+                log.debug("Could not write per-clip cpu_stats.json: %s", exc)
+
+
+def _start_cpu_sampler(mode_key: str, output_dir: str | None = None) -> None:
+    """Spawn the background CPU sampler.
+
+    ``output_dir`` is the folder where the pipeline is writing this run's
+    segments — the sampler stamps a ``cpu_stats.json`` there on stop so
+    the metrics tab can show CPU% for THIS clip rather than a global
+    rolling average.
+    Author: Bloodawn (KheivenD), 2026-05-03 (per-clip CPU stats).
+    """
+    global _cpu_sampler_thread
+    if not _PSUTIL_OK:
+        return
+    _cpu_sampler_stop.clear()
+    _cpu_sampler_thread = threading.Thread(
+        target=_cpu_sampler_loop,
+        args=(mode_key, output_dir),
+        daemon=True,
+        name="cpu-sampler",
+    )
+    _cpu_sampler_thread.start()
+
+
+def _stop_cpu_sampler() -> None:
+    _cpu_sampler_stop.set()
+    if _cpu_sampler_thread is not None:
+        _cpu_sampler_thread.join(timeout=4)
+
+
+def _bg_hw_sampler_loop() -> None:
+    """Always-on background thread: samples CPU/RAM/battery every 2 s.
+
+    This ensures /api/system_metrics always returns fresh data without doing a
+    blocking cpu_percent() call in the request handler.  The per-pipeline
+    _cpu_sampler_loop continues to run during pipeline execution and handles
+    per-mode averages; this thread simply keeps _power_state current at all
+    times so the dashboard strip is live even when idle.
+    """
+    if not _PSUTIL_OK:
+        return
+    # Prime psutil so the first sample isn't 0.0
+    _psutil.cpu_percent(interval=None)
+    while True:
+        try:
+            cpu = _psutil.cpu_percent(interval=1.0)
+            mem = _psutil.virtual_memory()
+            bat = _psutil.sensors_battery() if hasattr(_psutil, "sensors_battery") else None
+            with _power_lock:
+                _power_state["cpu_pct"]      = cpu
+                _power_state["ram_pct"]      = mem.percent
+                _power_state["ram_used_mb"]  = mem.used // (1024 * 1024)
+                _power_state["ram_total_mb"] = mem.total // (1024 * 1024)
+                if bat is not None:
+                    _power_state["battery_pct"]      = round(bat.percent, 1)
+                    _power_state["battery_plugged"]  = bat.power_plugged
+                    sl = getattr(bat, "secsleft", -1)
+                    _power_state["battery_mins_left"] = round(sl / 60, 1) if sl > 0 else None
+                else:
+                    _power_state["battery_pct"]      = None
+                    _power_state["battery_plugged"]  = None
+                    _power_state["battery_mins_left"] = None
+        except Exception:
+            pass
+        # cpu_percent(interval=1.0) already blocks for 1 s; sleep 1 more → 2 s cadence
+        import time as _time
+        _time.sleep(1.0)
+
+
+# Start the always-on hardware sampler as soon as the module loads
+_bg_hw_thread = threading.Thread(target=_bg_hw_sampler_loop, daemon=True, name="bg-hw-sampler")
+_bg_hw_thread.start()
+
 
 # ── Log capture ───────────────────────────────────────────────────────────────
 _log_queue: queue.Queue = queue.Queue(maxsize=1000)
@@ -105,30 +471,30 @@ class _QueueLogHandler(logging.Handler):
         try:
             _log_queue.put_nowait(item)
         except queue.Full:
-            pass  # drop oldest — client will re-fetch on reconnect
+            pass  # drop oldest; client will re-fetch on reconnect
 
 
 # ── Log formatter and handlers ────────────────────────────────────────────────
-_LOG_FMT = logging.Formatter("%(asctime)s  %(levelname)-8s  %(name)s — %(message)s")
+_LOG_FMT = logging.Formatter("%(asctime)s  %(levelname)-8s  %(name)s: %(message)s")
 
-# Queue handler — forwards records to the SSE stream for the browser
+# Queue handler: forwards records to the SSE stream for the browser
 _queue_handler = _QueueLogHandler()
 _queue_handler.setFormatter(logging.Formatter("%(asctime)s  %(levelname)s  %(message)s"))
 
-# File handler — writes all records to outputs/svcs.log for offline debugging
+# File handler: writes all records to outputs/svcs.log for offline debugging
 _LOG_FILE = _ROOT / "outputs" / "svcs.log"
 _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 _file_handler = logging.FileHandler(str(_LOG_FILE), encoding="utf-8")
 _file_handler.setFormatter(_LOG_FMT)
 
-# Console handler — mirrors to terminal
+# Console handler: mirrors to terminal
 _console_handler = logging.StreamHandler(sys.stderr)
 _console_handler.setFormatter(_LOG_FMT)
 
 _root_logger = logging.getLogger()
 _root_logger.addHandler(_queue_handler)
 _root_logger.addHandler(_file_handler)
-_root_logger.setLevel(logging.DEBUG)   # capture DEBUG level — filter per-handler below
+_root_logger.setLevel(logging.DEBUG)   # capture DEBUG level; filter per-handler below
 
 # Only forward INFO+ to browser SSE and terminal (DEBUG goes to file only)
 _queue_handler.setLevel(logging.INFO)
@@ -141,7 +507,7 @@ log = logging.getLogger(__name__)
 def _write_shutdown_log():
     """Write a clean shutdown marker to the log file on process exit."""
     log.info("=" * 60)
-    log.info("SVCS SERVER SHUTDOWN — %s", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
+    log.info("SVCS SERVER SHUTDOWN: %s", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
     log.info("=" * 60)
     # Flush file handler so nothing is lost if Python exits abruptly
     _file_handler.flush()
@@ -158,7 +524,7 @@ def _patch_frame_source(src_obj):
     Also reads total_frames from the source so the progress bar knows the denominator.
     """
     # Push total frame count into status so the progress bar has a denominator.
-    # total_frames == 0 for live cameras/RTSP — progress bar shows spinner instead.
+    # total_frames == 0 for live cameras/RTSP; progress bar shows a spinner instead.
     total = getattr(src_obj, "total_frames", 0) or 0
     with _state_lock:
         _status["total_frames"] = int(total)
@@ -206,6 +572,16 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
         _status["start_time"] = time.time()
         _status["config"] = config
 
+    # Persist the chosen output_dir so the GUI can re-find segments after
+    # a server restart. See _save_gui_state() up top.
+    _save_gui_state()
+
+    # Start CPU/RAM/battery sampler (labels samples under the active mode
+    # AND attributes them to this run's output folder so the per-clip
+    # CPU stats land alongside its segments).
+    _mode_key = config.get("mode", "mode0")
+    _start_cpu_sampler(_mode_key, output_dir=config.get("output_dir"))
+
     log.info("━" * 60)
     log.info("GUI PIPELINE START")
     log.info(f"  Input:   {config.get('input_source', '0')}")
@@ -216,7 +592,7 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
     _orig_fs_init = None
     _orig_re_init = None
     try:
-        # Patch FrameSource and ROIEncoder lazily — import here so we can wrap.
+        # Patch FrameSource and ROIEncoder lazily. Import here so we can wrap.
         try:
             import utils.frame_source as _fs
             import compression.roi_encoder as _re
@@ -256,12 +632,15 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             enhance_every_n=int(config.get("enhance_every_n", 5)),
             enhance_max_roi_px=int(config.get("enhance_max_roi_px", 200)),
             enhance_device=config.get("enhance_device", "auto"),
+            upscale_output=config.get("upscale_output", False),
             encrypt=config.get("encrypt", False),
             encrypt_password=config.get("encrypt_password") or None,
             encrypt_key_file=config.get("encrypt_key_file") or None,
             object_filter=config.get("object_filter", False),
             filter_confidence=float(config.get("filter_confidence", 0.30)),
             stop_event=stop_event,
+            codec=config.get("codec", "libsvtav1"),
+            crf=config.get("crf"),
         )
 
     except Exception as exc:
@@ -288,6 +667,7 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             _status["running"] = False
         global _active_encoder
         _active_encoder = None
+        _stop_cpu_sampler()
         log.info("Pipeline stopped.")
 
 
@@ -296,6 +676,58 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
 @app.route("/")
 def index():
     return render_template("index.html")
+
+
+@app.route("/api/system_metrics")
+def api_system_metrics():
+    """Return live CPU/RAM/battery stats plus per-mode CPU averages."""
+    with _power_lock:
+        snap = dict(_power_state)
+        snap["mode_avgs"] = {k: dict(v) for k, v in _power_state["mode_avgs"].items()}
+
+    # If psutil not available, still return stub so frontend degrades gracefully
+    if not _PSUTIL_OK:
+        return jsonify({"available": False})
+
+    # _bg_hw_sampler_loop keeps _power_state fresh every ~2 s at all times,
+    # so no blocking cpu_percent() call is needed here.
+
+    # Estimate battery runtime on current load (Cody's "3-hr baseline" formula):
+    # remaining_hrs = battery_mins_left / 60 (real) or synthetic from charge%
+    estimated_hrs = None
+    if snap["battery_pct"] is not None and not snap["battery_plugged"]:
+        if snap["battery_mins_left"] is not None:
+            estimated_hrs = round(snap["battery_mins_left"] / 60, 2)
+        else:
+            # Fallback: linear estimate from a 3-hr baseline
+            estimated_hrs = round((snap["battery_pct"] / 100) * 3.0, 2)
+
+    # Storage rate (MB / hr) from current session segments
+    storage_mb_hr = None
+    with _state_lock:
+        cfg = _status.get("config", {})
+        start = _status.get("start_time")
+        seg_count = _status.get("segment_count", 0)
+    if start and seg_count > 0:
+        elapsed_hr = (time.time() - start) / 3600
+        if elapsed_hr > 0:
+            # Estimate from segments table
+            try:
+                with get_connection() as conn:
+                    output_dir = cfg.get("output_dir", "")
+                    row = conn.execute(
+                        "SELECT SUM(file_size_kb) FROM segments WHERE file_path LIKE ?",
+                        (str(output_dir).replace("\\", "/") + "%",),
+                    ).fetchone()
+                    total_kb = (row[0] or 0) if row else 0
+                storage_mb_hr = round((total_kb / 1024) / elapsed_hr, 2)
+            except Exception:
+                pass
+
+    snap["available"]        = True
+    snap["estimated_hrs"]    = estimated_hrs
+    snap["storage_mb_hr"]    = storage_mb_hr
+    return jsonify(snap)
 
 
 @app.route("/api/status")
@@ -336,6 +768,11 @@ def api_start():
 
     data = request.get_json(force=True) or {}
 
+    # ── Validate camera_id (alphanumeric / dash / underscore, max 64 chars) ──
+    camera_id = str(data.get("camera_id", "cam_00")).strip()
+    if not _re.match(r"^[a-zA-Z0-9_\-]{1,64}$", camera_id):
+        return jsonify({"error": "camera_id must be 1–64 alphanumeric/dash/underscore chars"}), 400
+
     # Resolve input: if digit treat as camera index, else file path
     raw_input = str(data.get("input_source", "0")).strip()
     try:
@@ -343,12 +780,29 @@ def api_start():
     except ValueError:
         resolved_input = raw_input
 
-    # Default output dir: <project_root>/outputs/
-    output_dir = data.get("output_dir", "").strip() or str(_ROOT / "outputs")
+    # Default output dir: prefer OneDrive/SVCS so segments land in the cloud
+    # folder operators expect. Falls back to <project_root>/outputs/ only when
+    # no cloud sync is detected. Was hard-coded to local — fixed 2026-05-02
+    # in the audit. Author: Bloodawn (KheivenD).
+    raw_out = data.get("output_dir", "").strip() or _default_output_dir()
+    try:
+        output_dir = str(_safe_output_dir(raw_out))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    # ── Validate encrypt_key_file if provided ──────────────────────────────
+    encrypt_key_file = (data.get("encrypt_key_file") or "").strip() or None
+    if encrypt_key_file:
+        kf = Path(encrypt_key_file).resolve()
+        if not kf.exists():
+            return jsonify({"error": f"encrypt_key_file not found: {kf}"}), 400
+        if not kf.is_file():
+            return jsonify({"error": "encrypt_key_file must be a regular file"}), 400
+        encrypt_key_file = str(kf)
 
     config = {
         "input_source": resolved_input,
-        "camera_id": data.get("camera_id", "cam_00"),
+        "camera_id": camera_id,
         "output_dir": output_dir,
         "segment_seconds": data.get("segment_seconds", 60),
         "bg_method": data.get("bg_method", "MOG2"),
@@ -360,11 +814,25 @@ def api_start():
         "enhance_every_n": int(data.get("enhance_every_n", 5)),
         "enhance_max_roi_px": int(data.get("enhance_max_roi_px", 200)),
         "enhance_device": data.get("enhance_device", "auto"),
+        "upscale_output": bool(data.get("upscale_output", False)),
         "encrypt": bool(data.get("encrypt", False)),
         "encrypt_password": data.get("encrypt_password", ""),
-        "encrypt_key_file": data.get("encrypt_key_file", ""),
+        "encrypt_key_file": encrypt_key_file,
         "object_filter": bool(data.get("object_filter", False)),
         "filter_confidence": float(data.get("filter_confidence", 0.30)),
+        # Codec selector (ROADMAP 4.2). Three valid values:
+        #   "libsvtav1" — DEFAULT as of 2026-05-03. Netflix-grade SVT-AV1.
+        #   "libaom-av1"— reference AV1, slower than SVT.
+        #   "libx264"   — H.264 fallback. Always available.
+        # ROIEncoder auto-falls-back to libx264 if libsvtav1 isn't in the
+        # running ffmpeg build, so a fresh clone on a stock ffmpeg keeps
+        # working. Author: Bloodawn (KheivenD), 2026-05-03.
+        "codec": str(data.get("codec", "libsvtav1") or "libsvtav1").strip(),
+        # Foreground CRF. None means "use the mode default" (18 for
+        # Mode 0/1/2, 38 for Mode 3). User can override from the Save To
+        # section in the sidebar. Lower = better quality, larger file.
+        # Author: Bloodawn (KheivenD), 2026-05-02 (Mode 3 redo).
+        "crf": (int(data.get("crf")) if str(data.get("crf", "")).strip() else None),
     }
 
     _stop_event = threading.Event()
@@ -375,6 +843,9 @@ def api_start():
         name="pipeline-worker",
     )
     _pipeline_thread.start()
+
+    with _state_lock:
+        _status["last_config"] = config
 
     return jsonify({"ok": True, "config": config})
 
@@ -413,55 +884,192 @@ def api_stop():
 
 @app.route("/api/segments")
 def api_segments():
-    """Return the 50 most recent segments from the metadata DB."""
-    # Try to find metadata.db in the last-used output_dir, or fallback
+    """Return the 50 most recent segments from the metadata DB.
+
+    Query params (all optional):
+      object_type   – vehicle | person | person+vehicle | animal | unknown
+      color         – red | orange | yellow | green | blue | white | black | gray | ...
+      scene_type    – highway | intersection | parking | street | unknown
+      time_of_day   – day | night | dusk_dawn
+      camera_id     – filter by camera
+    """
     with _state_lock:
         cfg = _status.get("config", {})
-    db_path = Path(cfg.get("output_dir", str(_ROOT / "outputs"))) / "metadata.db"
+    with _demo_lock:
+        demo_last_root = _demo_state.get("last_output_root", "")
 
-    if not db_path.exists():
-        return jsonify({"segments": [], "db_path": str(db_path)})
+    # ── Discover metadata.db files under EVERY plausible root ────────────────
+    # The main pipeline writes to <pipeline-output_dir>/metadata.db.
+    # Demo runs write to <demo-output_root>/demo_<mode><suffix>/metadata.db
+    # AND ./demo_comp<suffix>/metadata.db (added 2026-05-04 so split-screen
+    # videos are searchable).
+    # The pipeline cfg's output_dir and the demo's last output_root can
+    # legitimately differ (one might point to ./outputs/, the other to
+    # OneDrive/SVCS/) — the user's report was that demo recordings
+    # weren't appearing in the metrics tab because we were only walking
+    # the pipeline cfg root. Now we walk both, plus a hard fallback to
+    # ./outputs/ for fresh clones, then de-dup by resolved path.
+    # Author: Bloodawn (KheivenD), 2026-05-04 (demo-output discovery).
+    candidate_roots: list[Path] = []
+    for raw in (
+        cfg.get("output_dir", ""),
+        demo_last_root,
+        str(_ROOT / "outputs"),
+    ):
+        if raw:
+            try:
+                p = Path(raw).resolve()
+                if p not in candidate_roots:
+                    candidate_roots.append(p)
+            except Exception:
+                continue
 
-    try:
-        with get_connection(str(db_path)) as conn:
-            rows = conn.execute(
-                """
-                SELECT timestamp, camera_id, target_detected, roi_count,
-                       file_size, duration, file_path,
-                       COALESCE(object_type, 'unknown') AS object_type,
-                       avg_sharpness, sharpness_label
-                FROM segments
-                WHERE COALESCE(hidden, 0) = 0
-                ORDER BY timestamp DESC
-                LIMIT 50
-                """
-            ).fetchall()
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+    all_dbs_set: set[Path] = set()
+    for root in candidate_roots:
+        if root.exists():
+            for db in root.rglob("metadata.db"):
+                all_dbs_set.add(db.resolve())
+    all_dbs: list[Path] = sorted(all_dbs_set)
 
-    output_dir = str(cfg.get("output_dir", str(_ROOT / "outputs")))
+    output_root = candidate_roots[0] if candidate_roots else (_ROOT / "outputs")
+
+    if not all_dbs:
+        return jsonify({"segments": [], "db_path": str(output_root / "metadata.db"),
+                        "note": "No metadata.db found — run the pipeline or a demo first.",
+                        "roots_searched": [str(r) for r in candidate_roots]})
+
+    # ── Build filter clause (same params applied to every db) ────────────────
+    filters: list[str] = ["COALESCE(hidden, 0) = 0"]
+    params:  list      = []
+
+    f_type      = request.args.get("object_type", "").strip()
+    f_color     = request.args.get("color", "").strip()
+    f_scene     = request.args.get("scene_type", "").strip()
+    f_tod       = request.args.get("time_of_day", "").strip()
+    f_cam       = request.args.get("camera_id", "").strip()
+    f_start     = request.args.get("start_time", "").strip()
+    f_end       = request.args.get("end_time", "").strip()
+    f_min_rois  = request.args.get("min_roi_count", "").strip()
+    f_enc_only  = request.args.get("encrypted_only", "").strip() == "1"
+
+    if f_type:
+        filters.append("COALESCE(object_type,'unknown') = ?"); params.append(f_type)
+    if f_color:
+        filters.append("dominant_color = ?"); params.append(f_color)
+    if f_scene:
+        filters.append("COALESCE(scene_type,'unknown') = ?"); params.append(f_scene)
+    if f_tod:
+        filters.append("time_of_day = ?"); params.append(f_tod)
+    if f_cam:
+        filters.append("camera_id = ?"); params.append(f_cam)
+    if f_start:
+        filters.append("timestamp >= ?"); params.append(f_start)
+    if f_end:
+        filters.append("timestamp <= ?"); params.append(f_end)
+    if f_min_rois:
+        try:
+            filters.append("roi_count >= ?"); params.append(int(f_min_rois))
+        except ValueError:
+            pass
+    if f_enc_only:
+        filters.append("file_path LIKE ?")
+        params.append("%.enc")
+
+    has_filters = any([f_type, f_color, f_scene, f_tod, f_cam, f_start, f_end, f_min_rois, f_enc_only])
+    row_limit   = 500 if has_filters else 200
+
+    where = " AND ".join(filters)
+    query = f"""
+        SELECT timestamp, camera_id, target_detected, roi_count,
+               file_size, duration, file_path,
+               COALESCE(object_type, 'unknown')  AS object_type,
+               avg_sharpness, sharpness_label,
+               COALESCE(object_classes, '[]')    AS object_classes,
+               dominant_color,
+               COALESCE(scene_type, 'unknown')   AS scene_type,
+               time_of_day,
+               COALESCE(vehicle_count, 0)        AS vehicle_count,
+               COALESCE(person_count, 0)         AS person_count
+        FROM segments
+        WHERE {where}
+        ORDER BY timestamp DESC
+        LIMIT {row_limit}
+    """
+
+    # ── Query every db, merge results, re-sort ───────────────────────────────
+    all_rows: list[tuple] = []
+    for db_path in all_dbs:
+        try:
+            with get_connection(str(db_path)) as conn:
+                db_dir = str(db_path.parent)
+                rows = conn.execute(query, params).fetchall()
+                # Tag each row with its db directory so file paths resolve correctly
+                all_rows.extend((r, db_dir) for r in rows)
+        except Exception:
+            continue  # skip corrupt or schema-mismatched dbs
+
+    # Global sort by timestamp desc, then cap total
+    all_rows.sort(key=lambda x: x[0][0], reverse=True)
+    all_rows = all_rows[:row_limit]
+
+    # Cache cpu_stats.json reads — many segments share the same db_dir.
+    # Author: Bloodawn (KheivenD), 2026-05-03 (per-clip CPU stats).
+    _cpu_cache: dict[str, dict | None] = {}
+
+    def _cpu_for_dir(d: str) -> dict | None:
+        if d in _cpu_cache:
+            return _cpu_cache[d]
+        try:
+            stats_file = Path(d) / "cpu_stats.json"
+            if stats_file.exists():
+                _cpu_cache[d] = json.loads(stats_file.read_text())
+            else:
+                _cpu_cache[d] = None
+        except Exception:
+            _cpu_cache[d] = None
+        return _cpu_cache[d]
+
     segs = []
-    for r in rows:
-        abs_path = _segment_absolute_path(r[6], output_dir)
+    for r, db_dir in all_rows:
+        abs_path = _segment_absolute_path(r[6], db_dir)
         playable_url = None
         if abs_path.exists() and abs_path.suffix.lower() in {".mp4", ".webm", ".mov", ".avi"}:
             playable_url = f"/api/media?path={quote(str(abs_path))}"
 
+        try:
+            obj_classes = json.loads(r[10]) if r[10] else []
+        except Exception:
+            obj_classes = []
+
+        cpu_stats = _cpu_for_dir(db_dir)
+
         segs.append({
-            "timestamp": r[0],
-            "camera_id": r[1],
+            "timestamp":       r[0],
+            "camera_id":       r[1],
             "target_detected": bool(r[2]),
-            "roi_count": r[3],
-            "file_size_kb": round(r[4] / 1024, 1),
-            "duration_s": round(r[5], 1),
-            "file_path": r[6],
-            "object_type": r[7],
-            "playable_url": playable_url,
-            "avg_sharpness": r[8],
+            "roi_count":       r[3],
+            "file_size_kb":    round(r[4] / 1024, 1),
+            "duration_s":      round(r[5], 1),
+            "file_path":       r[6],
+            "object_type":     r[7],
+            "playable_url":    playable_url,
+            "avg_sharpness":   r[8],
             "sharpness_label": r[9],
+            "object_classes":  obj_classes,
+            "dominant_color":  r[11],
+            "scene_type":      r[12],
+            "time_of_day":     r[13],
+            "vehicle_count":   r[14],
+            "person_count":    r[15],
+            # Per-clip CPU stats (None if no sampler ran for this output dir).
+            "cpu_avg":         cpu_stats.get("avg") if cpu_stats else None,
+            "cpu_max":         cpu_stats.get("max") if cpu_stats else None,
+            "cpu_min":         cpu_stats.get("min") if cpu_stats else None,
+            "cpu_samples":     cpu_stats.get("samples") if cpu_stats else None,
+            "cpu_duration_s":  cpu_stats.get("duration_s") if cpu_stats else None,
         })
 
-    return jsonify({"segments": segs, "db_path": str(db_path)})
+    return jsonify({"segments": segs, "db_count": len(all_dbs)})
 
 
 @app.route("/api/storage")
@@ -502,7 +1110,7 @@ def api_storage():
 
 @app.route("/api/logs")
 def api_logs():
-    """Server-Sent Events stream — delivers live log lines to the browser.
+    """Server-Sent Events stream: delivers live log lines to the browser.
 
     Supports Last-Event-ID resume: on reconnect the browser sends the last
     event ID it received, and the server replays only newer entries so no
@@ -573,6 +1181,26 @@ def media_file(rel_path: str):
     return send_from_directory(str(root), rel_path, as_attachment=False)
 
 
+@app.route("/api/media_debug")
+def api_media_debug():
+    """Diagnostic: check whether a given path would be served by /api/media."""
+    path = unquote(request.args.get("path", "").strip())
+    if not path:
+        return jsonify({"error": "no path param"})
+    p = Path(path).resolve()
+    return jsonify({
+        "raw_path": path,
+        "resolved": str(p),
+        "is_absolute": p.is_absolute(),
+        "exists": p.exists(),
+        "is_file": p.is_file() if p.exists() else False,
+        "suffix": p.suffix.lower(),
+        "allowed_suffix": p.suffix.lower() in {".mp4", ".webm", ".mov", ".avi", ".mkv"},
+        "would_serve": p.is_absolute() and p.exists() and p.is_file()
+                       and p.suffix.lower() in {".mp4", ".webm", ".mov", ".avi", ".mkv"},
+    })
+
+
 @app.route("/api/media")
 def api_media():
     """Serve any local video file by absolute path with HTTP range support.
@@ -582,12 +1210,21 @@ def api_media():
 
     Range request support is required for browser <video> elements to seek
     and play without buffering the entire file. Flask's send_from_directory
-    does not handle Range headers — this implementation does.
+    does not handle Range headers. This implementation does.
     """
     path = unquote(request.args.get("path", "").strip())
     if not path:
         abort(400)
     p = Path(path).resolve()
+
+    # Security: reject non-absolute paths (path traversal guard).
+    # We allow any absolute path to a video file that exists on disk — this
+    # dashboard runs on localhost only, so the only risk would be a crafted
+    # URL from the same machine, which is already trusted.
+    if not p.is_absolute():
+        log.warning("api_media: rejected non-absolute path: %s", p)
+        abort(403)
+
     if not p.exists() or not p.is_file():
         abort(404)
     suffix = p.suffix.lower()
@@ -690,15 +1327,70 @@ def api_browse():
     return jsonify({"path": path})
 
 
-_UPLOAD_DIR = _ROOT / "data" / "uploads"
+_UPLOAD_DIR_LOCAL = _ROOT / "data" / "uploads"
 _ALLOWED_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".h264", ".m4v"}
+
+
+def _upload_dir() -> Path:
+    """Return the best available upload directory.
+
+    Prefers <cloud sync root>/SVCS/uploads/ (OneDrive or Google Drive) so
+    uploaded source videos land alongside pipeline output segments in the cloud.
+    Falls back to local data/uploads/ if no cloud sync is found.
+    """
+    root, _label, _url = _detect_cloud_root()
+    if root is not None:
+        d = root / _CLOUD_SUBFOLDER / "uploads"
+    else:
+        d = _UPLOAD_DIR_LOCAL
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+@app.route("/api/open_folder", methods=["POST"])
+def api_open_folder():
+    """Open a folder in the native OS file explorer on the host machine.
+
+    Security: resolves the path and requires it to be a directory (not a file
+    or a system path trick). Runs on localhost only.
+    """
+    import platform as _platform
+    data = request.get_json(silent=True) or {}
+    raw = data.get("path", "").strip()
+    if not raw:
+        return jsonify({"error": "No path provided"}), 400
+
+    folder = Path(raw).resolve()
+
+    if not folder.exists():
+        return jsonify({"error": f"Path not found: {folder}"}), 404
+    if not folder.is_dir():
+        # If caller passed a file path, open its parent directory
+        folder = folder.parent
+    if not folder.is_dir():
+        return jsonify({"error": "Not a directory"}), 400
+
+    try:
+        sys_name = _platform.system()
+        if sys_name == "Windows":
+            subprocess.Popen(["explorer", str(folder)])
+        elif sys_name == "Darwin":
+            subprocess.Popen(["open", str(folder)])
+        else:
+            subprocess.Popen(["xdg-open", str(folder)])
+    except Exception as exc:
+        log.warning("api_open_folder: failed to open %s — %s", folder, exc)
+        return jsonify({"error": str(exc)}), 500
+
+    return jsonify({"ok": True, "path": str(folder)})
 
 
 @app.route("/api/upload", methods=["POST"])
 def api_upload():
     """Accept a video file upload from a remote browser.
 
-    Saves the file into data/uploads/ on the server and returns the
+    Saves the file into the Google Drive SVCS/uploads/ folder when Drive is
+    detected, otherwise falls back to local data/uploads/.  Returns the
     server-side path so the pipeline can use it as input_source.
     """
     if "file" not in request.files:
@@ -712,19 +1404,19 @@ def api_upload():
     if suffix not in _ALLOWED_EXTENSIONS:
         return jsonify({"error": f"File type {suffix} not allowed"}), 400
 
-    _UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-    # Sanitize filename — strip any path components the client might inject
+    upload_dir = _upload_dir()
+    # Sanitize filename: strip any path components the client might inject
     safe_name = Path(f.filename).name
-    dest = _UPLOAD_DIR / safe_name
+    dest = upload_dir / safe_name
     # Avoid clobbering existing files by appending a counter
     counter = 1
     while dest.exists():
-        dest = _UPLOAD_DIR / f"{Path(safe_name).stem}_{counter}{suffix}"
+        dest = upload_dir / f"{Path(safe_name).stem}_{counter}{suffix}"
         counter += 1
 
     f.save(str(dest))
     log.info("Uploaded video saved: %s (%d bytes)", dest.name, dest.stat().st_size)
-    return jsonify({"path": str(dest), "filename": dest.name})
+    return jsonify({"path": str(dest), "filename": dest.name, "in_drive": "My Drive" in str(dest) or "Google Drive" in str(dest)})
 
 
 @app.route("/api/segments/clear", methods=["POST"])
@@ -756,6 +1448,157 @@ def api_segments_clear():
 
     log.info("Segment table cleared from dashboard view (files preserved on disk)")
     return jsonify({"ok": True})
+
+
+@app.route("/api/segments/hide_one", methods=["POST"])
+def api_segments_hide_one():
+    """Hide one segment row by file_path.
+
+    The segment list doesn't carry DB row IDs across the multiple
+    metadata.db files (main + per-demo), so file_path is the cheapest
+    stable identifier. Walks every metadata.db under the output root,
+    sets hidden=1 on any matching row, leaves the file on disk alone.
+
+    Used by the per-row [X] button in the metrics table — the user just
+    wants the entry off the dashboard, not the underlying file deleted.
+
+    Author: Bloodawn (KheivenD), 2026-05-03 (cleanup of dead rows).
+    """
+    data = request.get_json(force=True) or {}
+    file_path = (data.get("file_path") or "").strip()
+    if not file_path:
+        return jsonify({"error": "file_path is required"}), 400
+
+    with _state_lock:
+        cfg = _status.get("config", {})
+    output_root = Path(cfg.get("output_dir", str(_ROOT / "outputs")))
+    if not output_root.exists():
+        return jsonify({"ok": True, "hidden": 0})
+
+    hidden_count = 0
+    for db_path in output_root.rglob("metadata.db"):
+        try:
+            with get_connection(str(db_path)) as conn:
+                cols = [c[1] for c in conn.execute("PRAGMA table_info(segments)").fetchall()]
+                if "hidden" not in cols:
+                    conn.execute("ALTER TABLE segments ADD COLUMN hidden INTEGER DEFAULT 0")
+                cur = conn.execute(
+                    "UPDATE segments SET hidden = 1 WHERE file_path = ? AND COALESCE(hidden,0) = 0",
+                    (file_path,),
+                )
+                hidden_count += cur.rowcount
+                conn.commit()
+        except Exception as exc:  # noqa: BLE001
+            log.warning("hide_one: skipped %s — %s", db_path, exc)
+            continue
+
+    return jsonify({"ok": True, "hidden": hidden_count})
+
+
+@app.route("/api/segments/cleanup_missing", methods=["POST"])
+def api_segments_cleanup_missing():
+    """Hide every segment whose file_path no longer exists on disk.
+
+    A pipeline test or a stop-mid-run can leave dangling DB rows whose
+    file got cleaned up before the row could be deleted. The user can
+    see them in the dashboard but the play / encrypt buttons all do
+    nothing. This sweeps them in one shot.
+
+    Returns the count of rows hidden so the frontend can confirm.
+
+    Author: Bloodawn (KheivenD), 2026-05-03 (cleanup of dead rows).
+    """
+    # Walk every plausible root — pipeline output_dir, last demo
+    # output_root, project /outputs/ — same fan-out /api/segments uses.
+    with _state_lock:
+        cfg = _status.get("config", {})
+    with _demo_lock:
+        demo_last_root = _demo_state.get("last_output_root", "")
+
+    candidate_roots: list[Path] = []
+    for raw in (
+        cfg.get("output_dir", ""),
+        demo_last_root,
+        str(_ROOT / "outputs"),
+    ):
+        if raw:
+            try:
+                p = Path(raw).resolve()
+                if p not in candidate_roots and p.exists():
+                    candidate_roots.append(p)
+            except Exception:
+                continue
+
+    hidden_count = 0
+    redundant_demo_count = 0
+    for root in candidate_roots:
+        for db_path in root.rglob("metadata.db"):
+            try:
+                with get_connection(str(db_path)) as conn:
+                    cols = [c[1] for c in conn.execute("PRAGMA table_info(segments)").fetchall()]
+                    if "hidden" not in cols:
+                        conn.execute("ALTER TABLE segments ADD COLUMN hidden INTEGER DEFAULT 0")
+                    rows = conn.execute(
+                        "SELECT rowid, file_path FROM segments "
+                        "WHERE COALESCE(hidden,0) = 0"
+                    ).fetchall()
+                    stale_ids = []
+                    db_dir = db_path.parent
+                    for rowid, fp in rows:
+                        if not fp:
+                            stale_ids.append(rowid)
+                            continue
+                        # Resolve path (relative paths are relative to the db's dir)
+                        p = Path(fp)
+                        if not p.is_absolute():
+                            p = db_dir / p
+                        if not p.exists():
+                            stale_ids.append(rowid)
+                    if stale_ids:
+                        placeholders = ",".join("?" * len(stale_ids))
+                        conn.execute(
+                            f"UPDATE segments SET hidden = 1 WHERE rowid IN ({placeholders})",
+                            stale_ids,
+                        )
+                        hidden_count += len(stale_ids)
+
+                    # ── Redundant per-mode demo rows ─────────────────────
+                    # Pre-2026-05-04 the demo runner indexed BOTH every
+                    # per-mode rendered video AND the split-screen
+                    # composite — five rows per demo run for what is
+                    # effectively one output. Hide the per-mode rows in
+                    # any demo_comp* dir that also has a *_split_M*
+                    # composite row, so the table only shows the one
+                    # video the user actually cares about.
+                    # Author: Bloodawn (KheivenD), 2026-05-04 (demo dedup).
+                    if "demo_comp" in str(db_path).lower():
+                        has_split = conn.execute(
+                            "SELECT 1 FROM segments "
+                            "WHERE camera_id LIKE '%_split_%' "
+                            "  AND COALESCE(hidden,0) = 0 LIMIT 1"
+                        ).fetchone()
+                        if has_split:
+                            cur = conn.execute(
+                                "UPDATE segments SET hidden = 1 "
+                                "WHERE camera_id LIKE '%_demo_mode%' "
+                                "  AND COALESCE(hidden,0) = 0"
+                            )
+                            redundant_demo_count += cur.rowcount
+                    conn.commit()
+            except Exception as exc:  # noqa: BLE001
+                log.warning("cleanup_missing: skipped %s — %s", db_path, exc)
+                continue
+
+    total = hidden_count + redundant_demo_count
+    if total:
+        log.info("cleanup_missing: hid %d dangling + %d redundant demo rows",
+                 hidden_count, redundant_demo_count)
+    return jsonify({
+        "ok": True,
+        "hidden": total,
+        "missing": hidden_count,
+        "redundant_demo": redundant_demo_count,
+    })
 
 
 # ── Archive query routes (Ashleyn's DB queries) ───────────────────────────────
@@ -888,38 +1731,15 @@ _demo_state: dict = {
     "demo_step": "",         # e.g. "(1/2)"
     "result": None,          # populated on success
     "error": None,
+    "last_output_root": "",  # absolute path of most recent demo run output
 }
 
 
-def _build_demo_result_from_manifest(manifest_path: Path) -> dict:
-    """Build the GUI demo result payload from a stitched demo manifest."""
-    with open(manifest_path, encoding="utf-8") as f:
-        manifest = json.load(f)
-
-    videos: dict = {}
-    for mode, view_map in manifest.get("outputs", {}).items():
-        videos[mode] = {}
-        for view, file_path in view_map.items():
-            p = Path(file_path).resolve()
-            if p.exists():
-                videos[mode][view] = f"/api/media?path={quote(str(p))}"
-            else:
-                videos[mode][view] = None
-
-    split_screen_url = None
-    stitched_dir = Path(manifest.get("stitched_dir", ""))
-    if stitched_dir.exists():
-        for candidate in stitched_dir.glob("demo_splitscreen*.mp4"):
-            split_screen_url = f"/api/media?path={quote(str(candidate.resolve()))}"
-            break
-
-    return {
-        "manifest_path": str(manifest_path),
-        "modes": manifest.get("modes", []),
-        "videos": videos,
-        "split_screen": split_screen_url,
-        "metrics": manifest.get("metrics", {}),
-    }
+# Now that _demo_state exists, replay any persisted output paths from disk
+# so the GUI can find the user's last pipeline + demo segments after a
+# server restart. See _load_gui_state() above for details.
+# Author: Bloodawn (KheivenD), 2026-05-04 (output-dir persistence).
+_load_gui_state()
 
 
 def _run_demo_thread(config: dict) -> None:
@@ -934,11 +1754,34 @@ def _run_demo_thread(config: dict) -> None:
             _demo_state.update(kw)
 
     def _progress_cb(message: str, detail: dict):
-        """Receive step updates from run_all_demos and push to demo state."""
+        """Receive step updates from run_all_demos and push to demo state.
+
+        Also drives the per-mode CPU sampler so the "CPU Usage by Mode"
+        card on the metrics tab actually populates from demo runs (was
+        only hooked into /api/start, which the user rarely invokes).
+        Author: Bloodawn (KheivenD), 2026-05-03 (cpu-by-mode demo wire-up).
+        """
         phase = detail.get("phase", "")
         mode = detail.get("mode", "")
+        mode_dir = detail.get("mode_dir", "")  # populated by run_demo as of 2026-05-03
         mode_index = detail.get("mode_index")
         mode_total = detail.get("mode_total")
+        done       = detail.get("done", None)
+
+        # Start sampler when entering a new mode's pipeline, stop when
+        # the pipeline phase reports done. Ignore phase=="render"/"stitch"
+        # — those are post-processing and shouldn't pollute the average.
+        # Pass mode_dir so cpu_stats.json lands in THIS run's output folder.
+        try:
+            if phase == "pipeline" and mode and done is False:
+                _start_cpu_sampler(mode, output_dir=mode_dir or None)
+            elif phase == "pipeline" and mode and done is True:
+                _stop_cpu_sampler()
+            elif phase == "done":
+                # Safety net in case the last "done=True" was missed
+                _stop_cpu_sampler()
+        except Exception as exc:  # noqa: BLE001
+            log.debug("cpu sampler hook failed: %s", exc)
 
         # Build a concise progress string for the UI
         if mode_total and mode_index is not None:
@@ -982,11 +1825,11 @@ def _run_demo_thread(config: dict) -> None:
 
     _update(progress="Locating manifest…")
 
-    # Find the manifest written by run_all_demos() — it picks a suffix to avoid
+    # Find the manifest written by run_all_demos(). It picks a suffix to avoid
     # overwriting previous runs, so we glob for the newest one.
     output_root = Path(config["output_root"]).resolve()
     manifests = sorted(
-        output_root.glob("demos_stitched*/manifest.json"),
+        output_root.glob("demo_comp*/manifest.json"),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
@@ -1024,7 +1867,11 @@ def api_demo():
     data = request.get_json(force=True) or {}
 
     input_path = data.get("input_path", "").strip()
-    output_root = data.get("output_root", "").strip() or str(_ROOT / "outputs")
+    output_root = data.get("output_root", "").strip()
+    if not output_root:
+        # Unified default — same OneDrive-preferred resolution as api_start
+        # and api_hls_start. Author: Bloodawn (KheivenD), 2026-05-02 audit.
+        output_root = _default_output_dir()
     modes = data.get("modes", ["mode0", "mode1", "mode2", "mode3"])
 
     if not input_path:
@@ -1042,8 +1889,14 @@ def api_demo():
         "no_tint": bool(data.get("no_tint", False)),
     }
 
+    resolved_root = str(Path(output_root).resolve())
     with _demo_lock:
-        _demo_state.update(running=True, modes=modes, result=None, error=None, status="queued")
+        _demo_state.update(running=True, modes=modes, result=None, error=None, status="queued",
+                           last_output_root=resolved_root)
+
+    # Persist the demo output root so /api/segments can still find these
+    # files after a server restart.
+    _save_gui_state()
 
     t = threading.Thread(target=_run_demo_thread, args=(config,), daemon=True, name="demo-worker")
     t.start()
@@ -1058,23 +1911,145 @@ def api_demo_status():
         return jsonify(dict(_demo_state))
 
 
-@app.route("/api/demo/latest")
-def api_demo_latest():
-    """Load the newest demos_stitched*/manifest.json from a demo output root."""
-    output_root = request.args.get("output_root", "").strip() or str(_ROOT / "outputs")
-    root = Path(output_root).expanduser().resolve()
-    manifests = sorted(
-        root.glob("demos_stitched*/manifest.json"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
-    if not manifests:
-        return jsonify({"error": f"No stitched demo manifest found in {root}"}), 404
+@app.route("/api/demo/search_debug")
+def api_demo_search_debug():
+    """Diagnostic: show which roots are searched and what manifests are found."""
+    with _state_lock:
+        cfg = _status.get("config", {})
+    with _demo_lock:
+        last_demo_root = _demo_state.get("last_output_root", "")
+
+    roots_info = []
+    for label, raw in [
+        ("pipeline output_dir", cfg.get("output_dir", "")),
+        ("project outputs/", str(_ROOT / "outputs")),
+        ("last demo root", last_demo_root),
+    ]:
+        if not raw:
+            continue
+        p = Path(raw).resolve()
+        roots_info.append({"label": label, "path": str(p), "exists": p.exists()})
+
     try:
-        result = _build_demo_result_from_manifest(manifests[0])
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
-    return jsonify({"ok": True, "result": result})
+        od_root, od_label = _detect_onedrive_root(prefer_business=True)
+        if od_root:
+            svcs = (od_root / _CLOUD_SUBFOLDER).resolve()
+            roots_info.append({"label": f"OneDrive SVCS ({od_label})", "path": str(svcs), "exists": svcs.exists()})
+            roots_info.append({"label": f"OneDrive root ({od_label})", "path": str(od_root.resolve()), "exists": od_root.exists()})
+    except Exception as e:
+        roots_info.append({"label": "OneDrive detection error", "path": str(e), "exists": False})
+
+    manifests_found = []
+    for ri in roots_info:
+        if not ri["exists"]:
+            continue
+        root = Path(ri["path"])
+        for pattern in ["demo_comp*/manifest.json", "demo_comp/demos_stitched*/manifest.json"]:
+            for mp in root.glob(pattern):
+                manifests_found.append({
+                    "root": ri["path"],
+                    "manifest": str(mp),
+                    "exists": mp.exists(),
+                    "mtime": mp.stat().st_mtime if mp.exists() else None,
+                })
+
+    return jsonify({"roots": roots_info, "manifests": manifests_found})
+
+
+@app.route("/api/demo/history")
+def api_demo_history():
+    """List previous demo runs by scanning for demo_comp*/manifest.json files.
+
+    Returns a list of run objects (newest first), each with:
+      ts, modes, split_screen (URL or None), videos {mode: {view: url}}, dir (folder name)
+    """
+    # Build a de-duplicated list of roots to search for manifests.
+    # Priority: pipeline output_dir → project outputs/ → last demo run root → OneDrive SVCS
+    with _state_lock:
+        cfg = _status.get("config", {})
+    with _demo_lock:
+        last_demo_root = _demo_state.get("last_output_root", "")
+
+    seen_roots: set[Path] = set()
+    search_roots: list[Path] = []
+
+    def _add_root(p: Path) -> None:
+        rp = p.resolve()
+        if rp not in seen_roots and rp.exists():
+            seen_roots.add(rp)
+            search_roots.append(rp)
+
+    # 1. Pipeline-configured output dir (set when user configures the pipeline)
+    if cfg.get("output_dir"):
+        _add_root(Path(cfg["output_dir"]))
+    # 2. Project-relative outputs/ folder (safe absolute reference via _ROOT)
+    _add_root(_ROOT / "outputs")
+    # 3. Last demo run's output root (captured when demo was started)
+    if last_demo_root:
+        _add_root(Path(last_demo_root))
+    # 4. OneDrive SVCS folder
+    try:
+        od_root, _ = _detect_onedrive_root(prefer_business=True)
+        if od_root:
+            _add_root(od_root / _CLOUD_SUBFOLDER)
+            # Also search OneDrive root directly (catches non-SVCS outputs)
+            _add_root(od_root)
+    except Exception:
+        pass
+
+    manifests: list[tuple[float, Path]] = []
+    seen: set[Path] = set()
+    for root in search_roots:
+        # New-style: <root>/demo_comp_N/manifest.json
+        for mp in root.glob("demo_comp*/manifest.json"):
+            if mp not in seen:
+                seen.add(mp)
+                try:
+                    manifests.append((mp.stat().st_mtime, mp))
+                except OSError:
+                    pass
+        # Old-style: <root>/demo_comp/demos_stitched_N/manifest.json
+        for mp in root.glob("demo_comp/demos_stitched*/manifest.json"):
+            if mp not in seen:
+                seen.add(mp)
+                try:
+                    manifests.append((mp.stat().st_mtime, mp))
+                except OSError:
+                    pass
+
+    manifests.sort(key=lambda x: x[0], reverse=True)  # newest first
+
+    runs = []
+    for mtime, mp in manifests:
+        try:
+            with open(mp, encoding="utf-8") as f:
+                manifest = json.load(f)
+        except Exception:
+            continue
+
+        videos: dict = {}
+        for mode, view_map in manifest.get("outputs", {}).items():
+            videos[mode] = {}
+            for view, file_path in view_map.items():
+                p = Path(file_path).resolve()
+                videos[mode][view] = f"/api/media?path={quote(str(p))}" if p.exists() else None
+
+        split_screen_url = None
+        sd = Path(manifest.get("stitched_dir", ""))
+        if sd.exists():
+            for c in sd.glob("demo_splitscreen*.mp4"):
+                split_screen_url = f"/api/media?path={quote(str(c.resolve()))}"
+                break
+
+        runs.append({
+            "ts":           mtime,
+            "modes":        manifest.get("modes", []),
+            "split_screen": split_screen_url,
+            "videos":       videos,
+            "dir":          mp.parent.name,
+        })
+
+    return jsonify(runs)
 
 
 # ── HLS live streaming (task 4.1) ────────────────────────────────────────────
@@ -1095,10 +2070,31 @@ _hls_state: dict = {
     "playlist_url": None,
     "hls_dir": None,
     "error": None,
+    "stream_start_time": None,   # epoch float: when FFmpeg process launched
+    "ingest_latency_s": None,    # float: seconds from FFmpeg launch to first .ts segment
+    # ─── Rolling end-to-end latency (ROADMAP 5.1) ──────────────────────────────
+    # Author: Bloodawn (KheivenD)
+    # ingest→HLS latency: how long does a frame read off RTSP take to land in
+    # a .ts chunk that the browser can play? Cody asked for this explicitly in
+    # the April 22 sponsor meeting — operators need it for hardware sizing.
+    "latency_avg_s":   None,     # float: rolling avg over last N segments (None until 1+ samples)
+    "latency_last_s":  None,     # float: latency of the most recent segment
+    "latency_samples": 0,        # int:   how many segments contributed to the average
+    "latency_window":  20,       # int:   how many segments are kept in the rolling window
 }
 _hls_process: subprocess.Popen | None = None
 _hls_thread: threading.Thread | None = None
 _hls_stop_event: threading.Event | None = None
+
+# Bounded deques used by the latency watcher (ROADMAP 5.1).
+# `_hls_frame_ts_dq` holds frame-read timestamps in arrival order; the watcher
+# pops ~(hls_time × fps) entries each time a new .ts segment is detected and
+# computes the median age. `_hls_segment_latencies` keeps a rolling window of
+# per-segment latencies so the API can report a stable average.
+# maxlen on _hls_frame_ts_dq prevents unbounded growth if FFmpeg stalls.
+# Author: Bloodawn (KheivenD)
+_hls_frame_ts_dq: "collections.deque[float]" = collections.deque(maxlen=10000)
+_hls_segment_latencies: "collections.deque[float]" = collections.deque(maxlen=20)
 
 
 def _hls_dir_for(camera_id: str, output_dir: str) -> Path:
@@ -1106,7 +2102,7 @@ def _hls_dir_for(camera_id: str, output_dir: str) -> Path:
 
 
 def _draw_corner_overlay(frame, mode_label: str, elapsed_s: int) -> None:
-    """Thin wrapper — delegates to the shared roi_encoder.draw_corner_overlay.
+    """Thin wrapper: delegates to the shared roi_encoder.draw_corner_overlay.
 
     Kept as a module-level name so the HLS annotator thread can call it
     without changes.
@@ -1126,7 +2122,7 @@ def _hls_annotator_thread(
         cv2.VideoCapture  →  BackgroundSubtractor  →  green ROI rectangles
         + corner overlay  →  proc.stdin (rawvideo bgr24)  →  FFmpeg HLS muxer
     """
-    import numpy as np  # noqa: F401 — needed for tobytes on numpy array
+    import numpy as np  # noqa: F401 (needed for tobytes on numpy array)
 
     try:
         from background_subtraction.background_subtraction import BackgroundSubtractor
@@ -1140,7 +2136,7 @@ def _hls_annotator_thread(
         cap_src = input_source
 
     is_rtsp = isinstance(cap_src, str) and cap_src.lower().startswith("rtsp://")
-    CONNECT_TIMEOUT = 10  # seconds — Python-level timeout for VideoCapture.open()
+    CONNECT_TIMEOUT = 10  # seconds (Python-level timeout for VideoCapture.open()
 
     # cv2.VideoCapture.open() blocks until the OS-level RTSP timeout fires
     # (~30s on Windows with pip opencv-python).  CAP_PROP_OPEN_TIMEOUT_MSEC is
@@ -1153,7 +2149,7 @@ def _hls_annotator_thread(
 
     def _do_open():
         c = cv2.VideoCapture()
-        # Try to set the property anyway — no-op on most builds but harmless
+        # Try to set the property anyway (no-op on most builds but harmless)
         c.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, CONNECT_TIMEOUT * 1000)
         c.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)
         ok = c.open(cap_src)
@@ -1166,11 +2162,11 @@ def _hls_annotator_thread(
         _open_thread = threading.Thread(target=_do_open, daemon=True)
         _open_thread.start()
         if not _open_done.wait(timeout=CONNECT_TIMEOUT):
-            # Timeout fired before cv2 returned — the thread is still blocked
+            # Timeout fired before cv2 returned. The thread is still blocked
             # in the OS network stack and we cannot kill it; it will
             # self-terminate when the 30s OS timeout fires in the background.
             err = (f"RTSP connection timed out after {CONNECT_TIMEOUT}s "
-                   f"— server unreachable or stream not found: {input_source}")
+                   f"server unreachable or stream not found: {input_source}")
             with _hls_lock:
                 _hls_state["error"] = err
                 _hls_state["running"] = False
@@ -1200,7 +2196,7 @@ def _hls_annotator_thread(
 
     first_frame = None
     if w == 0 or h == 0:
-        log.info("HLS: frame dimensions unknown from stream header — reading first frame…")
+        log.info("HLS: frame dimensions unknown from stream header. Reading first frame…")
         for _ in range(30):        # try up to 30 frames (handles buffered RTSP)
             if stop_event.is_set():
                 cap.release()
@@ -1259,8 +2255,143 @@ def _hls_annotator_thread(
         return
 
     global _hls_process
+    ffmpeg_launch_time = time.time()
     with _hls_lock:
         _hls_process = proc
+        _hls_state["stream_start_time"] = ffmpeg_launch_time
+        _hls_state["ingest_latency_s"] = None
+
+    # Watch for the first .ts segment to appear and record ingest latency
+    def _watch_first_segment(hls_dir: Path, launch_time: float) -> None:
+        deadline = launch_time + 30.0  # give up after 30 s
+        while time.time() < deadline:
+            ts_files = list(hls_dir.glob("*.ts"))
+            if ts_files:
+                latency = round(time.time() - launch_time, 2)
+                with _hls_lock:
+                    _hls_state["ingest_latency_s"] = latency
+                log.info(f"HLS: first segment appeared in {latency}s")
+                return
+            time.sleep(0.25)
+        log.warning("HLS: first segment not seen within 30 s; latency unknown")
+
+    threading.Thread(
+        target=_watch_first_segment,
+        args=(hls_dir, ffmpeg_launch_time),
+        daemon=True,
+        name="hls-latency-watcher",
+    ).start()
+
+    # ── Rolling end-to-end latency watcher (ROADMAP 5.1) ─────────────────────
+    # Author: Bloodawn (KheivenD)
+    #
+    # The first-segment watcher above only tells us how long FFmpeg takes to
+    # produce its initial chunk. Cody actually asked for the *steady-state*
+    # latency: from a frame coming off RTSP, how long until that frame is
+    # inside a .ts chunk the browser can play? For hls_time=2 with fps=25
+    # we expect 50 frames per chunk, so a typical frame waits about 1 s for
+    # its containing chunk to flush. We sample this for every new .ts that
+    # appears and keep a rolling average of the last `_hls_state["latency_window"]`
+    # segments.
+    #
+    # The watcher matches each newly observed .ts to a slice of frame
+    # timestamps from `_hls_frame_ts_dq` so the latency reflects real ingest
+    # → playable-chunk delay instead of the (already-tracked) launch delay.
+    def _watch_segment_latency(
+        hls_dir: Path,
+        seg_fps: float,
+        seg_duration_s: float,
+        stop: threading.Event,
+    ) -> None:
+        seen: set[str] = set()
+        # Initial snapshot of any pre-existing .ts files (defensive — start()
+        # already deletes stale chunks, but skip if any survive).
+        try:
+            for p in hls_dir.glob("*.ts"):
+                seen.add(p.name)
+        except OSError:
+            pass
+
+        # Estimate frames per segment from the negotiated FPS. Clamp so weird
+        # camera streams that report fps=120 don't drain the queue too fast.
+        frames_per_seg = max(1, int(round(seg_duration_s * max(1.0, min(seg_fps, 60.0)))))
+        log.info(
+            f"HLS: latency watcher armed (~{frames_per_seg} frames/segment, "
+            f"window={_hls_state.get('latency_window', 20)})"
+        )
+
+        while not stop.is_set():
+            try:
+                # mtime-sorted so we process segments in the order FFmpeg wrote them
+                ts_files = sorted(
+                    (p for p in hls_dir.glob("*.ts") if p.is_file()),
+                    key=lambda p: p.stat().st_mtime,
+                )
+            except OSError:
+                ts_files = []
+
+            for p in ts_files:
+                if p.name in seen:
+                    continue
+                seen.add(p.name)
+                try:
+                    seg_written_time = p.stat().st_mtime
+                except OSError:
+                    seg_written_time = time.time()
+
+                # Pop ~frames_per_seg oldest frame-read timestamps. If the
+                # deque is shorter than that, take whatever is there — this
+                # happens for the very first segment (FFmpeg sometimes
+                # buffers fewer frames before flushing).
+                #
+                # Defensive: belt-and-braces try/except inside the lock in
+                # case len() and popleft() ever observe a different state
+                # (impossible with a single lock, but a future refactor
+                # could break that and silently produce IndexError that the
+                # outer except would then mask). Audit follow-up 2026-05-02.
+                popped: list[float] = []
+                with _hls_lock:
+                    n = min(frames_per_seg, len(_hls_frame_ts_dq))
+                    for _ in range(n):
+                        try:
+                            popped.append(_hls_frame_ts_dq.popleft())
+                        except IndexError:
+                            break
+
+                if not popped:
+                    # No frame timestamps queued for this segment — happens
+                    # if we missed the .ts notification window. Skip silently
+                    # rather than poison the average with bogus data.
+                    continue
+
+                # Median age = the typical frame's time-to-playable. Using the
+                # median (not the mean) is robust against the first/last frame
+                # outliers that bracket each segment's flush window.
+                popped.sort()
+                median_ts = popped[len(popped) // 2]
+                latency = max(0.0, seg_written_time - median_ts)
+
+                with _hls_lock:
+                    _hls_segment_latencies.append(latency)
+                    avg = sum(_hls_segment_latencies) / len(_hls_segment_latencies)
+                    _hls_state["latency_last_s"]  = round(latency, 3)
+                    _hls_state["latency_avg_s"]   = round(avg, 3)
+                    _hls_state["latency_samples"] = len(_hls_segment_latencies)
+
+            # Cap the seen-set so a long-running stream with delete_segments
+            # doesn't grow it unbounded. 256 entries × ~12 chars ≈ trivial.
+            if len(seen) > 256:
+                seen = set(sorted(seen)[-128:])
+
+            # Poll twice per chunk; FFmpeg writes a new .ts every seg_duration_s.
+            stop.wait(timeout=max(0.25, seg_duration_s / 2.0))
+
+    threading.Thread(
+        target=_watch_segment_latency,
+        args=(hls_dir, fps, 2.0, stop_event),
+        daemon=True,
+        name="hls-segment-latency-watcher",
+    ).start()
 
     # ── frame loop ────────────────────────────────────────────────────────────
     subtractor = BackgroundSubtractor(var_threshold=50)
@@ -1280,6 +2411,13 @@ def _hls_annotator_thread(
                 ret, frame = cap.read()
             if not ret or frame is None:
                 break  # EOF or read error
+
+            # Stamp the frame-read time for the latency watcher (ROADMAP 5.1).
+            # Done as close to cap.read() as possible so the measured latency
+            # reflects real ingest delay, not bg-subtraction or annotation work.
+            # Author: Bloodawn (KheivenD)
+            with _hls_lock:
+                _hls_frame_ts_dq.append(time.time())
 
             # Run background subtraction on every frame to build the model
             mask = subtractor.apply(frame)
@@ -1349,7 +2487,10 @@ def api_hls_start():
     data = request.get_json(force=True) or {}
     input_source = str(data.get("input_source", "0")).strip()
     camera_id = str(data.get("camera_id", "cam_00")).strip()
-    output_dir = str(data.get("output_dir", "")).strip() or str(_ROOT / "outputs")
+    # HLS .ts chunks should sync alongside saved segments — OneDrive when
+    # available, local fallback otherwise. Was hard-coded to local in the
+    # initial M3 implementation. Author: Bloodawn (KheivenD), 2026-05-02.
+    output_dir = str(data.get("output_dir", "")).strip() or _default_output_dir()
     mode_label = str(data.get("mode", "Mode 0")).strip()
 
     hls_dir = _hls_dir_for(camera_id, output_dir)
@@ -1378,6 +2519,16 @@ def api_hls_start():
             hls_dir=str(hls_dir),
             error=None,
         )
+        # Reset the rolling latency window so a new run does not inherit
+        # samples from the previous camera/source. (ROADMAP 5.1)
+        # Author: Bloodawn (KheivenD)
+        _hls_frame_ts_dq.clear()
+        _hls_segment_latencies.clear()
+        _hls_state["ingest_latency_s"] = None
+        _hls_state["latency_avg_s"]    = None
+        _hls_state["latency_last_s"]   = None
+        _hls_state["latency_samples"]  = 0
+        _hls_state["stream_start_time"] = None
 
     _hls_stop_event = threading.Event()
     _hls_thread = threading.Thread(
@@ -1420,6 +2571,7 @@ def api_hls_stop():
         _hls_state.update(
             running=False, camera_id=None,
             input_source=None, playlist_url=None,
+            stream_start_time=None, ingest_latency_s=None,
         )
 
     log.info("HLS stream stopped.")
@@ -1433,6 +2585,59 @@ def api_hls_status():
         snap = dict(_hls_state)
 
     return jsonify(snap)
+
+
+@app.route("/api/hls/latency")
+def api_hls_latency():
+    """Return ingest and end-to-end latency for the current HLS session.
+
+    Two latency metrics are exposed:
+
+    1. ``ingest_latency_s`` — one-shot startup latency from FFmpeg launch
+       to first .ts segment. Useful as a "did the stream connect quickly?"
+       check; set once at the start of a run.
+
+    2. ``latency_avg_s`` / ``latency_last_s`` / ``latency_samples`` —
+       rolling steady-state latency added 2026-05-02 (ROADMAP 5.1) so
+       Cody's sponsor team can size hardware against real ingest → playable
+       chunk delay. ``latency_avg_s`` is the median frame age across the
+       last ``latency_window`` segments. ``measuring`` flips to false once
+       the rolling watcher has at least one sample, even while the stream
+       continues running.
+
+    Response fields:
+        stream_start_time  – epoch timestamp when FFmpeg launched (float or null)
+        ingest_latency_s   – seconds from FFmpeg launch to first .ts file (float or null)
+        latency_avg_s      – rolling-avg end-to-end latency, seconds (float or null)
+        latency_last_s     – latency of the most recent segment, seconds (float or null)
+        latency_samples    – integer count of segments in the rolling window
+        latency_window     – integer max size of the rolling window
+        measuring          – true while no latency sample is available yet
+
+    Author: Bloodawn (KheivenD)
+    """
+    with _hls_lock:
+        start          = _hls_state.get("stream_start_time")
+        ingest         = _hls_state.get("ingest_latency_s")
+        latency_avg    = _hls_state.get("latency_avg_s")
+        latency_last   = _hls_state.get("latency_last_s")
+        latency_n      = _hls_state.get("latency_samples", 0)
+        latency_window = _hls_state.get("latency_window", 20)
+        running        = _hls_state.get("running", False)
+
+    # `measuring` is true only while we have neither a one-shot ingest sample
+    # nor a rolling sample yet — the front-end uses it to keep polling.
+    measuring = running and (ingest is None) and (latency_avg is None)
+
+    return jsonify({
+        "stream_start_time": start,
+        "ingest_latency_s":  ingest,
+        "latency_avg_s":     latency_avg,
+        "latency_last_s":    latency_last,
+        "latency_samples":   latency_n,
+        "latency_window":    latency_window,
+        "measuring":         measuring,
+    })
 
 
 @app.route("/api/hls/<camera_id>/playlist.m3u8")
@@ -1465,7 +2670,7 @@ def api_hls_segment(camera_id: str, ts_file: str):
     if not hls_dir or state_cam != camera_id:
         abort(404)
 
-    # Only serve .ts files — reject anything else
+    # Only serve .ts files. Reject anything else.
     if not ts_file.endswith(".ts"):
         abort(403)
 
@@ -1508,7 +2713,7 @@ def api_rtsp_status():
 def api_rtsp_download():
     """Start downloading the MediaMTX binary in the background.
 
-    Idempotent — safe to call again if the binary is already present
+    Idempotent. Safe to call again if the binary is already present
     (returns ok without re-downloading).
     """
     if _rtsp_mgr.binary_present():
@@ -1532,7 +2737,7 @@ def api_rtsp_start():
         return jsonify({"error": str(exc)}), 409
 
     state = _rtsp_mgr.get_state()
-    log.info("Local RTSP server started — listening on rtsp://localhost:8554/")
+    log.info("Local RTSP server started. Listening on rtsp://localhost:8554/")
     return jsonify({"ok": True, "rtsp_url": state["rtsp_url"]})
 
 
@@ -1553,23 +2758,40 @@ def api_rtsp_push():
         stream_name  – RTSP path to publish to (default: "live")
     """
     data = request.get_json(force=True) or {}
-    video_path = str(data.get("video_path", "")).strip()
+    video_path  = str(data.get("video_path", "")).strip()
     stream_name = str(data.get("stream_name", "live")).strip() or "live"
 
     if not video_path:
         return jsonify({"error": "video_path is required"}), 400
-    if not Path(video_path).exists():
-        return jsonify({"error": f"File not found: {video_path}"}), 400
+
+    # Sanitize stream_name to alphanumeric + dash/underscore only.
+    # Used directly in an RTSP URL — any shell metacharacter is a command injection risk.
+    if not _re.match(r"^[a-zA-Z0-9_\-]{1,64}$", stream_name):
+        return jsonify({"error": "stream_name must be 1–64 alphanumeric/dash/underscore chars"}), 400
+
+    # Validate video_path is inside the output directory
+    with _state_lock:
+        cfg = _status.get("config", {})
+    output_dir = Path(cfg.get("output_dir", str(_ROOT / "outputs"))).resolve()
+    vp = Path(video_path).resolve()
+    data_dir = (_ROOT / "data").resolve()
+    allowed = [output_dir, data_dir, (_ROOT / "outputs").resolve()]
+    if not any(vp == r or r in vp.parents for r in allowed):
+        log.warning("api_rtsp_push: rejected video_path outside allowed roots: %s", vp)
+        return jsonify({"error": "video_path must be inside the output or data directory"}), 403
+
+    if not vp.exists():
+        return jsonify({"error": f"File not found: {vp.name}"}), 400
     if not _rtsp_mgr.is_running():
-        return jsonify({"error": "RTSP server is not running — start it first"}), 409
+        return jsonify({"error": "RTSP server is not running. Start it first"}), 409
 
     try:
-        _rtsp_mgr.push(video_path, stream_name)
+        _rtsp_mgr.push(str(vp), stream_name)
     except Exception as exc:
         return jsonify({"error": str(exc)}), 500
 
     rtsp_url = f"rtsp://localhost:8554/{stream_name}"
-    log.info(f"RTSP push started: {video_path} → {rtsp_url}")
+    log.info("RTSP push started: %s → %s", vp.name, rtsp_url)
     return jsonify({"ok": True, "rtsp_url": rtsp_url})
 
 
@@ -1606,6 +2828,193 @@ def api_gpu_info():
     return jsonify(info)
 
 
+# ── Plate reader (post-process AI enhancement + ALPR) ────────────────────────
+#
+# Two routes power the in-GUI license-plate reader:
+#
+#   GET  /api/enhance/plates/status  – which OCR/SR backends are installed
+#   POST /api/enhance/plates         – run the reader on a saved segment
+#
+# This is intentionally a post-process flow (matches sponsor's "AI upscaling
+# for low-quality footage on offload" use case from the March 23 kickoff).
+# Running heavy SR + OCR live during recording would blow the FPS budget.
+#
+# Author: Bloodawn (KheivenD), 2026-05-02
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _import_plate_reader():
+    """Lazy import so module loading doesn't pull torch / paddle at startup."""
+    try:
+        from enhancement.plate_reader import PlateReader  # type: ignore
+    except ImportError:
+        from src.enhancement.plate_reader import PlateReader  # type: ignore
+    return PlateReader
+
+
+@app.route("/api/enhance/plates/status")
+def api_plate_reader_status():
+    """Return install/availability info for the plate-reader UI.
+
+    The GUI calls this on page load to decide whether to enable the
+    "Read Plates" button or show a "OCR backend not installed" hint.
+    """
+    try:
+        PlateReader = _import_plate_reader()
+        reader = PlateReader()
+        return jsonify(reader.status())
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Plate reader status check failed: %s", exc)
+        return jsonify({
+            "ocr_backend":   "none",
+            "ocr_available": False,
+            "sr_backend":    "unknown",
+            "sr_available":  False,
+            "sr_scale":      4,
+            "device_request":"auto",
+            "error":         str(exc),
+        })
+
+
+def _import_enhancement_benchmark():
+    """Lazy import the benchmark — keeps app startup light."""
+    try:
+        from enhancement.enhancement_benchmark import benchmark_enhancement  # type: ignore
+    except ImportError:
+        from src.enhancement.enhancement_benchmark import benchmark_enhancement  # type: ignore
+    return benchmark_enhancement
+
+
+@app.route("/api/enhance/benchmark", methods=["POST"])
+def api_enhance_benchmark():
+    """Compare no-SR vs full-frame-SR vs ROI-only-SR on a saved segment.
+
+    POST body (JSON):
+        file_path             – absolute path to a .mp4 segment (required)
+        roi_box               – [x, y, w, h] ROI in original frame coords (required)
+        sample_every_n_frames – stride between sampled frames (default 5)
+        max_frames            – cap on total frames sampled (default 20)
+        sr_scale              – 2 or 4 (default 4)
+        run_ocr               – also report OCR confidence per variant (default false)
+        ocr_backend           – "auto" | "paddleocr" | "easyocr" (default auto)
+        device                – "cuda" | "mps" | "cpu" | null (auto)
+
+    Returns the full ``BenchmarkResult`` JSON: per-variant sharpness /
+    PSNR / SSIM / OCR confidence, deltas, and a plain-English verdict.
+
+    Author: Bloodawn (KheivenD), 2026-05-02
+    """
+    data = request.get_json(force=True) or {}
+    file_path = str(data.get("file_path", "")).strip()
+    if not file_path:
+        return jsonify({"error": "file_path is required"}), 400
+
+    roi_raw = data.get("roi_box")
+    if not roi_raw or not isinstance(roi_raw, list) or len(roi_raw) != 4:
+        return jsonify({"error": "roi_box must be a 4-element [x, y, w, h] list"}), 400
+    try:
+        roi_box = tuple(int(v) for v in roi_raw)
+    except (TypeError, ValueError):
+        return jsonify({"error": "roi_box values must be integers"}), 400
+
+    src = Path(file_path)
+    if not src.exists():
+        return jsonify({"error": f"File not found: {file_path}"}), 404
+    if src.suffix.lower() == ".enc":
+        return jsonify({"error": "Decrypt the segment first; benchmark needs plaintext"}), 400
+
+    try:
+        benchmark_enhancement = _import_enhancement_benchmark()
+        result = benchmark_enhancement(
+            src,
+            roi_box=roi_box,
+            sample_every_n_frames=int(data.get("sample_every_n_frames", 5)),
+            max_frames=int(data.get("max_frames", 20)),
+            sr_scale=int(data.get("sr_scale", 4)),
+            run_ocr=bool(data.get("run_ocr", False)),
+            ocr_backend=str(data.get("ocr_backend", "auto")),
+            device=data.get("device") or None,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.error("Enhancement benchmark failed on %s: %s", file_path, exc, exc_info=True)
+        return jsonify({"error": f"Benchmark failed: {exc}"}), 500
+
+    return jsonify(result.to_dict())
+
+
+@app.route("/api/enhance/plates", methods=["POST"])
+def api_plate_reader():
+    """Run the plate reader on a saved segment.
+
+    POST body (JSON):
+        file_path             – absolute path to a .mp4/.avi/.mov clip (required)
+        sample_every_n_frames – stride between sampled frames (default 5)
+        max_frames            – cap on total frames sampled (default 60)
+        roi_boxes             – optional list of [x, y, w, h] crops to focus on
+        min_consensus_votes   – minimum agreeing-frame count (default 1)
+        min_ocr_confidence    – per-frame OCR confidence floor (default 0.4)
+        device                – "cuda" | "mps" | "cpu" | null (auto)
+        ocr_backend           – "auto" | "paddleocr" | "easyocr" (default auto)
+
+    Returns the full ``PlateReadResult`` as JSON, including a ``best_read``
+    string (or null) and per-candidate ``verdict`` flags so the operator can
+    see which reads are trustworthy.
+
+    Author: Bloodawn (KheivenD)
+    """
+    data = request.get_json(force=True) or {}
+    file_path = str(data.get("file_path", "")).strip()
+    if not file_path:
+        return jsonify({"error": "file_path is required"}), 400
+
+    src = Path(file_path)
+    if not src.exists():
+        return jsonify({"error": f"File not found: {file_path}"}), 404
+    if src.is_dir():
+        return jsonify({"error": "file_path must be a video file, not a directory"}), 400
+    if src.suffix.lower() == ".enc":
+        return jsonify({"error": "Decrypt the segment first; this endpoint does not handle .enc files"}), 400
+
+    try:
+        sample_every  = int(data.get("sample_every_n_frames", 5))
+        max_frames    = int(data.get("max_frames", 60))
+        consensus_min = int(data.get("min_consensus_votes", 1))
+        min_conf      = float(data.get("min_ocr_confidence", 0.40))
+    except (TypeError, ValueError) as exc:
+        return jsonify({"error": f"Invalid numeric parameter: {exc}"}), 400
+
+    roi_raw = data.get("roi_boxes")
+    roi_boxes = None
+    if isinstance(roi_raw, list) and roi_raw:
+        try:
+            roi_boxes = [tuple(int(v) for v in r) for r in roi_raw]
+        except (TypeError, ValueError):
+            return jsonify({"error": "roi_boxes must be a list of [x, y, w, h] integers"}), 400
+
+    device       = data.get("device") or None
+    ocr_backend  = str(data.get("ocr_backend", "auto"))
+
+    try:
+        PlateReader = _import_plate_reader()
+        reader = PlateReader(
+            ocr_backend=ocr_backend,
+            device=device,
+            min_ocr_confidence=min_conf,
+        )
+        result = reader.read_plates_from_video(
+            src,
+            sample_every_n_frames=sample_every,
+            max_frames=max_frames,
+            roi_boxes=roi_boxes,
+            min_consensus_votes=consensus_min,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.error("Plate reader failed on %s: %s", file_path, exc, exc_info=True)
+        return jsonify({"error": f"Plate reader failed: {exc}"}), 500
+
+    return jsonify(result.to_dict())
+
+
 # ── Network / LAN info ────────────────────────────────────────────────────────
 
 @app.route("/api/network_info")
@@ -1630,15 +3039,764 @@ def api_network_info():
     })
 
 
+# ── Config import / export ────────────────────────────────────────────────────
+
+_VALID_MODES   = {"mode0", "mode1", "mode2", "mode3"}
+_VALID_BG      = {"MOG2", "KNN", "GMG"}
+_VALID_DEVICES = {"auto", "cuda", "mps", "cpu"}
+_VALID_MODELS  = {"espcn", "fsrcnn", "edsr", "lapsrn", "realesrnet", "realesrgan", "bicubic"}
+
+
+@app.route("/api/config/import", methods=["POST"])
+def api_config_import():
+    """Accept a previously exported SVCS config JSON and store it as last_config.
+
+    The front-end reads the returned ``config`` object and applies each value
+    to the appropriate form field.  Fields not present in the JSON are left at
+    their current defaults.  Credentials (encrypt_password, encrypt_key_file)
+    are never stored by this route even if the client accidentally sends them.
+
+    Returns:
+        {"ok": true, "config": { ... normalised fields ... }}
+        {"error": "..."} with 400 on bad input
+    """
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data, dict):
+        return jsonify({"error": "Request body must be a JSON object"}), 400
+
+    version = data.get("svcs_config_version")
+    if version is None:
+        return jsonify({"error": "Not a valid SVCS config file (missing svcs_config_version)"}), 400
+
+    def _str(key, default=""):
+        return str(data.get(key, default)).strip() or default
+
+    def _int(key, default, lo=None, hi=None):
+        try:
+            v = int(data[key])
+        except (KeyError, TypeError, ValueError):
+            return default
+        if lo is not None:
+            v = max(lo, v)
+        if hi is not None:
+            v = min(hi, v)
+        return v
+
+    def _float(key, default, lo=None, hi=None):
+        try:
+            v = float(data[key])
+        except (KeyError, TypeError, ValueError):
+            return default
+        if lo is not None:
+            v = max(lo, v)
+        if hi is not None:
+            v = min(hi, v)
+        return v
+
+    def _bool(key, default=False):
+        val = data.get(key, default)
+        if isinstance(val, bool):
+            return val
+        return str(val).lower() in ("true", "1", "yes")
+
+    def _choice(key, valid_set, default):
+        v = str(data.get(key, default))
+        return v if v in valid_set else default
+
+    cfg = {
+        "input_source":     _str("input_source", "0"),
+        "camera_id":        _str("camera_id", "cam_00"),
+        "output_dir":       _str("output_dir", "outputs/"),
+        "mode":             _choice("mode", _VALID_MODES, "mode0"),
+        "segment_seconds":  _int("segment_seconds", 60, lo=10, hi=3600),
+        "bg_method":        _choice("bg_method", _VALID_BG, "MOG2"),
+        "warmup_frames":    _int("warmup_frames", 120, lo=0, hi=9999),
+        "enhance":          _bool("enhance"),
+        "enhance_model":    _choice("enhance_model", _VALID_MODELS, "bicubic"),
+        "enhance_scale":    _int("enhance_scale", 4, lo=2, hi=4),
+        "enhance_every_n":  _int("enhance_every_n", 5, lo=1, hi=25),
+        "enhance_max_roi_px": _int("enhance_max_roi_px", 200, lo=32),
+        "enhance_device":   _choice("enhance_device", _VALID_DEVICES, "auto"),
+        "upscale_output":   _bool("upscale_output"),
+        "object_filter":    _bool("object_filter"),
+        "filter_confidence":_float("filter_confidence", 0.30, lo=0.05, hi=0.95),
+        "encrypt":          _bool("encrypt"),
+        # NOTE: credentials (encrypt_password, encrypt_key_file) are never stored
+    }
+
+    with _state_lock:
+        _status["last_config"] = cfg
+
+    log.info("Config imported: mode=%s segment=%ss enhance=%s", cfg["mode"], cfg["segment_seconds"], cfg["enhance"])
+    return jsonify({"ok": True, "config": cfg})
+
+
+@app.route("/api/config/export", methods=["GET"])
+def api_config_export():
+    """Return the last-used pipeline config as a downloadable JSON file.
+
+    If the pipeline has not been run yet in this session, returns the
+    default config values so the operator still gets a valid starting point.
+    """
+    with _state_lock:
+        cfg = _status.get("last_config") or {}
+
+    export = {
+        "svcs_config_version": "1.0",
+        "saved_at": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "input_source": str(cfg.get("input_source", "0")),
+        "camera_id": cfg.get("camera_id", "cam_00"),
+        "output_dir": cfg.get("output_dir", "outputs/"),
+        "mode": cfg.get("mode", "mode0"),
+        "segment_seconds": cfg.get("segment_seconds", 60),
+        "bg_method": cfg.get("bg_method", "MOG2"),
+        "warmup_frames": cfg.get("warmup_frames", 120),
+        "enhance": cfg.get("enhance", False),
+        "enhance_model": cfg.get("enhance_model", "bicubic"),
+        "enhance_scale": cfg.get("enhance_scale", 4),
+        "enhance_every_n": cfg.get("enhance_every_n", 5),
+        "enhance_max_roi_px": cfg.get("enhance_max_roi_px", 200),
+        "enhance_device": cfg.get("enhance_device", "auto"),
+        "upscale_output": cfg.get("upscale_output", False),
+        "object_filter": cfg.get("object_filter", False),
+        "filter_confidence": cfg.get("filter_confidence", 0.30),
+        "encrypt": cfg.get("encrypt", False),
+    }
+
+    filename = f"svcs_config_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"
+    response = app.response_class(
+        response=json.dumps(export, indent=2),
+        status=200,
+        mimetype="application/json",
+    )
+    response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+# ── Cloud storage helpers ─────────────────────────────────────────────────────
+# Priority: school OneDrive → personal OneDrive → Google Drive → local outputs/
+#
+# OneDrive for Desktop syncs <UserFolder>\SVCS\ automatically.
+# No API credentials needed — files saved to the local folder appear in the
+# cloud within seconds, exactly like Google Drive for Desktop.
+
+_CLOUD_SUBFOLDER = "SVCS"   # subfolder created inside whichever cloud root is found
+
+
+def _detect_onedrive_root(prefer_business: bool = True) -> tuple[Path, str] | tuple[None, None]:
+    """Return (local_root, label) for the best available OneDrive folder, or (None, None).
+
+    Checks (in order when prefer_business=True):
+      1. Windows registry – OneDrive Business/School accounts (Business1, Business2, …)
+      2. Windows registry – OneDrive Personal account
+      3. Profile folder scan: any 'OneDrive - *' directory (school/org accounts)
+      4. Profile folder: plain 'OneDrive' directory (personal)
+
+    Returns a label like "OneDrive - Florida Atlantic University" or "OneDrive (Personal)".
+    """
+    home = Path.home()
+
+    def _reg_path(account_key: str) -> Path | None:
+        try:
+            import winreg
+            reg_path = rf"Software\Microsoft\OneDrive\Accounts\{account_key}"
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path) as key:
+                val, _ = winreg.QueryValueEx(key, "UserFolder")
+                p = Path(val)
+                return p if p.exists() else None
+        except Exception:
+            return None
+
+    if prefer_business:
+        # Try up to 5 business/school accounts (Business1 … Business5)
+        for n in range(1, 6):
+            p = _reg_path(f"Business{n}")
+            if p:
+                return p, p.name  # folder name is e.g. "OneDrive - Florida Atlantic University"
+        p = _reg_path("Personal")
+        if p:
+            return p, "OneDrive (Personal)"
+    else:
+        p = _reg_path("Personal")
+        if p:
+            return p, "OneDrive (Personal)"
+        for n in range(1, 6):
+            p = _reg_path(f"Business{n}")
+            if p:
+                return p, p.name
+
+    # Fallback: scan home directory for OneDrive folders
+    import glob as _glob
+    # School/org accounts: "OneDrive - OrgName"
+    if prefer_business:
+        for match in _glob.glob(str(home / "OneDrive - *")):
+            p = Path(match)
+            if p.is_dir():
+                return p, p.name
+    # Personal: plain "OneDrive"
+    plain = home / "OneDrive"
+    if plain.exists():
+        return plain, "OneDrive (Personal)"
+    # macOS / any remaining
+    for match in _glob.glob(str(home / "OneDrive*")):
+        p = Path(match)
+        if p.is_dir():
+            label = "OneDrive (Personal)" if p.name == "OneDrive" else p.name
+            return p, label
+
+    return None, None
+
+
+def _detect_gdrive_root() -> Path | None:
+    """Return the local Google Drive for Desktop 'My Drive' root, or None."""
+    home = Path.home()
+
+    try:
+        import winreg
+        for key_path in (
+            r"Software\Google\DriveFS\PerAccountPreferences",
+            r"Software\Google\Drive\PerAccountPreferences",
+        ):
+            try:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+                    i = 0
+                    while True:
+                        try:
+                            sub_name = winreg.EnumKey(key, i)
+                            with winreg.OpenKey(key, sub_name) as sub:
+                                for val_name in ("mount_point_path", "MountPointPath"):
+                                    try:
+                                        mount, _ = winreg.QueryValueEx(sub, val_name)
+                                        p = Path(mount)
+                                        for candidate in (p / "My Drive", p):
+                                            if candidate.exists() and candidate.is_dir():
+                                                return candidate
+                                    except FileNotFoundError:
+                                        pass
+                            i += 1
+                        except OSError:
+                            break
+            except FileNotFoundError:
+                pass
+    except Exception:
+        pass
+
+    import string
+    for letter in string.ascii_uppercase:
+        for sub in ("My Drive", ""):
+            p = Path(f"{letter}:\\{sub}") if sub else Path(f"{letter}:\\")
+            try:
+                if p.exists() and p.is_dir():
+                    # Confirm it's Google Drive by looking for 'Shared drives' sibling
+                    parent = p.parent if sub else p
+                    if (parent / "My Drive").exists() and (parent / "Shared drives").exists():
+                        return parent / "My Drive"
+                    if sub == "My Drive":
+                        return p
+            except (PermissionError, OSError):
+                pass
+
+    for p in (home / "Google Drive" / "My Drive", home / "Google Drive", home / "My Drive"):
+        try:
+            if p.exists():
+                return p
+        except (PermissionError, OSError):
+            pass
+
+    import glob as _glob
+    for pattern in (str(home / "Library/CloudStorage/GoogleDrive-*/My Drive"),):
+        matches = _glob.glob(pattern)
+        if matches:
+            return Path(matches[0])
+
+    return None
+
+
+def _detect_cloud_root() -> tuple[Path, str, str] | tuple[None, None, None]:
+    """Return (local_root, provider_label, web_url) for the best cloud sync folder.
+
+    Priority: school OneDrive → personal OneDrive → Google Drive.
+    Returns (None, None, None) if nothing is found.
+    """
+    od_root, od_label = _detect_onedrive_root(prefer_business=True)
+    if od_root:
+        # Direct link to the shared SVCS folder in the school OneDrive
+        web_url = (
+            "https://fau-my.sharepoint.com/:f:/g/personal/kdhaiti2024_fau_edu"
+            "/IgAq7qu600dkR57LsWrnNVvxAVt09vkarwuHEjxfcDwDF4w?e=kg15Bf"
+            if "Personal" not in od_label
+            else "https://onedrive.live.com"
+        )
+        return od_root, od_label, web_url
+
+    gd_root = _detect_gdrive_root()
+    if gd_root:
+        return gd_root, "Google Drive", "https://drive.google.com/drive/folders/1r032XVGXJeUYDZrw4eDdyXwZYCsbiH99"
+
+    return None, None, None
+
+
+@app.route("/api/gdrive/detect", methods=["GET"])
+def api_gdrive_detect():
+    """Detect the best available local cloud sync folder (OneDrive preferred, then Google Drive).
+
+    Returns JSON:
+      { "found": true, "provider": "OneDrive - Florida Atlantic University",
+        "drive_root": "C:\\Users\\k\\OneDrive - FAU",
+        "output_path": "C:\\Users\\k\\OneDrive - FAU\\SVCS",
+        "web_url": "https://portal.office.com/onedrive" }
+      { "found": false, "hint": "..." }
+    """
+    root, label, web_url = _detect_cloud_root()
+    if root is None:
+        return jsonify({
+            "found": False,
+            "provider": None,
+            "drive_root": None,
+            "output_path": None,
+            "web_url": None,
+            "hint": (
+                "No cloud sync folder found. "
+                "Make sure OneDrive is installed and signed in — "
+                "on Windows it comes pre-installed, just open it from the Start menu."
+            ),
+        })
+
+    output_path = root / _CLOUD_SUBFOLDER
+    return jsonify({
+        "found": True,
+        "provider": label,
+        "drive_root": str(root),
+        "output_path": str(output_path),
+        "web_url": web_url,
+    })
+
+
+@app.route("/api/keygen", methods=["POST"])
+def api_keygen():
+    """Generate a fresh 32-byte AES-256 key and save it as <output_dir>/camera.key.
+
+    POST body (JSON, optional):
+      { "filename": "camera.key" }   — override the output filename
+
+    Returns:
+      { "path": "C:/...outputs/camera.key", "size": 32 }
+    """
+    if not _CRYPTO_AVAILABLE:
+        return jsonify({"error": "cryptography package not installed"}), 503
+
+    body     = request.get_json(silent=True) or {}
+    raw_name = body.get("filename") or "camera.key"
+
+    # Sanitize filename — strip directories, allow only safe characters
+    try:
+        safe_name = _safe_filename(raw_name)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    if not safe_name.endswith(".key"):
+        safe_name = safe_name + ".key"
+
+    with _state_lock:
+        cfg = _status.get("config", {})
+    out_dir = Path(cfg.get("output_dir", str(_ROOT / "outputs"))).resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    key_path = out_dir / safe_name
+
+    key = _generate_key()
+    key_path.write_bytes(key)
+    try:
+        key_path.chmod(0o600)   # read/write for owner only
+    except Exception:
+        pass
+    log.info("Generated new AES-256 key file: %s", key_path)
+    return jsonify({"path": str(key_path), "size": len(key)})
+
+
+def _safe_segment_roots() -> list[Path]:
+    """Return the set of directories the user is allowed to encrypt/decrypt
+    files from. Any of these (or their descendants) is considered trusted.
+
+    Includes:
+      • the configured output_dir (default: <project>/outputs/)
+      • the project root itself (so data/samples/, data/raw/, etc. work
+        — those are the user's own clips checked into the repo)
+      • the auto-detected OneDrive root when present (covers
+        OneDrive/SVCS/, OneDrive/SVCS/Encrypted/, etc.)
+
+    The original validation only allowed output_dir, which broke the
+    common case of decrypting an .enc you have stored alongside your
+    source clips in data/samples/. Author: Bloodawn (KheivenD),
+    2026-05-03 (decrypt path fix).
+    """
+    roots: list[Path] = []
+    try:
+        with _state_lock:
+            cfg = _status.get("config", {})
+        out = Path(cfg.get("output_dir", str(_ROOT / "outputs"))).resolve()
+        roots.append(out)
+    except Exception:
+        pass
+    # Project root: lets data/, outputs/, and anything else under the repo
+    # work without requiring the user to fiddle with output_dir first.
+    try:
+        roots.append(_ROOT.resolve())
+    except Exception:
+        pass
+    # OneDrive root (covers files under OneDrive/SVCS/Encrypted/ even if
+    # the configured output_dir points somewhere else).
+    try:
+        od_root, _ = _detect_onedrive_root(prefer_business=True)
+        if od_root is not None:
+            roots.append(od_root.resolve())
+    except Exception:
+        pass
+    # De-dup while preserving order
+    seen: set[str] = set()
+    uniq: list[Path] = []
+    for r in roots:
+        s = str(r)
+        if s and s not in seen:
+            seen.add(s)
+            uniq.append(r)
+    return uniq
+
+
+def _path_under_any(p: Path, roots: list[Path]) -> bool:
+    """True if `p` equals or is under any of `roots` (after resolve)."""
+    try:
+        p_res = p.resolve()
+    except OSError:
+        return False
+    for r in roots:
+        if p_res == r:
+            return True
+        try:
+            if r in p_res.parents:
+                return True
+        except Exception:
+            continue
+    return False
+
+
+@app.route("/api/decrypt", methods=["POST"])
+def api_decrypt():
+    """Decrypt an .enc segment and stream the plaintext back to the browser.
+
+    POST body (JSON):
+      {
+        "file_path": "/absolute/path/to/segment.mp4.enc",
+        "password":  "s3cr3t",        // mutually exclusive with key_file
+        "key_file":  "/path/to/camera.key"  // mutually exclusive with password
+      }
+
+    The decrypted .mp4 is written to a temp file alongside the .enc, streamed
+    to the client, then deleted. The .enc file is NOT deleted.
+
+    Returns the video file as application/octet-stream (or video/mp4) with
+    Content-Disposition: attachment so the browser saves/plays it.
+    """
+    if not _CRYPTO_AVAILABLE:
+        return jsonify({"error": "cryptography package not installed"}), 503
+
+    body      = request.get_json(silent=True) or {}
+    enc_path_raw = body.get("file_path", "").strip()
+    password  = body.get("password") or None
+    key_file  = body.get("key_file") or None
+
+    if not enc_path_raw:
+        return jsonify({"error": "file_path is required"}), 400
+    if not password and not key_file:
+        return jsonify({"error": "Either password or key_file is required"}), 400
+
+    # ── Security: restrict file_path to one of the trusted roots ──────────────
+    # Was strictly limited to output_dir, which rejected the common case of
+    # decrypting a file you've stored under data/samples/ or anywhere else
+    # in the repo. Now allows output_dir, project root, OR OneDrive root.
+    # Author: Bloodawn (KheivenD), 2026-05-03 (decrypt path fix).
+    safe_roots = _safe_segment_roots()
+    enc_path = Path(enc_path_raw).resolve()
+    if not _path_under_any(enc_path, safe_roots):
+        log.warning("api_decrypt: rejected path outside trusted roots: %s "
+                    "(roots=%s)", enc_path, [str(r) for r in safe_roots])
+        return jsonify({
+            "error": "file_path is outside the trusted folders. Allowed: "
+                     + " | ".join(str(r) for r in safe_roots)
+        }), 403
+
+    if not enc_path.exists():
+        return jsonify({"error": f"File not found: {enc_path.name}"}), 404   # name only, no full path
+
+    if enc_path.suffix.lower() != ".enc":
+        return jsonify({"error": "Only .enc files can be decrypted via this endpoint"}), 400
+
+    # ── Security: same trust check for the key file ───────────────────────────
+    raw_key = None
+    if key_file:
+        kf_path = Path(key_file).resolve()
+        if not _path_under_any(kf_path, safe_roots):
+            log.warning("api_decrypt: rejected key_file outside trusted roots: %s", kf_path)
+            return jsonify({"error": "key_file is outside the trusted folders"}), 403
+        try:
+            with open(kf_path, "rb") as kf:
+                raw_key = kf.read()
+        except OSError as e:
+            return jsonify({"error": f"Cannot read key file: {e}"}), 400
+
+    # ── Save the decrypted plaintext to <enc_dir>/Decrypted/<name>.mp4 ──
+    # Was previously written to a temp file, streamed back, then deleted —
+    # which left the user asking "where did the file go?" since browsers
+    # treat the response as a download/play but don't expose the path.
+    # Now we keep a persistent copy on disk AND stream the bytes to the
+    # browser, so the metrics player can play it AND the file is sitting
+    # in a known folder for later use.
+    # Author: Bloodawn (KheivenD), 2026-05-03 (decrypt destination fix).
+    dec_dir = enc_path.parent / "Decrypted"
+    try:
+        dec_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        return jsonify({"error": f"Could not create Decrypted/ folder: {e}"}), 500
+
+    # Strip the trailing ".enc" — leaves e.g. "segment.mp4"
+    plain_name = enc_path.name[:-4] if enc_path.name.lower().endswith(".enc") else enc_path.stem
+    out_path = dec_dir / plain_name
+
+    # If a stale copy already exists (re-decrypt), overwrite it. The user
+    # always wants the freshest plaintext and the original .enc is the
+    # source of truth.
+    try:
+        if out_path.exists():
+            out_path.unlink()
+    except OSError:
+        pass
+
+    try:
+        out = _decrypt_file(
+            enc_path,
+            password=password,
+            key=raw_key,
+            output_path=out_path,
+        )
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 403
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"error": f"Decryption failed: {e}"}), 500
+
+    # Stream the bytes back AND keep the on-disk copy. The frontend can
+    # also call /api/media?path=<dec_path> later to replay without
+    # re-decrypting.
+    try:
+        data = out.read_bytes()
+    except OSError as e:
+        return jsonify({"error": f"Could not read decrypted file: {e}"}), 500
+
+    stem = enc_path.stem  # e.g.  cam_01_20260501T120000Z.mp4
+    log.info("Decrypted %s → %s (%d KB)", enc_path.name, out, len(data) // 1024)
+    return Response(
+        data,
+        mimetype="video/mp4",
+        headers={
+            "Content-Disposition": f'attachment; filename="{stem}"',
+            "Content-Length": str(len(data)),
+            # Surface the on-disk path so the frontend can show "saved to"
+            # without parsing the binary body.
+            "X-Decrypted-Path": str(out),
+        },
+    )
+
+
+@app.route("/api/encrypt", methods=["POST"])
+def api_encrypt():
+    """Encrypt a plaintext segment to a SIBLING ``Encrypted/`` folder.
+
+    POST body (JSON):
+      {
+        "file_path": "/absolute/path/to/segment.mp4",
+        "password":  "s3cr3t",              // mutually exclusive with key_file
+        "key_file":  "/path/to/camera.key"  // mutually exclusive with password
+      }
+
+    Behavior change 2026-05-03 (Bloodawn / KheivenD): the original .mp4
+    is now PRESERVED. Previously the segment was encrypted in-place and
+    the original was deleted, which meant a typo in the password
+    permanently lost the recording. Now we:
+
+      1. Create ``<src_dir>/Encrypted/``  (mkdir -p)
+      2. Encrypt to ``<src_dir>/Encrypted/<segment>.mp4.enc``
+      3. Leave the original .mp4 untouched
+      4. Add a NEW DB row pointing at the .enc (so the metrics table
+         shows both the unencrypted clip and its locked copy) instead
+         of replacing the original row
+
+    Returns:
+      { "enc_path": "...", "size_kb": <int>, "original_kept": True }
+    """
+    if not _CRYPTO_AVAILABLE:
+        return jsonify({"error": "cryptography package not installed. "
+                                  "Run: uv sync   (or: pip install cryptography)"}), 503
+
+    body         = request.get_json(silent=True) or {}
+    raw_path     = body.get("file_path", "").strip()
+    password     = body.get("password") or None
+    key_file     = body.get("key_file") or None
+
+    if not raw_path:
+        return jsonify({"error": "file_path is required"}), 400
+    if not password and not key_file:
+        return jsonify({"error": "Either password or key_file is required"}), 400
+
+    src_path = Path(raw_path).resolve()
+
+    # Same trust check the decrypt route uses — only allow encrypting
+    # files inside the trusted roots so a misclick can't read arbitrary
+    # files off disk.
+    safe_roots = _safe_segment_roots()
+    if not _path_under_any(src_path, safe_roots):
+        log.warning("api_encrypt: rejected path outside trusted roots: %s", src_path)
+        return jsonify({
+            "error": "file_path is outside the trusted folders. Allowed: "
+                     + " | ".join(str(r) for r in safe_roots)
+        }), 403
+
+    if not src_path.exists():
+        return jsonify({"error": f"File not found: {src_path.name}"}), 404
+
+    if src_path.suffix.lower() == ".enc":
+        return jsonify({"error": "File is already encrypted (.enc)"}), 400
+
+    # ── Load key file if provided ─────────────────────────────────────────────
+    raw_key = None
+    if key_file:
+        kf_path = Path(key_file).resolve()
+        try:
+            raw_key = kf_path.read_bytes()
+        except OSError as e:
+            return jsonify({"error": f"Cannot read key file: {e}"}), 400
+
+    # ── Pick the destination folder (NEW: don't overwrite source) ─────────────
+    # Default: a sibling "Encrypted/" folder next to the source clip.
+    # If OneDrive is detected, prefer OneDrive/SVCS/Encrypted/ so the
+    # locked copy syncs to the cloud automatically — but ONLY when the
+    # source is already somewhere in OneDrive (we don't want to silently
+    # leak a file from data/samples/ into OneDrive).
+    enc_subdir = src_path.parent / "Encrypted"
+    try:
+        od_root, _ = _detect_onedrive_root(prefer_business=True)
+        if od_root is not None and od_root in src_path.parents:
+            enc_subdir = od_root / "SVCS" / "Encrypted"
+    except Exception:
+        pass
+
+    try:
+        enc_subdir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        return jsonify({"error": f"Could not create Encrypted/ folder: {e}"}), 500
+
+    target_enc = enc_subdir / (src_path.name + ".enc")
+
+    # ── Encrypt to the target path, KEEPING the original ─────────────────────
+    try:
+        enc_path = _encrypt_file(
+            src_path,
+            password=password,
+            key=raw_key,
+            delete_original=False,    # ← KEEP the source mp4
+            output_path=target_enc,   # ← write to the Encrypted/ folder
+        )
+    except TypeError:
+        # Older _encrypt_file signature without output_path. Fall back to
+        # in-place encrypt + move-and-restore-original.
+        log.warning("api_encrypt: _encrypt_file lacks output_path; using fallback")
+        try:
+            tmp_enc = _encrypt_file(
+                src_path,
+                password=password,
+                key=raw_key,
+                delete_original=False,
+            )
+            # Move into Encrypted/ (it landed next to src by default)
+            enc_path = Path(tmp_enc).rename(target_enc)
+        except (ValueError, FileNotFoundError) as e:
+            return jsonify({"error": str(e)}), 400
+        except Exception as e:  # noqa: BLE001
+            return jsonify({"error": f"Encryption failed: {e}"}), 500
+    except (ValueError, FileNotFoundError) as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:  # noqa: BLE001
+        return jsonify({"error": f"Encryption failed: {e}"}), 500
+
+    # ── DB: ADD a new row for the .enc copy instead of replacing the original.
+    # The metrics table will show both rows so the user can see "this
+    # recording has been locked" without losing the unlocked entry.
+    try:
+        db_path = _get_db_path()
+        with get_connection(str(db_path)) as conn:
+            # Check the original row exists so we can clone its metadata
+            row = conn.execute(
+                "SELECT timestamp, camera_id, target_detected, roi_count, "
+                "       file_size, duration, object_type, "
+                "       COALESCE(avg_sharpness, 0), sharpness_label, "
+                "       COALESCE(object_classes, '[]'), dominant_color, "
+                "       COALESCE(scene_type, 'unknown'), time_of_day, "
+                "       COALESCE(vehicle_count, 0), COALESCE(person_count, 0) "
+                "FROM segments WHERE file_path = ?",
+                (str(src_path),),
+            ).fetchone()
+            enc_size = enc_path.stat().st_size
+            if row:
+                conn.execute(
+                    "INSERT INTO segments (timestamp, camera_id, target_detected, "
+                    "  roi_count, file_size, duration, file_path, object_type, "
+                    "  avg_sharpness, sharpness_label, object_classes, "
+                    "  dominant_color, scene_type, time_of_day, "
+                    "  vehicle_count, person_count) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (row[0], row[1], row[2], row[3], enc_size, row[5],
+                     str(enc_path), row[6], row[7], row[8], row[9],
+                     row[10], row[11], row[12], row[13], row[14]),
+                )
+            else:
+                # No prior row (file was outside the pipeline). Insert a
+                # minimal row so the .enc still shows up in the dashboard.
+                conn.execute(
+                    "INSERT INTO segments (timestamp, camera_id, target_detected, "
+                    "  roi_count, file_size, duration, file_path, object_type) "
+                    "VALUES (datetime('now'), ?, 0, 0, ?, 0, ?, 'unknown')",
+                    (src_path.stem, enc_size, str(enc_path)),
+                )
+            conn.commit()
+    except Exception as e:  # noqa: BLE001
+        log.warning("api_encrypt: DB update failed: %s", e)
+        # Don't fail the request — file was encrypted successfully
+
+    size_kb = int(enc_path.stat().st_size / 1024)
+    log.info("Encrypted segment: %s → %s (%d KB)  [original kept]",
+             src_path.name, enc_path, size_kb)
+    return jsonify({
+        "enc_path": str(enc_path),
+        "size_kb": size_kb,
+        "original_kept": True,
+        "original_path": str(src_path),
+    })
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def create_app() -> Flask:
+    # Pre-create OneDrive/SVCS/Encrypted/ if OneDrive is available
+    try:
+        od_root, _ = _detect_onedrive_root(prefer_business=True)
+        if od_root is not None:
+            enc_dir = od_root / "SVCS" / "Encrypted"
+            enc_dir.mkdir(parents=True, exist_ok=True)
+            log.info("OneDrive Encrypted folder ready: %s", enc_dir)
+    except Exception:
+        pass
     return app
 
 
 if __name__ == "__main__":
     log.info("=" * 60)
-    log.info("SVCS SERVER STARTUP — %s", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
+    log.info("SVCS SERVER STARTUP: %s", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
     log.info("Project root:  %s", _ROOT)
     log.info("Dashboard:     http://localhost:5000")
     log.info("Log file:      %s", _LOG_FILE)

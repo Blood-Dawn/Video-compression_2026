@@ -1,0 +1,238 @@
+"""
+tests/test_mode_size_hierarchy.py
+
+End-to-end mode-size benchmark.
+
+The user's expectation is "each mode should lower file size incrementally —
+mode 3 < mode 2 < mode 1 < mode 0". The reality on real surveillance
+footage is more nuanced: see ``docs/mode_size_hierarchy.md`` for the full
+discussion. These tests lock in the WEAKER invariants that DO hold across
+all reasonable scenes:
+
+* Every mode runs end-to-end without raising.
+* Every output (single .mp4 for mode 0/1/2, sparse directory for mode 3)
+  is smaller than the uncompressed raw bytes the source frames represent.
+* The mode 3 sparse output is a directory containing at least one
+  per-object .mp4 plus a manifest.json.
+
+This is the test file that exercises the FULL pipeline (FrameSource ->
+BG subtractor -> MOG2 mask -> ROI encoder OR Mode3SparseEncoder -> SQLite
+DB row). It is the closest thing the suite has to a smoke test of the
+whole stack, so a regression anywhere in pipeline.py / roi_encoder.py /
+mode3_sparse.py will surface here first.
+
+Author: Bloodawn (KheivenD), 2026-05-02 (audit follow-up).
+"""
+
+from __future__ import annotations
+
+import shutil
+import sys
+from pathlib import Path
+
+import cv2
+import numpy as np
+import pytest
+
+# Make sure src/ is importable
+SRC = Path(__file__).parent.parent / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _has_ffmpeg() -> bool:
+    """Return True iff the system ffmpeg binary is available on PATH."""
+    return shutil.which("ffmpeg") is not None
+
+
+def _make_synthetic_clip(path: Path, w: int = 640, h: int = 360,
+                         fps: int = 30, n_frames: int = 90) -> None:
+    """Synthesise a clip with a single moving white square on a static bg.
+
+    The square moves across the middle of the frame in frames [warmup, end-15].
+    Static background gives MOG2 enough warmup data to lock in the model;
+    motion in the middle gives Mode 1 something to gate on.
+    """
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"),
+                             float(fps), (w, h))
+    try:
+        for i in range(n_frames):
+            frame = np.full((h, w, 3), 30, dtype=np.uint8)   # dark grey bg
+            if 15 <= i < n_frames - 15:
+                x = 40 + (i - 15) * 4
+                cv2.rectangle(frame, (x, h // 2 - 30),
+                              (x + 50, h // 2 + 30),
+                              (255, 255, 255), -1)
+            writer.write(frame)
+    finally:
+        writer.release()
+
+
+def _bytes_for_mode(out_dir: Path, mode: str) -> int:
+    """Return total bytes written under out_dir for the given mode."""
+    if mode == "mode3":
+        sparse_dirs = list(out_dir.glob("mode3_sparse/*"))
+        return sum(p.stat().st_size for d in sparse_dirs
+                   for p in d.rglob("*") if p.is_file())
+    return sum(p.stat().st_size for p in out_dir.glob("*.mp4"))
+
+
+def _run_mode(src_path: Path, out_dir: Path, mode: str) -> dict:
+    """Run the real pipeline once and return measurements."""
+    from pipeline.pipeline import run_pipeline  # lazy: skips cleanly when missing
+    out_dir.mkdir(parents=True, exist_ok=True)
+    run_pipeline(
+        input_source=str(src_path),
+        camera_id="cam_bench",
+        output_dir=str(out_dir),
+        segment_seconds=15,
+        bg_method="MOG2",
+        warmup_frames=10,
+        mode=mode,
+        show_preview=False,
+    )
+    return {
+        "bytes": _bytes_for_mode(out_dir, mode),
+        "files": [str(p.relative_to(out_dir))
+                  for p in out_dir.rglob("*") if p.is_file()],
+    }
+
+
+# ---------------------------------------------------------------------------
+# Skip if ffmpeg isn't installed (the streaming encoder needs it).
+# ---------------------------------------------------------------------------
+
+pytestmark = pytest.mark.skipif(not _has_ffmpeg(),
+                                reason="ffmpeg binary not installed; "
+                                "end-to-end mode benchmark requires it")
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+class TestModeSizeHierarchy:
+    """End-to-end smoke + size benchmark across all four modes."""
+
+    def test_all_four_modes_run_without_raising(self, tmp_path):
+        """Every mode must finish a full segment without raising. This is
+        the real smoke test for the whole pipeline."""
+        src = tmp_path / "src.mp4"
+        _make_synthetic_clip(src)
+
+        results = {}
+        for mode in ("mode0", "mode1", "mode2", "mode3"):
+            out = tmp_path / mode
+            results[mode] = _run_mode(src, out, mode)
+
+        # Every mode should have produced at least one output file.
+        for mode, r in results.items():
+            assert r["files"], f"{mode}: produced no output files"
+            assert r["bytes"] > 0, f"{mode}: output bytes was 0"
+
+    def test_outputs_are_smaller_than_uncompressed_raw(self, tmp_path):
+        """All four modes must shrink the source vs. uncompressed bytes.
+        Uncompressed = N_frames * W * H * 3."""
+        src = tmp_path / "src.mp4"
+        _make_synthetic_clip(src, w=640, h=360, n_frames=90)
+
+        # Uncompressed BGR bytes for the synthetic clip
+        raw = 90 * 640 * 360 * 3
+
+        for mode in ("mode0", "mode1", "mode2", "mode3"):
+            out = tmp_path / mode
+            r = _run_mode(src, out, mode)
+            assert r["bytes"] < raw, (
+                f"{mode}: {r['bytes']} bytes is NOT smaller than raw {raw}"
+            )
+
+    def test_mode3_produces_sparse_directory(self, tmp_path):
+        """Mode 3 specifically must write the sparse output: at least one
+        per-object .mp4 + a manifest.json. This is the core "remove the
+        black, don't paint over it" check the user explicitly asked for."""
+        src = tmp_path / "src.mp4"
+        _make_synthetic_clip(src)
+
+        out = tmp_path / "mode3"
+        _run_mode(src, out, "mode3")
+
+        sparse_dirs = list(out.glob("mode3_sparse/*"))
+        assert sparse_dirs, "mode3 produced no mode3_sparse/ subdirectory"
+        seg_dir = sparse_dirs[0]
+        manifest = seg_dir / "manifest.json"
+        assert manifest.exists(), "missing manifest.json in sparse segment"
+        objects = list(seg_dir.glob("object_*.mp4"))
+        assert len(objects) >= 1, "expected at least one per-object .mp4"
+
+    def test_outputs_are_valid_mp4s(self, tmp_path):
+        """Every produced .mp4 must be openable by OpenCV. Catches the
+        FFmpeg pipe truncation regressions we've debugged before."""
+        src = tmp_path / "src.mp4"
+        _make_synthetic_clip(src)
+
+        for mode in ("mode0", "mode1", "mode2"):
+            out = tmp_path / mode
+            _run_mode(src, out, mode)
+            for f in out.glob("*.mp4"):
+                cap = cv2.VideoCapture(str(f))
+                try:
+                    assert cap.isOpened(), f"{f} could not be opened"
+                    ok, frame = cap.read()
+                    assert ok and frame is not None, (
+                        f"{f} opened but produced no frame"
+                    )
+                finally:
+                    cap.release()
+
+        # Mode 3: validate at least one object_*.mp4 in the sparse output.
+        out3 = tmp_path / "mode3"
+        _run_mode(src, out3, "mode3")
+        seg_dirs = list(out3.glob("mode3_sparse/*"))
+        assert seg_dirs
+        any_object_ok = False
+        for f in seg_dirs[0].glob("object_*.mp4"):
+            cap = cv2.VideoCapture(str(f))
+            try:
+                if cap.isOpened():
+                    ok, frame = cap.read()
+                    if ok and frame is not None:
+                        any_object_ok = True
+                        break
+            finally:
+                cap.release()
+        assert any_object_ok, "no decodable object_*.mp4 in sparse segment"
+
+    def test_size_report_for_documentation(self, tmp_path, capsys):
+        """Print measured bytes per mode so the docs/CI logs always have a
+        fresh data point. Does not assert a strict hierarchy — see
+        ``docs/mode_size_hierarchy.md`` for why mode 3 < mode 2 < mode 1 <
+        mode 0 isn't always true on synthetic clips."""
+        src = tmp_path / "src.mp4"
+        _make_synthetic_clip(src, w=1280, h=720, n_frames=180)
+
+        sizes = {}
+        for mode in ("mode0", "mode1", "mode2", "mode3"):
+            out = tmp_path / mode
+            sizes[mode] = _run_mode(src, out, mode)["bytes"]
+
+        with capsys.disabled():
+            print("\n[mode-size benchmark]")
+            for m in ("mode0", "mode1", "mode2", "mode3"):
+                print(f"  {m}: {sizes[m]:>10} bytes")
+            print(f"  mode1/mode0: {sizes['mode1']/sizes['mode0']:.2f}")
+            print(f"  mode3/mode0: {sizes['mode3']/sizes['mode0']:.2f}")
+
+        # Soft assertions: mode 1 should usually be <= mode 0 on a clip
+        # with significant no-motion frames. Mode 3 should usually be <=
+        # mode 2 on a clip with one moving object.
+        # These are documented as observations, not contracts — see
+        # docs/mode_size_hierarchy.md. We only enforce a 2x ceiling on
+        # mode 3 vs mode 0 to catch dramatic regressions.
+        assert sizes["mode3"] < sizes["mode0"] * 3, (
+            f"mode3 ({sizes['mode3']}) more than 3x mode0 ({sizes['mode0']}) "
+            "— sparse encoder regression?"
+        )

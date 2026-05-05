@@ -1,4 +1,4 @@
-# db_query — CLI for querying the segment metadata database
+# db_query: CLI for querying the segment metadata database
 import argparse
 from datetime import datetime, timedelta, timezone
 
@@ -11,7 +11,7 @@ def main():
     parser.add_argument("--camera", type=str, help="Camera ID")
     parser.add_argument("--last-hours", type=int, help="Lookback window in hours")
     parser.add_argument("--type", nargs="+", required=True,
-                        help="Object type(s) to filter — e.g. vehicle person")
+                        help="Object type(s) to filter (e.g. vehicle person)")
     parser.add_argument("--min-roi", type=int, help="Minimum ROI detection count")
     parser.add_argument("--start-time", type=str,
                         help="Start timestamp (YYYYMMDDTHHMMSSz)")

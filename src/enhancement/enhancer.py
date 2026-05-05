@@ -5,9 +5,9 @@ Super-resolution enhancement using Real-ESRGAN.
 Supports CPU, NVIDIA CUDA (GPU), and Apple Silicon MPS.
 
 Device selection order (automatic):
-  1. CUDA  — if an NVIDIA GPU with CUDA is available and torch is installed
-  2. MPS   — if running on Apple Silicon (M1/M2/M3) with torch >= 2.0
-  3. CPU   — universal fallback, always works (slowest)
+  1. CUDA  (if an NVIDIA GPU with CUDA is available and torch is installed
+  2. MPS   (if running on Apple Silicon (M1/M2/M3) with torch >= 2.0
+  3. CPU   (universal fallback, always works (slowest)
 
 The device can also be forced via the ``device`` constructor argument or the
 ``ENHANCER_DEVICE`` environment variable ("cuda", "mps", "cpu").
@@ -54,17 +54,17 @@ def detect_gpu() -> Dict:
     Probe the system for GPU acceleration support.
 
     Returns a dict with keys:
-        available      bool  — True if any GPU backend can be used
-        backend        str   — "cuda" | "mps" | "cpu"
-        device_name    str   — Human-readable GPU name, or "CPU only"
+        available      bool  (True if any GPU backend can be used)
+        backend        str   ("cuda", "mps", or "cpu")
+        device_name    str   (human-readable GPU name, or "CPU only")
         cuda_available bool
         mps_available  bool
         cuda_version   str | None
-        vram_mb        int | None   — CUDA VRAM in MB (None if unknown)
+        vram_mb        int | None   (CUDA VRAM in MB; None if unknown)
         torch_version  str | None
-        will_work      bool  — True if SR will run faster than CPU
-        note           str   — Human-readable summary
-        mobile_note    str   — Warning about mobile / integrated GPU
+        will_work      bool  (True if SR will run faster than CPU)
+        note           str   (human-readable summary)
+        mobile_note    str   (warning about mobile / integrated GPU)
     """
     result: Dict = {
         "available": False,
@@ -110,19 +110,19 @@ def detect_gpu() -> Dict:
             if vram_mb < 2048:
                 result["will_work"] = False
                 result["note"] = (
-                    f"{name} — only {vram_mb} MB VRAM detected. "
+                    f"{name}: only {vram_mb} MB VRAM detected. "
                     "Real-ESRGAN needs at least 2 GB. Will fall back to CPU."
                 )
-                result["mobile_note"] = "Low VRAM — GPU acceleration disabled for SR."
+                result["mobile_note"] = "Low VRAM. GPU acceleration disabled for SR."
             elif is_mobile:
                 result["note"] = (
-                    f"{name} — mobile/older GPU detected ({vram_mb} MB VRAM). "
+                    f"{name}: mobile/older GPU detected ({vram_mb} MB VRAM). "
                     "SR will run but may be slow. Consider using every-N-frames sampling."
                 )
                 result["mobile_note"] = "Mobile GPU: SR will work but expect reduced speed."
             else:
                 result["note"] = (
-                    f"{name} — {vram_mb} MB VRAM. GPU acceleration active. "
+                    f"{name}: {vram_mb} MB VRAM. GPU acceleration active. "
                     "Expect 5–20× faster SR than CPU."
                 )
 
@@ -138,7 +138,7 @@ def detect_gpu() -> Dict:
                 "Neural Engine / GPU cores. Expect 2–5× faster than CPU."
             )
             result["mobile_note"] = (
-                "MPS is Apple-only — not supported on phones or Windows/Linux machines."
+                "MPS is Apple-only. Not supported on phones or Windows/Linux machines."
             )
 
         else:
@@ -198,7 +198,7 @@ class Enhancer:
         Args:
             model_path: Explicit path to a RealESRGAN .pth weights file.
             models_dir: Directory containing RealESRGAN_x4plus.pth.
-            scale:      Model upscale factor — 2 or 4.
+            scale:      Model upscale factor (2 or 4).
             device:     "cuda" | "mps" | "cpu" | None (auto-detect).
         """
         if scale not in _VALID_SCALES:
@@ -234,14 +234,14 @@ class Enhancer:
             from realesrgan import RealESRGANer              # type: ignore
         except ImportError:
             log.warning(
-                "realesrgan / basicsr not installed — using bicubic fallback. "
+                "realesrgan / basicsr not installed. Using bicubic fallback. "
                 "To enable AI upscaling: pip install basicsr realesrgan"
             )
             return
 
         if not self.model_path.exists():
             log.warning(
-                "Model weights not found at %s — using bicubic fallback. "
+                "Model weights not found at %s. Using bicubic fallback. "
                 "See DEV.md → 'Enhancement Module Setup' to download weights.",
                 self.model_path,
             )
@@ -277,7 +277,7 @@ class Enhancer:
             if resolved_device != "cpu":
                 # Try again on CPU before giving up entirely
                 log.warning(
-                    "Real-ESRGAN failed on %s (%s: %s) — retrying on CPU.",
+                    "Real-ESRGAN failed on %s (%s: %s). Retrying on CPU.",
                     resolved_device.upper(), type(exc).__name__, exc,
                 )
                 try:
@@ -298,10 +298,10 @@ class Enhancer:
                     log.info("Real-ESRGAN loaded on CPU (GPU fallback).")
                     return
                 except Exception as exc2:
-                    log.warning("CPU fallback also failed (%s) — using bicubic.", exc2)
+                    log.warning("CPU fallback also failed (%s). Using bicubic.", exc2)
             else:
                 log.warning(
-                    "Real-ESRGAN failed to initialise (%s: %s) — using bicubic fallback.",
+                    "Real-ESRGAN failed to initialise (%s: %s). Using bicubic fallback.",
                     type(exc).__name__, exc,
                 )
             self._upsampler = None
@@ -314,23 +314,23 @@ class Enhancer:
             import torch
             if requested == "cuda":
                 if torch.cuda.is_available():
-                    # Check VRAM — Real-ESRGAN needs ~2 GB
+                    # Check VRAM (Real-ESRGAN needs ~2 GB)
                     vram = torch.cuda.get_device_properties(0).total_memory // (1024 * 1024)
                     if vram < 2048:
                         log.warning(
-                            "CUDA GPU has only %d MB VRAM (need 2048 MB) — falling back to CPU.", vram
+                            "CUDA GPU has only %d MB VRAM (need 2048 MB). Falling back to CPU.", vram
                         )
                         return "cpu"
                     return "cuda"
-                log.warning("CUDA requested but not available — falling back to CPU.")
+                log.warning("CUDA requested but not available. Falling back to CPU.")
                 return "cpu"
             if requested == "mps":
                 if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
                     return "mps"
-                log.warning("MPS requested but not available — falling back to CPU.")
+                log.warning("MPS requested but not available. Falling back to CPU.")
                 return "cpu"
         except ImportError:
-            log.warning("torch not installed — cannot use GPU, falling back to CPU.")
+            log.warning("torch not installed. Cannot use GPU, falling back to CPU.")
         return "cpu"
 
     # ------------------------------------------------------------------

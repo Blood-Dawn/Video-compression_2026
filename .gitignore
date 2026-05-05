@@ -90,3 +90,74 @@ ffmpeg_tmp/
 
 # MediaMTX binary (downloaded on demand — not committed)
 tools/mediamtx/
+
+# Flask persistent secret key (generated on first run)
+.flask_secret
+# AES key files
+*.key
+
+# uv sync stamp (tracks pyproject hash for the run_gui.py auto-installer;
+# regenerated on first launch on any new clone)
+.uv_sync_stamp
+
+# Per-mode CPU benchmarks (running averages from "CPU Usage by Mode" card,
+# rebuilt on every demo run — never committed)
+.mode_cpu_avgs.json
+
+# QA artifacts (generated exports / slides)
+qa_pdf/
+qa_slides/
+qa_plates/
+qa plates/
+
+# Dot-prefixed QA artifact dirs (some tools create dot-prefixed folders)
+.qa_pdf/
+.qa_slides/
+.qa_plates/
+
+# SVCS deliverables (presentations / proposals / reports)
+SVCS_*.pptx
+SVCS_*.docx
+SVCS_*.pdf
+
+# ── Sponsor handoff cleanup (added 2026-05-04) ──────────────────────
+# Drop dev-internal files from the public repo so the sponsor only sees
+# the working code. Keep README, DEV.md, LICENSE, src/, tests/,
+# pyproject.toml, uv.lock, requirements.txt, and the M3 final notebook.
+
+# Personal documents anywhere in the tree
+*.docx
+*.pptx
+*.xlsx
+
+# Loose PDFs in the repo root and in docs/ (proposal copies, progress
+# report exports, draft reports). Sponsor-facing technical docs in
+# docs/ are markdown, so PDFs there are always exports of internal docs.
+/*.pdf
+docs/*.pdf
+
+# All session logs are dev-team notes, not sponsor-facing
+docs/session_log_*.md
+docs/sponsor_meeting_*.md
+docs/handoff_*.md
+docs/progress_report_*.md
+docs/research_report.md
+docs/test_results.md
+
+# Working notebooks. Keep ONLY notebooks/final_results.ipynb (M3 deliverable).
+notebooks/*.ipynb
+!notebooks/final_results.ipynb
+
+# Generated GUI state files (in addition to the existing .flask_secret).
+# Stores last output_dir and demo root so the GUI can re-find segments
+# after a restart. Local state, never commit.
+.svcs_gui_state.json
+
+# Proposal figures are personal-doc assets, not part of the runnable code
+proposal_figures/
+
+# Local Trello / personal task exports
+*.trello
+TASKS.md
+CLAUDE.md
+.cowork/

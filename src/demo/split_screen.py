@@ -8,6 +8,11 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+try:
+    from demo.video_writer import H264Writer
+except ImportError:
+    from src.demo.video_writer import H264Writer
+
 
 def load_manifest(path: Path) -> dict:
     with open(path, "r", encoding="utf-8") as f:
@@ -15,6 +20,12 @@ def load_manifest(path: Path) -> dict:
 
 
 def resolve_mode_videos(manifest: dict) -> list[tuple[str, Path]]:
+    """Resolve one video per mode for split-screen compositing.
+
+    When multiple views exist for a mode (e.g. "standard" and "roi_tint"),
+    prefer "standard"; fall back to the first available view.
+    This avoids crashing when run_all_demos() renders more than one view.
+    """
     outputs = manifest.get("outputs", {})
     if not outputs:
         raise RuntimeError("Manifest contains no outputs")
@@ -25,15 +36,13 @@ def resolve_mode_videos(manifest: dict) -> list[tuple[str, Path]]:
         if not isinstance(mode_outputs, dict) or not mode_outputs:
             raise RuntimeError(f"No rendered outputs found for mode '{mode}'")
 
-        if len(mode_outputs) > 1:
-            available = ", ".join(mode_outputs.keys())
-            raise RuntimeError(
-                f"Mode '{mode}' has multiple rendered views ({available}). "
-                f"For now, split_screen.py expects exactly one rendered file per mode."
-            )
+        # Prefer "standard" view for the split screen; fall back to first available
+        if "standard" in mode_outputs:
+            chosen_path = mode_outputs["standard"]
+        else:
+            chosen_path = next(iter(mode_outputs.values()))
 
-        only_path = Path(next(iter(mode_outputs.values())))
-        resolved.append((mode, only_path))
+        resolved.append((mode, Path(chosen_path)))
 
     return resolved
 
@@ -82,23 +91,41 @@ def fit_frame(frame: np.ndarray, cell_w: int, cell_h: int) -> np.ndarray:
 
 
 def draw_label(frame: np.ndarray, text: str) -> None:
+    """Tiny top-left mode tag for each quadrant.
+
+    Was a big chunky label (scale 0.8, thickness 2, padded 8px) that
+    chewed up ~10% of every quadrant. Shrunk to a discreet badge so
+    the underlying video is actually visible.
+    Author: Bloodawn (KheivenD), 2026-05-04 (corner overlays).
+    """
     font = cv2.FONT_HERSHEY_SIMPLEX
-    scale = 0.8
-    thickness = 2
-    pad = 8
-    x = 12
-    y = 30
+    scale = 0.45
+    thickness = 1
+    pad_x, pad_y = 6, 4
+    x = 8
+    y_baseline = 18
 
-    (tw, th), _ = cv2.getTextSize(text, font, scale, thickness)
+    # Normalize "mode0" → "M0" so all four labels fit in tight quadrants.
+    short = text
+    low = text.lower()
+    if low.startswith("mode") and len(text) > 4:
+        short = "M" + text[4:]
 
+    (tw, th), baseline = cv2.getTextSize(short, font, scale, thickness)
+
+    # Translucent dark pad
+    overlay = frame.copy()
     cv2.rectangle(
-        frame,
-        (x - pad, y - th - pad),
-        (x + tw + pad, y + pad),
+        overlay,
+        (x - pad_x, y_baseline - th - pad_y),
+        (x + tw + pad_x, y_baseline + baseline + pad_y - 2),
         (0, 0, 0),
         -1,
     )
-    cv2.putText(frame, text, (x, y), font, scale, (255, 255, 255), thickness, cv2.LINE_AA)
+    cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, dst=frame)
+
+    cv2.putText(frame, short, (x, y_baseline), font, scale,
+                (255, 255, 255), thickness, cv2.LINE_AA)
 
 
 def build_composite_frame(
@@ -111,11 +138,17 @@ def build_composite_frame(
     total_cells = rows * cols
     blank = np.zeros((cell_h, cell_w, 3), dtype=np.uint8)
 
+    # Each per-mode demo video is rendered with corner labels already
+    # stamped by add_bottom_right_labels() in src/demo/demo.py
+    # (top-left "MODE N · SEG N", top-right "TIME"). If we call
+    # draw_label() again here we get a second small "M0" badge stacked
+    # on top of the existing "MODE 0 · SEG 1" label, which is the
+    # "modes on top of each other" defect Riley flagged 2026-05-04.
+    # Skip the second draw and just stitch the already-labeled cells.
+    # Author: Bloodawn (KheivenD), 2026-05-04 (split-screen label fix).
     prepared: list[np.ndarray] = []
-    for mode, frame in labeled_frames:
-        fitted = fit_frame(frame, cell_w, cell_h)
-        draw_label(fitted, mode)
-        prepared.append(fitted)
+    for _mode, frame in labeled_frames:
+        prepared.append(fit_frame(frame, cell_w, cell_h))
 
     while len(prepared) < total_cells:
         prepared.append(blank.copy())
@@ -166,14 +199,14 @@ def build_split_screen_from_manifest(manifest_path: Path) -> Path | None:
         output_path = stitched_dir / "demo_splitscreen.mp4"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        writer = cv2.VideoWriter(
+        writer = H264Writer(
             str(output_path),
-            cv2.VideoWriter_fourcc(*"mp4v"),
             fps,
-            (first_composite.shape[1], first_composite.shape[0]),
+            first_composite.shape[1],
+            first_composite.shape[0],
         )
         if not writer.isOpened():
-            raise RuntimeError(f"Failed to open output writer: {output_path}")
+            raise RuntimeError(f"Failed to open H264Writer for: {output_path}")
 
         try:
             current_frames = first_frames

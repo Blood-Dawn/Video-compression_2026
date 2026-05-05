@@ -57,8 +57,20 @@ class DummyFrameSource:
 
 class DummyRegion:
     """Minimal stand-in for ForegroundRegion used by pipeline serialization."""
+    # Match the attributes accessed by pipeline.py (color, centroid, enhance checks)
+    x: int = 0
+    y: int = 0
+    w: int = 4
+    h: int = 4
+
+    def __init__(self, x=0, y=0, w=4, h=4):
+        self.x = x
+        self.y = y
+        self.w = w
+        self.h = h
+
     def to_tuple(self):
-        return (0, 0, 4, 4)
+        return (self.x, self.y, self.w, self.h)
 
 
 class DummySubtractor:
@@ -91,7 +103,8 @@ class DummyEncoder:
         self._open = False
 
     def begin_segment(self, frame_shape, fps, camera_id="cam_unknown",
-                      has_targets=True, object_type="unknown", source_path=None):
+                      has_targets=True, object_type="unknown", source_path=None,
+                      **kwargs):
         self._open = True
 
     def write_frame(self, frame, boxes=None, background_frame=None,
@@ -102,7 +115,7 @@ class DummyEncoder:
     def abort_segment(self):
         self._open = False
 
-    def finish_segment(self, timeout=30.0):
+    def finish_segment(self, timeout=30.0, **kwargs):
         self._open = False
         self.call_log["encode_segment"] += 1
         return {
@@ -330,7 +343,8 @@ class TestMode1Behavior:
                 self._bbox_count = 0
 
             def begin_segment(self, frame_shape, fps, camera_id="cam_unknown",
-                              has_targets=True, object_type="unknown", source_path=None):
+                              has_targets=True, object_type="unknown", source_path=None,
+                              **kwargs):
                 self._frame_count = 0
                 self._bbox_count = 0
 
@@ -345,7 +359,7 @@ class TestMode1Behavior:
             def abort_segment(self):
                 pass
 
-            def finish_segment(self, timeout=30.0):
+            def finish_segment(self, timeout=30.0, **kwargs):
                 calls["encode_segment"] += 1
                 calls["encoded_frame_count"] = self._frame_count
                 calls["encoded_bboxes_count"] = self._bbox_count
@@ -480,7 +494,8 @@ class TestMode2Behavior:
                 self._background_val = None
 
             def begin_segment(self, frame_shape, fps, camera_id="cam_unknown",
-                              has_targets=True, object_type="unknown", source_path=None):
+                              has_targets=True, object_type="unknown", source_path=None,
+                              **kwargs):
                 self._frame_count = 0
                 self._object_only = None
                 self._background_val = None
@@ -501,7 +516,7 @@ class TestMode2Behavior:
             def abort_segment(self):
                 pass
 
-            def finish_segment(self, timeout=30.0):
+            def finish_segment(self, timeout=30.0, **kwargs):
                 calls["encode_segment"] += 1
                 calls["encoded_frame_counts"].append(self._frame_count)
                 calls["object_only"].append(self._object_only)
@@ -755,7 +770,8 @@ class TestMode3Behavior:
                 self._object_only = None
 
             def begin_segment(self, frame_shape, fps, camera_id="cam_unknown",
-                              has_targets=True, object_type="unknown", source_path=None):
+                              has_targets=True, object_type="unknown", source_path=None,
+                              **kwargs):
                 self._frame_count = 0
                 self._bbox_count = 0
                 self._object_only = None
@@ -772,7 +788,7 @@ class TestMode3Behavior:
             def abort_segment(self):
                 pass
 
-            def finish_segment(self, timeout=30.0):
+            def finish_segment(self, timeout=30.0, **kwargs):
                 calls["encode_segment"] += 1
                 calls["encoded_frame_count"] = self._frame_count
                 calls["encoded_bboxes_count"] = self._bbox_count
@@ -787,6 +803,11 @@ class TestMode3Behavior:
                 calls["get_storage_report"] += 1
                 return {"total_segments": calls["encode_segment"]}
 
+        # Mode 3 now routes back through ROIEncoder with object_only=True
+        # and a higher CRF (default 38). The sparse per-object encoder was
+        # removed 2026-05-02 because it produced multiple files per segment
+        # which wasn't what the brief asked for.
+        # Author: Bloodawn (KheivenD)
         monkeypatch.setattr("pipeline.pipeline.ROIEncoder", RecordingEncoder)
 
         run_pipeline(
@@ -800,6 +821,9 @@ class TestMode3Behavior:
             warmup_frames=0,
         )
 
+        # Mode 3 contract: object_only=True is passed on every write_frame,
+        # the encoder is called once per segment, and 3 frames + 3 bboxes
+        # made it through.
         assert calls["encode_segment"] == 1
         assert calls["encoded_frame_count"] == 3
         assert calls["encoded_bboxes_count"] == 3

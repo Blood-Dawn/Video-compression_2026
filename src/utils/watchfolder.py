@@ -216,7 +216,7 @@ def run_watchfolder(
     log.info(f"Interval : {poll_interval}s")
     log.info(f"Formats  : {', '.join(sorted(SUPPORTED_EXTENSIONS))}")
     if dry_run:
-        log.info("DRY RUN mode — no encoding will occur.")
+        log.info("DRY RUN mode. No encoding will occur.")
 
     total_ingested = 0
 
@@ -242,7 +242,17 @@ def run_watchfolder(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Watchfolder daemon — auto-ingest external video files into the compression pipeline."
+        description=(
+            "Watchfolder daemon: auto-ingest external video files into the "
+            "compression pipeline.\n\n"
+            "Tip: the GUI's Save To field auto-detects OneDrive/Google Drive "
+            "and writes to <cloud_root>/SVCS/. This CLI does NOT auto-detect "
+            "— if you want the same behaviour, point --output explicitly at "
+            "your synced folder, e.g. "
+            "`--output \"$HOME/OneDrive - Florida Atlantic University/SVCS\"` "
+            "(or %USERPROFILE%\\OneDrive - ...\\SVCS on Windows)."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--watch-dir",
@@ -252,7 +262,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--output",
         default="outputs/",
-        help="Output directory for compressed segments (default: outputs/)",
+        help=(
+            "Output directory for compressed segments (default: outputs/). "
+            "Set to <OneDrive>/SVCS/ for cloud-synced output — see the "
+            "description above."
+        ),
     )
     parser.add_argument(
         "--interval",

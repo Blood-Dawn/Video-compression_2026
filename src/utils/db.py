@@ -22,7 +22,7 @@ from typing import List, Optional, Tuple, Union
 
 # Default database path. Override via the db_path argument on every function
 # so callers are always explicit. This constant exists only for backward
-# compatibility — new code should always pass db_path explicitly.
+# compatibility. New code should always pass db_path explicitly.
 DB_NAME = "metadata.db"
 
 # Type alias for a row returned from the segments table.
@@ -34,7 +34,7 @@ def get_connection(db_path: Union[str, Path] = DB_NAME) -> sqlite3.Connection:
     Open a SQLite connection with WAL journal mode enabled.
 
     WAL (Write-Ahead Logging) allows readers and writers to operate
-    concurrently without blocking each other — important when a query
+    concurrently without blocking each other. Important when a query
     tool or reporting script runs alongside the encoding pipeline.
 
     Args:
@@ -52,7 +52,7 @@ def initialize_database(db_path: Union[str, Path] = DB_NAME) -> None:
     """
     Create the segments table and performance indexes if they do not exist.
 
-    Safe to call multiple times — all statements use IF NOT EXISTS.
+    Safe to call multiple times. All statements use IF NOT EXISTS.
     Should be called once at pipeline startup before any inserts.
 
     Args:
@@ -88,8 +88,32 @@ def initialize_database(db_path: Union[str, Path] = DB_NAME) -> None:
         if "hidden" not in columns:
             conn.execute("ALTER TABLE segments ADD COLUMN hidden INTEGER DEFAULT 0")
 
+        # ── Enhanced metadata (v2) ────────────────────────────────────────────
+        # object_classes: JSON array of distinct COCO classes detected, e.g. ["car","person"]
+        if "object_classes" not in columns:
+            conn.execute("ALTER TABLE segments ADD COLUMN object_classes TEXT DEFAULT NULL")
+
+        # dominant_color: most common color in detected ROI crops (Cody's HSV approach)
+        if "dominant_color" not in columns:
+            conn.execute("ALTER TABLE segments ADD COLUMN dominant_color TEXT DEFAULT NULL")
+
+        # scene_type: highway | intersection | parking | street | unknown
+        if "scene_type" not in columns:
+            conn.execute("ALTER TABLE segments ADD COLUMN scene_type TEXT DEFAULT 'unknown'")
+
+        # time_of_day: day | night | dusk_dawn  (derived from timestamp hour)
+        if "time_of_day" not in columns:
+            conn.execute("ALTER TABLE segments ADD COLUMN time_of_day TEXT DEFAULT NULL")
+
+        # vehicle_count / person_count: per-segment object tallies
+        if "vehicle_count" not in columns:
+            conn.execute("ALTER TABLE segments ADD COLUMN vehicle_count INTEGER DEFAULT 0")
+
+        if "person_count" not in columns:
+            conn.execute("ALTER TABLE segments ADD COLUMN person_count INTEGER DEFAULT 0")
+
         # Index on (camera_id, timestamp) makes query_recent_targets O(log n).
-        # Without this, every query is a full table scan — a problem after weeks
+        # Without this, every query is a full table scan. A problem after weeks
         # of footage accumulate thousands of rows.
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_cam_time
@@ -109,6 +133,12 @@ def insert_segment(
     object_type: str = "unknown",
     avg_sharpness: Optional[float] = None,
     sharpness_label: Optional[str] = None,
+    object_classes: Optional[str] = None,   # JSON array string, e.g. '["car","person"]'
+    dominant_color: Optional[str] = None,   # e.g. "blue", "white"
+    scene_type: str = "unknown",            # highway | intersection | parking | street
+    time_of_day: Optional[str] = None,      # day | night | dusk_dawn
+    vehicle_count: int = 0,
+    person_count: int = 0,
     db_path: Union[str, Path] = DB_NAME,
 ) -> None:
     """
@@ -137,9 +167,11 @@ def insert_segment(
             INSERT INTO segments (
                 timestamp, camera_id, target_detected,
                 roi_count, file_size, duration, file_path, object_type,
-                avg_sharpness, sharpness_label
+                avg_sharpness, sharpness_label,
+                object_classes, dominant_color, scene_type,
+                time_of_day, vehicle_count, person_count
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 timestamp,
@@ -152,6 +184,12 @@ def insert_segment(
                 object_type,
                 avg_sharpness,
                 sharpness_label,
+                object_classes,
+                dominant_color,
+                scene_type,
+                time_of_day,
+                vehicle_count,
+                person_count,
             ),
         )
         conn.commit()

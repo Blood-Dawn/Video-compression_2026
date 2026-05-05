@@ -13,9 +13,15 @@ Metrics:
 
 import cv2
 import numpy as np
+import os
+import sqlite3
+import time
 from pathlib import Path
+from typing import Callable, TypeVar
 from skimage.metrics import structural_similarity as ssim_fn
 from skimage.metrics import peak_signal_noise_ratio as psnr_fn
+
+T = TypeVar("T")
 
 """
 Enhancement metrics
@@ -173,3 +179,92 @@ def storage_savings_report(original_size_bytes: int, compressed_size_bytes: int)
         "compression_ratio": round(ratio, 2) if ratio != float("inf") else ratio,
         "space_saved_pct": round((saved / original_size_bytes) * 100, 2) if original_size_bytes > 0 else 0.0,
     }
+
+
+def measure_cpu_usage(func: Callable[[], T]) -> tuple[T, dict]:
+    """
+    Run a callable and measure CPU cost for the current process plus completed
+    child processes.
+
+    The percentage is normalized to one CPU core, so CPU-heavy subprocesses can
+    exceed 100% on multi-core systems.
+    """
+    start_wall = time.perf_counter()
+    start_times = os.times()
+    result = func()
+    end_times = os.times()
+    wall_seconds = max(time.perf_counter() - start_wall, 1e-9)
+
+    cpu_seconds = (
+        (end_times.user - start_times.user)
+        + (end_times.system - start_times.system)
+        + (end_times.children_user - start_times.children_user)
+        + (end_times.children_system - start_times.children_system)
+    )
+
+    return result, {
+        "wall_seconds": round(wall_seconds, 3),
+        "cpu_seconds": round(cpu_seconds, 3),
+        "cpu_percent": round((cpu_seconds / wall_seconds) * 100.0, 1),
+        "cpu_core_equivalent": round(cpu_seconds / wall_seconds, 2),
+    }
+
+
+def summarize_mode_storage(input_path: str | Path, db_path: str | Path) -> dict:
+    """
+    Compute storage metrics for one demo mode from its metadata database.
+
+    The compressed size is the sum of the segment file sizes recorded by the
+    pipeline, not the stitched demo video size. Demo videos include overlays and
+    are only for presentation.
+    """
+    original_size = Path(input_path).stat().st_size
+    with sqlite3.connect(str(db_path)) as conn:
+        row = conn.execute(
+            """
+            SELECT
+                COALESCE(SUM(file_size), 0),
+                COALESCE(SUM(duration), 0.0),
+                COUNT(*),
+                COALESCE(SUM(target_detected), 0),
+                COALESCE(SUM(roi_count), 0)
+            FROM segments
+            """
+        ).fetchone()
+
+    compressed_size = int(row[0] or 0)
+    report = storage_savings_report(original_size, compressed_size)
+    report.update(
+        {
+            "original_bytes": int(original_size),
+            "compressed_bytes": compressed_size,
+            "total_duration_seconds": round(float(row[1] or 0.0), 3),
+            "segment_count": int(row[2] or 0),
+            "segments_with_targets": int(row[3] or 0),
+            "roi_count": int(row[4] or 0),
+        }
+    )
+    return report
+
+
+def build_demo_metrics(
+    *,
+    mode: str,
+    input_path: str | Path,
+    db_path: str | Path,
+    cpu_metrics: dict | None = None,
+    latency_ms: float | None = None,
+) -> dict:
+    """
+    Build the metrics payload shown on the demo end card and written to the
+    manifest.
+
+    latency_ms is intentionally optional because file demos do not have camera
+    capture/display latency. Live paths can populate it when frame arrival and
+    display/write timestamps are available.
+    """
+    metrics = summarize_mode_storage(input_path, db_path)
+    metrics["mode"] = mode
+    metrics["cpu"] = cpu_metrics or {}
+    metrics["latency_ms"] = round(float(latency_ms), 1) if latency_ms is not None else None
+    return metrics

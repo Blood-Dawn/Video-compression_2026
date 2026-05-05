@@ -80,6 +80,36 @@ class TestEncodeSegment:
         assert np.array_equal(out[0, 0], background[0, 0])
         assert np.array_equal(out[6:, :], background[6:, :])
 
+    def test_background_compression_preserves_bbox_pixels(self, encoder):
+        frame = np.zeros((32, 32, 3), dtype=np.uint8)
+        for y in range(32):
+            for x in range(32):
+                frame[y, x] = [(x * 7) % 256, (y * 5) % 256, ((x + y) * 3) % 256]
+
+        out = encoder._compress_background_outside_bboxes(
+            frame,
+            [(8, 8, 10, 10)],
+            downscale=8,
+        )
+
+        assert np.array_equal(out[10, 10], frame[10, 10])
+        assert not np.array_equal(out[2, 2], frame[2, 2])
+
+    def test_background_compression_degrades_entire_frame_without_bboxes(self, encoder):
+        frame = np.zeros((32, 32, 3), dtype=np.uint8)
+        for y in range(32):
+            for x in range(32):
+                frame[y, x] = [(x * 7) % 256, (y * 5) % 256, ((x + y) * 3) % 256]
+
+        out = encoder._compress_background_outside_bboxes(
+            frame,
+            [],
+            downscale=8,
+        )
+
+        assert out.shape == frame.shape
+        assert not np.array_equal(out, frame)
+
     def test_returns_mp4_path(self, encoder, tiny_frames):
         out = encoder.encode_segment(tiny_frames, camera_id="cam_test", fps=10.0)
         assert out["file_path"].endswith(".mp4")

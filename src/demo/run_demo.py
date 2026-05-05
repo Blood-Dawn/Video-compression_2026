@@ -73,10 +73,12 @@ try:
     from demo.demo import render_demo
     from demo.split_screen import build_split_screen_from_manifest
     from pipeline.pipeline import run_pipeline
+    from utils.metrics import build_demo_metrics, measure_cpu_usage
 except ModuleNotFoundError:
     from src.demo.demo import render_demo
     from src.demo.split_screen import build_split_screen_from_manifest
     from src.pipeline.pipeline import run_pipeline
+    from src.utils.metrics import build_demo_metrics, measure_cpu_usage
 
 
 ALLOWED_MODES = {"mode0", "mode1", "mode2", "mode3"}
@@ -130,6 +132,7 @@ def run_all_demos(
     modes: list[str],
     views: list[str],
     no_boxes: bool = False,
+    no_tint: bool = False,
     progress_callback=None,
 ):
     """Run pipelines for each mode then render annotated demo videos.
@@ -161,6 +164,7 @@ def run_all_demos(
     _cb(f"Starting demo run — {mode_total} mode(s)", phase="start", mode_total=mode_total)
 
     mode_output_dirs: dict[str, Path] = {}
+    mode_metrics: dict[str, dict] = {}
 
     for mode_index, mode in enumerate(modes):
         mode_dir = (output_root_path / f"demo_{mode}{suffix}").resolve()
@@ -172,13 +176,27 @@ def run_all_demos(
             mode_index=mode_index, mode_total=mode_total, done=False,
         )
 
-        run_pipeline(
-            input_source=input_path,
-            camera_id=camera_id,
-            output_dir=str(mode_dir),
-            mode=mode,
-            demo=True,
+        _, cpu_metrics = measure_cpu_usage(
+            lambda: run_pipeline(
+                input_source=input_path,
+                camera_id=camera_id,
+                output_dir=str(mode_dir),
+                mode=mode,
+                demo=True,
+            )
         )
+
+        db_path = (mode_dir / "metadata.db").resolve()
+        mode_metrics[mode] = build_demo_metrics(
+            mode=mode,
+            input_path=input_path,
+            db_path=db_path,
+            cpu_metrics=cpu_metrics,
+        )
+
+        metrics_path = (mode_dir / f"{camera_id}_{mode}_metrics.json").resolve()
+        with open(metrics_path, "w", encoding="utf-8") as f:
+            json.dump(mode_metrics[mode], f, indent=2)
 
         _cb(
             f"Pipeline done: {mode} — rendering annotated video…",
@@ -215,6 +233,8 @@ def run_all_demos(
                 output_path=str(output_video),
                 view=view,
                 draw_boxes=not no_boxes,
+                draw_tint=not no_tint,
+                metrics=mode_metrics.get(mode),
             )
 
             _cb(
@@ -231,6 +251,7 @@ def run_all_demos(
         "modes": modes,
         "stitched_dir": str(stitched_dir),
         "outputs": {},
+        "metrics": mode_metrics,
     }
 
     for mode in modes:
@@ -297,6 +318,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Disable ROI boxes in stitched demo renders",
     )
+    parser.add_argument(
+        "--no-tint",
+        action="store_true",
+        help="Disable ROI tinting in stitched demo renders",
+    )
 
     args = parser.parse_args()
 
@@ -307,4 +333,5 @@ if __name__ == "__main__":
         modes=args.modes,
         views=args.view,
         no_boxes=args.no_boxes,
+        no_tint=args.no_tint,
     )

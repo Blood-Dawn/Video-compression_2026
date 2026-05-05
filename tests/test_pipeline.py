@@ -96,7 +96,7 @@ class DummyEncoder:
 
     def write_frame(self, frame, boxes=None, background_frame=None,
                     object_only=False, mode_label="", draw_roi_boxes=None,
-                    measure_sharpness=True):
+                    measure_sharpness=True, compress_background=False):
         pass
 
     def abort_segment(self):
@@ -178,6 +178,53 @@ def mixed_event_frames():
 # ---------------------------------------------------------------------------
 
 class TestEOFBoundaryBehavior:
+    def test_mode0_compresses_background_outside_rois(
+        self, monkeypatch, tmp_path, exact_segment_frames
+    ):
+        calls = {
+            "encode_segment": 0,
+            "get_storage_report": 0,
+            "compress_background": None,
+        }
+
+        monkeypatch.setattr(
+            "pipeline.pipeline.FrameSource",
+            lambda *_args, **_kwargs: DummyFrameSource(exact_segment_frames)
+        )
+        monkeypatch.setattr(
+            "pipeline.pipeline.BackgroundSubtractor",
+            DummySubtractor
+        )
+        monkeypatch.setattr(
+            "pipeline.pipeline.initialize_database",
+            lambda *_args, **_kwargs: None
+        )
+
+        class RecordingEncoder(DummyEncoder):
+            def write_frame(self, frame, boxes=None, background_frame=None,
+                            object_only=False, mode_label="", draw_roi_boxes=None,
+                            measure_sharpness=True, compress_background=False):
+                if calls["compress_background"] is None:
+                    calls["compress_background"] = compress_background
+
+        monkeypatch.setattr(
+            "pipeline.pipeline.ROIEncoder",
+            lambda *args, **kwargs: RecordingEncoder(calls, *args, **kwargs)
+        )
+
+        run_pipeline(
+            input_source="dummy.mp4",
+            camera_id="cam_test",
+            output_dir=str(tmp_path),
+            segment_seconds=2,
+            bg_method="MOG2",
+            mode="mode0",
+            show_preview=False,
+            warmup_frames=0,
+        )
+
+        assert calls["compress_background"] is True
+
     def test_no_extra_partial_encode_when_video_ends_on_exact_segment_boundary(
         self, monkeypatch, tmp_path, exact_segment_frames
     ):
@@ -210,7 +257,7 @@ class TestEOFBoundaryBehavior:
             "pipeline.pipeline.initialize_database",
             lambda *_args, **_kwargs: None
         )
-        
+
 
         run_pipeline(
             input_source="dummy.mp4",
@@ -227,8 +274,8 @@ class TestEOFBoundaryBehavior:
 
         # Cleanup/reporting should still run with zero leftover frames.
         assert calls["get_storage_report"] == 1
-        
-        
+
+
 # ---------------------------------------------------------------------------
 # mode1 behavior
 # ---------------------------------------------------------------------------
@@ -249,6 +296,7 @@ class TestMode1Behavior:
             "get_storage_report": 0,
             "encoded_frame_count": None,
             "encoded_bboxes_count": None,
+            "compress_background": None,
         }
 
         # Event pattern across 6 frames: skip, keep, skip, keep, skip, keep
@@ -288,9 +336,11 @@ class TestMode1Behavior:
 
             def write_frame(self, frame, boxes=None, background_frame=None,
                             object_only=False, mode_label="", draw_roi_boxes=None,
-                            measure_sharpness=True):
+                            measure_sharpness=True, compress_background=False):
                 self._frame_count += 1
                 self._bbox_count += 1  # one bboxes_per_frame entry per write_frame call
+                if calls["compress_background"] is None:
+                    calls["compress_background"] = compress_background
 
             def abort_segment(self):
                 pass
@@ -330,6 +380,7 @@ class TestMode1Behavior:
         assert calls["encode_segment"] == 1
         assert calls["encoded_frame_count"] == 3
         assert calls["encoded_bboxes_count"] == 3
+        assert calls["compress_background"] is False
         assert calls["get_storage_report"] == 1
 
 
@@ -338,6 +389,49 @@ class TestMode1Behavior:
 # ---------------------------------------------------------------------------
 
 class TestMode2Behavior:
+    def test_mode2_uses_compression_oriented_encoder_settings(
+        self, monkeypatch, tmp_path
+    ):
+        encoder_kwargs = {}
+        frames = [np.full((16, 16, 3), 1, dtype=np.uint8)]
+        regions_per_frame = [[DummyRegion()]]
+
+        monkeypatch.setattr(
+            "pipeline.pipeline.FrameSource",
+            lambda *_args, **_kwargs: DummyFrameSource(
+                frames, fps=2.0, width=16, height=16
+            )
+        )
+        monkeypatch.setattr(
+            "pipeline.pipeline.BackgroundSubtractor",
+            lambda *args, **kwargs: SequenceSubtractor(regions_per_frame, *args, **kwargs)
+        )
+        monkeypatch.setattr(
+            "pipeline.pipeline.initialize_database",
+            lambda *_args, **_kwargs: None
+        )
+
+        class RecordingEncoder(DummyEncoder):
+            def __init__(self, *args, **kwargs):
+                encoder_kwargs.update(kwargs)
+                super().__init__({"encode_segment": 0, "get_storage_report": 0}, *args, **kwargs)
+
+        monkeypatch.setattr("pipeline.pipeline.ROIEncoder", RecordingEncoder)
+
+        run_pipeline(
+            input_source="dummy.mp4",
+            camera_id="cam_test",
+            output_dir=str(tmp_path),
+            segment_seconds=60,
+            bg_method="MOG2",
+            mode="mode2",
+            show_preview=False,
+            warmup_frames=0,
+        )
+
+        assert encoder_kwargs["preset"] == "veryfast"
+        assert encoder_kwargs["foreground_crf"] == 23
+
     def test_mode2_uses_background_only_after_two_clean_seconds(
         self, monkeypatch, tmp_path
     ):
@@ -393,7 +487,7 @@ class TestMode2Behavior:
 
             def write_frame(self, frame, boxes=None, background_frame=None,
                             object_only=False, mode_label="", draw_roi_boxes=None,
-                            measure_sharpness=True):
+                            measure_sharpness=True, compress_background=False):
                 self._frame_count += 1
                 # Capture the first frame's object_only and background value
                 if self._object_only is None:
@@ -438,7 +532,177 @@ class TestMode2Behavior:
         assert calls["encode_segment"] == 2
         assert calls["encoded_frame_counts"] == [1, 1]
         assert calls["object_only"] == [False, False]
-        assert calls["background_values"] == [0, 7]
+        assert calls["background_values"] == [0, 4]
+
+    def test_mode2_does_not_learn_clean_background_during_first_second_after_warmup(
+        self, monkeypatch, tmp_path
+    ):
+        calls = {
+            "encode_segment": 0,
+            "background_values": [],
+        }
+
+        frames = [
+            np.full((16, 16, 3), value, dtype=np.uint8)
+            for value in range(3)
+        ]
+        regions_per_frame = [
+            [],
+            [],
+            [DummyRegion()],
+        ]
+
+        monkeypatch.setattr(
+            "pipeline.pipeline.FrameSource",
+            lambda *_args, **_kwargs: DummyFrameSource(
+                frames, fps=2.0, width=16, height=16
+            )
+        )
+        monkeypatch.setattr(
+            "pipeline.pipeline.BackgroundSubtractor",
+            lambda *args, **kwargs: SequenceSubtractor(regions_per_frame, *args, **kwargs)
+        )
+        monkeypatch.setattr(
+            "pipeline.pipeline.initialize_database",
+            lambda *_args, **_kwargs: None
+        )
+
+        class RecordingEncoder:
+            def __init__(self, *args, **kwargs):
+                self._background_val = None
+
+            def begin_segment(self, frame_shape, fps, camera_id="cam_unknown",
+                              has_targets=True, object_type="unknown", source_path=None):
+                self._background_val = None
+
+            def write_frame(self, frame, boxes=None, background_frame=None,
+                            object_only=False, mode_label="", draw_roi_boxes=None,
+                            measure_sharpness=True, compress_background=False):
+                if self._background_val is None:
+                    self._background_val = (
+                        None if background_frame is None
+                        else int(background_frame[0, 0, 0])
+                    )
+
+            def abort_segment(self):
+                pass
+
+            def finish_segment(self, timeout=30.0):
+                calls["encode_segment"] += 1
+                calls["background_values"].append(self._background_val)
+                return {
+                    "file_path": f"mode2_patch_{calls['encode_segment']}.mp4",
+                    "avg_sharpness": None,
+                    "sharpness_label": None,
+                }
+
+            def get_storage_report(self):
+                return {"total_segments": calls["encode_segment"]}
+
+        monkeypatch.setattr("pipeline.pipeline.ROIEncoder", RecordingEncoder)
+
+        run_pipeline(
+            input_source="dummy.mp4",
+            camera_id="cam_test",
+            output_dir=str(tmp_path),
+            segment_seconds=60,
+            bg_method="MOG2",
+            mode="mode2",
+            show_preview=False,
+            warmup_frames=0,
+            mode2_clean_seconds=1.0,
+        )
+
+        assert calls["encode_segment"] == 1
+        assert calls["background_values"] == [0]
+
+    def test_mode2_refreshes_active_segment_background_after_clean_skip_gap(
+        self, monkeypatch, tmp_path
+    ):
+        calls = {
+            "encode_segment": 0,
+            "background_values_per_write": [],
+        }
+
+        frames = [
+            np.full((16, 16, 3), value, dtype=np.uint8)
+            for value in range(11)
+        ]
+        regions_per_frame = [
+            [DummyRegion()],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [],
+            [DummyRegion()],
+            [DummyRegion()],
+        ]
+
+        monkeypatch.setattr(
+            "pipeline.pipeline.FrameSource",
+            lambda *_args, **_kwargs: DummyFrameSource(
+                frames, fps=2.0, width=16, height=16
+            )
+        )
+        monkeypatch.setattr(
+            "pipeline.pipeline.BackgroundSubtractor",
+            lambda *args, **kwargs: SequenceSubtractor(regions_per_frame, *args, **kwargs)
+        )
+        monkeypatch.setattr(
+            "pipeline.pipeline.initialize_database",
+            lambda *_args, **_kwargs: None
+        )
+
+        class RecordingEncoder:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            def begin_segment(self, frame_shape, fps, camera_id="cam_unknown",
+                              has_targets=True, object_type="unknown", source_path=None):
+                pass
+
+            def write_frame(self, frame, boxes=None, background_frame=None,
+                            object_only=False, mode_label="", draw_roi_boxes=None,
+                            measure_sharpness=True, compress_background=False):
+                calls["background_values_per_write"].append(
+                    None if background_frame is None
+                    else int(background_frame[0, 0, 0])
+                )
+
+            def abort_segment(self):
+                pass
+
+            def finish_segment(self, timeout=30.0):
+                calls["encode_segment"] += 1
+                return {
+                    "file_path": f"mode2_patch_{calls['encode_segment']}.mp4",
+                    "avg_sharpness": None,
+                    "sharpness_label": None,
+                }
+
+            def get_storage_report(self):
+                return {"total_segments": calls["encode_segment"]}
+
+        monkeypatch.setattr("pipeline.pipeline.ROIEncoder", RecordingEncoder)
+
+        run_pipeline(
+            input_source="dummy.mp4",
+            camera_id="cam_test",
+            output_dir=str(tmp_path),
+            segment_seconds=60,
+            bg_method="MOG2",
+            mode="mode2",
+            show_preview=False,
+            warmup_frames=0,
+            mode2_clean_seconds=1.0,
+        )
+
+        assert calls["encode_segment"] == 1
+        assert calls["background_values_per_write"] == [0, 5, 5]
 
 
 # ---------------------------------------------------------------------------
@@ -446,7 +710,7 @@ class TestMode2Behavior:
 # ---------------------------------------------------------------------------
 
 class TestMode3Behavior:
-    def test_mode3_encodes_object_only_mp4_segments(
+    def test_mode3_encodes_object_only_mp4_segments_with_compression_settings(
         self, monkeypatch, tmp_path, mixed_event_frames
     ):
         calls = {
@@ -455,6 +719,8 @@ class TestMode3Behavior:
             "encoded_frame_count": None,
             "encoded_bboxes_count": None,
             "object_only": None,
+            "init_kwargs": None,
+            "source_path": "unset",
         }
 
         regions_per_frame = [
@@ -483,6 +749,7 @@ class TestMode3Behavior:
 
         class RecordingEncoder:
             def __init__(self, *args, **kwargs):
+                calls["init_kwargs"] = kwargs
                 self._frame_count = 0
                 self._bbox_count = 0
                 self._object_only = None
@@ -492,10 +759,11 @@ class TestMode3Behavior:
                 self._frame_count = 0
                 self._bbox_count = 0
                 self._object_only = None
+                calls["source_path"] = source_path
 
             def write_frame(self, frame, boxes=None, background_frame=None,
                             object_only=False, mode_label="", draw_roi_boxes=None,
-                            measure_sharpness=True):
+                            measure_sharpness=True, compress_background=False):
                 self._frame_count += 1
                 self._bbox_count += 1
                 if self._object_only is None:
@@ -536,4 +804,7 @@ class TestMode3Behavior:
         assert calls["encoded_frame_count"] == 3
         assert calls["encoded_bboxes_count"] == 3
         assert calls["object_only"] is True
+        assert calls["init_kwargs"]["preset"] == "veryfast"
+        assert calls["init_kwargs"]["foreground_crf"] == 23
+        assert calls["source_path"] is None
         assert calls["get_storage_report"] == 1

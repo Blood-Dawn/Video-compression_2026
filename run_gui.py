@@ -216,6 +216,22 @@ def main():
                              "check that runs when pyproject.toml has changed.")
     args = parser.parse_args()
 
+    # ── Crash reporting (opt-in) ────────────────────────────────────────
+    # Wire Sentry BEFORE we import gui.app so unhandled errors during
+    # Flask startup are also captured. The helper is a no-op unless the
+    # user has both installed sentry-sdk (via the [crash-reporting] extra)
+    # and set SVCS_ENABLE_SENTRY=1 with a valid SENTRY_DSN. The casual
+    # install never phones home. See src/utils/crash_reporting.py for the
+    # full PII / scrubbing policy.
+    # Author: Bloodawn (KheivenD), 2026-05-14 (audit item: crash reporting).
+    try:
+        from utils.crash_reporting import init_crash_reporting
+        init_crash_reporting()
+    except Exception:  # noqa: BLE001
+        # Crash reporting must NEVER block the app from launching. If
+        # anything goes wrong here we silently fall back to no Sentry.
+        pass
+
     print(f"\n{'━'*55}")
     print(f"  SVCS Dashboard")
     print(f"  http://{args.host}:{args.port}")

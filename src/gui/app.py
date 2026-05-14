@@ -92,9 +92,18 @@ except ImportError:
 # ── Flask app ─────────────────────────────────────────────────────────────────
 app = Flask(__name__, template_folder="templates")
 
+# All state files now live in the platform-standard app data directory
+# instead of the repo root, so the installer works on Windows / macOS /
+# Linux where Program Files / /Applications are read-only.
+# Author: Bloodawn (KheivenD), 2026-05-14 (installer prep).
+try:
+    from utils import paths as _paths
+except ModuleNotFoundError:
+    from src.utils import paths as _paths
+
 # Persist SECRET_KEY so signed cookies/sessions survive restarts.
 # File is created with mode 0600 on first run.
-_SK_FILE = _ROOT / ".flask_secret"
+_SK_FILE = _paths.state_file("flask_secret")
 try:
     app.config["SECRET_KEY"] = _SK_FILE.read_bytes()
 except FileNotFoundError:
@@ -209,10 +218,11 @@ _cpu_sampler_thread: threading.Thread | None = None
 _cpu_sampler_stop = threading.Event()
 
 # Per-mode CPU benchmarks live here so they persist across server
-# restarts. Lives next to .flask_secret in the project root, mode 0644
-# (no secrets — just a tiny JSON of running averages).
-# Author: Bloodawn (KheivenD), 2026-05-03 (cpu-by-mode persistence).
-_MODE_AVG_FILE = _ROOT / ".mode_cpu_avgs.json"
+# restarts. Now stored under the platform app-data dir alongside the
+# Flask secret; was previously in the repo root, which broke any real
+# installer because Program Files / /Applications are read-only.
+# Author: Bloodawn (KheivenD), 2026-05-14 (installer prep, was 2026-05-03).
+_MODE_AVG_FILE = _paths.state_file("mode_cpu_avgs.json")
 try:
     if _MODE_AVG_FILE.exists():
         _saved_avgs = json.loads(_MODE_AVG_FILE.read_text())
@@ -237,10 +247,10 @@ except Exception as _exc:  # noqa: BLE001
 # to OneDrive/SVCS or another folder, those segments become invisible
 # in the GUI even though the files still exist on disk.
 #
-# Store the last-known roots in a tiny JSON next to .flask_secret so
-# they survive a restart. No secrets in this file, just paths.
-# Author: Bloodawn (KheivenD), 2026-05-04 (output-dir persistence).
-_GUI_STATE_FILE = _ROOT / ".svcs_gui_state.json"
+# Store the last-known roots in a tiny JSON next to the Flask secret
+# so they survive a restart. No secrets in this file, just paths.
+# Author: Bloodawn (KheivenD), 2026-05-14 (installer prep, was 2026-05-04).
+_GUI_STATE_FILE = _paths.state_file("gui_state.json")
 
 
 def _load_gui_state() -> None:

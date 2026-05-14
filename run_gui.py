@@ -55,7 +55,24 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 _REPO_ROOT = Path(__file__).parent
 _PYPROJECT = _REPO_ROOT / "pyproject.toml"
 _UV_LOCK   = _REPO_ROOT / "uv.lock"
-_SYNC_STAMP = _REPO_ROOT / ".uv_sync_stamp"   # tracks last successful sync
+
+# The uv sync stamp tracks whether pyproject.toml + uv.lock have changed
+# since the last successful auto-install. It lives in the platform cache
+# dir (e.g. %LOCALAPPDATA%\SVCS on Windows, ~/Library/Caches/SVCS on
+# macOS) so the installed app can write it without needing access to
+# the repo root. Importing src.utils.paths also kicks off a one-time
+# migration of any pre-existing state files from the repo root to the
+# new platform locations.
+# Author: Bloodawn (KheivenD), 2026-05-14 (installer prep).
+try:
+    sys.path.insert(0, str(_REPO_ROOT / "src"))
+    from utils.paths import cache_dir as _cache_dir  # noqa: E402
+    _SYNC_STAMP = _cache_dir() / "uv_sync_stamp"
+except Exception:  # noqa: BLE001
+    # If platformdirs isn't installed yet (very first launch on a fresh
+    # clone, before uv sync has run), fall back to the old repo-root
+    # location. After the first sync this path won't be hit again.
+    _SYNC_STAMP = _REPO_ROOT / ".uv_sync_stamp"
 
 
 def _pyproject_fingerprint() -> str:

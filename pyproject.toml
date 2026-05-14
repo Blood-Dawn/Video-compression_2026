@@ -60,6 +60,15 @@ dependencies = [
     # Pinning >=41 because PBKDF2HMAC-from-bytes lives in the modern API.
     # Author: Bloodawn (KheivenD), 2026-05-03 (encrypt fix).
     "cryptography>=41.0.0",
+    # Platform-aware app data / config / cache directories. Lets the
+    # installed app write its small state files (.flask_secret, the
+    # CPU benchmark cache, the persisted output_dir, etc.) to the
+    # standard OS location instead of next to the binary, which is
+    # required for any real installer to work on Windows or macOS.
+    # On dev machines we still migrate any existing files from the
+    # repo root automatically on first run so nothing is lost.
+    # Author: Bloodawn (KheivenD), 2026-05-14 (installer prep).
+    "platformdirs>=4.0.0",
 ]
 
 [project.optional-dependencies]

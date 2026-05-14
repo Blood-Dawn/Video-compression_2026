@@ -91,7 +91,10 @@ ffmpeg_tmp/
 # MediaMTX binary (downloaded on demand — not committed)
 tools/mediamtx/
 
-# Flask persistent secret key (generated on first run)
+# Legacy state files. As of 2026-05-14 these live in the platform
+# app-data dir (see src/utils/paths.py), but we keep these entries
+# so older dev clones with the files still in the repo root stay
+# ignored after migration.
 .flask_secret
 # AES key files
 *.key

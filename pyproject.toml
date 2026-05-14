@@ -97,6 +97,20 @@ plates = [
     "easyocr>=1.7.0",
 ]
 
+# Opt-in crash reporting (Sentry). Disabled by default; the user has to
+# both install this extra AND set SVCS_ENABLE_SENTRY=1 with a valid
+# SENTRY_DSN env var before any traces are sent. The casual installer
+# does NOT ship this; we add it for the premium / enterprise tier and
+# for our own internal dogfood builds where we want backtraces from
+# production crashes. PII (cookies, request headers, user IPs) is
+# scrubbed; only the exception type, message, and Python traceback are
+# transmitted.
+# Install:  uv sync --extra crash-reporting
+# Author: Bloodawn (KheivenD), 2026-05-14 (audit item: crash reporting).
+crash-reporting = [
+    "sentry-sdk>=2.0.0",
+]
+
 [project.scripts]
 run-gui = "src.gui.run_gui:main"
 

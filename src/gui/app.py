@@ -556,12 +556,37 @@ log = logging.getLogger(__name__)
 
 
 def _write_shutdown_log():
-    """Write a clean shutdown marker to the log file on process exit."""
-    log.info("=" * 60)
-    log.info("SVCS SERVER SHUTDOWN: %s", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
-    log.info("=" * 60)
-    # Flush file handler so nothing is lost if Python exits abruptly
-    _file_handler.flush()
+    """Write a clean shutdown marker to the log file on process exit.
+
+    Guards against the case where atexit fires after the test runner (or
+    any parent process) has already closed stdout/stderr. The naive
+    approach of wrapping log.info() in try/except doesn't work, because
+    Python's logging.Handler.emit() catches the ValueError internally and
+    routes it to its own error-handling path (printing "--- Logging
+    error ---" to stderr). To actually silence that, we have to detach
+    handlers whose underlying stream is already closed BEFORE logging.
+    The file handler is preserved either way so the shutdown marker
+    still lands in svcs.log.
+    """
+    try:
+        root = logging.getLogger()
+        for h in list(root.handlers):
+            stream = getattr(h, "stream", None)
+            if stream is not None and getattr(stream, "closed", False):
+                root.removeHandler(h)
+    except Exception:  # noqa: BLE001  shutdown best-effort
+        pass
+    try:
+        log.info("=" * 60)
+        log.info("SVCS SERVER SHUTDOWN: %s",
+                 datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
+        log.info("=" * 60)
+    except (ValueError, OSError):
+        pass
+    try:
+        _file_handler.flush()
+    except (ValueError, OSError):
+        pass
 
 
 atexit.register(_write_shutdown_log)

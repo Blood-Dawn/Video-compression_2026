@@ -112,6 +112,12 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+# Use a project-local tmp dir for pytest fixtures. Windows %TEMP% periodically
+# gets locked by AV/indexer/OneDrive, producing PermissionError on tmp_path
+# fixtures (`pytest-of-<user>` directory). Keeping basetemp inside the repo
+# under .pytest_tmp/ sidesteps all of that. The folder is gitignored.
+# Author: Bloodawn (KheivenD), 2026-05-14.
+addopts = "--basetemp=.pytest_tmp --tb=short -ra"
 
 # ── PyTorch CUDA index ────────────────────────────────────────────────────────
 # Tell uv to always fetch torch and torchvision from the CUDA 12.8 wheel index

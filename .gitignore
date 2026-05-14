@@ -53,6 +53,10 @@ results/
 logs/
 *.log
 
+# Pytest tmp dir (project-local, replaces %TEMP%\pytest-of-<user>)
+.pytest_tmp/
+.pytest_cache/
+
 # OS
 .DS_Store
 Thumbs.db

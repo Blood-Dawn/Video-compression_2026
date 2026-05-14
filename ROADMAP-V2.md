@@ -13,8 +13,8 @@ for the dual-license strategy.
 | Milestone | Done when |
 |---|---|
 | Audit fixes landed | All items from the May 4 audit are resolved: no `print()`, structured logging, platform-aware app-data dirs, centralized config, `gui/app.py` split into modules |
-| Ultralytics removed | YOLOv8 replaced with MediaPipe Object Detector (Apache-2.0) wired via ONNX Runtime |
-| PaddleOCR removed | EasyOCR promoted to primary OCR backend |
+| Premium branch live | `premium` branch off `app`, builds the commercial-license edition with plate reader and other paid-tier features included |
+| PaddleOCR removed | EasyOCR promoted to primary OCR backend on the premium-only plate reader |
 | Preset system v1 | 10 presets shipping (Movie, Show, Vlog, Action, Animation, Screen Recording, Surveillance, Music Video, Archive, Mobile) |
 | Auto-detect content type | First 30 seconds analyzed, preset recommended |
 | Windows installer | `SVCS-Setup-x.y.z.exe` via Inno Setup. Bundles FFmpeg, Python embeddable, all model weights |

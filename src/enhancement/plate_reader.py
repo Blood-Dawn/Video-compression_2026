@@ -7,7 +7,7 @@ academic ALPR pipeline (YOLO/RetinaNet detect -> CRNN/Transformer OCR):
 
     Frame  -->  Vehicle ROI crop (MOG2-driven, optional)
            -->  Real-ESRGAN x4 super-resolution         (existing Enhancer)
-           -->  PaddleOCR plate / generic OCR backend   (Apache-2.0)
+           -->  EasyOCR generic OCR backend             (Apache-2.0)
            -->  Multi-frame consensus voting            (own code)
            -->  PlateRead{ text, confidence, verdict }
 
@@ -15,9 +15,13 @@ Why this shape:
 
   * Real-ESRGAN is BSD-3 and already loaded in `Enhancer`; reusing it costs
     nothing.
-  * PaddleOCR is Apache-2.0 with a dedicated license-plate model and ~15 MB
-    mobile weights. EasyOCR (Apache-2.0) is the fallback for environments
-    where PaddleOCR can't install (no AVX, no PaddlePaddle wheels).
+  * EasyOCR is Apache-2.0 and is the primary OCR backend as of 2026-05-14.
+    PaddleOCR was dropped from the default install set because the
+    paddlepaddle wheel is large (~500 MB), fragile on non-AVX CPUs, and
+    adds a third-party-of-third-party supply chain we don't need for the
+    accuracy delta. PaddleOCR is still supported at runtime if installed
+    manually (the backend auto-detects), but is no longer pulled in by
+    ``uv sync --extra plates``.
   * OpenALPR is AGPL-3.0 and intentionally NOT used — it would force the
     whole repo to AGPL. fast-plate-ocr (MIT) is a worthwhile next addition
     once we have a baseline.
@@ -203,7 +207,13 @@ class _OcrBackend:
 
 
 class _PaddleOcrBackend(_OcrBackend):
-    """PaddleOCR PP-OCRv4 (Apache-2.0) — primary OCR backend."""
+    """PaddleOCR PP-OCRv4 (Apache-2.0) — optional secondary backend.
+
+    Used to be the primary backend up through May 2026, demoted as part
+    of the v2 productization to keep the default install small. Still
+    fully supported at runtime; install with `pip install paddleocr
+    paddlepaddle` if you want the dedicated license-plate model.
+    """
 
     name = "paddleocr"
 
@@ -364,26 +374,33 @@ class _TesseractBackend(_OcrBackend):
 def _select_backend(prefer: str = "auto", use_gpu: bool = False) -> _OcrBackend:
     """Pick the strongest available OCR backend.
 
-    ``prefer`` is one of "auto", "paddleocr", "easyocr", "tesseract". With
-    "auto" we try PaddleOCR (best plate accuracy), then EasyOCR (good
-    multi-language fallback), then Tesseract (lightweight, ships
-    everywhere). If none is installed we return a no-op backend so the
-    rest of the pipeline can still run without crashing.
+    ``prefer`` is one of "auto", "easyocr", "paddleocr", "tesseract". With
+    "auto" we try EasyOCR first (Apache-2.0, smaller install, primary
+    backend as of 2026-05-14), then PaddleOCR if someone installed it
+    manually, then Tesseract as a lightweight fallback. If none is
+    installed we return a no-op backend so the rest of the pipeline can
+    still run without crashing.
+
+    Order rationale: PaddleOCR was the primary up through May 2026 because
+    it has a dedicated license-plate model, but the paddlepaddle wheel is
+    ~500 MB and fragile on non-AVX CPUs. For a commercial / consumer ship
+    we'd rather start with a lean EasyOCR install and let power users
+    upgrade to PaddleOCR if they need the plate-specific model.
 
     Author: Bloodawn (KheivenD)
     """
     prefer = (prefer or "auto").lower()
-    if prefer in ("paddleocr", "auto"):
-        b = _PaddleOcrBackend(use_gpu=use_gpu)
-        if b.available:
-            return b
-        if prefer == "paddleocr":
-            return b
     if prefer in ("easyocr", "auto"):
         b = _EasyOcrBackend(use_gpu=use_gpu)
         if b.available:
             return b
         if prefer == "easyocr":
+            return b
+    if prefer in ("paddleocr", "auto"):
+        b = _PaddleOcrBackend(use_gpu=use_gpu)
+        if b.available:
+            return b
+        if prefer == "paddleocr":
             return b
     if prefer in ("tesseract", "auto"):
         b = _TesseractBackend(use_gpu=use_gpu)

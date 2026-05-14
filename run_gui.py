@@ -12,13 +12,20 @@ Drop your test videos into the data/ folder and click the ⟳ button
 to find them automatically.
 
 On first start (or whenever pyproject.toml has changed), this script
-runs ``uv sync --extra enhance --extra plates`` to install the
-Real-ESRGAN super-resolution stack and the PaddleOCR plate-reading
-backend. Both are needed for the AI enhancement pipeline and the
-``READ PLATES`` button. If ``uv`` isn't on PATH or the install fails,
-the dashboard still launches — the relevant features just degrade
-gracefully (Real-ESRGAN falls back to bicubic, plate reader returns
-"OCR backend not installed" warnings).
+runs ``uv sync --extra enhance`` to install the Real-ESRGAN
+super-resolution stack. The YOLO object filter is already in the core
+deps; no extra needed.
+
+The ``plates`` extra is premium-only and not pulled in by default. If
+you're building the premium edition (or a developer who wants the
+plate reader locally), add it manually:
+
+    uv sync --extra enhance --extra plates
+
+If ``uv`` isn't on PATH or the install fails, the dashboard still
+launches — relevant features just degrade gracefully (Real-ESRGAN
+falls back to bicubic, plate reader hides its UI when no backend is
+installed, YOLO falls back to pass-through if ultralytics is missing).
 
 Pass ``--no-sync`` to skip the dependency check entirely.
 
@@ -188,7 +195,12 @@ if __name__ == "__main__":
     # (gui.app imports modules that lazily reference paddleocr/realesrgan).
     # First-run: ~1-3 minutes for the heavy installs; subsequent launches
     # are instant because the stamp file matches.
-    _ensure_extras_installed(["enhance", "plates"], skip=args.no_sync)
+    # The casual / open-source edition only auto-installs `enhance`.
+    # `plates` is premium-only and intentionally NOT pulled in here. If
+    # you're building the premium edition, edit this list locally or
+    # pass --extra plates to your launch wrapper before calling this
+    # script. Author: Bloodawn (KheivenD), 2026-05-14 (premium split).
+    _ensure_extras_installed(["enhance"], skip=args.no_sync)
 
     print(f"{'━'*55}")
     print(f"  Drop test videos into:  {Path('data').resolve()}")

@@ -36,14 +36,20 @@ dependencies = [
     # Testing
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
-    # YOLO smart detection filter
+    # YOLO smart detection filter.
     # YOLOv8-nano classifies MOG2 bounding boxes so leaves/shadows are not
-    # recorded. Falls back to pass-through if this package is missing at runtime.
-    # On first use, downloads yolov8n.pt (~6 MB) automatically.
+    # recorded. Falls back to pass-through if this package is missing at
+    # runtime. On first use, downloads yolov8n.pt (~6 MB) automatically.
+    # License: AGPL-3.0. That's compatible with our open-source edition
+    # because we also ship the regular app under AGPL-3.0 (see LICENSE).
+    # Commercial-tier customers who can't comply with AGPL pay us through
+    # LICENSE-COMMERCIAL.md; that deal covers either an Ultralytics
+    # enterprise license sublicensed to them, or a swap to a permissive
+    # detector (MediaPipe / RT-DETR) which is on the v2 roadmap anyway.
     "ultralytics>=8.0.0",
-    # PyTorch — pinned to CUDA 12.8 build via [tool.uv.sources] below.
-    # CPU-only builds are pulled in by ultralytics/basicsr if torch is not
-    # listed explicitly here, which breaks GPU detection and SR enhancement.
+    # PyTorch core for Real-ESRGAN enhancement (BSD-3) and YOLO above.
+    # Pinned to the CUDA 12.8 build via [tool.uv.sources] below; the CPU
+    # build is served by PyPI by default which breaks our enhancer GPU path.
     "torch>=2.0.0",
     "torchvision>=0.15.0",
     # AES-256-GCM segment encryption (the ENCRYPT tab in the dashboard).
@@ -57,26 +63,28 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Super-resolution enhancement — only needed if using --enhance flag
+# Super-resolution enhancement — only needed if using --enhance flag.
 # Install with: uv sync --extra enhance
 enhance = [
     "basicsr>=1.4.2",
     "realesrgan>=0.3.0",
 ]
 
-# AI license-plate reader (post-process). Pulls a permissive-licensed OCR
-# engine + lightweight image-processing deps. Both candidate engines are
-# Apache-2.0; PaddleOCR has a dedicated plate-recognition model and is the
-# primary backend, EasyOCR is the fallback when paddle wheels can't install.
-# OpenALPR is intentionally NOT included — its AGPL-3.0 license would force
-# the rest of the repo into AGPL.
-# Install with: uv sync --extra plates
-# Author: Bloodawn (KheivenD), 2026-05-02
+# AI license-plate reader (post-process). PREMIUM-ONLY FEATURE — not
+# included in the default consumer installer. The premium build script
+# adds this extra so paying customers get the feature; the casual
+# (open-source) installer omits it and the GUI auto-hides the plate
+# reader button when no OCR backend is installed.
+#
+# EasyOCR is Apache-2.0 and is the primary backend. PaddleOCR has been
+# removed from the default install set because the paddlepaddle wheel is
+# large (~500 MB) and fragile on non-AVX CPUs. PaddleOCR is still
+# supported at runtime if a customer installs it manually (the backend
+# auto-detects). OpenALPR is intentionally NOT used (AGPL-3.0).
+#
+# Install (premium tier only):  uv sync --extra plates
+# Author: Bloodawn (KheivenD), 2026-05-14 (premium branch split).
 plates = [
-    "paddleocr>=2.7.0",
-    "paddlepaddle>=2.6.0",
-]
-plates-fallback = [
     "easyocr>=1.7.0",
 ]
 

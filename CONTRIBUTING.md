@@ -77,8 +77,32 @@ PRs are reviewed within 7 days. Smaller PRs get merged faster.
 |---|---|
 | `main` | Stable release line. Tagged versions only. |
 | `dev` | Active development of the Python pipeline (v1 series). |
-| `app` | Productization (installers, mobile, presets). |
+| `app` | Productization for the casual / open-source edition (installers, mobile, presets). |
+| `premium` | Premium-only features for the commercial-tier edition. Branches off `app`. Plate reader, advanced presets, paid-only experiments. |
 | `kdev` | Experimental Rust port (v2 series). Not stable. |
+
+### `app` vs `premium`
+
+The `app` branch builds the casual edition that ships under AGPL. It
+includes everything an open-source user needs: compression, four modes,
+search, encryption, YOLO object filter, Real-ESRGAN enhancement.
+
+The `premium` branch builds the commercial-license edition. It contains
+everything in `app` plus features that are paid-tier only: the AI plate
+reader, future advanced scene-aware bitrate tuning, batch priority
+queue, anything else we decide is worth charging for.
+
+Premium features should be:
+
+- Added on the `premium` branch only.
+- Opt-in at install time (via an optional dependency extra in
+  `pyproject.toml` where reasonable).
+- Hidden in the UI when their backing dependencies aren't installed,
+  so the casual edition doesn't show empty buttons.
+
+Bug fixes on `app` need to be merged into `premium` regularly to keep
+the two branches in sync. Use `git merge app` from `premium` after
+every batch of `app` commits.
 
 ## Tests
 

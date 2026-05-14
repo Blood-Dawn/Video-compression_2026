@@ -139,15 +139,34 @@ path. Python stays in the repo as reference and as the testing oracle.
 | Android 10+ (arm64) | First class | Play Store + APK direct |
 | iOS | Future | Out of scope for v2 |
 
+## Editions: casual vs premium
+
+The product ships in two editions built from the same codebase:
+
+- **Casual edition** (built from `app` branch). AGPL-3.0. Full feature
+  set for personal use: compression, four modes, search, encryption,
+  Real-ESRGAN enhancement, YOLO object filter. Free to download.
+- **Premium edition** (built from `premium` branch). Commercial license
+  required (see `LICENSE-COMMERCIAL.md`). Includes everything in the
+  casual edition plus paid-tier features: AI plate reader, future
+  advanced presets, batch priority, etc.
+
+The two editions share most code. The `premium` branch tracks `app`
+and adds premium-only features on top. Build scripts include or
+exclude the `plates` extra (and similar) based on edition.
+
 ## Dependencies cleanup
 
 The current Python pipeline has license issues that prevent commercial
-distribution. v2 fixes these.
+*closed-source* distribution. v2 keeps AGPL deps in the AGPL casual
+edition (where they're fine) and plans replacements only where a
+commercial customer's deal terms require it.
 
 | Dep | License | Action |
 |---|---|---|
-| `ultralytics` (YOLOv8) | AGPL-3.0 | Remove. Replace with MediaPipe or RT-DETR via ONNX. |
-| `paddlepaddle` / `paddleocr` | Apache-2.0 but huge and fragile | Remove. EasyOCR (Apache-2.0) in v1, ONNX-based OCR in v2. |
+| `ultralytics` (YOLOv8) | AGPL-3.0 | **Keep in core deps**. Compatible with our AGPL casual edition. For commercial customers who can't take AGPL, we either sublicense an Ultralytics enterprise license through their deal, or swap to MediaPipe / RT-DETR via ONNX at that point. |
+| `paddlepaddle` / `paddleocr` | Apache-2.0 but huge | **Dropped from defaults**. The premium plate reader uses EasyOCR. PaddleOCR remains supported at runtime if a customer installs it themselves. |
+| `easyocr` | Apache-2.0 | **Premium-only**. In the `[plates]` optional extra, included only in the premium edition build. |
 | `basicsr` + `realesrgan` | BSD / Apache | Keep. Export model to ONNX for v2. |
 | `opencv-python` | Apache-2.0 | Keep. Use `opencv-rust` in v2. |
 | `ffmpeg-python` | Apache-2.0 | Drop the wrapper, call FFmpeg directly. |

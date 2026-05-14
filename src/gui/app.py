@@ -143,26 +143,54 @@ def _safe_output_dir(raw: str) -> Path:
 def _default_output_dir() -> str:
     """Return the canonical default output directory.
 
-    Prefers ``<cloud sync root>/SVCS`` (OneDrive school → personal → Google
-    Drive), falls back to ``<project root>/outputs/`` only if no cloud sync
-    folder is detected. Used by every route that accepts a user-supplied
-    ``output_dir`` so segments always land in the cloud-synced folder when
-    one is available, even if the front-end's pre-fill hadn't resolved yet
-    (or the user cleared the field).
+    Resolution order:
+      1. Persisted output_dir from the last pipeline run (loaded by
+         _load_gui_state() at startup from the platform state file).
+      2. The user's videos folder discovered by
+         ``src.utils.paths.default_videos_dir()`` (``~/Videos/SVCS`` on
+         Windows / Linux, ``~/Movies/SVCS`` on macOS).
+      3. Cloud sync root (OneDrive school / personal / Google Drive)
+         ONLY when the user has explicitly opted in by toggling
+         ``Prefer cloud output`` in the dashboard. This was previously
+         baked in as the default, which surprised users who didn't
+         have OneDrive and made the app harder to package as an
+         installer. As of 2026-05-14 it's opt-in.
+      4. Repo-relative ``outputs/`` for dev clones with no other
+         signal (final fallback).
 
-    Returns an absolute string path so call sites can pass it straight to
-    ``Path(...)``.
+    Returns an absolute string path so call sites can pass it straight
+    to ``Path(...)``.
 
-    Author: Bloodawn (KheivenD), 2026-05-02 — fixes the audit finding that
-    ``api_start`` / ``api_hls_start`` were defaulting to local ``outputs/``
-    instead of OneDrive when the field was empty.
+    Author: Bloodawn (KheivenD), 2026-05-14 (productization: OneDrive
+    no longer the implicit default).
     """
+    # (1) Restore last-known output_dir from persistent state.
+    with _state_lock:
+        cfg = _status.get("config", {})
+        persisted = (cfg.get("output_dir") or "").strip()
+    if persisted and Path(persisted).is_absolute():
+        return persisted
+
+    # (3) Cloud sync, only when explicitly opted in.
     try:
-        cloud_root, _label, _url = _detect_cloud_root()
-    except Exception:
-        cloud_root = None
-    if cloud_root is not None:
-        return str(cloud_root / _CLOUD_SUBFOLDER)
+        cfg_prefer_cloud = (cfg or {}).get("prefer_cloud_output", False)
+    except Exception:  # noqa: BLE001
+        cfg_prefer_cloud = False
+    if cfg_prefer_cloud:
+        try:
+            cloud_root, _label, _url = _detect_cloud_root()
+            if cloud_root is not None:
+                return str(cloud_root / _CLOUD_SUBFOLDER)
+        except Exception:  # noqa: BLE001
+            pass
+
+    # (2) Platform default (Videos / Movies / Videos folder + SVCS).
+    try:
+        return str(_paths.default_videos_dir())
+    except Exception:  # noqa: BLE001
+        pass
+
+    # (4) Last-resort dev fallback.
     return str(_ROOT / "outputs")
 
 
@@ -485,14 +513,21 @@ class _QueueLogHandler(logging.Handler):
 
 
 # ── Log formatter and handlers ────────────────────────────────────────────────
+# Log file lives in the platform cache dir, not next to the user's video
+# outputs. Required for any real installer to work on Windows / macOS.
+# Also fixes a pre-existing bug where the console handler was defined
+# but never attached to the root logger.
+# Author: Bloodawn (KheivenD), 2026-05-14 (installer prep + logging fix).
 _LOG_FMT = logging.Formatter("%(asctime)s  %(levelname)-8s  %(name)s: %(message)s")
 
 # Queue handler: forwards records to the SSE stream for the browser
 _queue_handler = _QueueLogHandler()
 _queue_handler.setFormatter(logging.Formatter("%(asctime)s  %(levelname)s  %(message)s"))
 
-# File handler: writes all records to outputs/svcs.log for offline debugging
-_LOG_FILE = _ROOT / "outputs" / "svcs.log"
+# File handler: writes all records to <cache_dir>/logs/svcs.log for
+# offline debugging. Was previously in outputs/svcs.log under the user's
+# video output folder, which breaks installed-app sandboxes.
+_LOG_FILE = _paths.cache_dir() / "logs" / "svcs.log"
 _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
 _file_handler = logging.FileHandler(str(_LOG_FILE), encoding="utf-8")
 _file_handler.setFormatter(_LOG_FMT)
@@ -504,12 +539,18 @@ _console_handler.setFormatter(_LOG_FMT)
 _root_logger = logging.getLogger()
 _root_logger.addHandler(_queue_handler)
 _root_logger.addHandler(_file_handler)
+_root_logger.addHandler(_console_handler)   # bug fix: was defined but never added
 _root_logger.setLevel(logging.DEBUG)   # capture DEBUG level; filter per-handler below
 
 # Only forward INFO+ to browser SSE and terminal (DEBUG goes to file only)
 _queue_handler.setLevel(logging.INFO)
 _console_handler.setLevel(logging.INFO)
 _file_handler.setLevel(logging.DEBUG)
+
+# Quiet down noisy third-party libraries so the SSE log isn't drowned.
+for _noisy in ("PIL", "matplotlib", "urllib3", "werkzeug",
+               "ultralytics", "easyocr", "torch"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 log = logging.getLogger(__name__)
 

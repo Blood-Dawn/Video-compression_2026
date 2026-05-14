@@ -191,7 +191,19 @@ def _open_browser(host: str, port: int):
     webbrowser.open(f"http://{h}:{port}")
 
 
-if __name__ == "__main__":
+def main():
+    """Entry point usable from a frozen launcher or `python -m run_gui`.
+
+    Previously the entire startup sequence lived inside the
+    ``if __name__ == "__main__":`` block. That worked for `python
+    run_gui.py` but made it impossible for the PyInstaller launcher
+    (installer/launcher.py) to call us without spawning a subprocess.
+    Wrapping it in a function lets the frozen exe import and invoke
+    main() directly, which is faster and gives us proper exception
+    propagation back into the launcher's friendly error dialog.
+    Behavior is unchanged for source-mode runs.
+    Author: Bloodawn (KheivenD), 2026-05-14 (installer prep).
+    """
     parser = argparse.ArgumentParser(description="SVCS Web Dashboard")
     parser.add_argument("--host", default="0.0.0.0",
                         help="Bind address (default: 0.0.0.0, accessible on LAN). "
@@ -261,3 +273,7 @@ if __name__ == "__main__":
             print(f"            python run_gui.py --port {args.port + 1}")
             sys.exit(3)
         raise
+
+
+if __name__ == "__main__":
+    main()

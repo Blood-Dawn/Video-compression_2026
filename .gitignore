@@ -57,6 +57,11 @@ logs/
 .pytest_tmp/
 .pytest_cache/
 
+# PyInstaller build artifacts (installer/build.ps1 output)
+build/
+dist/
+*.spec.bak
+
 # OS
 .DS_Store
 Thumbs.db

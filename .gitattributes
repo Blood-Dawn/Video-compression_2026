@@ -1,0 +1,52 @@
+# Line-ending normalization for SVCS.
+# Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.4 — kill CRLF/LF churn).
+#
+# Without this file, Git on Windows silently rewrites line endings and the
+# working tree drifts to CRLF while the index stays LF, producing 100+
+# "modified" files whose diffs are pure whitespace. This pins it:
+# everything is LF in the repo except Windows-native scripts.
+
+# Default: treat as text, normalize to LF in the repo.
+* text=auto eol=lf
+
+# Windows-native scripts want CRLF.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Explicit source types (LF).
+*.py   text eol=lf
+*.sh   text eol=lf
+*.md   text eol=lf
+*.txt  text eol=lf
+*.toml text eol=lf
+*.cfg  text eol=lf
+*.ini  text eol=lf
+*.json text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.html text eol=lf
+*.css  text eol=lf
+*.js   text eol=lf
+*.iss  text eol=lf
+
+# Binary assets — never touch.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.mp4  binary
+*.avi  binary
+*.mov  binary
+*.pt   binary
+*.pth  binary
+*.onnx binary
+*.db   binary
+*.sqlite binary
+*.xlsx binary
+*.pptx binary
+*.docx binary
+*.pdf  binary
+*.zip  binary
+*.ipynb binary

@@ -1,9 +1,13 @@
 [project]
 name = "Video-compression"
-version = "0.1.0"
+# v2 development line. v1.0.0 is tagged on `main` (sponsor handoff). The
+# productization work on `app` is v2-in-progress.
+version = "2.0.0.dev0"
 description = "Open-source selective video compression for static surveillance cameras"
 readme = "README.md"
-requires-python = ">=3.9"
+# 3.11+ matches CONTRIBUTING.md and the codebase, which already uses
+# 3.10+ syntax (e.g. `str | None` unions). Was wrongly pinned to >=3.9.
+requires-python = ">=3.11"
 authors = [
     { name = "Kheiven D'Haiti", email = "kdhaiti2024@fau.edu" },
     { name = "Jorge Sanchez", email = "jorgesanchez2022@fau.edu" },
@@ -90,11 +94,11 @@ enhance = [
     "realesrgan>=0.3.0",
 ]
 
-# AI license-plate reader (post-process). PREMIUM-ONLY FEATURE — not
-# included in the default consumer installer. The premium build script
-# adds this extra so paying customers get the feature; the casual
-# (open-source) installer omits it and the GUI auto-hides the plate
-# reader button when no OCR backend is installed.
+# AI license-plate reader (post-process). FREE optional extra — split out
+# only because EasyOCR is a heavy dependency, NOT to gate it behind payment
+# (v2 is open-source only; see README/CONTRIBUTING). Omitted from the
+# default install; the GUI auto-hides the plate-reader button when no OCR
+# backend is present, so a base install shows no empty controls.
 #
 # EasyOCR is Apache-2.0 and is the primary backend. PaddleOCR has been
 # removed from the default install set because the paddlepaddle wheel is

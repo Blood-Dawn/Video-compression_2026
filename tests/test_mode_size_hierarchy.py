@@ -29,6 +29,7 @@ updated 2026-05-31 (M0 TASK 0.3 — mode3 is a single object-only clip).
 from __future__ import annotations
 
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -49,6 +50,27 @@ if str(SRC) not in sys.path:
 def _has_ffmpeg() -> bool:
     """Return True iff the system ffmpeg binary is available on PATH."""
     return shutil.which("ffmpeg") is not None
+
+
+def _ffprobe_ok(path: Path) -> bool:
+    """True if ffprobe finds a video stream in the file (codec-agnostic).
+
+    Used instead of an OpenCV frame read to validate output. OpenCV's
+    bundled decoder can't read AV1 (libsvtav1, the pipeline's default codec)
+    on some platforms — notably Linux CI — which would fail a perfectly
+    valid file. ffprobe validates the container + stream regardless of codec,
+    so this still catches FFmpeg pipe truncation without false negatives.
+    Author: Bloodawn (KheivenD), 2026-06-01 (M0 TASK 0.7 — portable mp4 check).
+    """
+    try:
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(path)],
+            capture_output=True, text=True, timeout=30,
+        )
+        return out.returncode == 0 and "video" in out.stdout
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _make_synthetic_clip(path: Path, w: int = 640, h: int = 360,
@@ -170,42 +192,22 @@ class TestModeSizeHierarchy:
         assert all(c.stat().st_size > 0 for c in clips), "mode3 clip is empty"
 
     def test_outputs_are_valid_mp4s(self, tmp_path):
-        """Every produced .mp4 must be openable by OpenCV. Catches the
-        FFmpeg pipe truncation regressions we've debugged before."""
+        """Every produced .mp4 (all four modes) must be a valid container
+        with a video stream. Catches FFmpeg pipe truncation. Validated with
+        ffprobe rather than an OpenCV frame read — OpenCV can't decode AV1
+        (our default codec) on some platforms (e.g. Linux CI), which is an
+        environment limit, not a bad file."""
         src = tmp_path / "src.mp4"
         _make_synthetic_clip(src)
 
-        for mode in ("mode0", "mode1", "mode2"):
+        for mode in ("mode0", "mode1", "mode2", "mode3"):
             out = tmp_path / mode
             _run_mode(src, out, mode)
-            for f in out.glob("*.mp4"):
-                cap = cv2.VideoCapture(str(f))
-                try:
-                    assert cap.isOpened(), f"{f} could not be opened"
-                    ok, frame = cap.read()
-                    assert ok and frame is not None, (
-                        f"{f} opened but produced no frame"
-                    )
-                finally:
-                    cap.release()
-
-        # Mode 3: validate the single object-only .mp4 is decodable.
-        out3 = tmp_path / "mode3"
-        _run_mode(src, out3, "mode3")
-        clips = list(out3.glob("*.mp4"))
-        assert clips, "mode3 produced no .mp4 segment"
-        any_clip_ok = False
-        for f in clips:
-            cap = cv2.VideoCapture(str(f))
-            try:
-                if cap.isOpened():
-                    ok, frame = cap.read()
-                    if ok and frame is not None:
-                        any_clip_ok = True
-                        break
-            finally:
-                cap.release()
-        assert any_clip_ok, "no decodable mode3 object-only .mp4"
+            clips = list(out.glob("*.mp4"))
+            assert clips, f"{mode}: produced no .mp4 segment"
+            for f in clips:
+                assert f.stat().st_size > 0, f"{f} is empty"
+                assert _ffprobe_ok(f), f"{f} has no decodable video stream"
 
     def test_size_report_for_documentation(self, tmp_path, capsys):
         """Print measured bytes per mode so the docs/CI logs always have a

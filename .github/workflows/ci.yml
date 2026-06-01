@@ -70,10 +70,13 @@ jobs:
       - name: Install CPU PyTorch
         run: uv pip install "torch>=2.0.0" "torchvision>=0.15.0" --index-url https://download.pytorch.org/whl/cpu
 
-      # Project + the non-conflicting extras. torch is already satisfied, so
-      # this does not re-resolve to the CUDA build. No [plates].
+      # Project + the non-conflicting extras. --no-sources ignores the
+      # [tool.uv.sources] pytorch-cu128 pin, so the CPU torch installed above
+      # (which already satisfies torch>=2.0.0) is kept instead of being
+      # replaced by the multi-GB CUDA build. Everything else resolves from
+      # PyPI as normal. No [plates] (easyocr/opencv conflict).
       - name: Install project + extras
-        run: uv pip install -e ".[enhance,crash-reporting]"
+        run: uv pip install -e ".[enhance,crash-reporting]" --no-sources
 
       - name: Show key versions
         run: |

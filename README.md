@@ -140,6 +140,14 @@ Outdoor surveillance footage of people and vehicles in real-world scenarios. Use
 | Python 3 | PSF |
 | pytest | MIT |
 
+## License
+
+SVCS is **free and open source under the GNU AGPL-3.0** (see `LICENSE`).
+There is no paid or commercial edition. You can use, modify, self-host, and
+redistribute it under the AGPL's terms. (`CLA.md` and `LICENSE-COMMERCIAL.md`
+are dormant drafts retained only for a possible future commercial fork — they
+are not in force; see their headers.)
+
 ---
 
 *EGN 4950C Capstone | Florida Atlantic University | Spring 2026 | Final deadline: May 6, 2026*

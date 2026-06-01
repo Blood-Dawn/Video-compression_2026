@@ -77,32 +77,33 @@ PRs are reviewed within 7 days. Smaller PRs get merged faster.
 |---|---|
 | `main` | Stable release line. Tagged versions only. |
 | `dev` | Active development of the Python pipeline (v1 series). |
-| `app` | Productization for the casual / open-source edition (installers, mobile, presets). |
-| `premium` | Premium-only features for the commercial-tier edition. Branches off `app`. Plate reader, advanced presets, paid-only experiments. |
+| `app` | Primary branch — the open-source (AGPL-3.0) edition: installers, presets, camera ingestion, everything. |
+| `premium` | **Dormant.** Held only as the seam for a possible future commercial fork. Nothing new lands here in v2. |
 | `kdev` | Experimental Rust port (v2 series). Not stable. |
 
-### `app` vs `premium`
+### One open-source edition
 
-The `app` branch builds the casual edition that ships under AGPL. It
-includes everything an open-source user needs: compression, four modes,
-search, encryption, YOLO object filter, Real-ESRGAN enhancement.
+SVCS v2 ships as a single open-source edition built from `app`, under
+AGPL-3.0. There is no paid tier and no `premium` build in v2 (see
+`README.md` and the dormant `LICENSE-COMMERCIAL.md`). Everything is free:
+compression, the four modes, search, encryption, YOLO object filter,
+Real-ESRGAN enhancement, and the AI plate reader.
 
-The `premium` branch builds the commercial-license edition. It contains
-everything in `app` plus features that are paid-tier only: the AI plate
-reader, future advanced scene-aware bitrate tuning, batch priority
-queue, anything else we decide is worth charging for.
+Some features stay behind optional `pyproject.toml` extras only to keep the
+default install small (not to gate them behind payment):
 
-Premium features should be:
+- `[plates]` — the AI plate reader (EasyOCR). Free; split out because
+  EasyOCR is heavy. The dashboard hides the plate-reader controls when the
+  backend isn't installed, so a base install shows no empty buttons.
+  (Note: install `[plates]` in a *separate* environment — see the warning
+  in `pyproject.toml`; easyocr's OpenCV conflicts with the core build.)
+- `[enhance]` — Real-ESRGAN super-resolution.
+- `[crash-reporting]` — opt-in Sentry (off by default).
 
-- Added on the `premium` branch only.
-- Opt-in at install time (via an optional dependency extra in
-  `pyproject.toml` where reasonable).
-- Hidden in the UI when their backing dependencies aren't installed,
-  so the casual edition doesn't show empty buttons.
-
-Bug fixes on `app` need to be merged into `premium` regularly to keep
-the two branches in sync. Use `git merge app` from `premium` after
-every batch of `app` commits.
+The `premium` branch is dormant. If a commercial fork is ever pursued (and
+only if the team is legally cleared — see PLAN-V2 §0/§13), it would branch
+from a frozen open-source release at that point. There is **no** routine
+`app` -> `premium` mirroring; just push `app`.
 
 ## Tests
 

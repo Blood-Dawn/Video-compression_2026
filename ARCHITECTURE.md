@@ -139,21 +139,24 @@ path. Python stays in the repo as reference and as the testing oracle.
 | Android 10+ (arm64) | First class | Play Store + APK direct |
 | iOS | Future | Out of scope for v2 |
 
-## Editions: casual vs premium
+## Edition: one open-source build
 
-The product ships in two editions built from the same codebase:
+> Updated 2026-05-31: v2 is **open-source only**. The earlier casual/premium
+> dual-edition split is dropped; the `premium` branch is dormant (see
+> `CONTRIBUTING.md` and the dormant `LICENSE-COMMERCIAL.md`).
 
-- **Casual edition** (built from `app` branch). AGPL-3.0. Full feature
-  set for personal use: compression, four modes, search, encryption,
-  Real-ESRGAN enhancement, YOLO object filter. Free to download.
-- **Premium edition** (built from `premium` branch). Commercial license
-  required (see `LICENSE-COMMERCIAL.md`). Includes everything in the
-  casual edition plus paid-tier features: AI plate reader, future
-  advanced presets, batch priority, etc.
+SVCS v2 ships as a single edition built from `app`, under AGPL-3.0, with the
+full feature set free: compression, the four modes, search, encryption,
+Real-ESRGAN enhancement, YOLO object filter, and the AI plate reader.
 
-The two editions share most code. The `premium` branch tracks `app`
-and adds premium-only features on top. Build scripts include or
-exclude the `plates` extra (and similar) based on edition.
+Some features sit behind optional `pyproject.toml` extras purely to keep the
+default install small — `[plates]` (AI plate reader, EasyOCR), `[enhance]`
+(Real-ESRGAN), `[crash-reporting]` (opt-in Sentry). These are free; the UI
+hides a feature's controls when its backing dependency isn't installed.
+
+A commercial fork remains *possible* but is out of scope for v2 and
+conditional on IP clearance (PLAN-V2 §0/§13); the dormant `premium` branch
+is its natural seam.
 
 ## Dependencies cleanup
 

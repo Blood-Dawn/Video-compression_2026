@@ -1,0 +1,88 @@
+# SVCS continuous integration — build + test only (NO deploy, NO publish).
+#
+# Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.7).
+#
+# What this enforces on every push / PR to `app`:
+#   - the full pytest suite is green on both Linux and Windows
+#   - dependencies install cleanly from a fresh environment
+#
+# What it deliberately does NOT do (per working-style: the human ships):
+#   - no auto-push, no release, no code signing, no artifact publishing
+#
+# PyTorch note: the project pins CUDA torch via [tool.uv.sources]
+# (pytorch-cu128) for the GPU enhancer path on dev machines. CI runners are
+# CPU-only, so we install the CPU torch wheels FIRST (which satisfy
+# `torch>=2.0.0`), then install the project — pip then sees torch already
+# present and won't pull the multi-GB CUDA build. This avoids a slow/failing
+# CUDA download. (M2's ONNX migration removes torch from the hot path and
+# will simplify this.)
+#
+# Plate reader: the [plates] extra (easyocr) is intentionally NOT installed
+# here — easyocr's opencv-python-headless clobbers the core
+# opencv-contrib-python (see pyproject [plates] comment). The plate-reader
+# tests do not require easyocr at import time, so they still run.
+
+name: CI
+
+on:
+  push:
+    branches: [app]
+  pull_request:
+    branches: [app]
+
+# Cancel superseded runs on the same ref to save runner minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ffmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y --no-progress
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python 3.11
+        run: uv python install 3.11
+
+      - name: Create virtual environment
+        run: uv venv --python 3.11
+
+      # CPU torch FIRST so the CUDA-pinned source is never triggered.
+      - name: Install CPU PyTorch
+        run: uv pip install "torch>=2.0.0" "torchvision>=0.15.0" --index-url https://download.pytorch.org/whl/cpu
+
+      # Project + the non-conflicting extras. torch is already satisfied, so
+      # this does not re-resolve to the CUDA build. No [plates].
+      - name: Install project + extras
+        run: uv pip install -e ".[enhance,crash-reporting]"
+
+      - name: Show key versions
+        run: |
+          uv run python -c "import sys, cv2; print('python', sys.version); print('cv2', cv2.__version__); cv2.createBackgroundSubtractorMOG2(); import cv2.bgsegm; print('cv2 contrib OK')"
+          uv run python -c "import torch; print('torch', torch.__version__, 'cuda', torch.cuda.is_available())"
+
+      # Project pytest config (basetemp=.pytest_tmp, --tb=short -ra) comes
+      # from pyproject.toml. Coverage is reported; once the first run prints
+      # a number, set --cov-fail-under in pyproject to that floor (ratchet up,
+      # never down) so coverage can't silently regress.
+      - name: Run test suite
+        run: uv run pytest tests/ --cov=src --cov-report=term-missing

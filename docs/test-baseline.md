@@ -18,19 +18,67 @@ Both sync the environment with the documented extras first, then run `pytest tes
 
 ---
 
-## Recorded baseline
+## GREEN baseline achieved (2026-05-31)
 
 | Field | Value |
 |---|---|
-| Source | `pytest_final.log` (most recent full run on disk) |
-| Timestamp | 2026-05-14 20:23 (after the last commit `10cbda9`, 16:20) |
-| Result | **48 failed, 465 passed, 3 skipped, 4 warnings, 5 errors** (516 collected, 142 s) |
-| OS / env | Windows (Kheiven's machine) |
-| Caveat | **The environment was under-provisioned** — `cryptography` (a core dep) and the `[crash-reporting]` extra were not installed. This alone accounts for **40 of the 48 failures.** |
+| Command | `scripts/run_tests.ps1` |
+| Log | `logs/pytest_20260531_204215.log` |
+| Result | **513 passed, 3 skipped, 0 failed, 0 errors** (130 s) |
+| Env | Windows 11, Python 3.11.9, opencv-contrib-python 4.10.0.84, `.venv` |
 
-> The headline: this is *not* 48 broken features. ~40 failures are a missing dependency in that run; the real work is ~8 stale tests plus a handful of Windows file-handle cleanup bugs. Re-running through `scripts/run_tests.ps1` (which syncs the deps) is expected to drop the failure count dramatically before a line of product code is touched.
+Path from the stale "48 failed" claim to green: provision the env (cleared 22 encryption deps) → fix the DB connection leak (6) → mode2 CRF bug + mode2/mode3 settings tests → crash-reporting test isolation (14) → mode2 `finish_segment`/mode3 `source_path` mocks → mode3 single-clip tests (3, D2) → gui_api DB isolation + new output-dir resolution (4). Two real bugs fixed: mode2 was stuck at CRF 18 (now 23), and `get_connection()` leaked sqlite handles (Windows lock risk in the live app).
 
-**Action for the human:** run `scripts/run_tests.ps1` once on Windows and paste the new summary here, replacing this note, so we have a baseline taken with a correctly-provisioned environment. Then TASK 0.3 closes the genuine remainder.
+The 3 skips are the real-webcam hardware tests (`SVCS_TEST_WEBCAM=1` to run) — intentional.
+
+---
+
+## (historical) First provisioned run, 2026-05-31 20:02
+
+| Field | Value |
+|---|---|
+| Command | `scripts/run_tests.ps1` (syncs `enhance + crash-reporting`, no `plates`; cv2 sanity-checked) |
+| Timestamp | 2026-05-31 20:02, log `logs/pytest_20260531_200154.log` |
+| Result | **26 failed, 487 passed, 3 skipped, 5 errors** (516 collected, 130 s) |
+| OS / env | Windows 11, Python 3.11.9, opencv-contrib-python 4.10.0.84, `.venv` |
+
+What the proper provisioning changed vs the stale 2026-05-14 log (48 failed):
+- **The 26 `test_encryption` failures are GONE** — `cryptography` is now installed (it's a core dep; the old run just hadn't synced it). +22 tests.
+- **The 14 `test_crash_reporting` failures REMAIN even with sentry-sdk installed** — so my earlier "missing-dep" guess was WRONG. These are a **real test-isolation bug** (see the corrected triage below). Running it mattered.
+
+### Corrected triage of the 31 remaining issues (26 failed + 5 errors)
+
+| Group | Count | Real cause | Status |
+|---|---|---|---|
+| `test_object_type_queries` (5 err) + `test_pipeline_stress` (1) | 6 | **Source bug:** `get_connection()` used `with conn:` which commits but never *closes* — leaked sqlite connections + WAL sidecars locked the file (WinError 32 on Windows). Affects the live app too. | **FIXED** this session (see below) |
+| `test_pipeline` mode2 `encrypt` kwarg | 2 | Stale mock — `begin_segment` gained `encrypt*` params. | **FIXED** this session |
+| `test_crash_reporting` | 14 | **Real** — `_SENTRY_ENABLED` module global leaks `True` into tests; the reimport helper + `patch.dict(sys.modules)` don't reset it, so `init_crash_reporting()` early-returns `True` without calling the stub. Source logic is correct; the TEST is fragile. | Open — needs test fix |
+| `test_gui_api` default_output_dir | 2 | Stale — the OneDrive-default removal changed the resolution order; tests still expect `FakeOneDrive\SVCS` / `…/outputs`. | Open — update assertions |
+| `test_gui_api` segments | 2 | Test isolation — reads the repo's real `metadata.db` (25–27 rows) instead of an empty/temp DB. | Open — point at temp DB |
+| `test_mode_size_hierarchy` mode3 (3) | 3 | **Divergence:** tests expect a `mode3_sparse/` per-object output, but **no `mode3_sparse.py` exists in `app`** (only a stale `.pyc`). The 2026-05-02 per-object rewrite never landed on `app`; current mode3 = single object-only mp4. | Open — **decision** |
+| `test_pipeline` mode2 (1) + mode3 (1) encoder settings | 2 | Tests pin OLD preset+CRF (`veryfast`, CRF 23). Code now gives mode2 `ultrafast`/CRF 18 and mode3 `ultrafast`/CRF 38 — which `mode_size_hierarchy.md` documents as the *intended* design (mode2 = forensic/largest). | Open — **decision** |
+
+### Fixes applied this session (TASK 0.3, partial)
+
+1. **`src/utils/db/schema.py` — `get_connection()` now closes connections.** Converted to a `@contextmanager` that commits on success, rolls back on error, and closes in `finally`. Root-cause fix for all 6 `WinError 32` failures *and* a real production connection leak. All 22 call sites already use `with get_connection(...)`, so no caller changes needed. **Verify by re-running the suite.**
+2. **`tests/test_object_type_queries.py`** — `temp_db` fixture now uses `tmp_path` (no system `%TEMP%`, no manual `os.remove`); dropped unused `os`/`tempfile` imports.
+3. **`tests/test_pipeline.py`** — the two mode2 mock encoders' `begin_segment` now absorb `**kwargs` (the `encrypt*` params).
+
+Expected effect: the 6 WinError-32 issues and the 2 mode2 `encrypt` tests go green → ~8 of 31 resolved. **Re-run `scripts/run_tests.ps1` to confirm**, then paste the new summary.
+
+### Decisions
+
+- **D1 — mode2/mode3 encoder settings. RESOLVED (owner, 2026-05-31).** Design intent is **progressive compression mode0 → mode3**: foreground CRF mode0=18, mode1=18, **mode2=23**, **mode3=38**; preset `ultrafast` for mode2/mode3 (CPU). **This exposed a real code bug:** mode2 was wrongly left at CRF 18 (same as mode0/1), so it wasn't compressing as designed. **FIXED** in `src/pipeline/pipeline.py` (added `elif mode == "mode2": resolved_crf = 23`). The mode2 test (CRF 23) now passes against the corrected code; the mode3 test was updated to expect CRF 38 + `ultrafast`. *Follow-up:* `docs/mode_size_hierarchy.md` is now outdated (it documents mode2 as always-largest-at-CRF-18); update it to the progressive-CRF design (the doc itself anticipated this at its line 98).
+- **D2 — mode3 per-object sparse output. OPEN.** The per-object `mode3_sparse/` rewrite isn't in `app` (only a stale `.pyc`; nothing imports it). Current `app` mode3 = single object-only mp4. Either recover the sparse rewrite from whatever branch has it (and keep the 3 `test_mode_size_hierarchy` tests), or ratify single-object-only mode3 as the truth (update the 3 tests). **Needs owner input.**
+
+### Fixes applied this session — updated tally
+
+- DB connection-close (`schema.py`): 6 WinError-32 tests.
+- mode2 `encrypt` kwarg mocks: 2 tests.
+- mode2 CRF code bug + mode2/mode3 test assertions (D1): 2 tests.
+- → ~10 of 31 addressed. **Re-run `scripts/run_tests.ps1` to confirm.**
+
+Still open after a confirming run: `crash_reporting` (14, real test-isolation), `gui_api` default_output_dir (2, stale) + segments isolation (2), `mode_size_hierarchy` mode3 (3, D2). All mechanical except D2.
 
 ---
 
@@ -73,6 +121,27 @@ These are the residue of the `%TEMP%` permission war the team mostly solved with
 | `test_pipeline.py::TestMode3Behavior::test_mode3_encodes_object_only_mp4_segments_with_compression_settings` | 1 | `assert seg_dirs == []` — no segment dirs produced. | Same Mode 3 question. |
 
 Also note `test_gui_api.py::TestApiSegments::test_empty_list_when_no_db` / `test_returns_segments_from_db` (2): the tests read the **repo's real `metadata.db`** (25–27 rows) instead of an isolated empty DB → expected `[]`/`2`, got `25`/`27`. This is a **test-isolation bug** (point the test at a temp DB / monkeypatch the DB path), Category C-ish. Counted in the 48.
+
+---
+
+## NEW finding (2026-05-31 re-baseline) — OpenCV / easyocr conflict breaks cv2
+
+Running `scripts/run_tests.ps1` with `--extra plates` (the first version of the script) **made things worse, not better**: 8 test files failed at *collection* with `AttributeError: module 'cv2' has no attribute 'createBackgroundSubtractorMOG2'`. Root cause, confirmed:
+
+- The `[plates]` extra installs **easyocr**, which depends on **`opencv-python-headless`**.
+- The project already resolves **`opencv-python`** (uv.lock pins 4.10.0.84).
+- Both packages install into the same `cv2/` namespace. When uv reconciled them, the shared binaries got clobbered, leaving a `cv2` so broken that even base `createBackgroundSubtractorMOG2` is gone. Every module that imports the pipeline dies at import.
+
+Second, latent issue found while diagnosing:
+
+- `src/background_subtraction/background_subtraction.py:180` calls **`cv2.bgsegm.createBackgroundSubtractorGMG`** — a **contrib-only** module — but `pyproject.toml:17` declares plain `opencv-python` (no contrib). It only ever worked because `opencv-contrib-python` was manually installed into the old `venv`. A clean install per `pyproject` would not have `bgsegm` at all (the GMG background-subtraction method would crash at runtime).
+- Also: `src/pipeline/pipeline.py:658` uses `cv2.imshow` (HighGUI) in a preview path — fine for a desktop build, but it means a pure-headless OpenCV would break that preview. The preview is optional; core processing doesn't need HighGUI.
+
+**Fixes:**
+- **Immediate (done in the script):** `run_tests.ps1`/`.sh` no longer install `[plates]` by default; they sync `enhance + crash-reporting` only, then sanity-check that `cv2` is whole before running. Plate-reader tests get `importorskip` and are validated in a dedicated environment. → **TASK 0.3b** below.
+- **Proper (pyproject):** declare the OpenCV dependency correctly and stop the dual-install. Recommended: switch the project to **`opencv-contrib-python`** (the code needs `cv2.bgsegm`), and add a `[tool.uv]` override so easyocr's `opencv-python-headless` resolves to the same single OpenCV build instead of a second one. → **TASK 0.4b** below. This also reinforces the PLAN-V2 §6 ONNX direction: these heavy, fragile vision deps are exactly what the ONNX migration thins out.
+
+> Net: the `--extra plates` failure is a packaging bug, not a code regression. The real baseline must be taken **without** `[plates]` (the updated script does this). Re-run and record the number below.
 
 ---
 

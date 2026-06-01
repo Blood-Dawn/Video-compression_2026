@@ -106,6 +106,26 @@ There is **no commercial/premium milestone** in v2. A future commercial fork, if
 **Risks:** The renormalize commit touches ~109 files — that's expected and is exactly why it's isolated. Confirm `git diff --ignore-all-space` is empty before committing so no real change rides along. Also: something may still import `db_query` — grep before deleting.
 **Notes:** `src/utils/db/` (`schema.py`, `queries.py`, `__init__.py`) is the live package. The CRLF index/worktree mismatch is shown by `git ls-files --eol`.
 
+### TASK 0.3b: Gate plate-reader tests; keep easyocr out of the core env
+**Milestone:** M0 · **Depends on:** 0.2 · **Size:** ~40 lines, 1 h
+**Files:** `tests/test_plate_reader.py`, `tests/test_plate_backend_order.py`, `tests/conftest.py`, `scripts/run_tests.*` (already updated)
+**Acceptance:**
+- Plate-reader tests `importorskip("easyocr")` (or skip when no OCR backend is present) so a core checkout without `[plates]` skips them cleanly instead of failing.
+- The default test/CI environment does **not** install `[plates]` (easyocr), because it breaks `cv2` (see `docs/test-baseline.md` "OpenCV / easyocr conflict"). Plate-reader tests are validated in a separate, dedicated environment.
+- `scripts/run_tests.ps1`/`.sh` sanity-check `cv2` after sync (done) and exclude `[plates]` by default (done) — verify these are committed.
+**Risks:** Skipping must be conditional on the backend being absent, not unconditional — a `[plates]` environment must still run them.
+**Notes:** This is the immediate mitigation; TASK 0.4b is the real dependency fix. The 8 collection errors from the 2026-05-31 re-baseline were entirely this conflict.
+
+### TASK 0.4b: Fix the OpenCV dependency (declare contrib; resolve the easyocr clash)
+**Milestone:** M0 · **Depends on:** 0.4 · **Size:** ~50 lines, 2–3 h
+**Files:** `pyproject.toml`, `uv.lock`, `docs/test-baseline.md`
+**Acceptance:**
+- The project declares the OpenCV build the code actually needs: **`opencv-contrib-python`** (the code calls `cv2.bgsegm.createBackgroundSubtractorGMG`, a contrib-only module — `background_subtraction.py:180`). Reconcile the version ceiling (currently `<4.11.0`).
+- Exactly **one** OpenCV distribution resolves in any environment, including with `[plates]`. Add a `[tool.uv]` override (e.g. `override-dependencies`) so easyocr's `opencv-python-headless` does not install a second OpenCV alongside the project's. Validate that `uv sync --extra plates` leaves `cv2` whole (`createBackgroundSubtractorMOG2` and `cv2.bgsegm` both present).
+- `uv.lock` regenerated; `scripts/run_tests.ps1 -WithPlates` passes the cv2 sanity check.
+**Risks:** Forcing easyocr onto a non-headless / contrib OpenCV may or may not satisfy its runtime needs — test the plate reader actually works after the override. If the override proves fragile, fall back to running plates in an isolated venv (TASK 0.3b already makes that viable).
+**Notes:** This is a real packaging bug, not a code issue. It also reinforces PLAN-V2 §6 (the ONNX migration thins exactly these heavy, conflict-prone vision deps). Decide contrib-vs-headless with the `cv2.imshow` preview path (`pipeline.py:658`) in mind — a headless build disables that optional preview.
+
 ### TASK 0.5: Fold the plate reader into `app`; retire the premium mirror
 **Milestone:** M0 · **Depends on:** 0.3 · **Size:** ~120 lines, 2–3 h
 **Files:** `pyproject.toml` (`[plates]` extra), `src/enhancement/plate_reader.py`, `src/gui/` (plate routes/UI), `CONTRIBUTING.md`, `ARCHITECTURE.md`

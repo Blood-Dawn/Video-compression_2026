@@ -443,7 +443,9 @@ class TestMode2Behavior:
             warmup_frames=0,
         )
 
-        assert encoder_kwargs["preset"] == "veryfast"
+        # mode2 uses ultrafast (per-frame compositing is CPU-heavy) and a
+        # compression-oriented CRF 23 (mode0/1=18 < mode2=23 < mode3=38).
+        assert encoder_kwargs["preset"] == "ultrafast"
         assert encoder_kwargs["foreground_crf"] == 23
 
     def test_mode2_uses_background_only_after_two_clean_seconds(
@@ -587,7 +589,8 @@ class TestMode2Behavior:
                 self._background_val = None
 
             def begin_segment(self, frame_shape, fps, camera_id="cam_unknown",
-                              has_targets=True, object_type="unknown", source_path=None):
+                              has_targets=True, object_type="unknown", source_path=None,
+                              **kwargs):  # absorb encrypt/encrypt_password/encrypt_key_file
                 self._background_val = None
 
             def write_frame(self, frame, boxes=None, background_frame=None,
@@ -602,7 +605,7 @@ class TestMode2Behavior:
             def abort_segment(self):
                 pass
 
-            def finish_segment(self, timeout=30.0):
+            def finish_segment(self, timeout=30.0, **kwargs):  # absorb object_classes/scene_type/etc.
                 calls["encode_segment"] += 1
                 calls["background_values"].append(self._background_val)
                 return {
@@ -677,7 +680,8 @@ class TestMode2Behavior:
                 pass
 
             def begin_segment(self, frame_shape, fps, camera_id="cam_unknown",
-                              has_targets=True, object_type="unknown", source_path=None):
+                              has_targets=True, object_type="unknown", source_path=None,
+                              **kwargs):  # absorb encrypt/encrypt_password/encrypt_key_file
                 pass
 
             def write_frame(self, frame, boxes=None, background_frame=None,
@@ -691,7 +695,7 @@ class TestMode2Behavior:
             def abort_segment(self):
                 pass
 
-            def finish_segment(self, timeout=30.0):
+            def finish_segment(self, timeout=30.0, **kwargs):  # absorb object_classes/scene_type/etc.
                 calls["encode_segment"] += 1
                 return {
                     "file_path": f"mode2_patch_{calls['encode_segment']}.mp4",
@@ -828,7 +832,10 @@ class TestMode3Behavior:
         assert calls["encoded_frame_count"] == 3
         assert calls["encoded_bboxes_count"] == 3
         assert calls["object_only"] is True
-        assert calls["init_kwargs"]["preset"] == "veryfast"
-        assert calls["init_kwargs"]["foreground_crf"] == 23
-        assert calls["source_path"] is None
+        # mode3 uses ultrafast (CPU) and the most aggressive CRF 38
+        # (mode0/1=18 < mode2=23 < mode3=38).
+        assert calls["init_kwargs"]["preset"] == "ultrafast"
+        assert calls["init_kwargs"]["foreground_crf"] == 38
+        # run_pipeline now forwards the input source for provenance.
+        assert calls["source_path"] == "dummy.mp4"
         assert calls["get_storage_report"] == 1

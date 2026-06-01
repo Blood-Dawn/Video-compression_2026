@@ -283,15 +283,22 @@ def run_pipeline(
     # overall CPU load manageable. Mode 0/1 can afford slightly better compression.
     encode_preset = "ultrafast" if mode in ("mode2", "mode3") else "veryfast"
 
-    # CRF resolution. Mode 3 zeros out everything outside the moving-object
-    # ROIs and then encodes the whole frame at a much higher CRF than
-    # Mode 0 (default 38 vs 18). The blacked-out background takes near-zero
-    # bits at any CRF; the win comes from compressing the ROI pixels harder.
-    # User-supplied `crf` overrides the mode default. Author: Bloodawn (KheivenD).
+    # CRF resolution. Modes get progressively more aggressive foreground CRF
+    # from mode 0 -> mode 3, so each mode compresses harder than the last:
+    #   mode 0 / mode 1: CRF 18 (highest quality baseline / dual-CRF foreground)
+    #   mode 2:          CRF 23 (compression-oriented event recording)
+    #   mode 3:          CRF 38 (object-only; blacked-out background takes
+    #                            near-zero bits, so the ROI pixels get
+    #                            compressed hardest)
+    # User-supplied `crf` overrides the mode default.
+    # Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.3 — mode2 was wrongly
+    # left at CRF 18; restored progressive mode0<mode1<mode2<mode3 compression).
     if crf is not None:
         resolved_crf = int(crf)
     elif mode == "mode3":
         resolved_crf = 38
+    elif mode == "mode2":
+        resolved_crf = 23
     else:
         resolved_crf = 18
 

@@ -27,11 +27,21 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 
 def _reimport_crash_reporting():
-    """Fresh import to reset the module-level _SENTRY_ENABLED flag."""
+    """Fresh import to reset the module-level _SENTRY_ENABLED flag.
+
+    The module can be cached under more than one name (e.g. both
+    ``utils.crash_reporting`` and ``src.utils.crash_reporting``) and an
+    earlier test or app import may have set ``_SENTRY_ENABLED = True`` on
+    a sibling instance. Deleting by name alone didn't reliably reset the
+    flag, so init_crash_reporting() hit its idempotency early-return and
+    never called the stub. Force the flag off after import so each test
+    starts from a clean, hermetic slate.
+    """
     for k in list(sys.modules):
         if k == "utils.crash_reporting" or k.startswith("utils.crash_reporting."):
             del sys.modules[k]
     from utils import crash_reporting
+    crash_reporting._SENTRY_ENABLED = False
     return crash_reporting
 
 

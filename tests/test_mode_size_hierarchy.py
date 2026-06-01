@@ -10,18 +10,20 @@ discussion. These tests lock in the WEAKER invariants that DO hold across
 all reasonable scenes:
 
 * Every mode runs end-to-end without raising.
-* Every output (single .mp4 for mode 0/1/2, sparse directory for mode 3)
+* Every output (a single segment .mp4 for every mode, mode 3 included)
   is smaller than the uncompressed raw bytes the source frames represent.
-* The mode 3 sparse output is a directory containing at least one
-  per-object .mp4 plus a manifest.json.
+* Mode 3 writes a single object-only .mp4 (objects kept, background
+  blacked out). The per-object mode3_sparse/ layout was never shipped on
+  the app branch — see docs/test-baseline.md D2.
 
 This is the test file that exercises the FULL pipeline (FrameSource ->
-BG subtractor -> MOG2 mask -> ROI encoder OR Mode3SparseEncoder -> SQLite
-DB row). It is the closest thing the suite has to a smoke test of the
-whole stack, so a regression anywhere in pipeline.py / roi_encoder.py /
-mode3_sparse.py will surface here first.
+BG subtractor -> MOG2 mask -> ROI encoder -> SQLite DB row). It is the
+closest thing the suite has to a smoke test of the whole stack, so a
+regression anywhere in pipeline.py / roi_encoder.py will surface here
+first.
 
-Author: Bloodawn (KheivenD), 2026-05-02 (audit follow-up).
+Author: Bloodawn (KheivenD), 2026-05-02 (audit follow-up);
+updated 2026-05-31 (M0 TASK 0.3 — mode3 is a single object-only clip).
 """
 
 from __future__ import annotations
@@ -73,11 +75,13 @@ def _make_synthetic_clip(path: Path, w: int = 640, h: int = 360,
 
 
 def _bytes_for_mode(out_dir: Path, mode: str) -> int:
-    """Return total bytes written under out_dir for the given mode."""
-    if mode == "mode3":
-        sparse_dirs = list(out_dir.glob("mode3_sparse/*"))
-        return sum(p.stat().st_size for d in sparse_dirs
-                   for p in d.rglob("*") if p.is_file())
+    """Return total bytes written under out_dir for the given mode.
+
+    All four modes (mode 3 included) write a single segment .mp4 into
+    out_dir. Mode 3 keeps the moving-object pixels and blacks out the
+    background; the per-object ``mode3_sparse/`` layout was never shipped
+    on the app branch (see docs/test-baseline.md D2).
+    """
     return sum(p.stat().st_size for p in out_dir.glob("*.mp4"))
 
 
@@ -150,23 +154,20 @@ class TestModeSizeHierarchy:
                 f"{mode}: {r['bytes']} bytes is NOT smaller than raw {raw}"
             )
 
-    def test_mode3_produces_sparse_directory(self, tmp_path):
-        """Mode 3 specifically must write the sparse output: at least one
-        per-object .mp4 + a manifest.json. This is the core "remove the
-        black, don't paint over it" check the user explicitly asked for."""
+    def test_mode3_produces_object_only_clip(self, tmp_path):
+        """Mode 3 writes a single object-only .mp4 per segment: the moving
+        objects are kept and the background is blacked out (compressing to
+        near-zero bits). The per-object mode3_sparse/ layout was never
+        shipped on the app branch — see docs/test-baseline.md D2."""
         src = tmp_path / "src.mp4"
         _make_synthetic_clip(src)
 
         out = tmp_path / "mode3"
         _run_mode(src, out, "mode3")
 
-        sparse_dirs = list(out.glob("mode3_sparse/*"))
-        assert sparse_dirs, "mode3 produced no mode3_sparse/ subdirectory"
-        seg_dir = sparse_dirs[0]
-        manifest = seg_dir / "manifest.json"
-        assert manifest.exists(), "missing manifest.json in sparse segment"
-        objects = list(seg_dir.glob("object_*.mp4"))
-        assert len(objects) >= 1, "expected at least one per-object .mp4"
+        clips = list(out.glob("*.mp4"))
+        assert clips, "mode3 produced no .mp4 segment"
+        assert all(c.stat().st_size > 0 for c in clips), "mode3 clip is empty"
 
     def test_outputs_are_valid_mp4s(self, tmp_path):
         """Every produced .mp4 must be openable by OpenCV. Catches the
@@ -188,23 +189,23 @@ class TestModeSizeHierarchy:
                 finally:
                     cap.release()
 
-        # Mode 3: validate at least one object_*.mp4 in the sparse output.
+        # Mode 3: validate the single object-only .mp4 is decodable.
         out3 = tmp_path / "mode3"
         _run_mode(src, out3, "mode3")
-        seg_dirs = list(out3.glob("mode3_sparse/*"))
-        assert seg_dirs
-        any_object_ok = False
-        for f in seg_dirs[0].glob("object_*.mp4"):
+        clips = list(out3.glob("*.mp4"))
+        assert clips, "mode3 produced no .mp4 segment"
+        any_clip_ok = False
+        for f in clips:
             cap = cv2.VideoCapture(str(f))
             try:
                 if cap.isOpened():
                     ok, frame = cap.read()
                     if ok and frame is not None:
-                        any_object_ok = True
+                        any_clip_ok = True
                         break
             finally:
                 cap.release()
-        assert any_object_ok, "no decodable object_*.mp4 in sparse segment"
+        assert any_clip_ok, "no decodable mode3 object-only .mp4"
 
     def test_size_report_for_documentation(self, tmp_path, capsys):
         """Print measured bytes per mode so the docs/CI logs always have a

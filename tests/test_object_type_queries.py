@@ -1,5 +1,3 @@
-import os
-import tempfile
 import pytest
 from src.utils.db import (
     initialize_database,
@@ -10,9 +8,13 @@ from src.utils.db import (
 )
 
 @pytest.fixture
-def temp_db():
-    db_fd, db_path = tempfile.mkstemp()
-    os.close(db_fd)
+def temp_db(tmp_path):
+    # Use pytest's tmp_path (project basetemp=.pytest_tmp) instead of the
+    # system %TEMP% + manual os.remove(). On Windows the manual remove hit
+    # WinError 32 because a SQLite handle was still open at teardown; letting
+    # pytest clean up (with ignore-cleanup-errors) avoids the lock war.
+    # Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.3 — Windows handle fix).
+    db_path = str(tmp_path / "metadata.db")
 
     initialize_database(db_path)
 
@@ -53,8 +55,7 @@ def temp_db():
     )
 
     yield db_path
-
-    os.remove(db_path)
+    # No manual cleanup — tmp_path is removed by pytest.
 
 
 _OBJECT_TYPE_COL = 8  # SELECT * column order: id,timestamp,camera_id,target_detected,roi_count,file_size,duration,file_path,object_type,...

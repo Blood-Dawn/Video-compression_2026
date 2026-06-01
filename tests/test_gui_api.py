@@ -48,16 +48,22 @@ def client():
 
 
 @pytest.fixture(autouse=True)
-def reset_pipeline_state(tmp_path):
+def reset_pipeline_state(tmp_path, monkeypatch):
     """
     Reset all shared pipeline state before every test.
 
     Without this, a test that calls /api/start would leave _status["running"]
     as True and cause the next test's /api/start to return 409.
 
-    output_dir is pointed at tmp_path (no metadata.db there) so tests that
-    expect an empty/missing DB don't accidentally find a real outputs/ DB.
+    DB isolation: /api/segments discovers metadata.db under EVERY candidate
+    root — the configured output_dir, the demo's last_output_root, AND a hard
+    fallback to <repo>/outputs. Pointing output_dir at tmp_path isn't enough
+    on its own (the repo's real outputs/ DB still leaks in), so we also clear
+    the demo root and repoint gui_module._ROOT at tmp_path. Now every
+    candidate root is an empty temp dir and tests see only the DB they create.
+    Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.3 — DB test isolation).
     """
+    monkeypatch.setattr(gui_module, "_ROOT", tmp_path)
     with gui_module._state_lock:
         gui_module._status.update({
             "running": False,
@@ -67,6 +73,8 @@ def reset_pipeline_state(tmp_path):
             "segment_count": 0,
             "error": None,
         })
+    with gui_module._demo_lock:
+        gui_module._demo_state["last_output_root"] = ""
     gui_module._pipeline_thread = None
     gui_module._stop_event = None
     yield
@@ -731,14 +739,27 @@ class TestApiEnhanceBenchmark:
 # ---------------------------------------------------------------------------
 
 class TestDefaultOutputDir:
-    """Regression for the 2026-05-02 OneDrive audit. _default_output_dir()
-    must prefer the cloud sync root and fall back to the local outputs/
-    only when no cloud sync is available.
+    """Regression for the output-dir resolution order, updated for the
+    2026-05-14 productization change. New order:
+      1. persisted absolute output_dir (highest priority)
+      2. cloud sync root — ONLY when the user opts in (prefer_cloud_output)
+      3. platform videos folder (~/Videos/SVCS etc.)
+      4. repo outputs/ (last-resort dev fallback)
+    OneDrive is no longer the implicit default.
     """
 
-    def test_default_output_dir_uses_cloud_when_available(self, monkeypatch, tmp_path):
+    def _clear_persisted(self):
+        # The autouse fixture seeds an absolute output_dir; clear it so the
+        # lower-priority branches (cloud / videos) are exercised.
+        with gui_module._state_lock:
+            gui_module._status["config"]["output_dir"] = ""
+
+    def test_default_output_dir_uses_cloud_when_opted_in(self, monkeypatch, tmp_path):
+        self._clear_persisted()
         cloud = tmp_path / "FakeOneDrive"
         cloud.mkdir()
+        with gui_module._state_lock:
+            gui_module._status["config"]["prefer_cloud_output"] = True
         monkeypatch.setattr(
             gui_module, "_detect_cloud_root",
             lambda: (cloud, "FakeOneDrive", "https://example/test"),
@@ -746,12 +767,18 @@ class TestDefaultOutputDir:
         result = gui_module._default_output_dir()
         assert result == str(cloud / gui_module._CLOUD_SUBFOLDER)
 
-    def test_default_output_dir_falls_back_to_local(self, monkeypatch):
+    def test_default_output_dir_ignores_cloud_when_not_opted_in(self, monkeypatch, tmp_path):
+        # Cloud is opt-in: even with a cloud root present, without the flag
+        # the default must fall through to the platform videos folder.
+        self._clear_persisted()
+        fake_videos = tmp_path / "Videos" / "SVCS"
         monkeypatch.setattr(
-            gui_module, "_detect_cloud_root", lambda: (None, None, None),
+            gui_module, "_detect_cloud_root",
+            lambda: (tmp_path / "FakeOneDrive", "FakeOneDrive", "https://example/test"),
         )
+        monkeypatch.setattr(gui_module._paths, "default_videos_dir", lambda: fake_videos)
         result = gui_module._default_output_dir()
-        assert result.endswith("outputs") or result.endswith("outputs/")
+        assert result == str(fake_videos)
 
 
 # ---------------------------------------------------------------------------

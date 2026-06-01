@@ -15,28 +15,52 @@ Author: Bloodawn (KheivenD), 2026-05-14 (audit split).
 from __future__ import annotations
 
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Union
+from typing import Iterator, Union
 
 from utils.db import DB_NAME
 
 
-def get_connection(db_path: Union[str, Path] = DB_NAME) -> sqlite3.Connection:
-    """Open a SQLite connection with WAL journal mode enabled.
+@contextmanager
+def get_connection(db_path: Union[str, Path] = DB_NAME) -> Iterator[sqlite3.Connection]:
+    """Open a SQLite connection (WAL mode) as a closing context manager.
 
     WAL (Write-Ahead Logging) allows readers and writers to operate
     concurrently without blocking each other. Important when a query
     tool or reporting script runs alongside the encoding pipeline.
 
+    IMPORTANT: a bare ``sqlite3.Connection`` used as ``with conn:`` only
+    commits/rolls back the transaction — it does NOT close the
+    connection. That left a connection (and the WAL ``-wal``/``-shm``
+    sidecar files) open after every DB call, which on Windows locked the
+    database file and broke temp-dir cleanup (WinError 32) and could lock
+    the live DB in the running app. This context manager commits on
+    success, rolls back on error, and always closes the connection.
+
+    Usage (unchanged for all existing callers):
+        with get_connection(db_path) as conn:
+            conn.execute(...)
+
     Args:
         db_path: Path to the SQLite database file, or ':memory:' for tests.
 
-    Returns:
-        An open sqlite3.Connection in WAL mode.
+    Yields:
+        An open sqlite3.Connection in WAL mode, closed on block exit.
+
+    Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.3 — close leaked
+    connections; fixes WinError 32 on Windows).
     """
     conn = sqlite3.connect(str(db_path))
-    conn.execute("PRAGMA journal_mode=WAL")
-    return conn
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def initialize_database(db_path: Union[str, Path] = DB_NAME) -> None:

@@ -13,8 +13,19 @@ authors = [
 ]
 
 dependencies = [
-    # Core vision and video
-    "opencv-python>=4.8.0,<4.11.0",
+    # Core vision and video.
+    # MUST be the -contrib build: src/background_subtraction uses
+    # cv2.bgsegm.createBackgroundSubtractorGMG (an opencv-contrib-only
+    # module) for the GMG method. Plain opencv-python lacks cv2.bgsegm, so
+    # a fresh `uv sync` would import-error / skip GMG. Using contrib here
+    # means a clean clone gets a working cv2 with MOG2 *and* GMG without a
+    # manual reinstall. NOTE: this is mutually exclusive with the
+    # opencv-python-headless that easyocr ([plates]) pulls — they share the
+    # cv2/ namespace and clobber each other. Plate-reader is therefore
+    # installed/tested in a SEPARATE environment, never alongside core
+    # (see the [plates] note below and docs/test-baseline.md).
+    # Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.4b — opencv dep fix).
+    "opencv-contrib-python>=4.8.0,<4.11.0",
     "numpy>=1.24.0,<2.0.0",
     "Pillow>=10.0.0",
     # Video processing
@@ -91,8 +102,18 @@ enhance = [
 # supported at runtime if a customer installs it manually (the backend
 # auto-detects). OpenALPR is intentionally NOT used (AGPL-3.0).
 #
-# Install (premium tier only):  uv sync --extra plates
-# Author: Bloodawn (KheivenD), 2026-05-14 (premium branch split).
+# WARNING — OpenCV conflict: easyocr depends on opencv-python-headless,
+# which shares the cv2/ package namespace with the core opencv-contrib-python
+# dependency and CLOBBERS it (createBackgroundSubtractorMOG2 disappears).
+# There is no clean way to coexist (they are distinct PyPI packages writing
+# the same cv2/ files). So DO NOT install [plates] into the core/dev/CI
+# environment. Install and validate it in a SEPARATE virtualenv dedicated to
+# the plate reader. The default test runner excludes it; see
+# docs/test-baseline.md ("OpenCV / easyocr conflict") and EXECUTION TASK 0.3b/0.4b.
+#
+# Install (separate env only):  uv sync --extra plates
+# Author: Bloodawn (KheivenD), 2026-05-14 (premium branch split);
+#         2026-05-31 (M0 TASK 0.4b — documented the opencv-headless conflict).
 plates = [
     "easyocr>=1.7.0",
 ]

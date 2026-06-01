@@ -4,6 +4,9 @@
 **Added:** 2026-05-02 (audit follow-up after the user asked: "each mode should lower file size incrementally — like mode 3 < mode 2 < mode 1 < mode 0").
 **Test:** `tests/test_mode_size_hierarchy.py` runs the real pipeline end-to-end across all four modes and prints the measured bytes.
 
+> **UPDATE 2026-05-31 (M0 TASK 0.3): the design changed; the numbers below are now historical.**
+> Foreground CRF is now **progressive** — mode0=18, mode1=18, **mode2=23**, mode3=38 — so each mode compresses harder than the last (mode2 was previously stuck at CRF 18, which is the bug these measurements captured). With mode2 at CRF 23 it is **no longer "consistently the largest"**; it now trades a little forensic quality for smaller files. Also: **mode3 is a single object-only clip**, not the per-object `mode3_sparse/` tree referenced below — that rewrite never shipped on `app`. The measured tables in this doc predate both changes; re-run `tests/test_mode_size_hierarchy.py` to capture fresh numbers when needed.
+
 ---
 
 ## TL;DR

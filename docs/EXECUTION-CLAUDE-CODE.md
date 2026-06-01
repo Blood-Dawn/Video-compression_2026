@@ -120,11 +120,11 @@ There is **no commercial/premium milestone** in v2. A future commercial fork, if
 **Milestone:** M0 · **Depends on:** 0.4 · **Size:** ~50 lines, 2–3 h
 **Files:** `pyproject.toml`, `uv.lock`, `docs/test-baseline.md`
 **Acceptance:**
-- The project declares the OpenCV build the code actually needs: **`opencv-contrib-python`** (the code calls `cv2.bgsegm.createBackgroundSubtractorGMG`, a contrib-only module — `background_subtraction.py:180`). Reconcile the version ceiling (currently `<4.11.0`).
-- Exactly **one** OpenCV distribution resolves in any environment, including with `[plates]`. Add a `[tool.uv]` override (e.g. `override-dependencies`) so easyocr's `opencv-python-headless` does not install a second OpenCV alongside the project's. Validate that `uv sync --extra plates` leaves `cv2` whole (`createBackgroundSubtractorMOG2` and `cv2.bgsegm` both present).
-- `uv.lock` regenerated; `scripts/run_tests.ps1 -WithPlates` passes the cv2 sanity check.
-**Risks:** Forcing easyocr onto a non-headless / contrib OpenCV may or may not satisfy its runtime needs — test the plate reader actually works after the override. If the override proves fragile, fall back to running plates in an isolated venv (TASK 0.3b already makes that viable).
-**Notes:** This is a real packaging bug, not a code issue. It also reinforces PLAN-V2 §6 (the ONNX migration thins exactly these heavy, conflict-prone vision deps). Decide contrib-vs-headless with the `cv2.imshow` preview path (`pipeline.py:658`) in mind — a headless build disables that optional preview.
+- **DONE (pyproject):** the core dependency is now `opencv-contrib-python>=4.8.0,<4.11.0` (the code calls `cv2.bgsegm.createBackgroundSubtractorGMG`, a contrib-only module — `background_subtraction.py:180`). A fresh `uv sync` now installs a `cv2` with both MOG2 and GMG, with no manual `uv pip install` needed.
+- **Regenerate the lock:** run `uv lock` (or `uv sync`) so `uv.lock` records `opencv-contrib-python`; commit `pyproject.toml` + `uv.lock` together.
+- **Plates stays in a separate environment — there is NO clean single-env coexistence.** `opencv-contrib-python` (core) and `opencv-python-headless` (easyocr) are distinct PyPI packages that write the same `cv2/` files and clobber each other; a `[tool.uv]` override cannot fix this (it can re-pin a version, not rename/merge two packages). So the policy is: the default/dev/CI env never installs `[plates]`; the plate reader is installed and validated in a dedicated virtualenv (TASK 0.3b). The `[plates]` extra comment in `pyproject.toml` documents this.
+**Acceptance check:** a clean `uv sync` (no extras beyond enhance/crash-reporting) + `scripts/run_tests.ps1` is green without any manual opencv reinstall.
+**Risks:** none material — this removes a fresh-clone footgun. The longer-term thinning of these heavy vision deps is the ONNX migration (PLAN-V2 §6, M2). Note `cv2.imshow` preview (`pipeline.py:658`) needs a non-headless build, which contrib is — preview still works.
 
 ### TASK 0.5: Fold the plate reader into `app`; retire the premium mirror
 **Milestone:** M0 · **Depends on:** 0.3 · **Size:** ~120 lines, 2–3 h

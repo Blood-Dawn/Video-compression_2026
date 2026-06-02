@@ -19,10 +19,7 @@ Usage:
 Author: Bloodawn (KheivenD)
 """
 
-import atexit
-import collections
 import json
-import logging
 import os
 import queue
 import subprocess
@@ -115,8 +112,40 @@ except FileNotFoundError:
         pass
     app.config["SECRET_KEY"] = _sk
 
-# ── Shared pipeline state (protected by _state_lock) ─────────────────────────
-_state_lock = threading.Lock()
+# ── Extracted state + logging (M1 refactor, TASK 1.1) ────────────────────────
+# Pure-data globals now live in gui.state; logging handlers + atexit in
+# gui.logging_setup. They are imported (and thereby re-exported) here so that
+# existing in-module references AND the gui.app.* test contract keep working
+# without churn. Importing gui.logging_setup also wires the root logger and
+# registers the atexit shutdown marker (side effect, as before).
+# Import direction is one-way: state <- logging_setup <- app.
+# Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — state/logging split).
+try:
+    from gui import state as _state
+    from gui.state import (
+        _state_lock, _status,
+        _power_lock, _power_state,
+        _demo_lock, _demo_state,
+        _hls_lock, _hls_state, _hls_frame_ts_dq, _hls_segment_latencies,
+        _log_queue, _log_history, _log_lock,
+        _VALID_MODES, _VALID_BG, _VALID_DEVICES, _VALID_MODELS,
+        _CLOUD_SUBFOLDER, _SAFE_FILENAME_RE, _ALLOWED_EXTENSIONS,
+    )
+    from gui.logging_setup import log, _LOG_FILE
+except ModuleNotFoundError:  # pragma: no cover - import path shim
+    from src.gui import state as _state
+    from src.gui.state import (
+        _state_lock, _status,
+        _power_lock, _power_state,
+        _demo_lock, _demo_state,
+        _hls_lock, _hls_state, _hls_frame_ts_dq, _hls_segment_latencies,
+        _log_queue, _log_history, _log_lock,
+        _VALID_MODES, _VALID_BG, _VALID_DEVICES, _VALID_MODELS,
+        _CLOUD_SUBFOLDER, _SAFE_FILENAME_RE, _ALLOWED_EXTENSIONS,
+    )
+    from src.gui.logging_setup import log, _LOG_FILE
+
+# ── Shared pipeline state (protected by _state_lock, from gui.state) ──────────
 _pipeline_thread: threading.Thread | None = None
 _stop_event: threading.Event | None = None
 _active_encoder = None   # set by _patched_re_init so stop can abort a hung FFmpeg pipe
@@ -209,8 +238,6 @@ def _assert_within_output(file_path: str, output_dir: str) -> Path:
     return fp
 
 
-_SAFE_FILENAME_RE = _re.compile(r"^[a-zA-Z0-9_\-\.]+$")
-
 def _safe_filename(name: str) -> str:
     """Strip directory components and validate the filename is safe."""
     name = Path(name).name   # strip any directory component
@@ -218,30 +245,9 @@ def _safe_filename(name: str) -> str:
         raise ValueError(f"Unsafe filename: {name!r}")
     return name
 
-_status: dict = {
-    "running": False,
-    "start_time": None,
-    "config": {},
-    "frame_count": 0,
-    "segment_count": 0,
-    "total_frames": 0,   # 0 = live/unknown, >0 = video file with known length
-    "error": None,
-}
-
 # ── Power / hardware metrics ───────────────────────────────────────────────────
-# Sampled by a background thread every 2 s while the pipeline is running.
-_power_lock = threading.Lock()
-_power_state: dict = {
-    "cpu_pct":        0.0,   # current process+system CPU %
-    "ram_pct":        0.0,   # system RAM %
-    "ram_used_mb":    0,
-    "ram_total_mb":   0,
-    "battery_pct":    None,  # None if no battery / not detectable
-    "battery_plugged": None,
-    "battery_mins_left": None,
-    # Per-mode running averages: {"mode0": {"cpu_sum": 0, "n": 0, "avg": 0.0}, ...}
-    "mode_avgs": {},
-}
+# _power_lock / _power_state now live in gui.state (imported above). Sampled by
+# a background thread every 2 s while the pipeline is running.
 _cpu_sampler_thread: threading.Thread | None = None
 _cpu_sampler_stop = threading.Event()
 
@@ -485,111 +491,13 @@ _bg_hw_thread = threading.Thread(target=_bg_hw_sampler_loop, daemon=True, name="
 _bg_hw_thread.start()
 
 
-# ── Log capture ───────────────────────────────────────────────────────────────
-_log_queue: queue.Queue = queue.Queue(maxsize=1000)
-_log_history: collections.deque = collections.deque(maxlen=300)  # (event_id, line)
-_log_id = 0
-_log_lock = threading.Lock()
-
-
-class _QueueLogHandler(logging.Handler):
-    """Forwards log records to the shared queue for SSE streaming.
-
-    Each record is stamped with a monotonic event ID so SSE clients can
-    resume without replaying duplicate lines after a reconnect.
-    """
-
-    def emit(self, record: logging.LogRecord) -> None:
-        global _log_id
-        line = self.format(record)
-        with _log_lock:
-            _log_id += 1
-            item = (_log_id, line)
-            _log_history.append(item)
-        try:
-            _log_queue.put_nowait(item)
-        except queue.Full:
-            pass  # drop oldest; client will re-fetch on reconnect
-
-
-# ── Log formatter and handlers ────────────────────────────────────────────────
-# Log file lives in the platform cache dir, not next to the user's video
-# outputs. Required for any real installer to work on Windows / macOS.
-# Also fixes a pre-existing bug where the console handler was defined
-# but never attached to the root logger.
-# Author: Bloodawn (KheivenD), 2026-05-14 (installer prep + logging fix).
-_LOG_FMT = logging.Formatter("%(asctime)s  %(levelname)-8s  %(name)s: %(message)s")
-
-# Queue handler: forwards records to the SSE stream for the browser
-_queue_handler = _QueueLogHandler()
-_queue_handler.setFormatter(logging.Formatter("%(asctime)s  %(levelname)s  %(message)s"))
-
-# File handler: writes all records to <cache_dir>/logs/svcs.log for
-# offline debugging. Was previously in outputs/svcs.log under the user's
-# video output folder, which breaks installed-app sandboxes.
-_LOG_FILE = _paths.cache_dir() / "logs" / "svcs.log"
-_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-_file_handler = logging.FileHandler(str(_LOG_FILE), encoding="utf-8")
-_file_handler.setFormatter(_LOG_FMT)
-
-# Console handler: mirrors to terminal
-_console_handler = logging.StreamHandler(sys.stderr)
-_console_handler.setFormatter(_LOG_FMT)
-
-_root_logger = logging.getLogger()
-_root_logger.addHandler(_queue_handler)
-_root_logger.addHandler(_file_handler)
-_root_logger.addHandler(_console_handler)   # bug fix: was defined but never added
-_root_logger.setLevel(logging.DEBUG)   # capture DEBUG level; filter per-handler below
-
-# Only forward INFO+ to browser SSE and terminal (DEBUG goes to file only)
-_queue_handler.setLevel(logging.INFO)
-_console_handler.setLevel(logging.INFO)
-_file_handler.setLevel(logging.DEBUG)
-
-# Quiet down noisy third-party libraries so the SSE log isn't drowned.
-for _noisy in ("PIL", "matplotlib", "urllib3", "werkzeug",
-               "ultralytics", "easyocr", "torch"):
-    logging.getLogger(_noisy).setLevel(logging.WARNING)
-
-log = logging.getLogger(__name__)
-
-
-def _write_shutdown_log():
-    """Write a clean shutdown marker to the log file on process exit.
-
-    Guards against the case where atexit fires after the test runner (or
-    any parent process) has already closed stdout/stderr. The naive
-    approach of wrapping log.info() in try/except doesn't work, because
-    Python's logging.Handler.emit() catches the ValueError internally and
-    routes it to its own error-handling path (printing "--- Logging
-    error ---" to stderr). To actually silence that, we have to detach
-    handlers whose underlying stream is already closed BEFORE logging.
-    The file handler is preserved either way so the shutdown marker
-    still lands in svcs.log.
-    """
-    try:
-        root = logging.getLogger()
-        for h in list(root.handlers):
-            stream = getattr(h, "stream", None)
-            if stream is not None and getattr(stream, "closed", False):
-                root.removeHandler(h)
-    except Exception:  # noqa: BLE001  shutdown best-effort
-        pass
-    try:
-        log.info("=" * 60)
-        log.info("SVCS SERVER SHUTDOWN: %s",
-                 datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
-        log.info("=" * 60)
-    except (ValueError, OSError):
-        pass
-    try:
-        _file_handler.flush()
-    except (ValueError, OSError):
-        pass
-
-
-atexit.register(_write_shutdown_log)
+# ── Log capture + handlers ────────────────────────────────────────────────────
+# Moved to gui.logging_setup (TASK 1.1): the SSE queue handler, file/console
+# handlers, root-logger wiring, _write_shutdown_log, and the atexit
+# registration now live there. `log`, `_LOG_FILE`, and the live-log ring
+# buffers (_log_queue / _log_history / _log_lock) are imported at the top of
+# this module. The file handler and the shutdown marker stay co-located in
+# logging_setup so the atexit ordering keeps landing the marker in svcs.log.
 
 # ── Frame-count interceptor ───────────────────────────────────────────────────
 # We wrap the FrameSource.read() method at runtime to count decoded frames
@@ -1404,7 +1312,7 @@ def api_browse():
 
 
 _UPLOAD_DIR_LOCAL = _ROOT / "data" / "uploads"
-_ALLOWED_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".h264", ".m4v"}
+# _ALLOWED_EXTENSIONS now lives in gui.state (imported at the top).
 
 
 def _upload_dir() -> Path:
@@ -1795,20 +1703,7 @@ def api_busiest():
 
 
 # ── Demo / comparison routes (Riley's render system) ─────────────────────────
-
-_demo_lock = threading.Lock()
-_demo_state: dict = {
-    "running": False,
-    "status": "idle",        # idle | running | done | error
-    "modes": [],
-    "progress": "",
-    "demo_phase": "",        # start | pipeline | render | stitch | done
-    "demo_mode": "",         # current mode being processed
-    "demo_step": "",         # e.g. "(1/2)"
-    "result": None,          # populated on success
-    "error": None,
-    "last_output_root": "",  # absolute path of most recent demo run output
-}
+# _demo_lock / _demo_state now live in gui.state (imported at the top).
 
 
 # Now that _demo_state exists, replay any persisted output paths from disk
@@ -2138,39 +2033,12 @@ def api_demo_history():
 # Frames are annotated in Python before encoding so the live stream shows
 # the same green ROI bounding boxes as the demo comparison output.
 
-_hls_lock = threading.Lock()
-_hls_state: dict = {
-    "running": False,
-    "camera_id": None,
-    "input_source": None,
-    "playlist_url": None,
-    "hls_dir": None,
-    "error": None,
-    "stream_start_time": None,   # epoch float: when FFmpeg process launched
-    "ingest_latency_s": None,    # float: seconds from FFmpeg launch to first .ts segment
-    # ─── Rolling end-to-end latency (ROADMAP 5.1) ──────────────────────────────
-    # Author: Bloodawn (KheivenD)
-    # ingest→HLS latency: how long does a frame read off RTSP take to land in
-    # a .ts chunk that the browser can play? Cody asked for this explicitly in
-    # the April 22 sponsor meeting — operators need it for hardware sizing.
-    "latency_avg_s":   None,     # float: rolling avg over last N segments (None until 1+ samples)
-    "latency_last_s":  None,     # float: latency of the most recent segment
-    "latency_samples": 0,        # int:   how many segments contributed to the average
-    "latency_window":  20,       # int:   how many segments are kept in the rolling window
-}
+# _hls_lock / _hls_state and the latency deques (_hls_frame_ts_dq /
+# _hls_segment_latencies) now live in gui.state (imported at the top). The
+# rebindable process/thread handles stay here until pipeline/hls extraction.
 _hls_process: subprocess.Popen | None = None
 _hls_thread: threading.Thread | None = None
 _hls_stop_event: threading.Event | None = None
-
-# Bounded deques used by the latency watcher (ROADMAP 5.1).
-# `_hls_frame_ts_dq` holds frame-read timestamps in arrival order; the watcher
-# pops ~(hls_time × fps) entries each time a new .ts segment is detected and
-# computes the median age. `_hls_segment_latencies` keeps a rolling window of
-# per-segment latencies so the API can report a stable average.
-# maxlen on _hls_frame_ts_dq prevents unbounded growth if FFmpeg stalls.
-# Author: Bloodawn (KheivenD)
-_hls_frame_ts_dq: "collections.deque[float]" = collections.deque(maxlen=10000)
-_hls_segment_latencies: "collections.deque[float]" = collections.deque(maxlen=20)
 
 
 def _hls_dir_for(camera_id: str, output_dir: str) -> Path:
@@ -3116,11 +2984,8 @@ def api_network_info():
 
 
 # ── Config import / export ────────────────────────────────────────────────────
-
-_VALID_MODES   = {"mode0", "mode1", "mode2", "mode3"}
-_VALID_BG      = {"MOG2", "KNN", "GMG"}
-_VALID_DEVICES = {"auto", "cuda", "mps", "cpu"}
-_VALID_MODELS  = {"espcn", "fsrcnn", "edsr", "lapsrn", "realesrnet", "realesrgan", "bicubic"}
+# _VALID_MODES / _VALID_BG / _VALID_DEVICES / _VALID_MODELS now live in
+# gui.state (imported at the top).
 
 
 @app.route("/api/config/import", methods=["POST"])
@@ -3256,7 +3121,7 @@ def api_config_export():
 # No API credentials needed — files saved to the local folder appear in the
 # cloud within seconds, exactly like Google Drive for Desktop.
 
-_CLOUD_SUBFOLDER = "SVCS"   # subfolder created inside whichever cloud root is found
+# _CLOUD_SUBFOLDER now lives in gui.state (imported at the top).
 
 
 def _detect_onedrive_root(prefer_business: bool = True) -> tuple[Path, str] | tuple[None, None]:
@@ -3853,6 +3718,46 @@ def api_encrypt():
         "original_kept": True,
         "original_path": str(src_path),
     })
+
+
+# ── Rebound-global forwarding (REFACTOR-PLAN §5) ─────────────────────────────
+# Most state names are mutable containers re-exported from gui.state as the
+# SAME object, so `gui.app.<name>` and `gui.state.<name>` are identical and
+# in-place mutation round-trips for free. A few names are *rebound* (reassigned,
+# not mutated in place) inside the owning submodule — e.g. the SSE log handler
+# does `state._log_id += 1`. A plain re-import would bind a stale copy here, and
+# the gui.app.* test contract reaches into these names for both reads AND
+# writes. We swap this module's class so those specific names are forwarded to
+# their owning module in both directions. As later tasks move _pipeline_thread /
+# _stop_event / _active_encoder into a service module, add them to the map below.
+# Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — rebound forwarding).
+import types as _types
+
+# name -> owning module object. Forwarded names must NOT be bound in this
+# module's __dict__, or normal attribute lookup would shadow __getattr__.
+_FORWARDED_GLOBALS: dict = {
+    "_log_id": _state,   # gui.state; rebound by the SSE log handler
+}
+
+
+class _ForwardingModule(_types.ModuleType):
+    """gui.app module class: forwards rebound globals to their owning module."""
+
+    def __getattr__(self, name):          # called only when normal lookup misses
+        owner = _FORWARDED_GLOBALS.get(name)
+        if owner is not None:
+            return getattr(owner, name)
+        raise AttributeError(f"module {self.__name__!r} has no attribute {name!r}")
+
+    def __setattr__(self, name, value):
+        owner = _FORWARDED_GLOBALS.get(name)
+        if owner is not None:
+            setattr(owner, name, value)
+        else:
+            super().__setattr__(name, value)
+
+
+sys.modules[__name__].__class__ = _ForwardingModule
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

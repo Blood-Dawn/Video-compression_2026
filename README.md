@@ -4,6 +4,14 @@ Sponsored by the Defense Innovation Unit (DIU) / NIWC Pacific
 
 ---
 
+## Download
+
+**[⬇ Download the latest Windows installer](https://github.com/Blood-Dawn/Video-compression_2026/releases/latest)** — grab `SVCS-Setup-*.exe` from the Releases page, then verify it against the published `SHA256SUMS.txt` (the [download page](docs/site/index.html) has the steps).
+
+Free and open source (AGPL-3.0). No account, no cloud, no telemetry by default. Runs offline on a regular PC — no GPU required. Also available as a [Docker image](docs/deployment_packaging.md) or from source (below).
+
+---
+
 ## What this is
 
 Security cameras waste a lot of storage. A camera pointed at a parking lot records 24 hours of footage a day, but 23 of those hours are just an empty parking lot — nothing moving, nothing happening. Every pixel of that dead footage still gets saved.

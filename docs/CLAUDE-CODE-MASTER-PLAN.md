@@ -206,7 +206,7 @@ Honest split (PLAN-V2 §2/§6 Pushback 4): RTSP/ONVIF cameras ingest directly; c
   **Do:** a **separate** channel from crash reporting — preset popularity, codec choice, encode success/failure, anonymized error categories, and which **camera-ingestion path** is used (RTSP/ONVIF vs watch-folder vs bridge). No footage, file contents, paths, PII, or reinstall-surviving IDs. Default **off**; first-run consent screen; settings toggle.
   **Acceptance:** `tests/test_usage_stats.py` asserts nothing is sent when off and payloads carry no PII/path fields.
 
-- [ ] **TASK 5.1 — public download page.** Depends: 2.4.
+- [x] **TASK 5.1 — public download page.** Depends: 2.4. *(docs/site/index.html + style.css — a static, fully self-hosted download page (no CDN, no external scripts/fonts, no JS) leading with the surveillance / self-hosted / open-source (AGPL) wedge, three value cards, a Download section linking GitHub Releases (SVCS-Setup-*.exe), SHA-256 verification steps (PowerShell Get-FileHash + sha256sum vs the release's SHA256SUMS.txt), system requirements (Windows 64-bit, no GPU required, ~600 MB), and "other ways to run" (Docker/source/cameras). No competitor comparisons. README gained a Download section. tests/test_download_page.py (8): page+css exist, links the installer, documents checksums, lists requirements, leads with the wedge, ships zero external resources, makes no competitor comparison, README has the link.)*
   **Files:** new `docs/site/` (GitHub Pages), `README.md`.
   **Do:** static page linking the latest installer from GitHub Releases, SHA-256 checksums, system requirements. Copy leads with the surveillance/self-hosted/open-source wedge; no competitor comparisons. Plain HTML/CSS, no CDN.
 

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SVCS — Selective Video Compression for Surveillance</title>
+  <meta name="description" content="Open-source, self-hosted video compression for surveillance cameras. Shrink 24/7 footage by recording only what moves. Runs offline on a regular PC — no cloud, no GPU.">
+  <!-- Plain HTML/CSS, fully self-hosted: no external scripts or fonts
+       (offline-friendly). Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5.1). -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="hero">
+    <h1>SVCS</h1>
+    <p class="tagline">Selective Video Compression for surveillance cameras.</p>
+    <p class="sub">
+      Your cameras record 24 hours a day, but most of it is an empty hallway or
+      a still parking lot. SVCS keeps what moves at full quality and compresses
+      the dead background hard — the same useful footage at a fraction of the size.
+    </p>
+    <div class="cta">
+      <a class="btn-download" href="https://github.com/Blood-Dawn/Video-compression_2026/releases/latest">
+        Download for Windows
+      </a>
+      <a class="btn-secondary" href="https://github.com/Blood-Dawn/Video-compression_2026">
+        View source on GitHub
+      </a>
+    </div>
+    <p class="fineprint">Free &amp; open source (AGPL-3.0). No account. No cloud. No telemetry by default.</p>
+  </header>
+
+  <main>
+    <section class="wedge">
+      <div class="card">
+        <h3>Surveillance-first</h3>
+        <p>Built for security footage: static cameras, sparse events, long idle
+           stretches. Named presets (Continuous CCTV, Doorbell, NVR, Active scene)
+           pick the right settings — no codec jargon.</p>
+      </div>
+      <div class="card">
+        <h3>Self-hosted</h3>
+        <p>Runs entirely on your own machine or server. Point it at an RTSP/ONVIF
+           camera, a watch-folder, or exported clips. Your video never leaves your
+           hardware.</p>
+      </div>
+      <div class="card">
+        <h3>Open source</h3>
+        <p>AGPL-3.0, auditable end to end. Object detection runs on ONNX Runtime
+           (no proprietary models), and the whole pipeline works offline.</p>
+      </div>
+    </section>
+
+    <section class="download">
+      <h2>Download</h2>
+      <p>
+        The Windows installer is published on the
+        <a href="https://github.com/Blood-Dawn/Video-compression_2026/releases/latest">GitHub Releases</a>
+        page. Grab the latest <code>SVCS-Setup-*.exe</code>.
+      </p>
+
+      <h3>Verify your download (recommended)</h3>
+      <p>
+        Every release ships a <code>SHA256SUMS.txt</code> alongside the installer.
+        After downloading, check the file's hash matches:
+      </p>
+      <pre><code># Windows (PowerShell)
+Get-FileHash .\SVCS-Setup-2.0.0.exe -Algorithm SHA256
+
+# Linux / macOS
+sha256sum SVCS-Setup-2.0.0.exe</code></pre>
+      <p class="note">
+        Compare the output against the value in <code>SHA256SUMS.txt</code> for
+        that release. If they don't match, do not run the installer.
+      </p>
+
+      <h3>System requirements</h3>
+      <ul class="reqs">
+        <li><strong>OS:</strong> Windows 10 or 11, 64-bit (a Linux build and a
+            Docker image are also available — see the repo).</li>
+        <li><strong>CPU:</strong> Any modern 64-bit x86 CPU. <strong>No GPU
+            required</strong> — detection runs on CPU via ONNX Runtime.</li>
+        <li><strong>RAM:</strong> 4 GB minimum, 8 GB recommended.</li>
+        <li><strong>Disk:</strong> ~600 MB for the app; plus space for your
+            compressed output.</li>
+        <li><strong>Network:</strong> None needed to run. Internet is only used
+            if you choose to update.</li>
+      </ul>
+    </section>
+
+    <section class="other">
+      <h2>Other ways to run</h2>
+      <ul>
+        <li><strong>Docker (server):</strong> <code>docker compose up</code> —
+            see <code>docs/deployment_packaging.md</code>.</li>
+        <li><strong>From source:</strong> <code>uv sync &amp;&amp; uv run python run_gui.py</code>.</li>
+        <li><strong>Cameras:</strong> RTSP/ONVIF, watch-folder, or a bridge for
+            cloud-locked cams — see <code>docs/camera-ingestion.md</code>.</li>
+      </ul>
+    </section>
+  </main>
+
+  <footer>
+    <p>SVCS — open-source surveillance video compression. AGPL-3.0.</p>
+    <p><a href="https://github.com/Blood-Dawn/Video-compression_2026">github.com/Blood-Dawn/Video-compression_2026</a></p>
+  </footer>
+</body>
+</html>

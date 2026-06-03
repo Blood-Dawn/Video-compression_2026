@@ -37,7 +37,16 @@ Suite green (702 passed). Slim installer **SVCS-Setup-2.0.0.dev0.exe = 210 MB**.
 
 Then M-CAM (ONVIF/watch-folder), M4 (watch-folder hardening, dashboard auth,
 Docker), M5 (download page, opt-in stats, docs, 🚦beta), M5b (🚦signing, Linux
-AppImage, 🚦macOS). Optional/deferred: 3.3 (adaptive per-segment bitrate).
+AppImage, 🚦macOS).
+
+**Deferred by the plan (not a gate): TASK 3.3 — adaptive per-segment bitrate.**
+The master plan marks it *optional / build only if the owner wants it now,
+otherwise log as a future enhancement.* No owner signal is available in this
+autonomous run, so it is **logged as a future enhancement and skipped**, per the
+plan's own instruction. If picked up later: per-segment automatic CRF on
+detected content behind an "Advanced" toggle, with a test asserting it never
+produces a larger file than the static preset on the CDnet clips. The building
+blocks now exist (content_detect signals + the preset registry).
 
 ---
 
@@ -81,6 +90,13 @@ as the run reaches them:
 - **🚦 Publishing a public release / tagging a beta (TASK 5.4, 5b.*)** — the agent
   prepares the installer, checksums, release checklist, and draft notes; the
   **owner** tags and publishes the GitHub Release.
+  **STATUS — prep complete, awaiting owner (TASK 5.4):** `docs/RELEASE-CHECKLIST.md`
+  (repeatable build → verify → checksums → draft) and `docs/release-notes-v2.0.0-beta.md`
+  (draft notes) are written. The remaining steps are the owner's and were NOT done
+  by the autonomous run (gated): build the installer (`installer/build.ps1 -Installer`)
+  on a release machine, generate `SHA256SUMS.txt`, create the **`v2.0.0-beta`** tag,
+  and publish the **pre-release** with the unsigned-beta warning. Nothing here is
+  blocked on code — only on the human publish action.
 - **🚦 macOS .dmg notarization (5b.3)** — needs the Apple cert; deferred unless the
   owner provides it. Linux AppImage (5b.2) is done first (no cert needed).
 - **🚦 Rust encoder spike (M6)** — explicitly out of scope for this run; needs the

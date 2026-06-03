@@ -214,7 +214,7 @@ Honest split (PLAN-V2 §2/§6 Pushback 4): RTSP/ONVIF cameras ingest directly; c
   **Files:** `docs/getting-started.md`, `docs/camera-ingestion.md` (finalize).
   **Do:** install → point at a folder or camera → compress; a camera compatibility table (works directly via RTSP/ONVIF / needs a bridge / needs export-folder). Honest about the cloud-locked limit; mark the table "community-maintained, last updated X".
 
-- [ ] 🚦 **TASK 5.4 — tag + publish unsigned public beta.** Depends: 5.1, 5.2, 5.3, 3.2, 4.1. **Human tags/publishes.**
+- [~] 🚦 **TASK 5.4 — tag + publish unsigned public beta.** Depends: 5.1, 5.2, 5.3, 3.2, 4.1. **Human tags/publishes.** *(PREP DONE; publish gated to owner. docs/RELEASE-CHECKLIST.md — repeatable build → quality-gate → build installer → smoke-test on clean Windows → SHA256SUMS → draft Release; docs/release-notes-v2.0.0-beta.md — draft notes honest about the unsigned beta + SmartScreen, with verify steps and AGPL. docs/BLOCKERS.md records the remaining owner-only steps (build on a release machine, tag v2.0.0-beta, publish the pre-release). The autonomous run did NOT tag or publish — gated. tests/test_release_artifacts.py (4) guards the checklist/notes/blockers.)*
   **Files:** new `docs/RELEASE-CHECKLIST.md`, release notes.
   **Do:** a repeatable release checklist (build, run suite, smoke-test installer, checksums, draft GitHub Release). You prepare it and the draft notes; the **owner** tags `v2.0.0-beta` and publishes the unsigned Windows installer (note "unsigned beta — SmartScreen will warn").
 

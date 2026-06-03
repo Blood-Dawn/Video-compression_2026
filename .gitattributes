@@ -30,6 +30,9 @@
 *.js   text eol=lf
 *.iss  text eol=lf
 
+# Extension-less shell script (AppImage AppRun) — force LF so it runs on Linux.
+installer/appimage/AppRun text eol=lf
+
 # Binary assets — never touch.
 *.png  binary
 *.jpg  binary

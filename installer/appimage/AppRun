@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# AppRun — entry point for the SVCS AppImage (M5b TASK 5b.2).
+# Runs the bundled relocatable Python on run_gui.py, with the bundled ffmpeg on
+# PATH. Everything lives under the mounted AppDir ($HERE).
+set -euo pipefail
+HERE="$(dirname "$(readlink -f "${0}")")"
+
+export PATH="${HERE}/usr/bin:${PATH}"
+# utils.ffmpeg also checks the bundle; PATH covers the AppImage case.
+export SVCS_HOME="${HERE}/usr/share/svcs"
+
+exec "${HERE}/usr/venv/bin/python" "${HERE}/usr/share/svcs/run_gui.py" "$@"

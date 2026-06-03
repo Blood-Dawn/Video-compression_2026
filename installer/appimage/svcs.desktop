@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=SVCS
+GenericName=Surveillance Video Compression
+Comment=Selective Video Compression for surveillance cameras
+Exec=AppRun
+Icon=svcs
+Categories=AudioVideo;Video;Utility;
+Terminal=false

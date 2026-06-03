@@ -105,6 +105,16 @@ as the run reaches them:
   on a release machine, generate `SHA256SUMS.txt`, create the **`v2.0.0-beta`** tag,
   and publish the **pre-release** with the unsigned-beta warning. Nothing here is
   blocked on code — only on the human publish action.
+- **Linux AppImage (5b.2) — built + smoke-tested in CI, not on the Windows host.**
+  Not a gate: `installer/build.sh` + `installer/appimage/` (AppRun/desktop/icon)
+  + `.github/workflows/appimage.yml` build a self-contained AppImage on
+  `ubuntu-latest` (relocatable CPython + slim ONNX deps + static FFmpeg + model)
+  and smoke-test it (launch → probe the dashboard). The autonomous run is on
+  Windows, so it could not execute/verify the AppImage locally — that runs on the
+  Linux CI runner. Scripts are `bash -n`-clean and pinned to LF. **Owner/CI
+  action:** confirm the `AppImage` workflow goes green, then attach the artifact
+  to the published Release (publishing itself is the gated step above).
+
 - **🚦 macOS .dmg notarization (5b.3)** — needs the Apple cert; deferred unless the
   owner provides it. Linux AppImage (5b.2) is done first (no cert needed).
 - **🚦 Rust encoder spike (M6)** — explicitly out of scope for this run; needs the

@@ -1,0 +1,63 @@
+# Build the Linux AppImage (M5b TASK 5b.2).
+#
+# Runs the AppImage build on a clean ubuntu-latest runner and uploads the result
+# as a CI artifact. It does NOT publish a GitHub Release — tagging/publishing is
+# the owner's gated step (see docs/RELEASE-CHECKLIST.md / docs/BLOCKERS.md).
+#
+# Triggers: manual (workflow_dispatch) and version tags (v*). On a tag it builds
+# and attaches the AppImage to the run; the owner downloads and attaches it to
+# the Release they publish.
+#
+# Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5b.2).
+
+name: AppImage
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  build-appimage:
+    name: Build Linux AppImage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true   # yolov8n.onnx may be tracked via LFS
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install build prerequisites
+        run: sudo apt-get update && sudo apt-get install -y curl xz-utils file
+
+      - name: Build AppImage
+        run: |
+          chmod +x installer/build.sh
+          ./installer/build.sh
+
+      - name: Smoke-test the AppImage
+        run: |
+          set -euo pipefail
+          chmod +x dist/SVCS-x86_64.AppImage
+          # Launch on localhost (no auth required) and probe the dashboard.
+          ./dist/SVCS-x86_64.AppImage --host 127.0.0.1 --port 5057 --no-browser --no-sync &
+          APP_PID=$!
+          ok=0
+          for i in $(seq 1 40); do
+            if curl -fsS -o /dev/null http://127.0.0.1:5057/; then ok=1; break; fi
+            sleep 2
+          done
+          kill "${APP_PID}" || true
+          test "${ok}" = "1" || { echo "AppImage did not serve the dashboard"; exit 1; }
+          echo "AppImage served the dashboard OK."
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SVCS-AppImage
+          path: dist/SVCS-x86_64.AppImage
+          if-no-files-found: error

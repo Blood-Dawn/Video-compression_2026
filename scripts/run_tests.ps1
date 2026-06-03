@@ -1,4 +1,4 @@
-# Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.1 — reproducible test baseline).
+# Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.1 - reproducible test baseline).
 #
 # Reproducible full-suite run for SVCS. This is THE command that defines
 # "green" (PLAN-V2 section 11). Run it on the Windows daily-driver before
@@ -6,7 +6,7 @@
 #
 # What it does:
 #   1. Syncs the environment with the documented extras (so the suite is
-#      not under-provisioned the way the 2026-05-14 baseline run was —
+#      not under-provisioned the way the 2026-05-14 baseline run was  - 
 #      that run was missing `cryptography` and the crash-reporting extra,
 #      which accounted for 40 of its 48 failures).
 #   2. Runs pytest with the project config.

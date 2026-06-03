@@ -99,8 +99,8 @@ def api_gpu_info():
 #
 # Two routes power the in-GUI license-plate reader:
 #
-#   GET  /api/enhance/plates/status  – which OCR/SR backends are installed
-#   POST /api/enhance/plates         – run the reader on a saved segment
+#   GET  /api/enhance/plates/status  - which OCR/SR backends are installed
+#   POST /api/enhance/plates         - run the reader on a saved segment
 #
 # This is intentionally a post-process flow (matches sponsor's "AI upscaling
 # for low-quality footage on offload" use case from the March 23 kickoff).

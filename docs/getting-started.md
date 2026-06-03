@@ -11,7 +11,7 @@ first compressed clip in a few minutes.
 **Windows (easiest)**
 1. Download the latest `SVCS-Setup-*.exe` from the
    [Releases page](https://github.com/Blood-Dawn/Video-compression_2026/releases/latest).
-2. (Recommended) verify the download — see the
+2. (Recommended) verify the download - see the
    [download page](site/index.html) for the SHA-256 steps.
 3. Run the installer and launch **SVCS** from the Start menu. The dashboard opens
    in your browser at `http://localhost:5000`.
@@ -36,7 +36,7 @@ uv run python run_gui.py
 
 ## 2. Point it at video
 
-You can feed SVCS three ways — pick whichever matches your setup:
+You can feed SVCS three ways - pick whichever matches your setup:
 
 - **A folder of clips** (camera exports, microSD dumps, NVR exports). Use the
   watch-folder so new files are compressed automatically:
@@ -55,12 +55,12 @@ including cloud-locked cameras (Ring/Nest/Arlo).
 
 ## 3. Choose a preset and compress
 
-You don't pick "Mode 0–3" — you pick **what the camera is watching**:
+You don't pick "Mode 0-3" - you pick **what the camera is watching**:
 
-- **Continuous CCTV** — a 24/7 static camera; biggest storage win.
-- **Motion-event cam / Doorbell** — mostly idle with occasional events.
-- **Active scene** — a busy street/lobby with near-constant motion.
-- **Archive** — evidence/retention where quality matters most.
+- **Continuous CCTV** - a 24/7 static camera; biggest storage win.
+- **Motion-event cam / Doorbell** - mostly idle with occasional events.
+- **Active scene** - a busy street/lobby with near-constant motion.
+- **Archive** - evidence/retention where quality matters most.
 
 Or let SVCS pick for you: content auto-detection analyzes the first ~30 seconds
 and recommends a preset. Hit **Start** and watch the live size savings.
@@ -72,12 +72,12 @@ detected OneDrive/Google Drive folder). Original files are never modified.
 
 ## 4. Where to go next
 
-- **Cameras:** [`camera-ingestion.md`](camera-ingestion.md) — RTSP/ONVIF,
+- **Cameras:** [`camera-ingestion.md`](camera-ingestion.md) - RTSP/ONVIF,
   watch-folder profiles, and the bridge path for cloud-locked cameras.
 - **Server deployment & auth:** [`deployment_packaging.md`](deployment_packaging.md).
 - **Privacy:** usage stats are **off by default** and never include footage,
-  filenames, or paths — opt in from the first-run banner if you'd like to help.
+  filenames, or paths - opt in from the first-run banner if you'd like to help.
 
 ---
 
-*Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5.3 — getting started).*
+*Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5.3 - getting started).*

@@ -1,11 +1,11 @@
 /*
  * src/gui/static/js/demo.js
  *
- * SVCS dashboard — demo module. Carved verbatim from the former single
+ * SVCS dashboard - demo module. Carved verbatim from the former single
  * inline <script> in index.html (TASK 1.5). Loaded as a classic script in
  * original execution order, so behavior is identical; all functions stay
  * global (reachable from inline on* handlers and the other modules).
- * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — JS split).
+ * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - JS split).
  */
 async function browseFile() {
   try {
@@ -32,7 +32,7 @@ function _syncDemoSrcDisplay() {
   disp.value = val;
   const status = document.getElementById('demo-src-status');
   if (status) {
-    status.textContent = val ? 'Ready — ' + val.split(/[\\/]/).pop() : '';
+    status.textContent = val ? 'Ready - ' + val.split(/[\\/]/).pop() : '';
     status.style.color = val ? 'var(--green)' : 'var(--text-dim)';
   }
 }
@@ -44,7 +44,7 @@ async function _demoPickFile(input) {
   if (status) { status.textContent = 'Uploading…'; status.style.color = 'var(--amber)'; }
   // Reuse the main upload logic
   await _uploadVideoFile(input.files[0]);
-  // _uploadVideoFile sets #input-source — mirror it
+  // _uploadVideoFile sets #input-source - mirror it
   _syncDemoSrcDisplay();
   input.value = '';
 }
@@ -132,14 +132,14 @@ async function runDemo() {
   if (!inputPath) { alert('Set an input source first.'); return; }
 
   // Use whatever is in the field (pre-filled by _initGDriveOutput on load).
-  // Send empty string when blank — backend will resolve to OneDrive or local outputs/.
+  // Send empty string when blank - backend will resolve to OneDrive or local outputs/.
   const outputRoot = document.getElementById('demo-output-dir').value.trim();
   const noBoxes    = document.getElementById('demo-no-boxes').checked;
   // Camera ID priority for demo runs:
   //   1. Live source (webcam idx / RTSP URL) → use the visible #camera-id field
   //   2. File source                          → use the filename stem (auto-derived)
   // The visible #camera-id field is HIDDEN for file sources, so reading it
-  // unconditionally was always falling through to "cam_00" — that's why
+  // unconditionally was always falling through to "cam_00" - that's why
   // every recording from a file showed up as "cam_00" in the metrics table.
   // Fixed 2026-05-03 (UI fix pass). Author: Bloodawn (KheivenD).
   const cameraId = _isLiveSource(inputPath)
@@ -202,7 +202,7 @@ function pollDemoStatus() {
       if (data.status === 'running' || data.status === 'queued') {
         const phase = data.demo_phase || 'running';
         const label = _DEMO_PHASE_LABELS[phase] || phase.toUpperCase();
-        const step  = data.demo_step  ? ' — ' + data.demo_step  : '';
+        const step  = data.demo_step  ? ' - ' + data.demo_step  : '';
         const mode  = data.demo_mode  ? ' (' + data.demo_mode.toUpperCase() + ')' : '';
         _demoShowProgress(label + step + mode, _demoPct);
 
@@ -234,8 +234,8 @@ function pollDemoStatus() {
  * Build the flat list of playable demo videos returned by /api/demo/status.
  *
  * The backend returns:
- *   result.split_screen  – string URL or null
- *   result.videos        – { mode: { view: url|null } }
+ *   result.split_screen  - string URL or null
+ *   result.videos        - { mode: { view: url|null } }
  *
  * Each entry is `{ label, url }` where `url` is already a `/api/media?path=`
  * URL ready for an inline <video src=…>. Filters out entries without a URL
@@ -263,7 +263,7 @@ function _demoCollectPlayables(result) {
 
 /**
  * Render the in-sidebar list of demo results. Each entry is a tiny row with
- * a label and a "▶ PLAY" button that calls playSegment() — which already
+ * a label and a "▶ PLAY" button that calls playSegment() - which already
  * routes to the inline home/search/metrics player based on the active tab.
  *
  * Hidden by default; shown only after a demo run completes successfully.
@@ -330,12 +330,12 @@ function _demoNotifyDone(result) {
 
   // Build the in-sidebar results panel so the operator has a permanent list
   // of every rendered video for this run, with one-click inline playback.
-  // This is the core of ROADMAP 5.3 — Cody's "watching the output still
+  // This is the core of ROADMAP 5.3 - Cody's "watching the output still
   // required opening a file locally" complaint from the April 22 demo.
   // Author: Bloodawn (KheivenD)
   try { _demoRenderResults(result); } catch (e) { console.warn('demo result render failed', e); }
 
-  // Pick the first playable URL — split-screen if multiple modes were run,
+  // Pick the first playable URL - split-screen if multiple modes were run,
   // otherwise the first per-mode standard view. This drives the "Watch Now"
   // action so the operator never has to dig through the file system.
   let watchUrl = result.split_screen || '';
@@ -349,7 +349,7 @@ function _demoNotifyDone(result) {
     }
   }
 
-  // Figure out the folder to open — pull from split_screen path or first video
+  // Figure out the folder to open - pull from split_screen path or first video
   let folderPath = '';
   if (result.split_screen) {
     const p = decodeURIComponent(result.split_screen.replace('/api/media?path=', ''));
@@ -378,10 +378,10 @@ function _demoNotifyDone(result) {
 
   pushNotif(
     'DEMO COMPLETE',
-    modeStr + ' — render finished' + (dir ? '\n' + dir : ''),
+    modeStr + ' - render finished' + (dir ? '\n' + dir : ''),
     'success',
     actions,
-    0  // no auto-dismiss — user must click
+    0  // no auto-dismiss - user must click
   );
 }
 
@@ -410,7 +410,7 @@ async function loadSearchDemoVideos() {
     // Flatten all videos from all runs into a list
     const allVids = [];
     runs.forEach(r => {
-      const date = r.ts ? new Date(r.ts * 1000).toLocaleString() : '—';
+      const date = r.ts ? new Date(r.ts * 1000).toLocaleString() : ' - ';
       if (r.split_screen) {
         allVids.push({ label: 'Split Screen', run: r.dir, date, url: r.split_screen, modes: r.modes });
       }
@@ -452,7 +452,7 @@ function playSearchDemoVid(url) {
   wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-// ── Demo history (stubs — history UI removed, notifications used instead) ──
+// ── Demo history (stubs - history UI removed, notifications used instead) ──
 async function loadDemoHistory() { /* no-op: history shown via notifications */ }
 function _loadHistoryRun(idx) {
   const runs = window._demoHistoryRuns || [];

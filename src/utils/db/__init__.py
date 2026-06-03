@@ -1,10 +1,10 @@
 """
-utils.db  —  SQLite metadata index for encoded video segments.
+utils.db  -  SQLite metadata index for encoded video segments.
 
 This package used to be a single 333-line ``utils/db.py``. The 2026-05-14
 audit flagged it as a code-smell because schema definition and query
 helpers had no clean boundary, making it hard to reason about which
-functions ran DDL vs. plain reads. The split is purely structural — no
+functions ran DDL vs. plain reads. The split is purely structural - no
 behavior change.
 
 Layout::

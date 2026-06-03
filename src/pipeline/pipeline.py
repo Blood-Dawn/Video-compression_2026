@@ -302,7 +302,7 @@ def run_pipeline(
     #                            near-zero bits, so the ROI pixels get
     #                            compressed hardest)
     # User-supplied `crf` overrides the mode default.
-    # Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.3 — mode2 was wrongly
+    # Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.3 - mode2 was wrongly
     # left at CRF 18; restored progressive mode0<mode1<mode2<mode3 compression).
     if crf is not None:
         resolved_crf = int(crf)
@@ -591,7 +591,7 @@ def run_pipeline(
                             d = ((cx - px) ** 2 + (cy - py) ** 2) ** 0.5
                             if d < best_dist:
                                 best_dist, best_dx, best_dy = d, cx - px, cy - py
-                        if best_dist < 80:   # px threshold — ignore teleporting blobs
+                        if best_dist < 80:   # px threshold - ignore teleporting blobs
                             _seg_motion_vecs.append((best_dx, best_dy))
                 _seg_prev_centroids = curr_centroids
 
@@ -719,7 +719,7 @@ def run_pipeline(
                 # This frame is not included in any segment (mode1/2/3 gate)
                 continue
 
-            # Full-frame output upscale — increases the output video resolution.
+            # Full-frame output upscale - increases the output video resolution.
             # Runs synchronously (bicubic is ~microseconds; Real-ESRGAN if installed).
             # Bounding box coordinates are scaled to match the upscaled frame.
             if enhancer is not None and upscale_output:

@@ -34,10 +34,10 @@ def api_hls_start():
     """Start the annotated HLS stream for a given input source.
 
     POST body (JSON):
-        input_source  – RTSP URL, webcam index (int as string), or file path
-        camera_id     – identifier used in the playlist URL (default: cam_00)
-        output_dir    – where to write HLS chunks (default: outputs/)
-        mode          – display label shown in the corner overlay (default: Mode 0)
+        input_source  - RTSP URL, webcam index (int as string), or file path
+        camera_id     - identifier used in the playlist URL (default: cam_00)
+        output_dir    - where to write HLS chunks (default: outputs/)
+        mode          - display label shown in the corner overlay (default: Mode 0)
 
     Returns:
         {"ok": true, "playlist_url": "/api/hls/<camera_id>/playlist.m3u8"}
@@ -51,7 +51,7 @@ def api_hls_start():
     data = request.get_json(force=True) or {}
     input_source = str(data.get("input_source", "0")).strip()
     camera_id = str(data.get("camera_id", "cam_00")).strip()
-    # HLS .ts chunks should sync alongside saved segments — OneDrive when
+    # HLS .ts chunks should sync alongside saved segments - OneDrive when
     # available, local fallback otherwise. Was hard-coded to local in the
     # initial M3 implementation. Author: Bloodawn (KheivenD), 2026-05-02.
     output_dir = str(data.get("output_dir", "")).strip() or _default_output_dir()
@@ -157,11 +157,11 @@ def api_hls_latency():
 
     Two latency metrics are exposed:
 
-    1. ``ingest_latency_s`` — one-shot startup latency from FFmpeg launch
+    1. ``ingest_latency_s`` - one-shot startup latency from FFmpeg launch
        to first .ts segment. Useful as a "did the stream connect quickly?"
        check; set once at the start of a run.
 
-    2. ``latency_avg_s`` / ``latency_last_s`` / ``latency_samples`` —
+    2. ``latency_avg_s`` / ``latency_last_s`` / ``latency_samples``  - 
        rolling steady-state latency added 2026-05-02 (ROADMAP 5.1) so
        Cody's sponsor team can size hardware against real ingest → playable
        chunk delay. ``latency_avg_s`` is the median frame age across the
@@ -170,13 +170,13 @@ def api_hls_latency():
        continues running.
 
     Response fields:
-        stream_start_time  – epoch timestamp when FFmpeg launched (float or null)
-        ingest_latency_s   – seconds from FFmpeg launch to first .ts file (float or null)
-        latency_avg_s      – rolling-avg end-to-end latency, seconds (float or null)
-        latency_last_s     – latency of the most recent segment, seconds (float or null)
-        latency_samples    – integer count of segments in the rolling window
-        latency_window     – integer max size of the rolling window
-        measuring          – true while no latency sample is available yet
+        stream_start_time  - epoch timestamp when FFmpeg launched (float or null)
+        ingest_latency_s   - seconds from FFmpeg launch to first .ts file (float or null)
+        latency_avg_s      - rolling-avg end-to-end latency, seconds (float or null)
+        latency_last_s     - latency of the most recent segment, seconds (float or null)
+        latency_samples    - integer count of segments in the rolling window
+        latency_window     - integer max size of the rolling window
+        measuring          - true while no latency sample is available yet
 
     Author: Bloodawn (KheivenD)
     """
@@ -190,7 +190,7 @@ def api_hls_latency():
         running        = _hls_state.get("running", False)
 
     # `measuring` is true only while we have neither a one-shot ingest sample
-    # nor a rolling sample yet — the front-end uses it to keep polling.
+    # nor a rolling sample yet - the front-end uses it to keep polling.
     measuring = running and (ingest is None) and (latency_avg is None)
 
     return jsonify({
@@ -252,12 +252,12 @@ def api_hls_segment(camera_id: str, ts_file: str):
 # and cached in <project_root>/tools/mediamtx/.  It is MIT-licensed.
 #
 # Routes:
-#   GET  /api/rtsp/status         – current state of the manager
-#   POST /api/rtsp/download       – start background download of MediaMTX binary
-#   POST /api/rtsp/start          – start the MediaMTX server process
-#   POST /api/rtsp/stop           – stop server (and any active push)
-#   POST /api/rtsp/push           – start FFmpeg looping a file into the server
-#   POST /api/rtsp/stop_push      – stop the FFmpeg push
+#   GET  /api/rtsp/status         - current state of the manager
+#   POST /api/rtsp/download       - start background download of MediaMTX binary
+#   POST /api/rtsp/start          - start the MediaMTX server process
+#   POST /api/rtsp/stop           - stop server (and any active push)
+#   POST /api/rtsp/push           - start FFmpeg looping a file into the server
+#   POST /api/rtsp/stop_push      - stop the FFmpeg push
 
 # _rtsp_mgr (the local MediaMTX server singleton) now lives in
 # gui.services.rtsp; the /api/rtsp/* routes below drive it.

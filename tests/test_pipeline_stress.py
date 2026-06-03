@@ -23,7 +23,7 @@ pytest run. Run explicitly when needed:
 
 Author: Jorge Sanchez
 Fixes applied by KD (Apr 13 2026):
-  - Removed sys.path.insert — conftest.py adds src/ to sys.path for all tests
+  - Removed sys.path.insert - conftest.py adds src/ to sys.path for all tests
   - SIMULATED_DURATION_S now reads STRESS_DURATION_S env var (default 3600)
     so CI / quick runs don't have to wait a full hour
   - Memory growth check now uses peak tracemalloc reading, not just
@@ -45,7 +45,7 @@ from background_subtraction.background_subtraction import BackgroundSubtractor
 
 
 # ---------------------------------------------------------------------------
-# Configuration — override STRESS_DURATION_S for faster CI runs
+# Configuration - override STRESS_DURATION_S for faster CI runs
 # ---------------------------------------------------------------------------
 
 SIMULATED_DURATION_S  = int(os.environ.get("STRESS_DURATION_S", 3600))

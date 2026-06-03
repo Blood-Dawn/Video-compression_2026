@@ -7,7 +7,7 @@
 
 ---
 
-## Scenario 1 — Normal Detection
+## Scenario 1 - Normal Detection
 
 - Baseline Compression Ratio: 1.6x  
 - Selective Compression Ratio: 1.0x  
@@ -20,7 +20,7 @@ High visual quality is maintained, but compression does not outperform the basel
 
 ---
 
-## Scenario 2 — No Foreground Detected (Forced)
+## Scenario 2 - No Foreground Detected (Forced)
 
 - Baseline Compression Ratio: 1.6x  
 - Selective Compression Ratio: 16.6x  

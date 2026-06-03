@@ -51,7 +51,7 @@ INGESTED_SUFFIX = ".ingested"
 
 # In-progress marker written just before encoding starts and removed on success.
 # If the daemon crashes mid-encode the marker survives; on the next scan we treat
-# the file as interrupted (not ingested) and retry it — explicit crash-resume.
+# the file as interrupted (not ingested) and retry it - explicit crash-resume.
 # E.g. "clip.mp4" -> "clip.mp4.processing"
 PROCESSING_SUFFIX = ".processing"
 
@@ -62,7 +62,7 @@ class WatchProfile:
 
     Profiles are data-driven (not hard-coded per vendor): they set how the tree
     is scanned (recursive for per-camera/per-day folders), how fast the source
-    writes (stable_checks/settle — a microSD dump copies fast, a NAS sync is
+    writes (stable_checks/settle - a microSD dump copies fast, a NAS sync is
     slow and bursty), and how the encode preset is chosen (auto-detected per
     clip, or a fixed preset for a known layout). A specific camera family maps to
     one of these in docs/camera-ingestion.md.
@@ -89,7 +89,7 @@ class WatchProfile:
         }
 
 
-# Ordered registry of layouts. Adding a layout is one entry — no code branch.
+# Ordered registry of layouts. Adding a layout is one entry - no code branch.
 _PROFILE_LIST: List[WatchProfile] = [
     WatchProfile(
         key="continuous",
@@ -104,7 +104,7 @@ _PROFILE_LIST: List[WatchProfile] = [
         key="motion_events",
         label="Per-event motion clips",
         description="A folder of short clips, one per motion event (most "
-                    "consumer cams). Auto-detect per clip — a porch visit and a "
+                    "consumer cams). Auto-detect per clip - a porch visit and a "
                     "passing car want different settings.",
         recursive=True, auto_preset=True, camera_prefix="event",
     ),
@@ -307,7 +307,7 @@ def scan_and_ingest(
     Scan watch_dir once for new video files and ingest any that are found.
 
     Skips files that:
-      - Have already been ingested (``.ingested`` sentinel exists) — dedupe.
+      - Have already been ingested (``.ingested`` sentinel exists) - dedupe.
       - Are still being written (size not stable across ``stable_checks`` polls).
       - Have unsupported extensions.
 
@@ -514,7 +514,7 @@ if __name__ == "__main__":
             "compression pipeline.\n\n"
             "Tip: the GUI's Save To field auto-detects OneDrive/Google Drive "
             "and writes to <cloud_root>/SVCS/. This CLI does NOT auto-detect "
-            "— if you want the same behaviour, point --output explicitly at "
+            " -  if you want the same behaviour, point --output explicitly at "
             "your synced folder, e.g. "
             "`--output \"$HOME/OneDrive - Florida Atlantic University/SVCS\"` "
             "(or %USERPROFILE%\\OneDrive - ...\\SVCS on Windows)."
@@ -531,7 +531,7 @@ if __name__ == "__main__":
         default="outputs/",
         help=(
             "Output directory for compressed segments (default: outputs/). "
-            "Set to <OneDrive>/SVCS/ for cloud-synced output — see the "
+            "Set to <OneDrive>/SVCS/ for cloud-synced output - see the "
             "description above."
         ),
     )

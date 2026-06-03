@@ -9,28 +9,28 @@ This document summarizes deployment packaging options for SVCS and their tradeof
 
 ## Deployment scenarios
 
-**Scenario A — Server deployment (primary)**
+**Scenario A - Server deployment (primary)**
 One machine runs the Flask server. Operators connect from any browser on the same network. Getting a web app on a standalone DoD server is generally easier than installing software on individual endpoints. Our current stack (Flask + vanilla HTML/JS, no React, no CDN dependencies) is already compliant with the restrictions Cody described.
 
-**Scenario B — Field laptop (secondary)**
+**Scenario B - Field laptop (secondary)**
 No network available. The operator plugs a laptop directly into the camera. Everything runs locally. Cody said this is a real scenario Geena described. In this case the user needs a single package they can install on a DoD laptop, which involves the DoD software approval process.
 
 ---
 
-## Dashboard authentication (Scenario A — required before LAN exposure)
+## Dashboard authentication (Scenario A - required before LAN exposure)
 
 Scenario A serves the dashboard on the network (`--host 0.0.0.0`), so it must
 not be open to everyone on that network. As of TASK 4.4 the server enforces a
 bind-aware policy (`src/gui/auth.py`):
 
-- **Localhost bind (`127.0.0.1`)** — no authentication required (the
+- **Localhost bind (`127.0.0.1`)** - no authentication required (the
   single-machine / field-laptop case, Scenario B). Auth is still enabled if you
   supply credentials.
-- **Any other bind (`0.0.0.0`, a LAN IP, …)** — HTTP Basic Auth is **required**.
+- **Any other bind (`0.0.0.0`, a LAN IP, …)** - HTTP Basic Auth is **required**.
   The server **refuses to start** unless you either configure credentials or
   explicitly opt out.
 
-Configure credentials with environment variables (preferred — keeps them out of
+Configure credentials with environment variables (preferred - keeps them out of
 the process list) or CLI flags:
 
 ```bash
@@ -61,7 +61,7 @@ docker run -p 5000:5000 -v /camera/output:/app/outputs svcs:latest
 ```
 
 **Pros:**
-- Reproducible environment — the exact Python version, dependencies, and FFmpeg binary are bundled
+- Reproducible environment - the exact Python version, dependencies, and FFmpeg binary are bundled
 - Easy to update: push a new image, restart the container
 - Works on any Linux host regardless of what the server has installed
 - DoD has an approved container registry process (IronBank / Platform One)
@@ -73,15 +73,15 @@ docker run -p 5000:5000 -v /camera/output:/app/outputs svcs:latest
 **Status: IMPLEMENTED** (TASK 4.2). The repo ships a `Dockerfile` and
 `docker-compose.yml`. The image builds on the **slim ONNX path** (post-M2): object
 detection runs on ONNX Runtime, not torch. The built image is ~2 GB (Debian +
-apt ffmpeg with all codecs + onnxruntime + opencv and their transitive deps) —
+apt ffmpeg with all codecs + onnxruntime + opencv and their transitive deps)  - 
 still well under the 4 GB+ a torch/CUDA image would be, and it could be trimmed
 further with a multi-stage build or ffmpeg's slimmer variants. FFmpeg comes from the distro
-(`apt install ffmpeg`, on PATH — `utils.ffmpeg` resolves it). Dependencies install
+(`apt install ffmpeg`, on PATH - `utils.ffmpeg` resolves it). Dependencies install
 from the committed `uv.lock` for reproducibility, and the `yolov8n.onnx` detection
 model is baked in.
 
 ```bash
-# Compose (recommended) — set a real password first:
+# Compose (recommended) - set a real password first:
 SVCS_DASHBOARD_PASSWORD='a-long-passphrase' docker compose up --build
 # open http://localhost:5000  (log in with operator / your-password)
 
@@ -113,10 +113,10 @@ Bundle the entire Python environment into a single `.exe` (Windows) or binary (L
 **Cons:**
 - FFmpeg must still be installed separately (PyInstaller bundles Python, not system tools)
   - Alternative: bundle a static FFmpeg binary inside the PyInstaller package using `--add-binary`
-- First run extracts files to a temp directory — can trigger antivirus on DoD machines
+- First run extracts files to a temp directory - can trigger antivirus on DoD machines
 - Rebuilding requires the exact same OS target (Windows EXE built on Windows, etc.)
 - cv2, torch, and realesrgan have complex binary dependencies that PyInstaller sometimes misses
-- Build time is 5–15 minutes; the resulting bundle is 500 MB–1.5 GB
+- Build time is 5-15 minutes; the resulting bundle is 500 MB-1.5 GB
 
 **Cody's guidance:** "If it takes an hour, go for it. If it's going to be a day or more, skip it." PyInstaller for a Flask + OpenCV + torch stack reliably takes more than a day to tune. The Electron wrapper below is lower risk.
 
@@ -134,11 +134,11 @@ Electron main.js  →  spawns:  uv run python src/gui/app.py
 ```
 
 **Pros:**
-- The existing GUI (Flask + HTML/JS) requires zero changes — Electron just wraps it
+- The existing GUI (Flask + HTML/JS) requires zero changes - Electron just wraps it
 - Ships as a standard installer (.exe on Windows, .dmg on macOS, .deb/.rpm on Linux)
-- Python environment handled by uv — bundled as a `dist/` folder alongside Electron
+- Python environment handled by uv - bundled as a `dist/` folder alongside Electron
 - FFmpeg can be bundled inside the Electron package (ffmpeg-static npm package)
-- No React, no CDN — already compliant with the restriction Cody mentioned
+- No React, no CDN - already compliant with the restriction Cody mentioned
 - Cody explicitly called this out as a viable path: "Electron shell that launches the Flask backend as a subprocess would work"
 
 **Cons:**
@@ -174,7 +174,7 @@ app.on('will-quit', () => {
 })
 ```
 
-**Status:** Tracked as ROADMAP.md section 4.7 (stretch goal). Estimated effort: 2–4 hours for basic working version.
+**Status:** Tracked as ROADMAP.md section 4.7 (stretch goal). Estimated effort: 2-4 hours for basic working version.
 
 ---
 
@@ -184,13 +184,13 @@ A `tar.gz` archive with the source tree, `uv.lock`, a bundled static FFmpeg bina
 
 **Pros:**
 - Smallest deliverable size
-- Zero special tools required — just uv and bash
+- Zero special tools required - just uv and bash
 - Easiest to audit (plain source code, no compiled bundle)
 - uv handles Python version isolation automatically
 
 **Cons:**
 - The target machine needs uv installed, and uv needs internet access for its first run (or you pre-bundle the cache)
-- Not a user-friendly installer — operators need to know how to run a shell script
+- Not a user-friendly installer - operators need to know how to run a shell script
 - FFmpeg still needs to be a compatible static binary for the target OS/architecture
 
 **This is probably the best option for a DoD server handoff** where a sysadmin will do the install, not an operator.
@@ -219,7 +219,7 @@ What does matter for software on a DoD network:
 
 2. **Section 889 cameras.** If SVCS is deployed with a Hikvision or Dahua camera, the camera hardware is the compliance problem, not our software. We read RTSP streams; we don't control what camera generates them.
 
-3. **FOSS license review.** Flask (BSD-3), OpenCV (Apache 2.0), FFmpeg (LGPL/GPL depending on build), PyTorch (BSD-3), hls.js (Apache 2.0), video.js (Apache 2.0). The GPL components in FFmpeg require us to link dynamically or provide build instructions — we already do the latter (FFmpeg is a system install, not bundled).
+3. **FOSS license review.** Flask (BSD-3), OpenCV (Apache 2.0), FFmpeg (LGPL/GPL depending on build), PyTorch (BSD-3), hls.js (Apache 2.0), video.js (Apache 2.0). The GPL components in FFmpeg require us to link dynamically or provide build instructions - we already do the latter (FFmpeg is a system install, not bundled).
 
 4. **RealESRGAN / basicsr.** BSD-3 license. No compliance issue.
 
@@ -231,8 +231,8 @@ What does matter for software on a DoD network:
 
 | Scenario | Recommended packaging | Estimated effort |
 |----------|----------------------|-----------------|
-| DoD server (sysadmin install) | Tarball + uv + static FFmpeg | 2–3 hours |
-| Field laptop (operator install) | Electron + Flask subprocess | 2–4 hours |
-| Cloud/containerized deployment | Docker (IronBank base) | 4–8 hours |
+| DoD server (sysadmin install) | Tarball + uv + static FFmpeg | 2-3 hours |
+| Field laptop (operator install) | Electron + Flask subprocess | 2-4 hours |
+| Cloud/containerized deployment | Docker (IronBank base) | 4-8 hours |
 
 For the May 6 deadline, the tarball approach is the most achievable and the most transparent for security review. The Electron wrapper is a stretch goal that would be high-value if we have time after the tarball works.

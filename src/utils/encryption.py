@@ -8,10 +8,10 @@ Government requirement (Cody Hayashi, NIWC Pacific):
     Decryption only occurs during authorised review.
 
 File format (.enc):
-    Bytes  0 –  11  : Nonce (random, 12 bytes)
-    Bytes 12 –  27  : Salt (random, 16 bytes; used only in password mode)
-    Bytes 28 –  43  : Auth tag (16 bytes, produced by GCM)
-    Bytes 44 – end  : Ciphertext (AES-256-GCM, no padding)
+    Bytes  0 -  11  : Nonce (random, 12 bytes)
+    Bytes 12 -  27  : Salt (random, 16 bytes; used only in password mode)
+    Bytes 28 -  43  : Auth tag (16 bytes, produced by GCM)
+    Bytes 44 - end  : Ciphertext (AES-256-GCM, no padding)
 
 Key modes:
     Password mode: `password` arg; key = PBKDF2-HMAC-SHA256(password, salt, 600_000 iters)

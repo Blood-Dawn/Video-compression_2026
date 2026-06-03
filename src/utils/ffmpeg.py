@@ -19,7 +19,7 @@ Search locations for the bundled binary:
   * frozen:  <_MEIPASS>/ffmpeg/bin/ and <_MEIPASS>/   (PyInstaller datas dest)
   * source:  <repo>/tools/ffmpeg/bin/ and <repo>/tools/ffmpeg/
 
-Author: Bloodawn (KheivenD), 2026-06-03 (TASK 2.3 — bundled FFmpeg).
+Author: Bloodawn (KheivenD), 2026-06-03 (TASK 2.3 - bundled FFmpeg).
 """
 
 from __future__ import annotations

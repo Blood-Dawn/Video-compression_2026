@@ -9,7 +9,7 @@ ONNX path (no torch), ships the detection model, binds for the server scenario,
 and wires the TASK 4.4 auth credentials through. An opt-in integration test
 actually builds + runs the image when SVCS_TEST_DOCKER=1 and Docker is present.
 
-Author: Bloodawn (KheivenD), 2026-06-03 (TASK 4.2 — Docker image).
+Author: Bloodawn (KheivenD), 2026-06-03 (TASK 4.2 - Docker image).
 """
 
 import os

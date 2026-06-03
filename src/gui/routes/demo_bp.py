@@ -37,13 +37,13 @@ def api_demo():
     """Start a multi-mode demo run in the background.
 
     POST body (JSON):
-        input_path   – path to source video
-        output_root  – root directory for demo outputs
-        camera_id    – camera identifier
-        modes        – list of mode strings, e.g. ["mode0", "mode1", "mode2", "mode3"]
-        views        – list of view strings (default ["standard"])
-        no_boxes     – bool, suppress ROI box overlays (default false)
-        no_tint      – bool, suppress ROI tint overlays (default false)
+        input_path   - path to source video
+        output_root  - root directory for demo outputs
+        camera_id    - camera identifier
+        modes        - list of mode strings, e.g. ["mode0", "mode1", "mode2", "mode3"]
+        views        - list of view strings (default ["standard"])
+        no_boxes     - bool, suppress ROI box overlays (default false)
+        no_tint      - bool, suppress ROI tint overlays (default false)
     """
     with _demo_lock:
         if _demo_state["running"]:
@@ -54,7 +54,7 @@ def api_demo():
     input_path = data.get("input_path", "").strip()
     output_root = data.get("output_root", "").strip()
     if not output_root:
-        # Unified default — same OneDrive-preferred resolution as api_start
+        # Unified default - same OneDrive-preferred resolution as api_start
         # and api_hls_start. Author: Bloodawn (KheivenD), 2026-05-02 audit.
         output_root = _default_output_dir()
     modes = data.get("modes", ["mode0", "mode1", "mode2", "mode3"])

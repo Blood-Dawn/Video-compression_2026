@@ -1,4 +1,4 @@
-# SVCS continuous integration — build + test only (NO deploy, NO publish).
+# SVCS continuous integration - build + test only (NO deploy, NO publish).
 #
 # Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.7).
 #
@@ -12,13 +12,13 @@
 # PyTorch note: the project pins CUDA torch via [tool.uv.sources]
 # (pytorch-cu128) for the GPU enhancer path on dev machines. CI runners are
 # CPU-only, so we install the CPU torch wheels FIRST (which satisfy
-# `torch>=2.0.0`), then install the project — pip then sees torch already
+# `torch>=2.0.0`), then install the project - pip then sees torch already
 # present and won't pull the multi-GB CUDA build. This avoids a slow/failing
 # CUDA download. (M2's ONNX migration removes torch from the hot path and
 # will simplify this.)
 #
 # Plate reader: the [plates] extra (easyocr) is intentionally NOT installed
-# here — easyocr's opencv-python-headless clobbers the core
+# here - easyocr's opencv-python-headless clobbers the core
 # opencv-contrib-python (see pyproject [plates] comment). The plate-reader
 # tests do not require easyocr at import time, so they still run.
 

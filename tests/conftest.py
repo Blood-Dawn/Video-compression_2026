@@ -81,7 +81,7 @@ def seeded_db(tmp_db):
 @pytest.fixture
 def tiny_frames():
     """
-    A list of 10 tiny (16x16) BGR frames — just enough to test encoding
+    A list of 10 tiny (16x16) BGR frames - just enough to test encoding
     without the overhead of realistic video dimensions.
     """
     rng = np.random.default_rng(42)

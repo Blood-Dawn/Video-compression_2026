@@ -4,15 +4,15 @@ src/gui/routes/cameras_bp.py
 Camera-setup routes: ONVIF discovery + RTSP URL building (M-CAM TASK 1).
 
 Two endpoints back the dashboard's "Add camera" flow:
-  * GET  /api/cameras/discover  — WS-Discovery scan of the LAN; returns the
+  * GET  /api/cameras/discover  - WS-Discovery scan of the LAN; returns the
     ONVIF cameras found (address/name/hardware + candidate RTSP paths). Never
-    errors on an empty/blocked network — returns an empty list so the UI falls
+    errors on an empty/blocked network - returns an empty list so the UI falls
     back to manual RTSP entry.
-  * POST /api/cameras/rtsp_url  — build a properly URL-encoded rtsp:// URL from
+  * POST /api/cameras/rtsp_url  - build a properly URL-encoded rtsp:// URL from
     host/path/port/username/password (server-side so credentials with special
     characters are encoded correctly). The built URL is NOT logged.
 
-Author: Bloodawn (KheivenD), 2026-06-03 (M-CAM TASK 1 — camera setup).
+Author: Bloodawn (KheivenD), 2026-06-03 (M-CAM TASK 1 - camera setup).
 """
 
 from flask import Blueprint, jsonify, request
@@ -31,7 +31,7 @@ cameras_bp = Blueprint("cameras", __name__)
 def api_cameras_discover():
     """Discover ONVIF cameras on the LAN via WS-Discovery.
 
-    Optional query param ``timeout`` (seconds, 1–10, default 3). Returns the
+    Optional query param ``timeout`` (seconds, 1-10, default 3). Returns the
     devices found plus suggested (credential-free) RTSP URL candidates so the
     operator can pick a stream; an empty list means discovery found nothing
     (manual entry is the fallback, not an error).
@@ -85,6 +85,6 @@ def api_cameras_rtsp_url():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    # Log only the host — never the full URL (it may carry a password).
+    # Log only the host - never the full URL (it may carry a password).
     log.info("Built RTSP URL for camera host %s (path %s)", host, path)
     return jsonify({"ok": True, "rtsp_url": url})

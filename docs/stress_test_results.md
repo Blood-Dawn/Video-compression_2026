@@ -1,4 +1,4 @@
-# Stress Test Results — Pipeline Memory and Storage
+# Stress Test Results - Pipeline Memory and Storage
 
 **Author:** Jorge Sanchez
 **Date:** April 11, 2026
@@ -60,7 +60,7 @@ A 1-hour simulated footage stress test was run against the pipeline using a loop
 
 ---
 
-## Storage Extrapolation — 60-Day / 100-Camera Estimate
+## Storage Extrapolation - 60-Day / 100-Camera Estimate
 
 ### Assumptions
 

@@ -17,7 +17,7 @@ write the live values here.
 Imports gui.state (the shared HLS dict, lock, and latency deques),
 gui.logging_setup, and compression.roi_encoder.
 
-Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — hls-runner extraction).
+Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - hls-runner extraction).
 """
 
 import subprocess
@@ -259,7 +259,7 @@ def _hls_annotator_thread(
         stop: threading.Event,
     ) -> None:
         seen: set[str] = set()
-        # Initial snapshot of any pre-existing .ts files (defensive — start()
+        # Initial snapshot of any pre-existing .ts files (defensive - start()
         # already deletes stale chunks, but skip if any survive).
         try:
             for p in hls_dir.glob("*.ts"):
@@ -295,7 +295,7 @@ def _hls_annotator_thread(
                     seg_written_time = time.time()
 
                 # Pop ~frames_per_seg oldest frame-read timestamps. If the
-                # deque is shorter than that, take whatever is there — this
+                # deque is shorter than that, take whatever is there - this
                 # happens for the very first segment (FFmpeg sometimes
                 # buffers fewer frames before flushing).
                 #
@@ -314,7 +314,7 @@ def _hls_annotator_thread(
                             break
 
                 if not popped:
-                    # No frame timestamps queued for this segment — happens
+                    # No frame timestamps queued for this segment - happens
                     # if we missed the .ts notification window. Skip silently
                     # rather than poison the average with bogus data.
                     continue

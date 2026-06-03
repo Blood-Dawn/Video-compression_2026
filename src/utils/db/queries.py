@@ -1,8 +1,8 @@
 """
-utils.db.queries  —  Read and write operations against the segments table.
+utils.db.queries  -  Read and write operations against the segments table.
 
 Anything that defines table shape lives in ``utils.db.schema``. This
-module is strictly DML — INSERT, SELECT, ORDER BY, GROUP BY.
+module is strictly DML - INSERT, SELECT, ORDER BY, GROUP BY.
 
 Author: Bloodawn (KheivenD), 2026-05-14 (audit split).
 """

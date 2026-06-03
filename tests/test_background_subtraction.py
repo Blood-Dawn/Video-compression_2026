@@ -30,12 +30,12 @@ from background_subtraction.background_subtraction import BackgroundSubtractor, 
 # ---------------------------------------------------------------------------
 
 def make_blank_frame(h=480, w=640):
-    """All-black frame — represents static empty background."""
+    """All-black frame - represents static empty background."""
     return np.zeros((h, w, 3), dtype=np.uint8)
 
 
 def make_frame_with_object(h=480, w=640, obj_x=200, obj_y=150, obj_w=80, obj_h=100, brightness=200):
-    """Frame with a solid bright rectangle — simulates a foreground object."""
+    """Frame with a solid bright rectangle - simulates a foreground object."""
     frame = make_blank_frame(h, w)
     frame[obj_y:obj_y + obj_h, obj_x:obj_x + obj_w] = brightness
     return frame
@@ -216,7 +216,7 @@ class TestMinAreaFilter:
         background = make_blank_frame()
         train_subtractor(bs, background, n_frames=60)
 
-        # Small object: 30x30 = 900px area — below min_area=5000
+        # Small object: 30x30 = 900px area - below min_area=5000
         small_obj = make_frame_with_object(obj_w=30, obj_h=30, brightness=220)
         mask = bs.apply(small_obj)
         regions = bs.get_foreground_regions(mask, pad=0)
@@ -230,7 +230,7 @@ class TestMinAreaFilter:
         background = make_blank_frame()
         train_subtractor(bs, background, n_frames=60)
 
-        # Large object: 150x150 = 22500px area — well above min_area=100
+        # Large object: 150x150 = 22500px area - well above min_area=100
         large_obj = make_frame_with_object(obj_w=150, obj_h=150, brightness=220)
         mask = bs.apply(large_obj)
         regions = bs.get_foreground_regions(mask, pad=0)

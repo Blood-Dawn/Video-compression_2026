@@ -9,7 +9,7 @@ small validator / constant tables. It imports nothing from the rest of the
 
     state  <-  logging_setup  <-  services  <-  routes  <-  app
 
-Nothing here starts a thread, opens a file, or touches the network — that
+Nothing here starts a thread, opens a file, or touches the network - that
 work stays in ``logging_setup``, the ``services`` layer, and the route
 blueprints. Keeping the data flat and side-effect-free is what lets every
 other module import these names safely at module load.
@@ -20,7 +20,7 @@ the same object, so writes round-trip automatically. The one scalar that is
 *rebound* (``_log_id``) is forwarded from ``gui.app`` via the module
 ``__getattr__``/``__setattr__`` installed in ``app.py``.
 
-Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — state extraction).
+Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - state extraction).
 """
 
 import collections
@@ -86,7 +86,7 @@ _hls_state: dict = {
     # Author: Bloodawn (KheivenD)
     # ingest→HLS latency: how long does a frame read off RTSP take to land in
     # a .ts chunk that the browser can play? Cody asked for this explicitly in
-    # the April 22 sponsor meeting — operators need it for hardware sizing.
+    # the April 22 sponsor meeting - operators need it for hardware sizing.
     "latency_avg_s":   None,     # float: rolling avg over last N segments (None until 1+ samples)
     "latency_last_s":  None,     # float: latency of the most recent segment
     "latency_samples": 0,        # int:   how many segments contributed to the average

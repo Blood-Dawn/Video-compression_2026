@@ -24,14 +24,14 @@ matters in the frozen build.
 
 The per-mode codec gate (RESOLVED 2026-06-01) chose **libx264** for Mode 0/1
 (universal playback + a clean royalty position vs HEVC). **libx264 is GPL**, so
-an LGPL FFmpeg build does *not* contain it — an LGPL bundle would leave Mode 0/1
+an LGPL FFmpeg build does *not* contain it - an LGPL bundle would leave Mode 0/1
 with no x264 encoder. Therefore, for **this** edition we bundle a **full GPL
 FFmpeg** (x264 + SVT-AV1, x265 present but unused).
 
 This is licence-compatible: the app is **AGPL-3.0**, and AGPL-3.0 is compatible
 with GPL-2.0-or-later code, so shipping GPL FFmpeg alongside the AGPL app is
-fine. (We do NOT use `libx265`/HEVC — its patent licensing is fragmented and not
-royalty-free — even though the GPL build technically contains it.)
+fine. (We do NOT use `libx265`/HEVC - its patent licensing is fragmented and not
+royalty-free - even though the GPL build technically contains it.)
 
 H.265/HEVC is never selected by the app (no `libx265` codepath), so its presence
 in the binary is irrelevant to what we actually encode.
@@ -41,7 +41,7 @@ in the binary is irrelevant to what we actually encode.
 If a future commercial fork needs to avoid GPL (e.g. to distribute under a
 proprietary licence), the seam is:
 - swap the bundle to an **LGPL FFmpeg** build, and
-- change the Mode 0/1 default from `libx264` to **`libopenh264`** (BSD) — an
+- change the Mode 0/1 default from `libx264` to **`libopenh264`** (BSD) - an
   LGPL FFmpeg includes it. SVT-AV1 (Mode 2/3) needs no change (BSD, in LGPL).
 
 That keeps the entire bundled stack permissive (LGPL FFmpeg + BSD encoders) with

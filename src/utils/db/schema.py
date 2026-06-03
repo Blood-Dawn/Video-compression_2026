@@ -1,5 +1,5 @@
 """
-utils.db.schema  —  Connection bootstrap and DDL for the segments table.
+utils.db.schema  -  Connection bootstrap and DDL for the segments table.
 
 This module owns everything that defines the *shape* of the database:
 - Opening a sqlite3 connection in WAL mode.
@@ -31,7 +31,7 @@ def get_connection(db_path: Union[str, Path] = DB_NAME) -> Iterator[sqlite3.Conn
     tool or reporting script runs alongside the encoding pipeline.
 
     IMPORTANT: a bare ``sqlite3.Connection`` used as ``with conn:`` only
-    commits/rolls back the transaction — it does NOT close the
+    commits/rolls back the transaction - it does NOT close the
     connection. That left a connection (and the WAL ``-wal``/``-shm``
     sidecar files) open after every DB call, which on Windows locked the
     database file and broke temp-dir cleanup (WinError 32) and could lock
@@ -48,7 +48,7 @@ def get_connection(db_path: Union[str, Path] = DB_NAME) -> Iterator[sqlite3.Conn
     Yields:
         An open sqlite3.Connection in WAL mode, closed on block exit.
 
-    Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.3 — close leaked
+    Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.3 - close leaked
     connections; fixes WinError 32 on Windows).
     """
     conn = sqlite3.connect(str(db_path))

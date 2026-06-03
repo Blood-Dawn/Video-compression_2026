@@ -4,13 +4,13 @@ src/gui/routes/usage_bp.py
 Opt-in usage-stats consent routes (M5 TASK 5.2).
 
 Backs the first-run consent banner and the settings toggle:
-  * GET  /api/usage_stats          — current state {consent, known, enabled}
-  * POST /api/usage_stats/consent  — store the user's choice {consent: bool}
+  * GET  /api/usage_stats          - current state {consent, known, enabled}
+  * POST /api/usage_stats/consent  - store the user's choice {consent: bool}
 
 The actual collection lives in utils.usage_stats, which is default-OFF and
 scrubs PII/paths. These routes only persist the yes/no decision.
 
-Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5.2 — usage-stats consent).
+Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5.2 - usage-stats consent).
 """
 
 from flask import Blueprint, jsonify, request

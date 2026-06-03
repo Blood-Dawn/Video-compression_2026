@@ -70,7 +70,7 @@ def api_start():
     # ── Validate camera_id (alphanumeric / dash / underscore, max 64 chars) ──
     camera_id = str(data.get("camera_id", "cam_00")).strip()
     if not _re.match(r"^[a-zA-Z0-9_\-]{1,64}$", camera_id):
-        return jsonify({"error": "camera_id must be 1–64 alphanumeric/dash/underscore chars"}), 400
+        return jsonify({"error": "camera_id must be 1-64 alphanumeric/dash/underscore chars"}), 400
 
     # Resolve input: if digit treat as camera index, else file path
     raw_input = str(data.get("input_source", "0")).strip()
@@ -81,7 +81,7 @@ def api_start():
 
     # Default output dir: prefer OneDrive/SVCS so segments land in the cloud
     # folder operators expect. Falls back to <project_root>/outputs/ only when
-    # no cloud sync is detected. Was hard-coded to local — fixed 2026-05-02
+    # no cloud sync is detected. Was hard-coded to local - fixed 2026-05-02
     # in the audit. Author: Bloodawn (KheivenD).
     raw_out = data.get("output_dir", "").strip() or _default_output_dir()
     try:
@@ -120,12 +120,12 @@ def api_start():
         "object_filter": bool(data.get("object_filter", False)),
         "filter_confidence": float(data.get("filter_confidence", 0.30)),
         # Codec selector. Valid values:
-        #   "auto"      — DEFAULT (TASK 1.6). Backend picks the per-mode codec:
+        #   "auto"      - DEFAULT (TASK 1.6). Backend picks the per-mode codec:
         #                 H.264 (libx264) for mode0/mode1, AV1 (libsvtav1) for
         #                 mode2/mode3 (config.default_codec_for_mode).
-        #   "libsvtav1" — explicit AV1 (SVT-AV1).
-        #   "libaom-av1"— explicit AV1 reference, slower than SVT.
-        #   "libx264"   — explicit H.264, always available.
+        #   "libsvtav1" - explicit AV1 (SVT-AV1).
+        #   "libaom-av1" -  explicit AV1 reference, slower than SVT.
+        #   "libx264"   - explicit H.264, always available.
         # H.265/HEVC is intentionally not offered (patent licensing). ROIEncoder
         # auto-falls-back to libx264 if the chosen encoder isn't in the running
         # ffmpeg build. Author: Bloodawn (KheivenD), 2026-05-03, updated

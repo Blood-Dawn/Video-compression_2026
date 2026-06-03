@@ -8,11 +8,11 @@ multicast to 239.255.255.250:3702) and turns a discovered device into an RTSP
 source the rest of SVCS already understands (FrameSource handles rtsp:// URLs).
 
 Design goals:
-  * No new dependencies — plain UDP socket + xml.etree, so it works in the slim
+  * No new dependencies - plain UDP socket + xml.etree, so it works in the slim
     ONNX bundle without pulling an ONVIF SDK.
   * Parsing is pure and isolated (parse_probe_matches) so it's unit-testable
     against a captured ProbeMatch without touching the network.
-  * Graceful degradation: discover() never raises on a blocked/empty network —
+  * Graceful degradation: discover() never raises on a blocked/empty network  - 
     it returns [] and the UI falls back to manual RTSP-URL entry.
   * Credentials never get logged. build_rtsp_url URL-encodes them and callers
     are expected to keep the returned URL out of logs.
@@ -22,9 +22,9 @@ device_service); the actual stream URI normally comes from GetStreamUri, which
 needs authentication and varies per device. For a dependency-free first pass we
 build the well-known RTSP paths for the major surveillance brands
 (Reolink/Amcrest/Dahua/Hikvision) from the device's advertised scopes, plus
-generic fallbacks — the operator can pick or paste the exact path.
+generic fallbacks - the operator can pick or paste the exact path.
 
-Author: Bloodawn (KheivenD), 2026-06-03 (M-CAM TASK 1 — ONVIF discovery).
+Author: Bloodawn (KheivenD), 2026-06-03 (M-CAM TASK 1 - ONVIF discovery).
 """
 
 from __future__ import annotations
@@ -54,7 +54,7 @@ VENDOR_RTSP_PATHS: Dict[str, List[str]] = {
     "tapo":    ["/stream1", "/stream2"],
     "wyze":    ["/live"],
 }
-# Tried when the brand is unknown — common ONVIF/RTSP defaults.
+# Tried when the brand is unknown - common ONVIF/RTSP defaults.
 GENERIC_RTSP_PATHS: List[str] = ["/stream1", "/onvif1", "/live", "/11", "/0"]
 
 DEFAULT_RTSP_PORT = 554
@@ -114,7 +114,7 @@ def _parse_scopes(scopes_text: str) -> Tuple[str, str, str, List[str]]:
 def parse_probe_matches(xml_data, source_ip: Optional[str] = None) -> List[OnvifDevice]:
     """Parse a WS-Discovery ProbeMatch(es) SOAP body into OnvifDevice objects.
 
-    Pure and network-free — this is the unit-tested core. Tolerates the
+    Pure and network-free - this is the unit-tested core. Tolerates the
     namespace and tag-ordering variations real cameras emit by matching on
     local tag names. Returns [] on unparseable input.
     """
@@ -167,7 +167,7 @@ def build_rtsp_url(
 
     Credentials are percent-encoded so an '@' or ':' in a password can't break
     the URL (or silently point at the wrong host). The caller must keep the
-    returned string out of logs — it may embed a password.
+    returned string out of logs - it may embed a password.
     """
     if not host:
         raise ValueError("host is required")

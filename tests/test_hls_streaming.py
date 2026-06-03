@@ -4,12 +4,12 @@ test_hls_streaming.py
 End-to-end tests for the HLS live streaming feature (task 4.1).
 
 Test structure:
-  Class TestHlsRouteUnit     — Flask test client, monkeypatched FFmpeg
+  Class TestHlsRouteUnit     - Flask test client, monkeypatched FFmpeg
                                (fast, no real video / no real subprocess)
-  Class TestHlsIntegration   — Real FFmpeg against a CDnet clip
+  Class TestHlsIntegration   - Real FFmpeg against a CDnet clip
                                (slow ~5s, skipped when CDnet clips absent)
   Class TestPipelineModeComparison
-                             — BackgroundSubtractor + ROIEncoder on CDnet clips,
+                             - BackgroundSubtractor + ROIEncoder on CDnet clips,
                                Mode 0 (all frames) vs Mode 1 (motion-gated frames)
 
 Run fast suite only:
@@ -146,7 +146,7 @@ def fake_ffmpeg(tmp_path):
 
 
 # ──────────────────────────────────────────────
-# Unit tests — Flask routes, no real FFmpeg
+# Unit tests - Flask routes, no real FFmpeg
 # ──────────────────────────────────────────────
 
 class TestHlsRouteUnit:
@@ -232,7 +232,7 @@ class TestHlsRouteUnit:
         assert r.status_code == 404
 
     def test_segment_403_on_non_ts_extension(self, client, fake_ffmpeg, tmp_path):
-        """Reject requests for any non-.ts file — basic security guard."""
+        """Reject requests for any non-.ts file - basic security guard."""
         _, tmpdir = fake_ffmpeg
         # Manually set state to "running" so the route doesn't 404 before the check
         with gui_module._hls_lock:
@@ -280,7 +280,7 @@ class TestHlsRouteUnit:
 
 
 # ──────────────────────────────────────────────
-# Integration tests — real FFmpeg against CDnet clips
+# Integration tests - real FFmpeg against CDnet clips
 # ──────────────────────────────────────────────
 
 @pytest.mark.integration
@@ -398,7 +398,7 @@ class TestHlsIntegration:
         seg_name = ts_files[0].name
         r = client.get(f"/api/hls/cam_highway/{seg_name}")
         assert r.status_code == 200
-        assert len(r.data) > 1000, f"Segment too small ({len(r.data)}B) — likely corrupt"
+        assert len(r.data) > 1000, f"Segment too small ({len(r.data)}B) - likely corrupt"
 
         client.post("/api/hls/stop")
 
@@ -425,12 +425,12 @@ class TestHlsIntegration:
 
 class TestPipelineModeComparison:
     """Compare Mode 0 (encode everything) vs Mode 1 (motion-gated) on CDnet
-    clips.  These tests do NOT run FFmpeg — they validate the background
+    clips.  These tests do NOT run FFmpeg - they validate the background
     subtraction gating logic that drives mode selection.
     """
 
     def test_highway_has_high_motion_ratio(self):
-        """baseline_highway.mp4 is a busy traffic scene — after MOG2 warmup,
+        """baseline_highway.mp4 is a busy traffic scene - after MOG2 warmup,
         Mode 1 should gate at least 30% of frames (moving vehicles present)."""
         clip = _require_clip(_HIGHWAY_CLIP)
         from src.background_subtraction.background_subtraction import BackgroundSubtractor
@@ -462,7 +462,7 @@ class TestPipelineModeComparison:
         assert total > 0
 
         ratio = motion_frames / total
-        # Highway clip: vehicles move continuously — expect solid detection rate
+        # Highway clip: vehicles move continuously - expect solid detection rate
         assert ratio >= 0.30, (
             f"Mode 1 would gate too aggressively on highway clip: "
             f"only {ratio:.0%} of frames have motion after warmup (expected ≥30%). "
@@ -470,7 +470,7 @@ class TestPipelineModeComparison:
         )
 
     def test_office_has_low_motion_ratio(self):
-        """baseline_office.mp4 is a near-static office scene — Mode 1 should
+        """baseline_office.mp4 is a near-static office scene - Mode 1 should
         gate most frames as background (low motion ratio = Mode 1 saves more)."""
         clip = _require_clip(_CDNET / "baseline" / "baseline_office.mp4")
         from src.background_subtraction.background_subtraction import BackgroundSubtractor
@@ -502,7 +502,7 @@ class TestPipelineModeComparison:
             pytest.skip("No frames after warmup.")
 
         ratio = motion_frames / total
-        # Office clip — mostly static camera, infrequent motion
+        # Office clip - mostly static camera, infrequent motion
         assert ratio < 0.5, (
             f"Office clip shows unexpectedly high motion ratio {ratio:.0%}. "
             "MOG2 may be too sensitive for static scenes (check varThreshold)."
@@ -537,7 +537,7 @@ class TestPipelineModeComparison:
         cap.release()
         assert mode0_count > 0
         assert mode1_count <= mode0_count, (
-            "Mode 1 processed more frames than Mode 0 — impossible by definition."
+            "Mode 1 processed more frames than Mode 0 - impossible by definition."
         )
 
     def test_nightVideos_benefits_from_night_mode(self):
@@ -545,7 +545,7 @@ class TestPipelineModeComparison:
         on a low-light clip.
 
         If night_mode makes no difference (detects the same or fewer regions),
-        the CLAHE preprocessing isn't helping — which warrants investigation.
+        the CLAHE preprocessing isn't helping - which warrants investigation.
         """
         clip = _require_clip(_CDNET / "nightVideos" / "nightVideos_busyBoulvard.mp4")
         from src.background_subtraction.background_subtraction import BackgroundSubtractor
@@ -578,7 +578,7 @@ class TestPipelineModeComparison:
 
     def test_roi_bboxes_present_in_motion_frames(self):
         """Verify that frames identified as having motion also produce non-empty
-        bounding boxes — the data that drives dual-CRF ROI encoding."""
+        bounding boxes - the data that drives dual-CRF ROI encoding."""
         clip = _require_clip(_PEDESTRIAN_CLIP)
         from src.background_subtraction.background_subtraction import BackgroundSubtractor
 
@@ -599,7 +599,7 @@ class TestPipelineModeComparison:
 
         cap.release()
         assert frames_with_motion > 0, (
-            "No motion detected in pedestrians clip — check BackgroundSubtractor defaults."
+            "No motion detected in pedestrians clip - check BackgroundSubtractor defaults."
         )
         assert boxes_found > 0, "Motion frames produced no bounding boxes."
 

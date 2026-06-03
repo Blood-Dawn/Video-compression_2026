@@ -1,11 +1,11 @@
 /*
  * src/gui/static/js/rtsp.js
  *
- * SVCS dashboard — rtsp module. Carved verbatim from the former single
+ * SVCS dashboard - rtsp module. Carved verbatim from the former single
  * inline <script> in index.html (TASK 1.5). Loaded as a classic script in
  * original execution order, so behavior is identical; all functions stay
  * global (reachable from inline on* handlers and the other modules).
- * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — JS split).
+ * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - JS split).
  */
 function _rtspApplyState(d) {
   const badge       = document.getElementById('rtsp-server-badge');
@@ -318,7 +318,7 @@ window.addEventListener('DOMContentLoaded', () => { _initGDriveOutput(); });
     const panes   = document.querySelector('.metrics-panes');
     if (!divider || !left || !panes) return;
 
-    // Restore saved width on first load — clamped both directions so a
+    // Restore saved width on first load - clamped both directions so a
     // tiny saved value (which produces the "jumbled metrics" look the
     // user reported) gets normalized to something readable. We require
     // at least 400px now; if the saved value is narrower we wipe it.
@@ -330,7 +330,7 @@ window.addEventListener('DOMContentLoaded', () => { _initGDriveOutput(); });
         const max = Math.min(saved, panes.getBoundingClientRect().width - 320);
         left.style.width = Math.max(360, max) + 'px';
       } else if (saved && saved < MIN_USABLE) {
-        // Saved value is uselessly narrow — drop it and use the default
+        // Saved value is uselessly narrow - drop it and use the default
         localStorage.removeItem('svcs.metrics.leftWidth');
       }
     } catch (_) { /* localStorage may be blocked */ }

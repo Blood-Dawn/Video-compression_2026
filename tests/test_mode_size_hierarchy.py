@@ -3,7 +3,7 @@ tests/test_mode_size_hierarchy.py
 
 End-to-end mode-size benchmark.
 
-The user's expectation is "each mode should lower file size incrementally —
+The user's expectation is "each mode should lower file size incrementally  - 
 mode 3 < mode 2 < mode 1 < mode 0". The reality on real surveillance
 footage is more nuanced: see ``docs/mode_size_hierarchy.md`` for the full
 discussion. These tests lock in the WEAKER invariants that DO hold across
@@ -14,7 +14,7 @@ all reasonable scenes:
   is smaller than the uncompressed raw bytes the source frames represent.
 * Mode 3 writes a single object-only .mp4 (objects kept, background
   blacked out). The per-object mode3_sparse/ layout was never shipped on
-  the app branch — see docs/test-baseline.md D2.
+  the app branch - see docs/test-baseline.md D2.
 
 This is the test file that exercises the FULL pipeline (FrameSource ->
 BG subtractor -> MOG2 mask -> ROI encoder -> SQLite DB row). It is the
@@ -23,7 +23,7 @@ regression anywhere in pipeline.py / roi_encoder.py will surface here
 first.
 
 Author: Bloodawn (KheivenD), 2026-05-02 (audit follow-up);
-updated 2026-05-31 (M0 TASK 0.3 — mode3 is a single object-only clip).
+updated 2026-05-31 (M0 TASK 0.3 - mode3 is a single object-only clip).
 """
 
 from __future__ import annotations
@@ -57,10 +57,10 @@ def _ffprobe_ok(path: Path) -> bool:
 
     Used instead of an OpenCV frame read to validate output. OpenCV's
     bundled decoder can't read AV1 (libsvtav1, the pipeline's default codec)
-    on some platforms — notably Linux CI — which would fail a perfectly
+    on some platforms - notably Linux CI - which would fail a perfectly
     valid file. ffprobe validates the container + stream regardless of codec,
     so this still catches FFmpeg pipe truncation without false negatives.
-    Author: Bloodawn (KheivenD), 2026-06-01 (M0 TASK 0.7 — portable mp4 check).
+    Author: Bloodawn (KheivenD), 2026-06-01 (M0 TASK 0.7 - portable mp4 check).
     """
     try:
         out = subprocess.run(
@@ -180,7 +180,7 @@ class TestModeSizeHierarchy:
         """Mode 3 writes a single object-only .mp4 per segment: the moving
         objects are kept and the background is blacked out (compressing to
         near-zero bits). The per-object mode3_sparse/ layout was never
-        shipped on the app branch — see docs/test-baseline.md D2."""
+        shipped on the app branch - see docs/test-baseline.md D2."""
         src = tmp_path / "src.mp4"
         _make_synthetic_clip(src)
 
@@ -194,7 +194,7 @@ class TestModeSizeHierarchy:
     def test_outputs_are_valid_mp4s(self, tmp_path):
         """Every produced .mp4 (all four modes) must be a valid container
         with a video stream. Catches FFmpeg pipe truncation. Validated with
-        ffprobe rather than an OpenCV frame read — OpenCV can't decode AV1
+        ffprobe rather than an OpenCV frame read - OpenCV can't decode AV1
         (our default codec) on some platforms (e.g. Linux CI), which is an
         environment limit, not a bad file."""
         src = tmp_path / "src.mp4"
@@ -211,7 +211,7 @@ class TestModeSizeHierarchy:
 
     def test_size_report_for_documentation(self, tmp_path, capsys):
         """Print measured bytes per mode so the docs/CI logs always have a
-        fresh data point. Does not assert a strict hierarchy — see
+        fresh data point. Does not assert a strict hierarchy - see
         ``docs/mode_size_hierarchy.md`` for why mode 3 < mode 2 < mode 1 <
         mode 0 isn't always true on synthetic clips."""
         src = tmp_path / "src.mp4"
@@ -232,10 +232,10 @@ class TestModeSizeHierarchy:
         # Soft assertions: mode 1 should usually be <= mode 0 on a clip
         # with significant no-motion frames. Mode 3 should usually be <=
         # mode 2 on a clip with one moving object.
-        # These are documented as observations, not contracts — see
+        # These are documented as observations, not contracts - see
         # docs/mode_size_hierarchy.md. We only enforce a 2x ceiling on
         # mode 3 vs mode 0 to catch dramatic regressions.
         assert sizes["mode3"] < sizes["mode0"] * 3, (
             f"mode3 ({sizes['mode3']}) more than 3x mode0 ({sizes['mode0']}) "
-            "— sparse encoder regression?"
+            " -  sparse encoder regression?"
         )

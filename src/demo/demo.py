@@ -105,7 +105,7 @@ def _draw_corner_label(
 ) -> None:
     """Stamp a single small label into one corner of `frame` (in-place).
 
-    Tight padding, semi-transparent background pad, white text — designed
+    Tight padding, semi-transparent background pad, white text - designed
     to take up almost no real estate so the user can actually see the
     underlying video. Author: Bloodawn (KheivenD), 2026-05-04 (corner overlays).
     """
@@ -150,7 +150,7 @@ def add_bottom_right_labels(
     barely see the actual video. Now:
 
       • Top-LEFT corner:  ``MODE  ·  SEGMENT N``
-      • Top-RIGHT corner: ``TIME``  (only — view is implicit when standard)
+      • Top-RIGHT corner: ``TIME``  (only - view is implicit when standard)
 
     Function name kept for backward compatibility with run_demo.py
     even though it no longer draws bottom-right.
@@ -159,7 +159,7 @@ def add_bottom_right_labels(
     """
     out = frame.copy()
 
-    # Compact mode label — strips the leading "mode" prefix when present
+    # Compact mode label - strips the leading "mode" prefix when present
     # so "mode0" → "MODE 0", "splitscreen" stays as-is.
     raw_mode = str(mode or "").strip()
     if raw_mode.lower().startswith("mode"):

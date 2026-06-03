@@ -61,7 +61,7 @@ def app_mod():
 
 @pytest.fixture
 def cloud_mod():
-    """The cloud_detection service module — home of _detect_cloud_root."""
+    """The cloud_detection service module - home of _detect_cloud_root."""
     return _cloud_mod()
 
 

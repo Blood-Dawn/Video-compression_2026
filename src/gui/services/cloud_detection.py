@@ -6,7 +6,7 @@ gui/app.py (TASK 1.2).
 
 Priority for cloud roots: school OneDrive -> personal OneDrive -> Google Drive
 -> local outputs/. OneDrive / Google Drive for Desktop sync a local folder
-automatically, so no cloud API credentials are needed — we just locate the
+automatically, so no cloud API credentials are needed - we just locate the
 local mount via the registry (Windows) or well-known home paths.
 
 Imports gui.state (for the shared status dict + the _CLOUD_SUBFOLDER constant)
@@ -14,7 +14,7 @@ and utils.paths. `_ROOT` is computed locally from __file__ (repo root); it is
 only used for the final dev fallback of _default_output_dir, which the GUI test
 suite never exercises (it always sets an explicit output_dir).
 
-Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — cloud-detection extraction).
+Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - cloud-detection extraction).
 """
 
 from pathlib import Path
@@ -208,7 +208,7 @@ def list_destinations() -> "list[dict]":
 # Priority: school OneDrive → personal OneDrive → Google Drive → local outputs/
 #
 # OneDrive for Desktop syncs <UserFolder>\SVCS\ automatically.
-# No API credentials needed — files saved to the local folder appear in the
+# No API credentials needed - files saved to the local folder appear in the
 # cloud within seconds, exactly like Google Drive for Desktop.
 
 
@@ -216,8 +216,8 @@ def _detect_onedrive_root(prefer_business: bool = True) -> tuple[Path, str] | tu
     """Return (local_root, label) for the best available OneDrive folder, or (None, None).
 
     Checks (in order when prefer_business=True):
-      1. Windows registry – OneDrive Business/School accounts (Business1, Business2, …)
-      2. Windows registry – OneDrive Personal account
+      1. Windows registry - OneDrive Business/School accounts (Business1, Business2, …)
+      2. Windows registry - OneDrive Personal account
       3. Profile folder scan: any 'OneDrive - *' directory (school/org accounts)
       4. Profile folder: plain 'OneDrive' directory (personal)
 

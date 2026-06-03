@@ -1,4 +1,4 @@
-; installer/svcs.iss — Inno Setup script for the SVCS desktop installer (M2 TASK 2.4)
+; installer/svcs.iss - Inno Setup script for the SVCS desktop installer (M2 TASK 2.4)
 ;
 ; Wraps the PyInstaller folder build (dist\SVCS\) into a single
 ; SVCS-Setup-<version>.exe that installs to Program Files, adds a Start Menu
@@ -16,7 +16,7 @@
 ; Author: Bloodawn (KheivenD), 2026-06-03 (TASK 2.4).
 
 #define MyAppName "SVCS"
-#define MyAppFullName "SVCS — Selective Video Compression System"
+#define MyAppFullName "SVCS - Selective Video Compression System"
 #define MyAppVersion "2.0.0.dev0"
 #define MyAppPublisher "SVCS Project"
 #define MyAppURL "https://github.com/Blood-Dawn/Video-compression_2026"
@@ -53,12 +53,12 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Types]
 Name: "full";    Description: "Full installation (recommended)"
-Name: "compact"; Description: "Compact — use a system FFmpeg on PATH"
+Name: "compact"; Description: "Compact - use a system FFmpeg on PATH"
 Name: "custom";  Description: "Custom installation"; Flags: iscustom
 
 [Components]
 Name: "main";   Description: "SVCS dashboard + ONNX detector"; Types: full compact custom; Flags: fixed
-Name: "ffmpeg"; Description: "Bundled FFmpeg (~243 MB) — uncheck to use a system FFmpeg on PATH"; Types: full
+Name: "ffmpeg"; Description: "Bundled FFmpeg (~243 MB) - uncheck to use a system FFmpeg on PATH"; Types: full
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked

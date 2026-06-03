@@ -6,7 +6,7 @@ Covers: video file mode, CDnet image sequence mode, temporal_roi parsing,
         get_warmup_frames(), context manager, __repr__, error handling.
 
 All CDnet fixtures are synthesised in tmp_path to avoid any real dataset
-dependency — each test creates the minimal folder layout it needs.
+dependency - each test creates the minimal folder layout it needs.
 """
 
 import cv2

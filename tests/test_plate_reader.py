@@ -10,7 +10,7 @@ Strategy:
     these tests in CI.
   * Generate a tiny synthetic .mp4 clip on the fly so the test is hermetic.
 
-These tests intentionally do NOT cover the real PaddleOCR/EasyOCR engines —
+These tests intentionally do NOT cover the real PaddleOCR/EasyOCR engines  - 
 those are heavy and license-plate accuracy is best validated by the team's
 manual review on real footage. The pipeline plumbing is what the unit tests
 need to lock down.
@@ -49,7 +49,7 @@ from enhancement.plate_reader import (  # noqa: E402
 def _write_synthetic_video(path: Path, n_frames: int = 30, w: int = 320, h: int = 180) -> None:
     """Write an n-frame .mp4 with a slow gradient so OpenCV can decode it.
 
-    Real plate text on a 320x180 frame is unreadable — these tests don't
+    Real plate text on a 320x180 frame is unreadable - these tests don't
     validate OCR accuracy, only the pipeline plumbing. The fake OCR backend
     in tests below returns plate strings independent of pixel content.
     """
@@ -77,13 +77,13 @@ class _FakeOcr:
     def available(self):
         return True
 
-    def ocr(self, frame):  # noqa: ARG002 — frame is unused
+    def ocr(self, frame):  # noqa: ARG002 - frame is unused
         self.calls += 1
         return list(self._returns)
 
 
 class _NoopEnhancer:
-    """Stand-in for the real Enhancer — just bicubic-upscales by 1×."""
+    """Stand-in for the real Enhancer - just bicubic-upscales by 1×."""
 
     backend = "stub"
 
@@ -145,7 +145,7 @@ class TestScoreCandidate:
 
 
 # ---------------------------------------------------------------------------
-# PlateReader.read_plates_from_video — uses synthetic video + fake OCR
+# PlateReader.read_plates_from_video - uses synthetic video + fake OCR
 # ---------------------------------------------------------------------------
 
 

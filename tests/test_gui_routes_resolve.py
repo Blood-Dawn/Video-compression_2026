@@ -6,7 +6,7 @@ resolves through the Flask url_map to a real endpoint, for the methods it
 declares. Catches a blueprint that registers a rule whose view function isn't
 actually wired (or a method mismatch) after the carve.
 
-Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — route-resolution guard).
+Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - route-resolution guard).
 """
 
 import sys

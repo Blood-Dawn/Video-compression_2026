@@ -9,7 +9,7 @@ dashboard on the LAN). Plus the localhost-stays-open path, env-var credentials,
 the --no-auth override, and the actual Basic-Auth guard (401 without/with-wrong
 creds, 200 with correct creds) on a throwaway Flask app.
 
-Author: Bloodawn (KheivenD), 2026-06-03 (TASK 4.4 — dashboard auth).
+Author: Bloodawn (KheivenD), 2026-06-03 (TASK 4.4 - dashboard auth).
 """
 
 import base64

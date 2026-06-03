@@ -14,7 +14,7 @@ This document compares MOG2 and KNN background subtraction algorithms on the CDn
 
 ## Benchmark Results
 
-Data source: `outputs/cdnet_batch_results.log` — full 46-scene batch run (2026-03-26)
+Data source: `outputs/cdnet_batch_results.log` - full 46-scene batch run (2026-03-26)
 
 ### Average Foreground Coverage (%) by Category
 
@@ -37,24 +37,24 @@ Data source: `outputs/cdnet_batch_results.log` — full 46-scene batch run (2026
 
 ## Algorithm Profiles
 
-### MOG2 (Mixture of Gaussians v2) — RECOMMENDED
+### MOG2 (Mixture of Gaussians v2) - RECOMMENDED
 
 MOG2 models each pixel's background as a mixture of up to 5 Gaussian distributions, automatically selecting how many each pixel needs.
 
 **Parameters used in this project:**
-- `history = 500` — frames used to build background model
-- `varThreshold = 16` (day) / `30` (night) — sensitivity threshold
-- `detectShadows = True` — marks shadows as gray (127) rather than white (255)
+- `history = 500` - frames used to build background model
+- `varThreshold = 16` (day) / `30` (night) - sensitivity threshold
+- `detectShadows = True` - marks shadows as gray (127) rather than white (255)
 
 **Performance:**
 - ~64 fps at 1080p on standard hardware
-- 15–25 fps on Raspberry Pi at 640x480
+- 15-25 fps on Raspberry Pi at 640x480
 - Handles gradual lighting changes (sunrise/sunset) well
 - Built-in shadow detection reduces false positives
 
 **Weaknesses:**
 - Sudden lighting changes (lights switching on/off) can confuse the model temporarily
-- Shadow detection adds ~10–20% processing overhead
+- Shadow detection adds ~10-20% processing overhead
 
 ---
 
@@ -63,8 +63,8 @@ MOG2 models each pixel's background as a mixture of up to 5 Gaussian distributio
 KNN stores actual pixel color samples from recent frames and classifies new pixels by comparing them to their K nearest historical neighbors.
 
 **Performance:**
-- ~40–50 fps on standard hardware (slower than MOG2)
-- Higher memory usage — stores raw pixel samples rather than compact Gaussian parameters
+- ~40-50 fps on standard hardware (slower than MOG2)
+- Higher memory usage - stores raw pixel samples rather than compact Gaussian parameters
 - Better boundary definition on foreground objects
 - Better handling of non-Gaussian noise (infrared/thermal cameras)
 
@@ -79,7 +79,7 @@ KNN stores actual pixel color samples from recent frames and classifies new pixe
 
 | Factor | MOG2 | KNN |
 |---|---|---|
-| Speed | ~64 fps | ~40–50 fps |
+| Speed | ~64 fps | ~40-50 fps |
 | Memory usage | Low (Gaussian params) | Higher (raw samples) |
 | Shadow detection | Built-in | None |
 | Edge case FP rate | Lower | Higher |
@@ -95,15 +95,15 @@ KNN stores actual pixel color samples from recent frames and classifies new pixe
 
 Reasons:
 
-1. **Identical detection accuracy** — both algorithms produce the same average FG% across all CDnet categories, so there is no accuracy benefit to choosing KNN for typical daylight surveillance footage.
+1. **Identical detection accuracy** - both algorithms produce the same average FG% across all CDnet categories, so there is no accuracy benefit to choosing KNN for typical daylight surveillance footage.
 
-2. **Better CPU performance** — MOG2 runs at ~64 fps vs KNN's ~40–50 fps at 1080p. On the legacy/low-spec hardware required by the sponsor, this margin matters.
+2. **Better CPU performance** - MOG2 runs at ~64 fps vs KNN's ~40-50 fps at 1080p. On the legacy/low-spec hardware required by the sponsor, this margin matters.
 
-3. **Lower memory footprint** — MOG2 stores compact Gaussian parameters rather than raw pixel samples, which is important for systems with limited RAM.
+3. **Lower memory footprint** - MOG2 stores compact Gaussian parameters rather than raw pixel samples, which is important for systems with limited RAM.
 
-4. **Built-in shadow handling** — MOG2's shadow detection (marking shadow pixels as 127 rather than 255) reduces false positives without additional post-processing code.
+4. **Built-in shadow handling** - MOG2's shadow detection (marking shadow pixels as 127 rather than 255) reduces false positives without additional post-processing code.
 
-5. **Proven on this dataset** — Kheiven's CDnet sweep confirmed MOG2 as the recommended primary algorithm (session_log_2026-03-26.md).
+5. **Proven on this dataset** - Kheiven's CDnet sweep confirmed MOG2 as the recommended primary algorithm (session_log_2026-03-26.md).
 
 **When to switch to KNN:**
 - Footage from thermal or near-infrared cameras

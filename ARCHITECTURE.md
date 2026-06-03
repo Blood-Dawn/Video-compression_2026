@@ -43,15 +43,15 @@ sponsored by NIWC Pacific. v2 is the consumer / commercial product.
 │  svcs-core (Rust)                            │
 │                                              │
 │  Modules:                                    │
-│    frame_source  — file, RTSP, camera        │
-│    bg_subtract   — MOG2, scene detect        │
-│    detect        — face, object (ONNX)       │
-│    mode          — dispatch (0, 1, 2, 3)     │
-│    encoder       — FFmpeg dual-CRF           │
-│    enhance       — ESRGAN via ONNX           │
-│    db            — SQLite metadata           │
-│    crypto        — AES-256-GCM               │
-│    preset        — auto-detect content type  │
+│    frame_source  - file, RTSP, camera        │
+│    bg_subtract   - MOG2, scene detect        │
+│    detect        - face, object (ONNX)       │
+│    mode          - dispatch (0, 1, 2, 3)     │
+│    encoder       - FFmpeg dual-CRF           │
+│    enhance       - ESRGAN via ONNX           │
+│    db            - SQLite metadata           │
+│    crypto        - AES-256-GCM               │
+│    preset        - auto-detect content type  │
 └──────────────────────────────────────────────┘
                       │
                       │  C ABI
@@ -150,7 +150,7 @@ full feature set free: compression, the four modes, search, encryption,
 Real-ESRGAN enhancement, YOLO object filter, and the AI plate reader.
 
 Some features sit behind optional `pyproject.toml` extras purely to keep the
-default install small — `[plates]` (AI plate reader, EasyOCR), `[enhance]`
+default install small - `[plates]` (AI plate reader, EasyOCR), `[enhance]`
 (Real-ESRGAN), `[crash-reporting]` (opt-in Sentry). These are free; the UI
 hides a feature's controls when its backing dependency isn't installed.
 

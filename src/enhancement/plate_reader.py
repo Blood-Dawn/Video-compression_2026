@@ -1,7 +1,7 @@
 """
 src/enhancement/plate_reader.py
 
-Post-process license-plate reader — runs on a saved segment after recording,
+Post-process license-plate reader - runs on a saved segment after recording,
 not in the live pipeline. Two-stage architecture matching the standard
 academic ALPR pipeline (YOLO/RetinaNet detect -> CRNN/Transformer OCR):
 
@@ -22,7 +22,7 @@ Why this shape:
     accuracy delta. PaddleOCR is still supported at runtime if installed
     manually (the backend auto-detects), but is no longer pulled in by
     ``uv sync --extra plates``.
-  * OpenALPR is AGPL-3.0 and intentionally NOT used — it would force the
+  * OpenALPR is AGPL-3.0 and intentionally NOT used - it would force the
     whole repo to AGPL. fast-plate-ocr (MIT) is a worthwhile next addition
     once we have a baseline.
   * Multi-frame consensus is the academic-paper-recommended mitigation for
@@ -66,7 +66,7 @@ class PlateRead:
 
     Fields:
         text:                Normalised plate string (uppercase, no spaces).
-        confidence:          Combined score in [0, 1] — see _score_candidate.
+        confidence:          Combined score in [0, 1] - see _score_candidate.
         ocr_confidence_avg:  Mean of per-frame OCR confidences for this text.
         votes:               How many frames agreed on this exact text.
         frames:              Indices of supporting frames in the source video.
@@ -104,7 +104,7 @@ class PlateReadResult:
         candidate_plates:  All consensus-grouped reads, sorted by confidence.
         best_read:         Highest-confidence text, or None when nothing was
                            even tentatively read.
-        warnings:          Honest caveats — unusual sample size, OCR engine
+        warnings:          Honest caveats - unusual sample size, OCR engine
                            missing, all reads below threshold, etc.
     """
     video_path: str
@@ -134,7 +134,7 @@ _PLATE_LEN_MIN = 4
 _PLATE_LEN_MAX = 9
 _PLATE_RE = re.compile(r"[A-Z0-9]+")
 
-# Characters PaddleOCR routinely confuses — useful to remember when the
+# Characters PaddleOCR routinely confuses - useful to remember when the
 # operator is reading the surfaced result and choosing whether to trust it.
 _AMBIGUOUS_PAIRS = {("0", "O"), ("1", "I"), ("1", "L"), ("5", "S"),
                     ("8", "B"), ("2", "Z"), ("6", "G"), ("Q", "0")}
@@ -182,7 +182,7 @@ def _score_candidate(votes: int, ocr_avg: float, frames_examined: int) -> Tuple[
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# OCR backends — lazy-imported, fully optional
+# OCR backends - lazy-imported, fully optional
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -207,7 +207,7 @@ class _OcrBackend:
 
 
 class _PaddleOcrBackend(_OcrBackend):
-    """PaddleOCR PP-OCRv4 (Apache-2.0) — optional secondary backend.
+    """PaddleOCR PP-OCRv4 (Apache-2.0) - optional secondary backend.
 
     Used to be the primary backend up through May 2026, demoted as part
     of the v2 productization to keep the default install small. Still
@@ -233,7 +233,7 @@ class _PaddleOcrBackend(_OcrBackend):
                 use_gpu=use_gpu,
                 show_log=False,
             )
-        except Exception as exc:  # noqa: BLE001 — paddle's init can throw anything
+        except Exception as exc:  # noqa: BLE001 - paddle's init can throw anything
             log.warning("PaddleOCR initialisation failed: %s. Falling back.", exc)
             self._engine = None
 
@@ -268,7 +268,7 @@ class _PaddleOcrBackend(_OcrBackend):
 
 
 class _EasyOcrBackend(_OcrBackend):
-    """EasyOCR (Apache-2.0) — fallback when PaddleOCR can't install."""
+    """EasyOCR (Apache-2.0) - fallback when PaddleOCR can't install."""
 
     name = "easyocr"
 
@@ -311,7 +311,7 @@ class _EasyOcrBackend(_OcrBackend):
 
 
 class _TesseractBackend(_OcrBackend):
-    """Tesseract via pytesseract (Apache-2.0) — lightweight CPU fallback.
+    """Tesseract via pytesseract (Apache-2.0) - lightweight CPU fallback.
 
     Slower per-call than PaddleOCR / EasyOCR but ships in apt and Homebrew
     out of the box, so it's the right choice when the user can't install
@@ -412,7 +412,7 @@ def _select_backend(prefer: str = "auto", use_gpu: bool = False) -> _OcrBackend:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PlateReader — the public class
+# PlateReader - the public class
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -421,7 +421,7 @@ class PlateReader:
 
     Combines the existing Real-ESRGAN ``Enhancer`` with a permissive-licensed
     OCR backend (PaddleOCR or EasyOCR). Multi-frame consensus voting is the
-    accuracy multiplier — single-frame reads from low-resolution footage are
+    accuracy multiplier - single-frame reads from low-resolution footage are
     flagged as uncertain by design.
 
     Typical use::
@@ -661,7 +661,7 @@ class PlateReader:
         """Return the regions to OCR from one frame.
 
         When the caller passes ``roi_boxes`` we crop just those regions and
-        skip the rest of the frame — this is dramatically faster on long
+        skip the rest of the frame - this is dramatically faster on long
         clips and avoids wasting SR cycles on empty background. With no
         boxes we fall back to the full frame.
         """

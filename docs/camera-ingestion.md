@@ -1,7 +1,7 @@
 # Camera ingestion
 
 SVCS compresses footage from cameras three ways. Pick the one your camera
-supports — there is no vendor-cloud scraping, ever.
+supports - there is no vendor-cloud scraping, ever.
 
 | Path | Works for | How |
 |------|-----------|-----|
@@ -17,29 +17,29 @@ recording and **2 (export-folder)** for bulk/after-the-fact compression.
 How each camera family connects. **Direct** = native RTSP/ONVIF (Path 1);
 **Bridge** = cloud-locked, needs a local bridge to RTSP (Path 3); **Export** =
 use the camera's clip export into a watch-folder (Path 2). Most cameras support
-more than one — the recommended path is listed first.
+more than one - the recommended path is listed first.
 
-> ⚠️ *Community-maintained — last updated 2026-06-03.* Vendors change firmware and
+> ⚠️ *Community-maintained - last updated 2026-06-03.* Vendors change firmware and
 > APIs often; treat this as a starting point and verify for your exact model.
 > Corrections welcome via pull request.
 
 | Camera family | Direct (RTSP/ONVIF) | Bridge | Export-folder | Recommended |
 |---------------|:---:|:---:|:---:|-------------|
-| Reolink | ✅ | — | ✅ (microSD/NVR) | Direct |
-| Amcrest / Dahua | ✅ | — | ✅ | Direct |
-| Hikvision / HiLook | ✅ | — | ✅ | Direct |
-| Axis | ✅ | — | ✅ | Direct |
+| Reolink | ✅ | - | ✅ (microSD/NVR) | Direct |
+| Amcrest / Dahua | ✅ | - | ✅ | Direct |
+| Hikvision / HiLook | ✅ | - | ✅ | Direct |
+| Axis | ✅ | - | ✅ | Direct |
 | Wyze (RTSP firmware) | ✅ | ✅ | ✅ (microSD) | Direct if RTSP fw, else Bridge |
 | TP-Link / Tapo | ✅ (most) | ✅ | ✅ | Direct |
-| Ubiquiti UniFi Protect | ✅ (RTSP export) | — | ✅ | Direct |
-| Generic ONVIF/NVR | ✅ | — | ✅ | Direct |
-| Body cameras (Axon, etc.) | — | — | ✅ (dock dump) | Export |
-| Dashcams | — | — | ✅ (microSD loop) | Export |
+| Ubiquiti UniFi Protect | ✅ (RTSP export) | - | ✅ | Direct |
+| Generic ONVIF/NVR | ✅ | - | ✅ | Direct |
+| Body cameras (Axon, etc.) | - | - | ✅ (dock dump) | Export |
+| Dashcams | - | - | ✅ (microSD loop) | Export |
 | **Ring** | ❌ | ✅ (Scrypted/HA) | ✅ (app export) | Export or Bridge |
 | **Nest** | ❌ | ✅ (Scrypted/HA) | ✅ (app export) | Export or Bridge |
 | **Arlo** | ❌ | ✅ (Scrypted/HA) | ✅ (app export) | Export or Bridge |
 
-**The honest limit:** Ring, Nest, and Arlo are cloud-locked — they expose no RTSP
+**The honest limit:** Ring, Nest, and Arlo are cloud-locked - they expose no RTSP
 stream, and SVCS will never scrape a vendor cloud. Your two supported options are
 exporting their clips to a folder, or running a local bridge that re-exposes them
 as RTSP (see *Bridge ingestion* below).
@@ -51,10 +51,10 @@ as RTSP (see *Bridge ingestion* below).
 Use **Add camera → Discover ONVIF cameras** in the dashboard. SVCS sends a
 WS-Discovery probe on your LAN, lists the cameras it finds, and fills in a
 suggested RTSP URL (enter the camera's username/password first if it needs
-them — credentials are sent only to your local SVCS server to build the URL and
+them - credentials are sent only to your local SVCS server to build the URL and
 are never logged).
 
-If discovery finds nothing — Windows Firewall commonly blocks the multicast —
+If discovery finds nothing - Windows Firewall commonly blocks the multicast  - 
 just paste the RTSP URL into the source field. Common patterns:
 
 | Brand | Typical RTSP URL |
@@ -65,7 +65,7 @@ just paste the RTSP URL into the source field. Common patterns:
 | Axis | `rtsp://user:pass@<ip>:554/axis-media/media.amp` |
 | TP-Link / Tapo | `rtsp://user:pass@<ip>:554/stream1` |
 
-The exact path varies by model and firmware — check your camera's manual or the
+The exact path varies by model and firmware - check your camera's manual or the
 [community RTSP list](https://www.ispyconnect.com/cameras) if these don't work.
 
 ---
@@ -74,7 +74,7 @@ The exact path varies by model and firmware — check your camera's manual or th
 
 Point SVCS at a folder; every new video that lands there is detected, compressed
 with an auto-chosen preset, and written to your output tree. This works for
-**any** camera that can get a file onto disk — including cloud cameras whose apps
+**any** camera that can get a file onto disk - including cloud cameras whose apps
 let you *export* or *download* clips.
 
 CLI:
@@ -85,7 +85,7 @@ python src/utils/watchfolder.py --watch-dir <folder> --output <out> --profile <p
 
 ### Profiles
 
-A **profile** sets sensible defaults for a camera's export layout — whether to
+A **profile** sets sensible defaults for a camera's export layout - whether to
 scan subfolders, how patient to be about half-written files (a NAS sync is slow
 and bursty; an SD-card copy is fast), and how to pick the encode preset. Profiles
 are data-driven (`WATCHFOLDER_PROFILES` in `src/utils/watchfolder.py`), not
@@ -117,18 +117,18 @@ and stays distinct from `cam8`.
 
 ### Reliability
 
-- **Partial writes** — a file is only ingested once its size is stable across
+- **Partial writes** - a file is only ingested once its size is stable across
   several polls (`--stable-checks`, raised automatically by the `nas_sync`
   profile), so a half-copied file is never compressed.
-- **Crash-resume** — if SVCS is killed mid-encode, the file is retried on the
+- **Crash-resume** - if SVCS is killed mid-encode, the file is retried on the
   next scan; finished files are marked and never reprocessed.
-- **Dedupe** — each ingested file gets a `.ingested` sentinel next to it.
+- **Dedupe** - each ingested file gets a `.ingested` sentinel next to it.
 
 ---
 
 ## 3. Bridge ingestion (cloud-locked cameras)
 
-Some consumer cameras — **Ring, Nest, Arlo**, and similar — have **no RTSP
+Some consumer cameras - **Ring, Nest, Arlo**, and similar - have **no RTSP
 stream and no useful local export**. Their video only leaves the device through
 the vendor's app and cloud. SVCS will **not** scrape a vendor cloud, log into
 your account, or screen-scrape an app: that's against their terms, fragile, and
@@ -139,14 +139,14 @@ of software you run on your own hardware that talks to the camera (often through
 the same APIs the vendor app uses, with *your* credentials, under *your*
 control) and **re-exposes it as a standard local RTSP stream**. SVCS then ingests
 that RTSP stream exactly like any other camera (Path 1 above). SVCS never touches
-the vendor cloud — the bridge does, on your machine.
+the vendor cloud - the bridge does, on your machine.
 
 ### What to expect (be realistic)
 
 - **It's extra setup.** You install and configure the bridge yourself; it's a
   one-time job but it isn't one click.
 - **Coverage depends on the bridge, not on SVCS.** Whether your specific Ring/
-  Nest/Arlo model can be bridged — and how reliably — is determined by the
+  Nest/Arlo model can be bridged - and how reliably - is determined by the
   bridge project and the vendor's current API, both of which change over time.
 - **Latency and reliability vary.** A cloud-locked camera bridged to RTSP is
   usually fine for recording/compression, but expect more lag and the occasional
@@ -171,7 +171,7 @@ the vendor cloud — the bridge does, on your machine.
    ONVIF discovery if the bridge advertises ONVIF).
 3. SVCS records and compresses it like any other RTSP camera.
 
-> **Summary:** SVCS supports exactly two honest paths for cloud-locked cameras —
+> **Summary:** SVCS supports exactly two honest paths for cloud-locked cameras  - 
 > **export their clips to a watch-folder (Path 2)**, or **bridge them to local
 > RTSP (Path 3)**. There is no vendor-cloud integration, by design.
 

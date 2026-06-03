@@ -75,8 +75,8 @@ def api_rtsp_push():
     """Start FFmpeg looping a local video file into the RTSP server.
 
     POST body (JSON):
-        video_path   – absolute path to the video file
-        stream_name  – RTSP path to publish to (default: "live")
+        video_path   - absolute path to the video file
+        stream_name  - RTSP path to publish to (default: "live")
     """
     data = request.get_json(force=True) or {}
     video_path  = str(data.get("video_path", "")).strip()
@@ -86,9 +86,9 @@ def api_rtsp_push():
         return jsonify({"error": "video_path is required"}), 400
 
     # Sanitize stream_name to alphanumeric + dash/underscore only.
-    # Used directly in an RTSP URL — any shell metacharacter is a command injection risk.
+    # Used directly in an RTSP URL - any shell metacharacter is a command injection risk.
     if not _re.match(r"^[a-zA-Z0-9_\-]{1,64}$", stream_name):
-        return jsonify({"error": "stream_name must be 1–64 alphanumeric/dash/underscore chars"}), 400
+        return jsonify({"error": "stream_name must be 1-64 alphanumeric/dash/underscore chars"}), 400
 
     # Validate video_path is inside the output directory
     with _state_lock:

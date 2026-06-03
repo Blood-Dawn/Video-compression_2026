@@ -7,11 +7,11 @@ Network-free: the parser is exercised against captured ProbeMatch SOAP bodies
 (a Reolink and a Hikvision camera, with different namespace prefixes and a
 percent-encoded name), RTSP-URL building is checked for credential encoding and
 path handling, and discover() is driven through a fake socket so the multicast
-loop is covered deterministically — plus a graceful-degradation case where the
+loop is covered deterministically - plus a graceful-degradation case where the
 network errors out and discover() must return [] rather than raise. The two
 camera-setup routes are smoke-tested through the Flask test client.
 
-Author: Bloodawn (KheivenD), 2026-06-03 (M-CAM TASK 1 — ONVIF discovery).
+Author: Bloodawn (KheivenD), 2026-06-03 (M-CAM TASK 1 - ONVIF discovery).
 """
 
 import socket

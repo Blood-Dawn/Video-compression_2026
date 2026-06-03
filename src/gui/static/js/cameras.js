@@ -1,14 +1,14 @@
 /*
  * src/gui/static/js/cameras.js
  *
- * SVCS dashboard — ONVIF camera discovery + RTSP auto-config (M-CAM TASK 1).
+ * SVCS dashboard - ONVIF camera discovery + RTSP auto-config (M-CAM TASK 1).
  *
  * "Discover cameras" runs a WS-Discovery scan via /api/cameras/discover and
  * lists the ONVIF cameras found in the source panel. Picking a camera fills the
  * input-source field with a suggested RTSP URL (optionally with credentials,
  * built server-side via /api/cameras/rtsp_url so special characters encode
- * correctly). If discovery finds nothing — common when Windows Firewall blocks
- * multicast — the UI says so and the operator just types the RTSP URL manually.
+ * correctly). If discovery finds nothing - common when Windows Firewall blocks
+ * multicast - the UI says so and the operator just types the RTSP URL manually.
  *
  * All functions are global (classic script). Degrades to no-ops if the optional
  * DOM hooks aren't present. Author: Bloodawn (KheivenD), 2026-06-03 (M-CAM.1).
@@ -89,7 +89,7 @@ function showBridgeHelp() {
     + "export/watch-folder path.\n"
     + "2. Run a local bridge (Scrypted, Home Assistant, or Frigate) that "
     + "re-exposes the camera as a local RTSP URL, then paste that URL above.\n\n"
-    + "SVCS never logs into or scrapes a vendor cloud — the bridge does, on "
+    + "SVCS never logs into or scrapes a vendor cloud - the bridge does, on "
     + "your hardware. See docs/camera-ingestion.md for setup.";
   if (typeof pushNotif === "function") {
     pushNotif("Cloud-locked camera?", msg, "info", null, 12000);

@@ -1,7 +1,7 @@
 # Final Report
 ## Open Source Selective Video Compression for Static Surveillance Cameras
 **EGN 4950C Senior Capstone | Florida Atlantic University | Spring 2026**
-**Sponsor:** Defense Innovation Unit (DIU) — Cody Hayashi, NIWC Pacific
+**Sponsor:** Defense Innovation Unit (DIU) - Cody Hayashi, NIWC Pacific
 **Team:** Kheiven D'Haiti · Jorge Sanchez · Ashleyn Montano · Riley Roberts · Victor De Souza Teixeira
 **Final Deadline:** May 6, 2026
 
@@ -33,7 +33,7 @@ Static surveillance cameras produce massive amounts of redundant video because t
 
 ## 1. Problem Statement
 
-Navy base surveillance cameras currently store footage for approximately one week before overwriting. At full-frame H.264 encoding rates, this generates enormous storage requirements across 100+ camera systems, with the majority of stored bits representing the static background — pavement, walls, fencing — that carries no intelligence value.
+Navy base surveillance cameras currently store footage for approximately one week before overwriting. At full-frame H.264 encoding rates, this generates enormous storage requirements across 100+ camera systems, with the majority of stored bits representing the static background - pavement, walls, fencing - that carries no intelligence value.
 
 A preliminary experiment by the sponsor's team (NIWC Pacific) used YOLO object detection to discard frames containing no people, achieving approximately 6x data reduction over 30 minutes of footage at a base walkway. This frame-dropping approach, while effective, introduces temporal gaps and loses the full-frame record required for incident reconstruction.
 
@@ -49,8 +49,8 @@ All design decisions were made subject to the following constraints confirmed ac
 - 60-day footage retention target across 100+ camera systems
 - Zero tolerance for foreground data loss (government is risk-intolerant; 5% loss is unacceptable per Cody Hayashi)
 - AES-256 encryption required for video stored and transmitted over network
-- Searchable metadata index — eliminate manual scrubbing; query by object type, camera, time range
-- Static cameras only — no PTZ, no drones, no swiveling cameras
+- Searchable metadata index - eliminate manual scrubbing; query by object type, camera, time range
+- Static cameras only - no PTZ, no drones, no swiveling cameras
 
 ---
 
@@ -61,7 +61,7 @@ The pipeline is organized as a series of composable modules. Each module has a w
 ```
 [Input Source]
   Camera (USB/IP) or video file
-  Handled by FrameSource — transparently supports VideoCapture and CDnet image sequences
+  Handled by FrameSource - transparently supports VideoCapture and CDnet image sequences
 
         |
         v
@@ -78,7 +78,7 @@ The pipeline is organized as a series of composable modules. Each module has a w
 [Pipeline Orchestrator]  src/pipeline/pipeline.py
   Warmup gate: feeds frames through subtractor during warmup period
                without accumulating them, letting the background model stabilize
-  Mode-aware frame buffering (mode0–mode3)
+  Mode-aware frame buffering (mode0-mode3)
   Segment boundary detection (default: 60-second segments)
 
         |
@@ -139,27 +139,27 @@ All modules import via relative paths rooted at `src/`. The pipeline can be run 
 
 The pipeline supports four compression modes addressing different operational contexts. The active mode is set at launch via `--mode` and does not change during a session.
 
-### Mode 0 — 24/7 Continuous (Default)
+### Mode 0 - 24/7 Continuous (Default)
 
 Every post-warmup frame is buffered and encoded, regardless of foreground activity. The encoder applies dual-CRF: CRF 18 on segments with detected foreground, CRF 45 on segments with no foreground. This produces a complete, gapless record.
 
 Best for: baseline surveillance where the full temporal record must be preserved for incident reconstruction.
 
-### Mode 1 — Frame Gating
+### Mode 1 - Frame Gating
 
 Only frames that contain detected foreground regions are buffered. Idle frames (no motion detected) are discarded. Segments are formed from active frames only, so a 60-second segment may represent 2 hours of wall-clock time if the scene is mostly static. File timestamps preserve absolute time.
 
 Best for: low-traffic scenes where most footage is empty. Maximum storage savings. Not suitable if continuous coverage is required.
 
-### Mode 2 — Background Keyframe + Object Patches *(Milestone 2)*
+### Mode 2 - Background Keyframe + Object Patches *(Milestone 2)*
 
 When foreground is detected, one background keyframe is captured before motion begins, then only per-frame bounding-box crops around moving objects are stored. The keyframe provides spatial context for playback; the patches carry the intelligence data.
 
 Best for: incident review pipelines where investigators need to see what the subject was doing without storing redundant background frames.
 
-### Mode 3 — Object-Only Forensic *(Milestone 2)*
+### Mode 3 - Object-Only Forensic *(Milestone 2)*
 
-The most aggressive mode. Only padded bounding-box crops around detected subjects are stored — no background whatsoever. Output files are dense sequences of object crops.
+The most aggressive mode. Only padded bounding-box crops around detected subjects are stored - no background whatsoever. Output files are dense sequences of object crops.
 
 Best for: downstream facial recognition or vehicle identification pipelines where background context is irrelevant and maximum data density is the priority.
 
@@ -167,12 +167,12 @@ Best for: downstream facial recognition or vehicle identification pipelines wher
 
 | Mode | Temporal Coverage | Storage per Day (1080p, 8hr active) | Background Stored |
 |---|---|---|---|
-| Mode 0 | 100% (all frames) | ~2–4 GB | Yes (CRF 45) |
-| Mode 1 | Active frames only | ~0.3–0.8 GB | No |
-| Mode 2 | Keyframe + patches | ~0.1–0.4 GB | Keyframe only |
-| Mode 3 | Object crops only | ~0.05–0.2 GB | No |
+| Mode 0 | 100% (all frames) | ~2-4 GB | Yes (CRF 45) |
+| Mode 1 | Active frames only | ~0.3-0.8 GB | No |
+| Mode 2 | Keyframe + patches | ~0.1-0.4 GB | Keyframe only |
+| Mode 3 | Object crops only | ~0.05-0.2 GB | No |
 
-*Estimates based on CDnet foreground coverage averages (1–8% of pixels) and dual-CRF encoding at 30 fps.*
+*Estimates based on CDnet foreground coverage averages (1-8% of pixels) and dual-CRF encoding at 30 fps.*
 
 ---
 
@@ -208,7 +208,7 @@ The raw mask from MOG2 undergoes two morphological operations before bounding bo
 1. **MORPH_CLOSE** (dilation then erosion): Fills small holes inside detected objects. A person's arm or the gap between their legs no longer creates a split detection.
 2. **MORPH_OPEN** (erosion then dilation): Removes isolated noise pixels. Shadow edges and sensor noise that survived the varThreshold check are removed.
 
-Contours are then extracted with `cv2.findContours`, and any with area below `min_area` (default 500 pixels, recommended 1500–2000 px for HD footage) are discarded.
+Contours are then extracted with `cv2.findContours`, and any with area below `min_area` (default 500 pixels, recommended 1500-2000 px for HD footage) are discarded.
 
 ---
 
@@ -218,7 +218,7 @@ Contours are then extracted with `cv2.findContours`, and any with area below `mi
 
 **No intermediate file.** An earlier implementation wrote frames to an XVID AVI before piping to FFmpeg. This compressed frames twice, introducing quality loss before the final encode. The current implementation buffers frames in memory as raw numpy arrays and pipes them directly to FFmpeg via stdin. The numpy arrays are lossless; all quality decisions are made exactly once in the FFmpeg pass.
 
-**libx264 codec.** H.264 was selected over H.265 and AV1 on CPU performance grounds. At the target hardware (Raspberry Pi, legacy x86), libx264 encodes 1080p at 120–180 fps on modern hardware and 15–25 fps on embedded hardware, while H.265 requires 3–10x more CPU cycles. H.264 also has the most mature ROI quality control support in FFmpeg via the `addroi` filter and macroblock-level QP offsets.
+**libx264 codec.** H.264 was selected over H.265 and AV1 on CPU performance grounds. At the target hardware (Raspberry Pi, legacy x86), libx264 encodes 1080p at 120-180 fps on modern hardware and 15-25 fps on embedded hardware, while H.265 requires 3-10x more CPU cycles. H.264 also has the most mature ROI quality control support in FFmpeg via the `addroi` filter and macroblock-level QP offsets.
 
 **Dual-CRF strategy.** When any foreground region is detected in a segment, the entire segment is encoded at CRF 18 (near-lossless). When no foreground is detected, the segment is encoded at CRF 45 (aggressive compression). This binary switch ensures forensic quality is never compromised on segments containing subjects, while maximizing compression on idle periods.
 
@@ -269,7 +269,7 @@ The database supports the following retrieval operations:
 - Daily storage summary by camera
 - Segments matching object_type, camera, and time range (for metadata search interface)
 
-All queries are parameterized to prevent SQL injection. The database is local SQLite with no server — it opens in under 1 ms and requires no installation.
+All queries are parameterized to prevent SQL injection. The database is local SQLite with no server - it opens in under 1 ms and requires no installation.
 
 ---
 
@@ -282,9 +282,9 @@ Results produced by `notebooks/milestone1_benchmark.ipynb` on the CDnet 2014 dat
 | Metric | Foreground ROI (CRF 18) | Background (CRF 45) | Effective (typical scene, ~5% FG) |
 |---|---|---|---|
 | Compression ratio | 1.0x | 16.6x | ~6.3x |
-| PSNR | 41.2 dB | 29.1 dB | — |
-| SSIM | 0.9783 | 0.7903 | — |
-| Storage per day (1080p30, 24 hr) | — | — | ~2–3 GB/camera |
+| PSNR | 41.2 dB | 29.1 dB | - |
+| SSIM | 0.9783 | 0.7903 | - |
+| Storage per day (1080p30, 24 hr) | - | - | ~2-3 GB/camera |
 
 *Storage per day derived from 1-hour stress test extrapolation (6.3x effective ratio vs. naive H.264 baseline of ~15 GB/day).*
 
@@ -297,7 +297,7 @@ Results produced by `notebooks/milestone1_benchmark.ipynb` on the CDnet 2014 dat
 | SSIM on foreground ROIs | ≥ 0.85 | 0.9783 | ✅ |
 | Pipeline runs end-to-end without errors | Pass | Pass | ✅ |
 
-### Scenario 1 — Foreground Detected (CRF 18)
+### Scenario 1 - Foreground Detected (CRF 18)
 
 | Metric | Value |
 |---|---|
@@ -306,9 +306,9 @@ Results produced by `notebooks/milestone1_benchmark.ipynb` on the CDnet 2014 dat
 | PSNR | 41.2 dB |
 | SSIM | 0.9783 |
 
-When foreground is detected, the pipeline applies CRF 18 to the entire segment. The near-lossless encode means the output is close to the raw frame size — this is by design. The 1.6x improvement over naive full-frame H.264 comes from libx264's ability to encode unchanged background macroblocks at near-zero cost, even at CRF 18.
+When foreground is detected, the pipeline applies CRF 18 to the entire segment. The near-lossless encode means the output is close to the raw frame size - this is by design. The 1.6x improvement over naive full-frame H.264 comes from libx264's ability to encode unchanged background macroblocks at near-zero cost, even at CRF 18.
 
-### Scenario 2 — No Foreground Detected (CRF 45)
+### Scenario 2 - No Foreground Detected (CRF 45)
 
 | Metric | Value |
 |---|---|
@@ -316,7 +316,7 @@ When foreground is detected, the pipeline applies CRF 18 to the entire segment. 
 | PSNR | 29.1 dB |
 | SSIM | 0.7903 |
 
-Background-only segments achieve 16.6x compression. SSIM of 0.7903 is below the 0.85 target but this is intentional — the threshold applies to foreground ROIs only. Background quality is deliberately degraded to maximize storage savings on footage that carries no intelligence value.
+Background-only segments achieve 16.6x compression. SSIM of 0.7903 is below the 0.85 target but this is intentional - the threshold applies to foreground ROIs only. Background quality is deliberately degraded to maximize storage savings on footage that carries no intelligence value.
 
 ### CDnet 2014 Category Coverage
 
@@ -343,9 +343,9 @@ Based on Scenario 2 (16.6x compression on background-only segments) and CDnet FG
 
 | Metric | Naive H.264 | Selective (Mode 0) | Selective (Mode 1) |
 |---|---|---|---|
-| Per camera per day (1080p30) | ~12–15 GB | ~3–5 GB | ~0.5–1.5 GB |
-| Per camera per week | ~85–105 GB | ~21–35 GB | ~3.5–10 GB |
-| 100 cameras, 60 days | ~72–90 TB | ~18–30 TB | ~2–6 TB |
+| Per camera per day (1080p30) | ~12-15 GB | ~3-5 GB | ~0.5-1.5 GB |
+| Per camera per week | ~85-105 GB | ~21-35 GB | ~3.5-10 GB |
+| 100 cameras, 60 days | ~72-90 TB | ~18-30 TB | ~2-6 TB |
 
 *Projections based on measured compression ratios. Actual results vary with scene activity level.*
 
@@ -359,21 +359,21 @@ Based on Scenario 2 (16.6x compression on background-only segments) and CDnet FG
 
 The `Enhancer` class (`src/enhancement/enhancer.py`) provides three methods:
 
-- `upscale_frame(frame, scale=4)` — upscale an entire frame using Real-ESRGAN in CPU (fp32) mode
-- `upscale_roi(frame, bbox)` — upscale only the bounding-box region and paste the result back onto the original canvas, avoiding full-frame processing cost
-- `enhance_batch(frames)` — batch enhancement for post-offload processing of full segments
-- `is_available()` — returns True only if model weights are downloaded and the inference library is installed
+- `upscale_frame(frame, scale=4)` - upscale an entire frame using Real-ESRGAN in CPU (fp32) mode
+- `upscale_roi(frame, bbox)` - upscale only the bounding-box region and paste the result back onto the original canvas, avoiding full-frame processing cost
+- `enhance_batch(frames)` - batch enhancement for post-offload processing of full segments
+- `is_available()` - returns True only if model weights are downloaded and the inference library is installed
 
 ### Algorithm Selection
 
-Real-ESRGAN (`RealESRGAN_x4plus.pth`) was selected for high-value forensic enhancement due to its superior visual quality on real-world degradations (compression artifacts, noise, blur). For bulk post-offload processing, ESPCN or FSRCNN via OpenCV's `dnn_superres` module will be offered as faster CPU alternatives (1–15 ms/frame vs. 100–500 ms/frame for Real-ESRGAN).
+Real-ESRGAN (`RealESRGAN_x4plus.pth`) was selected for high-value forensic enhancement due to its superior visual quality on real-world degradations (compression artifacts, noise, blur). For bulk post-offload processing, ESPCN or FSRCNN via OpenCV's `dnn_superres` module will be offered as faster CPU alternatives (1-15 ms/frame vs. 100-500 ms/frame for Real-ESRGAN).
 
 ### Hallucination Mitigation
 
 The sponsor specifically raised concerns about hallucination in AI-enhanced footage (license plates, faces). The system implements the following safeguards:
 
 1. Enhancement is applied only to foreground ROIs, not the background, reducing the hallucination surface area
-2. The `RealESRNet` model variant (MSE loss, non-adversarial) is preferred over full Real-ESRGAN for forensic applications — MSE-trained models blur rather than hallucinate detail
+2. The `RealESRNet` model variant (MSE loss, non-adversarial) is preferred over full Real-ESRGAN for forensic applications - MSE-trained models blur rather than hallucinate detail
 3. Original compressed footage is always retained alongside any enhanced version; enhanced output is never the sole record
 4. Metadata records enhanced output files separately from source segments, with a flag indicating AI processing
 
@@ -430,9 +430,9 @@ This test runs in CI against every PR targeting `dev`. Any change that degrades 
 Target hardware is COTS (Commercial Off-The-Shelf) x86 without GPU. The pipeline has been designed and benchmarked on this assumption. No CUDA, no NVENC, no tensor cores. Every component (MOG2, libx264, Real-ESRGAN fp32, SQLite) runs on any multi-core x86 or ARM CPU from the last decade.
 
 For reference, Raspberry Pi 4 performance:
-- MOG2 at 640×480: 15–25 fps
+- MOG2 at 640×480: 15-25 fps
 - libx264 encoding (CRF 45, ultrafast): 30+ fps at 640×480
-- Real-ESRGAN fp32 (CPU): 200–500 ms per 640×480 frame
+- Real-ESRGAN fp32 (CPU): 200-500 ms per 640×480 frame
 
 ### Packaging
 
@@ -454,7 +454,7 @@ No component is of Chinese origin (NDAA compliance verified).
 
 ## 12. Limitations
 
-**Background-only SSIM is below threshold.** Background segments achieve SSIM of 0.7903, below the 0.85 target. This is intentional — background quality is deliberately degraded at CRF 45. The 0.85 threshold applies only to foreground ROIs.
+**Background-only SSIM is below threshold.** Background segments achieve SSIM of 0.7903, below the 0.85 target. This is intentional - background quality is deliberately degraded at CRF 45. The 0.85 threshold applies only to foreground ROIs.
 
 **Dual-CRF is segment-level, not frame-level.** The current implementation applies a single CRF to the entire segment based on whether any foreground was detected in any frame of that segment. A 60-second segment with one frame of motion uses CRF 18 for all 60 seconds. Frame-level CRF switching is a future optimization.
 
@@ -472,13 +472,13 @@ No component is of Chinese origin (NDAA compliance verified).
 
 ## 13. Future Work
 
-**GPU-accelerated path.** NVENC (NVIDIA) and VideoToolbox (Apple) can encode at 4–10x the speed of libx264 on equivalent hardware. For non-government deployments without COTS restrictions, an optional `--gpu` flag that switches to the GPU encoder would significantly expand the system's throughput ceiling.
+**GPU-accelerated path.** NVENC (NVIDIA) and VideoToolbox (Apple) can encode at 4-10x the speed of libx264 on equivalent hardware. For non-government deployments without COTS restrictions, an optional `--gpu` flag that switches to the GPU encoder would significantly expand the system's throughput ceiling.
 
 **RTSP stream support.** The current `FrameSource` supports USB cameras and pre-recorded files. IP cameras expose RTSP streams, which OpenCV can consume but which require additional handling for network jitter, reconnection on drop, and keyframe synchronization. RTSP is in scope for future milestones.
 
-**SVT-AV1 encoding.** AV1 achieves 40–50% better compression than H.264 at equivalent quality. With a BSD license (DoD-preferred), it is the ideal long-term codec once hardware support matures. SVT-AV1 is not currently viable for real-time encoding on COTS hardware but is a strong target for planned hardware refreshes.
+**SVT-AV1 encoding.** AV1 achieves 40-50% better compression than H.264 at equivalent quality. With a BSD license (DoD-preferred), it is the ideal long-term codec once hardware support matures. SVT-AV1 is not currently viable for real-time encoding on COTS hardware but is a strong target for planned hardware refreshes.
 
-**Neural video codecs.** Research into AI-based compression alternatives (learned image compression, neural video codecs) is assigned for Milestone 3. These approaches — including models based on YOLO detection for frame-level gating — may offer superior compression ratios over the classical MOG2 + libx264 pipeline for specific scene types.
+**Neural video codecs.** Research into AI-based compression alternatives (learned image compression, neural video codecs) is assigned for Milestone 3. These approaches - including models based on YOLO detection for frame-level gating - may offer superior compression ratios over the classical MOG2 + libx264 pipeline for specific scene types.
 
 **Web dashboard.** A minimal web interface for metadata query and clip playback would lower the operational skill floor for base security personnel who are not comfortable with the command line or SQLite.
 
@@ -486,4 +486,4 @@ No component is of Chinese origin (NDAA compliance verified).
 
 *This report is a living document. Numbers in Sections 7 and 8 will be updated as Milestone 2 and Milestone 3 results become available. Final numbers must be reproducible by running `notebooks/final_results.ipynb` on the final codebase.*
 
-*Last updated: April 6, 2026 — Author: Bloodawn (KheivenD)*
+*Last updated: April 6, 2026 - Author: Bloodawn (KheivenD)*

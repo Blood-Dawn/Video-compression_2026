@@ -13,9 +13,9 @@ The owner wants you to **re-do the entire v2 product plan from scratch with maxi
 
 Two deliverables, in this order:
 
-1. **`PLAN-V2.md`** — a comprehensive, opinionated, end-to-end product + technical plan. It must cover everything: market positioning, license model, feature list, architecture, build + release pipeline, monetization, support, distribution, telemetry, security, accessibility, internationalization, legal. Where current planning docs (`ROADMAP-V2.md`, `ARCHITECTURE.md`, `docs/REFACTOR-PLAN-gui-app.md`) are right, say so explicitly and keep them. Where they are wrong or thin, replace them with reasoning. Push back on weak ideas.
+1. **`PLAN-V2.md`** - a comprehensive, opinionated, end-to-end product + technical plan. It must cover everything: market positioning, license model, feature list, architecture, build + release pipeline, monetization, support, distribution, telemetry, security, accessibility, internationalization, legal. Where current planning docs (`ROADMAP-V2.md`, `ARCHITECTURE.md`, `docs/REFACTOR-PLAN-gui-app.md`) are right, say so explicitly and keep them. Where they are wrong or thin, replace them with reasoning. Push back on weak ideas.
 
-2. **`EXECUTION-CLAUDE-CODE.md`** — a sequenced, machine-actionable task list for Claude Code. Each task must include: a one-line summary, the files Claude Code needs to touch, the acceptance criterion (preferably a failing test that becomes passing), the rough size in lines / hours, dependencies on earlier tasks, and risk notes. Group into milestones. Assume Claude Code has full file I/O, can run shell commands, and follows repo conventions but does not have product context — you are translating product intent into engineering work.
+2. **`EXECUTION-CLAUDE-CODE.md`** - a sequenced, machine-actionable task list for Claude Code. Each task must include: a one-line summary, the files Claude Code needs to touch, the acceptance criterion (preferably a failing test that becomes passing), the rough size in lines / hours, dependencies on earlier tasks, and risk notes. Group into milestones. Assume Claude Code has full file I/O, can run shell commands, and follows repo conventions but does not have product context - you are translating product intent into engineering work.
 
 Both deliverables should be written as markdown files inside `docs/` of this repo. Aim for length proportional to thoroughness, not brevity for its own sake. The owner reads everything.
 
@@ -31,10 +31,10 @@ Origin: FAU EGN-4950C senior capstone, Spring 2026 semester, five-person team, s
 
 What it actually does: a Python pipeline that ingests video (file, RTSP, or live camera), runs background subtraction (MOG2) + optional YOLO object filter on each frame, partitions ROIs from background, and encodes the resulting segments in one of four modes:
 
-- **Mode 0** — every frame kept, single-pass encode (baseline).
-- **Mode 1** — dual-CRF: foreground regions at CRF 18 (visually lossless), background at CRF 45 (aggressive). One output file per segment.
-- **Mode 2** — record only when targets are detected; idle background dropped entirely.
-- **Mode 3** — per-object videos (rewritten 2026-05-02; was previously "blackout-in-full-frame"). Each detected object becomes its own short clip.
+- **Mode 0** - every frame kept, single-pass encode (baseline).
+- **Mode 1** - dual-CRF: foreground regions at CRF 18 (visually lossless), background at CRF 45 (aggressive). One output file per segment.
+- **Mode 2** - record only when targets are detected; idle background dropped entirely.
+- **Mode 3** - per-object videos (rewritten 2026-05-02; was previously "blackout-in-full-frame"). Each detected object becomes its own short clip.
 
 Encoded segments are indexed in a SQLite metadata DB (`metadata.db`, WAL mode) with rich fields: camera ID, timestamp, ROI count, file size, duration, object classes, vehicle/person counts, sharpness, dominant color, scene type, time of day, encryption metadata. A Flask-based browser dashboard (`src/gui/app.py`) is the v1 UI: live status, log stream over SSE, file browser, four-quadrant demo, HLS player, encryption (AES-256-GCM, PBKDF2 600k iters), preset import/export, GPU/network/system metrics, plate reader (premium-only).
 
@@ -69,7 +69,7 @@ The team are students; this is summer work alongside whatever else they have goi
 | Branch | Purpose | State |
 |---|---|---|
 | `main` | v1.0.0 sponsor handoff, frozen | Tagged. Don't touch. |
-| `dev` | v1.x bugfix line for any sponsor follow-up | Backlog of leftover capstone tasks (~48 hours of work) — see `ROADMAP-V2.md` "Backlog from v1" section. |
+| `dev` | v1.x bugfix line for any sponsor follow-up | Backlog of leftover capstone tasks (~48 hours of work) - see `ROADMAP-V2.md` "Backlog from v1" section. |
 | `app` | v2 productization (Python + Flask, before Rust port) | **Active development.** All productization work lands here. |
 | `premium` | Tracks `app`, adds premium-only features (plate reader, etc.) at build time | Mirrors `app` after every `app` commit. |
 | `kdev` | Rust experiments (`svcs-core` crate scaffolding) | Empty for now; July milestone. |
@@ -77,12 +77,12 @@ The team are students; this is summer work alongside whatever else they have goi
 ### Latest commits on `app` (most recent first)
 
 ```
-10cbda9 refactor: audit fixes — db.py split, Sentry opt-in, gui/app.py plan
+10cbda9 refactor: audit fixes - db.py split, Sentry opt-in, gui/app.py plan
 a94ab80 build: PyInstaller desktop bundle for SVCS (audit item 6)
 d097313 test: comprehensive coverage for v2 productization (102/102 passing)
 e0257e8 chore: centralize defaults, structured logging, drop OneDrive default
 746cab2 feat(installer): move state files to platform app-data dir
-ef66145 chore: licensing pivot — Ultralytics back in core, plate reader premium-only
+ef66145 chore: licensing pivot - Ultralytics back in core, plate reader premium-only
 a300cdb chore: relicense as AGPL-3.0 dual-license, add v2 strategy docs
 c2ba6e1 Merge dev to main for sponsor handoff (May 6 capstone)
 ```
@@ -91,14 +91,14 @@ c2ba6e1 Merge dev to main for sponsor handoff (May 6 capstone)
 
 7 test files added in productization, all green:
 
-- `tests/test_paths.py` — platformdirs + legacy state-file migration (19)
-- `tests/test_logging_config.py` — console + JSON Lines formatters (16)
-- `tests/test_config.py` — compression CRFs, BG subtraction, encryption iters, GUI defaults (21)
-- `tests/test_default_output_dir.py` — resolution order (persisted > cloud > Videos > repo fallback) (11)
-- `tests/test_plate_backend_order.py` — EasyOCR-first selection (13)
-- `tests/test_split_screen.py` — double-label fix regression guard (6)
-- `tests/test_pipeline_real_video.py` — end-to-end on real CDnet clips (9)
-- `tests/test_crash_reporting.py` — Sentry opt-in invariants (16)
+- `tests/test_paths.py` - platformdirs + legacy state-file migration (19)
+- `tests/test_logging_config.py` - console + JSON Lines formatters (16)
+- `tests/test_config.py` - compression CRFs, BG subtraction, encryption iters, GUI defaults (21)
+- `tests/test_default_output_dir.py` - resolution order (persisted > cloud > Videos > repo fallback) (11)
+- `tests/test_plate_backend_order.py` - EasyOCR-first selection (13)
+- `tests/test_split_screen.py` - double-label fix regression guard (6)
+- `tests/test_pipeline_real_video.py` - end-to-end on real CDnet clips (9)
+- `tests/test_crash_reporting.py` - Sentry opt-in invariants (16)
 
 Plus pre-existing tests under `tests/test_database.py`, `tests/test_metrics.py`, `tests/test_gui_api.py`, `tests/test_object_type_queries.py`, `tests/test_roi_encoder.py`, etc.
 
@@ -106,9 +106,9 @@ Pytest config: project-local `basetemp=.pytest_tmp`, `--tb=short -ra` in `pyproj
 
 ### Installer
 
-- `installer/launcher.py` — frozen entry point. Sets `SVCS_FROZEN=1`, splices `--no-sync` into argv (so the bundled exe doesn't try to call `uv sync`), primes `sys.path`, then imports `run_gui.main()`.
-- `installer/svcs.spec` — PyInstaller spec, folder mode, hidden imports for Ultralytics/PyTorch/skimage/platformdirs, excludes Numba/sympy/torch.testing/paddleocr/Jupyter for size.
-- `installer/build.ps1` — clean → install pyinstaller → build → smoke-test loop. Probes `http://127.0.0.1:5000/` for 60s after launch.
+- `installer/launcher.py` - frozen entry point. Sets `SVCS_FROZEN=1`, splices `--no-sync` into argv (so the bundled exe doesn't try to call `uv sync`), primes `sys.path`, then imports `run_gui.main()`.
+- `installer/svcs.spec` - PyInstaller spec, folder mode, hidden imports for Ultralytics/PyTorch/skimage/platformdirs, excludes Numba/sympy/torch.testing/paddleocr/Jupyter for size.
+- `installer/build.ps1` - clean → install pyinstaller → build → smoke-test loop. Probes `http://127.0.0.1:5000/` for 60s after launch.
 
 **First build outcome:** 4.7 GB unpacked, 219 sec build, smoke test passed. After exclude-list trimming, should land near 2.5 GB. FFmpeg expected on PATH; bundling it is a not-yet-done item.
 
@@ -123,16 +123,16 @@ From the May 4 audit:
 - ✅ `print()` calls audited and replaced with logging in production paths.
 - ✅ `src/utils/db.py` split into `src/utils/db/` package (`schema.py`, `queries.py`, `__init__.py` re-exports).
 - ✅ Sentry SDK wired with **opt-in** crash reporting (`SVCS_ENABLE_SENTRY=1` AND `SENTRY_DSN` both required, PII off, traces=0, idempotent). Optional `[crash-reporting]` extra.
-- ✅ PyInstaller bundle (audit item 6) — working .exe.
+- ✅ PyInstaller bundle (audit item 6) - working .exe.
 
 ### Audit fixes still open
 
-- ❌ `src/gui/app.py` (3835 lines, 48 routes) **not yet split**. Plan is saved in `docs/REFACTOR-PLAN-gui-app.md` — 12 blueprints + ~10 service modules. Multi-hour refactor.
+- ❌ `src/gui/app.py` (3835 lines, 48 routes) **not yet split**. Plan is saved in `docs/REFACTOR-PLAN-gui-app.md` - 12 blueprints + ~10 service modules. Multi-hour refactor.
 - ❌ `src/gui/templates/index.html` (6000+ lines) **not split**. Frontend extraction into separate JS files under `src/gui/static/js/`. Lower risk than `gui/app.py` but still big.
 - ❌ Bundled FFmpeg (currently expected on PATH).
 - ❌ Inno Setup wrapper to produce `SVCS-Setup-x.y.z.exe`.
 - ❌ macOS `.dmg` (signed + notarized) and Linux AppImage.
-- ❌ Preset system v1 — 10 presets (Movie, Show, Vlog, Action, Animation, Screen Recording, Surveillance, Music Video, Archive, Mobile).
+- ❌ Preset system v1 - 10 presets (Movie, Show, Vlog, Action, Animation, Screen Recording, Surveillance, Music Video, Archive, Mobile).
 - ❌ Auto-detect content type (analyze first 30 seconds, recommend preset).
 - ❌ Public download page (GitHub Pages or similar).
 - ❌ RealESRGAN model weights bundling/CDN strategy.
@@ -147,7 +147,7 @@ From the May 4 audit:
 
 ## 4. Architectural decisions, with rationale
 
-These are decisions the team has made. If you disagree with any of them in your re-plan, **say so explicitly** with reasoning — but understand what's already committed.
+These are decisions the team has made. If you disagree with any of them in your re-plan, **say so explicitly** with reasoning - but understand what's already committed.
 
 ### Dual license: AGPL-3.0 + commercial
 
@@ -159,7 +159,7 @@ Same playbook Ultralytics uses. AGPL means anyone who runs SVCS as a service mus
 
 ### Edition split via branches, not feature flags
 
-`premium` tracks `app` and adds the `[plates]` extra (and future paid features) at build time, not via a runtime license-key check. Two physically separate installer binaries. The casual installer literally does not contain the paid code, so there's nothing to crack and no PII / license-check phone-home in the free edition. Build tooling difference is "include `[plates]` extra in PyInstaller spec" — that's it.
+`premium` tracks `app` and adds the `[plates]` extra (and future paid features) at build time, not via a runtime license-key check. Two physically separate installer binaries. The casual installer literally does not contain the paid code, so there's nothing to crack and no PII / license-check phone-home in the free edition. Build tooling difference is "include `[plates]` extra in PyInstaller spec" - that's it.
 
 ### Ultralytics (YOLO) stays in core deps
 
@@ -183,7 +183,7 @@ Both `SVCS_ENABLE_SENTRY=1` AND `SENTRY_DSN` must be set, AND the optional `[cra
 
 ### Test discipline
 
-Every change since the audit has shipped tests. 118 passing. Pre-existing pre-audit tests cover the pipeline core. Refactors must keep the suite green; new modules need their own tests in the same commit. **Real video integration tests** run against CDnet sample clips in `data/samples/cdnet_mp4/` — these caught issues no unit test could.
+Every change since the audit has shipped tests. 118 passing. Pre-existing pre-audit tests cover the pipeline core. Refactors must keep the suite green; new modules need their own tests in the same commit. **Real video integration tests** run against CDnet sample clips in `data/samples/cdnet_mp4/` - these caught issues no unit test could.
 
 ---
 
@@ -191,7 +191,7 @@ Every change since the audit has shipped tests. 118 passing. Pre-existing pre-au
 
 - **Windows is the daily-driver dev environment.** macOS / Linux work happens in CI eventually. Anything that hits the filesystem must respect Windows-specific quirks (paths, ACLs, the `%TEMP%` permission war that fixed-by-`.pytest_tmp`).
 - **Team is part-time, students, summer.** Schedules will slip. Plan should not assume a 40hr/wk full-time staff.
-- **PyInstaller bundle size is 2.5–4.7 GB.** Acceptable for v1.x desktop, brutal for download. Real solution comes with the Rust port (single ~50 MB binary). For Inno Setup, expect a 1–2 GB installer download with optional model weight component.
+- **PyInstaller bundle size is 2.5-4.7 GB.** Acceptable for v1.x desktop, brutal for download. Real solution comes with the Rust port (single ~50 MB binary). For Inno Setup, expect a 1-2 GB installer download with optional model weight component.
 - **FFmpeg licensing.** FFmpeg LGPL/GPL build choice matters when we bundle it. Default to LGPL build (less restrictive) and avoid GPL-only codecs unless we accept GPL on the bundled FFmpeg binary specifically. Document this carefully.
 - **Ultralytics AGPL is a sale-time conversation.** It's compatible with our AGPL casual edition but is the single biggest licensing snag in commercial deals. Plan a clear story for it.
 - **No CI yet.** All builds and tests run on Kheiven's machine. GitHub Actions setup is a needed but not-yet-done item.
@@ -204,10 +204,10 @@ Every change since the audit has shipped tests. 118 passing. Pre-existing pre-au
 
 ## 6. Open questions you should resolve in PLAN-V2.md
 
-- What are the **real** commercial pricing tiers? Current `LICENSE-COMMERCIAL.md` placeholder of Indie/Startup/Enterprise/OEM needs validation — talk through what each customer profile looks like, what they actually pay competitors today, and what value they get from SVCS that they don't get from HandBrake + FFmpeg.
+- What are the **real** commercial pricing tiers? Current `LICENSE-COMMERCIAL.md` placeholder of Indie/Startup/Enterprise/OEM needs validation - talk through what each customer profile looks like, what they actually pay competitors today, and what value they get from SVCS that they don't get from HandBrake + FFmpeg.
 - Should we offer a **hosted SaaS** tier (you upload, we compress)? The current `ARCHITECTURE.md` says no. Push back if you disagree.
-- How does the **preset auto-detection** actually work? "Analyze first 30 seconds, recommend preset" — what's the actual classifier? Hand-engineered features (motion variance, scene change rate, color palette diversity)? A small CNN? A wrapper around an existing video-content classifier? Specify it.
-- **Plex / Jellyfin integration** is listed as "out of scope for v2". Re-evaluate — these are the audiences who care most about self-hosted AI-aware compression, and a watch-folder plugin could be a wedge into the community.
+- How does the **preset auto-detection** actually work? "Analyze first 30 seconds, recommend preset" - what's the actual classifier? Hand-engineered features (motion variance, scene change rate, color palette diversity)? A small CNN? A wrapper around an existing video-content classifier? Specify it.
+- **Plex / Jellyfin integration** is listed as "out of scope for v2". Re-evaluate - these are the audiences who care most about self-hosted AI-aware compression, and a watch-folder plugin could be a wedge into the community.
 - **Update channel mechanism.** Self-hosted apps need an updater. Build our own, use Squirrel/Sparkle, or skip auto-updates for v2?
 - **Analytics / telemetry posture.** Current default is none. Do we want anonymous usage stats (preset popularity, codec choice, failure modes) opt-in or opt-out by default?
 - **Internationalization.** v1 is English-only. When do we add i18n? Which languages first?
@@ -238,18 +238,18 @@ These are well-established. Honor them in `EXECUTION-CLAUDE-CODE.md`.
 
 Read these in your sandbox before producing anything:
 
-1. `ROADMAP-V2.md` — current rough roadmap (full text included in section 11 of this doc as appendix A).
-2. `ARCHITECTURE.md` — current architecture decisions (full text in appendix B).
-3. `LICENSE-COMMERCIAL.md` — commercial license terms.
-4. `CLA.md` — contributor agreement (note the revenue split clause).
-5. `CONTRIBUTING.md` — branch layout + contribution rules.
-6. `docs/REFACTOR-PLAN-gui-app.md` — the saved plan for the `gui/app.py` refactor (you will fold this into `EXECUTION-CLAUDE-CODE.md` as one of the milestones).
-7. `pyproject.toml` — current dependency picture, including `[plates]` and `[crash-reporting]` extras.
-8. `src/gui/app.py` — the 3800-line monolith (skim, don't ingest fully).
-9. `src/gui/templates/index.html` — the 6000-line frontend (skim).
-10. `installer/svcs.spec`, `installer/launcher.py`, `installer/build.ps1` — current build system.
-11. `tests/` — the test suite. Skim test names to understand what behaviors are pinned.
-12. `DEV.md` (49 KB) and `ROADMAP.md` (68 KB) — historical context from the capstone phase. Skim, don't read end-to-end.
+1. `ROADMAP-V2.md` - current rough roadmap (full text included in section 11 of this doc as appendix A).
+2. `ARCHITECTURE.md` - current architecture decisions (full text in appendix B).
+3. `LICENSE-COMMERCIAL.md` - commercial license terms.
+4. `CLA.md` - contributor agreement (note the revenue split clause).
+5. `CONTRIBUTING.md` - branch layout + contribution rules.
+6. `docs/REFACTOR-PLAN-gui-app.md` - the saved plan for the `gui/app.py` refactor (you will fold this into `EXECUTION-CLAUDE-CODE.md` as one of the milestones).
+7. `pyproject.toml` - current dependency picture, including `[plates]` and `[crash-reporting]` extras.
+8. `src/gui/app.py` - the 3800-line monolith (skim, don't ingest fully).
+9. `src/gui/templates/index.html` - the 6000-line frontend (skim).
+10. `installer/svcs.spec`, `installer/launcher.py`, `installer/build.ps1` - current build system.
+11. `tests/` - the test suite. Skim test names to understand what behaviors are pinned.
+12. `DEV.md` (49 KB) and `ROADMAP.md` (68 KB) - historical context from the capstone phase. Skim, don't read end-to-end.
 
 ---
 
@@ -264,7 +264,7 @@ Sections (suggested; reorder if you have a better structure):
 3. Customer profiles (open-source casual user, prosumer self-hoster, paying small business, paying enterprise, paying OEM).
 4. Feature inventory by edition (casual vs premium).
 5. Pricing strategy with reasoning (replace the placeholder tiers).
-6. Architecture (extend / correct `ARCHITECTURE.md` — don't just restate it).
+6. Architecture (extend / correct `ARCHITECTURE.md` - don't just restate it).
 7. Detailed roadmap with monthly granularity through Q1 2027.
 8. Build, release, and distribution pipeline.
 9. Telemetry / privacy posture.
@@ -297,7 +297,7 @@ Sections:
    **Notes for Claude Code:** <pointers, gotchas, where to find similar prior work>
    ```
 
-5. Glossary of project terms Claude Code will need (CDnet, MOG2, Mode 0–3, ROI, dual-CRF, segment, etc.).
+5. Glossary of project terms Claude Code will need (CDnet, MOG2, Mode 0-3, ROI, dual-CRF, segment, etc.).
 
 Tasks should be sized so most fit in a single Claude Code session (≤ 500 lines of changes, ≤ 4 hours). Bigger tasks get broken down.
 
@@ -309,14 +309,14 @@ Tasks should be sized so most fit in a single Claude Code session (≤ 500 lines
 2. Make a list of decisions you want to either ratify or overturn from the current planning docs.
 3. For each overturn, write the reasoning in the form: "Current doc says X. I believe Y because Z. Cost of being wrong: W."
 4. Decide pricing by sketching what each customer profile pays for HandBrake / FFmpeg / Compressor / cloud encoders today, what time / money they save with SVCS, and how price-sensitive each is.
-5. Sketch the build/release pipeline end-to-end — from `git push` on `app` to a downloaded `.exe` on a user's machine — and identify every step that doesn't exist yet.
+5. Sketch the build/release pipeline end-to-end - from `git push` on `app` to a downloaded `.exe` on a user's machine - and identify every step that doesn't exist yet.
 6. Only then start writing.
 
 ---
 
 ## 11. Appendices
 
-### Appendix A — `ROADMAP-V2.md` (verbatim, current state)
+### Appendix A - `ROADMAP-V2.md` (verbatim, current state)
 
 ```
 # SVCS v2 Roadmap
@@ -329,24 +329,24 @@ auto-detected presets.
 See ARCHITECTURE.md for the technical plan and LICENSE-COMMERCIAL.md
 for the dual-license strategy.
 
-## June 2026 — Desktop installer (Python, on `app` branch)
+## June 2026 - Desktop installer (Python, on `app` branch)
 - Audit fixes landed (mostly done; gui/app.py + index.html splits remain)
 - Premium branch live (done)
 - PaddleOCR removed (done)
-- Preset system v1 (10 presets) — NOT STARTED
-- Auto-detect content type — NOT STARTED
-- Windows installer via Inno Setup, bundling FFmpeg + Python + weights — NOT STARTED
-- macOS .dmg signed + notarized — NOT STARTED
-- Linux AppImage — NOT STARTED
-- Public download page — NOT STARTED
-- Crash reporting (Sentry opt-in) — DONE
+- Preset system v1 (10 presets) - NOT STARTED
+- Auto-detect content type - NOT STARTED
+- Windows installer via Inno Setup, bundling FFmpeg + Python + weights - NOT STARTED
+- macOS .dmg signed + notarized - NOT STARTED
+- Linux AppImage - NOT STARTED
+- Public download page - NOT STARTED
+- Crash reporting (Sentry opt-in) - DONE
 
-## July 2026 — Rust core MVP (`kdev` branch) — NOT STARTED
-## August 2026 — Flutter UI + Android app (`app` branch) — NOT STARTED
-## September 2026 — Public beta — NOT STARTED
+## July 2026 - Rust core MVP (`kdev` branch) - NOT STARTED
+## August 2026 - Flutter UI + Android app (`app` branch) - NOT STARTED
+## September 2026 - Public beta - NOT STARTED
 
 ## Backlog from v1 (Python pipeline on `dev` branch)
-~48 hours of leftover capstone tasks — color detection (Ashleyn),
+~48 hours of leftover capstone tasks - color detection (Ashleyn),
 contour-based object classifier (Ashleyn), adaptive mode controller
 (Kheiven), Mode 2 background staleness (Kheiven), demo concat (Riley),
 test_pipeline extensions (Riley), per-segment encryption (Victor),
@@ -354,7 +354,7 @@ password-protected export (Victor), per-mode CPU/battery benchmarks
 (Jorge), AV1 benchmark doc (Jorge).
 ```
 
-### Appendix B — `ARCHITECTURE.md` (key excerpts)
+### Appendix B - `ARCHITECTURE.md` (key excerpts)
 
 Stack:
 ```
@@ -369,7 +369,7 @@ FFmpeg static + ONNX Runtime + OpenCV (via opencv-rust) + SQLite (rusqlite)
 Phasing (current plan, possibly wrong, push back if so):
 
 - Phase 1 (June): Python desktop installer ships.
-- Phase 2 (June–July): Rust core skeleton compiles cross-platform.
+- Phase 2 (June-July): Rust core skeleton compiles cross-platform.
 - Phase 3 (July): Encoder ported, validated against Python on 19 CDnet clips.
 - Phase 4 (August): BG subtraction + mode dispatch ported.
 - Phase 5 (August): Flutter desktop UI prototype, mixed Rust+Python backend.
@@ -380,18 +380,18 @@ Editions:
 - Casual (built from `app`, AGPL-3.0, free, full feature set minus plate reader).
 - Premium (built from `premium`, commercial license, casual + plate reader + future paid features).
 
-### Appendix C — Memory facts the user wants preserved across sessions
+### Appendix C - Memory facts the user wants preserved across sessions
 
 These live in the agent memory system at
 `C:\Users\kheiven\AppData\Roaming\Claude\local-agent-mode-sessions\bc113a3e-d95e-4975-903b-9fcf6f899152\7afec904-5ae9-4b89-80d6-f2a15ca19d25\spaces\099558e1-996f-4412-8bc5-d6bc0bb4ae94\memory\`:
 
-- `project_kickoff_meeting.md` — DIU kickoff meeting takeaways with sponsor Cody Hayashi, NIWC Pacific, March 23, 2026.
-- `feedback_pr_signature.md` — PR/commit signature `Bloodawn(KheivenD)` convention.
-- `project_task_reassignments.md` — Riley's 5.3 reassigned to Kheiven on 2026-05-02; instructor handles 5.6 Cody invite.
-- `project_plate_reader.md` — AI license-plate reader (post-process) shipped 2026-05-02; Real-ESRGAN + EasyOCR (was PaddleOCR) + multi-frame consensus.
-- `project_mode3_sparse.md` — Mode 3 rewritten 2026-05-02 to per-object videos; was blackout-in-full-frame.
+- `project_kickoff_meeting.md` - DIU kickoff meeting takeaways with sponsor Cody Hayashi, NIWC Pacific, March 23, 2026.
+- `feedback_pr_signature.md` - PR/commit signature `Bloodawn(KheivenD)` convention.
+- `project_task_reassignments.md` - Riley's 5.3 reassigned to Kheiven on 2026-05-02; instructor handles 5.6 Cody invite.
+- `project_plate_reader.md` - AI license-plate reader (post-process) shipped 2026-05-02; Real-ESRGAN + EasyOCR (was PaddleOCR) + multi-frame consensus.
+- `project_mode3_sparse.md` - Mode 3 rewritten 2026-05-02 to per-object videos; was blackout-in-full-frame.
 
-### Appendix D — Key file paths
+### Appendix D - Key file paths
 
 - Repo root: `C:\Users\kheiven\Documents\GitHub\Video-compression_2026`
 - GitHub remote: `Blood-Dawn/Video-compression_2026`
@@ -405,14 +405,14 @@ These live in the agent memory system at
 - License files: `LICENSE`, `LICENSE-COMMERCIAL.md`, `CLA.md`
 - Saved plans: `docs/REFACTOR-PLAN-gui-app.md`
 
-### Appendix E — Branch / commit cheat sheet for `EXECUTION-CLAUDE-CODE.md`
+### Appendix E - Branch / commit cheat sheet for `EXECUTION-CLAUDE-CODE.md`
 
 Commit template:
 
 ```
 <type>(<scope>): <subject line>
 
-<body — explain *why*, not what>
+<body - explain *why*, not what>
 
 Bloodawn(KheivenD)
 ```
@@ -431,8 +431,8 @@ git checkout app
 
 ## 12. Final notes for Opus 4.8
 
-Push back where the current planning is weak. The owner respects strong arguments. Do not flatter or pad. If a section of this handoff is wrong, say so before you write your plan. If you need information that isn't here and can't be derived from reading the listed files, list your questions at the top of `PLAN-V2.md` as "questions outstanding" — do not invent answers.
+Push back where the current planning is weak. The owner respects strong arguments. Do not flatter or pad. If a section of this handoff is wrong, say so before you write your plan. If you need information that isn't here and can't be derived from reading the listed files, list your questions at the top of `PLAN-V2.md` as "questions outstanding" - do not invent answers.
 
 Treat this as a real product launch, not a school project. The team is launching a real commercial offering. The plans you produce will be used.
 
-— end of handoff —
+ -  end of handoff  - 

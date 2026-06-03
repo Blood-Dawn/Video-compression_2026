@@ -1,13 +1,13 @@
 /*
  * src/gui/static/js/usage.js
  *
- * SVCS dashboard — opt-in usage-stats consent (M5 TASK 5.2).
+ * SVCS dashboard - opt-in usage-stats consent (M5 TASK 5.2).
  *
  * On first run (no decision recorded) this shows a small, dismissible consent
  * banner. The choice is persisted via /api/usage_stats/consent; a settings
  * toggle (#usage-stats-toggle, if present) lets the user change it later.
  * Usage stats are DEFAULT OFF and collect only anonymous, non-identifying
- * signal — see utils/usage_stats.py. Degrades to a no-op if the DOM hooks
+ * signal - see utils/usage_stats.py. Degrades to a no-op if the DOM hooks
  * aren't present. Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5.2).
  */
 "use strict";
@@ -41,7 +41,7 @@ function _buildUsageBanner() {
   b.innerHTML =
     "<div style='margin-bottom:8px;'>Help improve SVCS? Share <b>anonymous</b> "
     + "usage stats (which presets/codecs you use and whether encodes succeed). "
-    + "<b>No footage, file names, paths, or personal data</b> — ever. Default is off; "
+    + "<b>No footage, file names, paths, or personal data</b> - ever. Default is off; "
     + "you can change this any time in settings.</div>"
     + "<div style='display:flex;gap:8px;justify-content:flex-end;'>"
     + "<button id='usage-decline' class='btn btn-ghost'>No thanks</button>"

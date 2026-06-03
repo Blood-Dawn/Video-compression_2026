@@ -1,7 +1,7 @@
 """
 tests/test_ffmpeg_resolver.py
 
-Tests src/utils/ffmpeg.py — the bundled-first FFmpeg resolver (M2 TASK 2.3).
+Tests src/utils/ffmpeg.py - the bundled-first FFmpeg resolver (M2 TASK 2.3).
 
 The key guarantee: the packaged app uses its VENDORED ffmpeg even when there is
 none on PATH, so an end user never has to "install FFmpeg first". Also verifies

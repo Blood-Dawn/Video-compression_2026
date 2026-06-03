@@ -177,13 +177,13 @@ def test_storage_savings_report_values():
 
 
 def test_storage_savings_report_zero_compressed():
-    """Zero compressed size should not raise — uses max(..., 1) guard."""
+    """Zero compressed size should not raise - uses max(..., 1) guard."""
     report = storage_savings_report(1_000_000, 0)
     assert report["compression_ratio"] > 0
 
 
 def test_storage_savings_report_no_savings():
-    """Compressed size equals original — ratio 1.0, 0% saved."""
+    """Compressed size equals original - ratio 1.0, 0% saved."""
     report = storage_savings_report(1_000_000, 1_000_000)
     assert report["space_saved_pct"] == pytest.approx(0.0)
     assert report["compression_ratio"] == pytest.approx(1.0)

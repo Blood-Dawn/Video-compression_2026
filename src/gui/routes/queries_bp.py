@@ -28,10 +28,10 @@ def api_query_segments():
     """Filter segments by object_type (and optionally camera_id, time range).
 
     Query params:
-        object_type  – required (e.g. 'vehicle', 'person', 'unknown')
-        camera_id    – optional
-        start_time   – optional ISO-style timestamp prefix
-        end_time     – optional ISO-style timestamp prefix
+        object_type  - required (e.g. 'vehicle', 'person', 'unknown')
+        camera_id    - optional
+        start_time   - optional ISO-style timestamp prefix
+        end_time     - optional ISO-style timestamp prefix
     """
     object_type = request.args.get("object_type", "").strip()
     if not object_type:

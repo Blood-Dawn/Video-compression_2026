@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
-  <!-- hls.js — MIT licensed, browser-based HLS playback (task 4.1) -->
+  <!-- hls.js - MIT licensed, browser-based HLS playback (task 4.1) -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 
   <style>
@@ -20,7 +20,7 @@
       --surface2:    #162238;
       --surface3:    #1e3a52;
       /*
-        Alias variables — code throughout the file uses these names,
+        Alias variables - code throughout the file uses these names,
         but they were never defined here, so anywhere we wrote
         `background: var(--bg-tertiary)` or `var(--surface1)` resolved
         to the empty string and the element rendered transparent.
@@ -184,7 +184,7 @@
       flex-direction: column;
       min-height: 0;
     }
-    /* Vertical drag handle — sits between content-top and content-bottom */
+    /* Vertical drag handle - sits between content-top and content-bottom */
     .resize-divider-v {
       grid-column: 2;
       grid-row: 2;
@@ -576,7 +576,7 @@
       text-align: left;
       border-bottom: 1px solid var(--border);
       /*
-        Sticky header. Was z-index:1 with a single bg layer — when the
+        Sticky header. Was z-index:1 with a single bg layer - when the
         first row scrolled under it, the row's text was bleeding through
         because tbody anti-aliasing painted over the cell border. Bumped
         z-index to 5, added a solid bottom box-shadow so the seam between
@@ -1050,7 +1050,7 @@
       /*
         Width is controlled by the JS drag handle (#metrics-divider, below)
         which writes inline style.width on this element. CSS resize:horizontal
-        was unreliable on flex items — kept fighting flex-grow on .metrics-right
+        was unreliable on flex items - kept fighting flex-grow on .metrics-right
         and silently snapping back. The manual handle is rock-solid and gives
         us hover/active visuals for free. Default 60%, clamped 360px..70vw.
         Author: Bloodawn (KheivenD), 2026-05-03 (metrics divider fix).
@@ -1107,7 +1107,7 @@
     /*
       Compact filter row above the metrics table. Was wrapping to a
       second line on narrow widths which made the area look "cropped"
-      and over-spaced — tightened padding, dropped flex-wrap so the
+      and over-spaced - tightened padding, dropped flex-wrap so the
       row stays a single line, gave the checkbox label proper width
       so the "Enc" word never gets clipped.
       Author: Bloodawn (KheivenD), 2026-05-03 (metrics top fix).
@@ -1237,7 +1237,7 @@
 
     /* SEARCH + ENCRYPT tabs: scrollable full-page panels */
     /* Search tab: flex column layout so results fill remaining height.
-       Do NOT set display here — .tab-page / .tab-page.active controls that. */
+       Do NOT set display here - .tab-page / .tab-page.active controls that. */
     #tab-search.active { flex-direction: column; overflow: hidden; }
     #tab-encrypt.active { overflow-y: auto; }
     #tab-search  .archive-header   { position: sticky; top: 0; z-index: 5; flex-shrink: 0; }
@@ -1422,7 +1422,7 @@
       text-align: left;
       border-bottom: 1px solid var(--border);
       /* Solid header bg + box-shadow so first data row never bleeds
-         through. Same fix as global thead — see comment there. */
+         through. Same fix as global thead - see comment there. */
       background: var(--bg-tertiary);
       box-shadow: 0 1px 0 0 var(--border), 0 2px 6px rgba(0,0,0,0.4);
       position: sticky;
@@ -1486,7 +1486,7 @@
     .btn-enc:hover { background: rgba(255,200,0,0.18); }
     /*
       Per-row [×] hide button. Stays muted until the row is hovered, so
-      the "Del" column doesn't scream at the user — only shows clearly
+      the "Del" column doesn't scream at the user - only shows clearly
       when they're already focused on a particular recording. Red-tinted
       hover so accidental clicks feel destructive enough to pause first.
       Author: Bloodawn (KheivenD), 2026-05-03 (cleanup of dead rows).
@@ -1591,7 +1591,7 @@
       div is the actual scroll surface (overflow:auto + max-height).
       Was max-height:260px + overflow:hidden which capped the panel
       below the inner scroll div's max-height and made the list look
-      like it could only ever show 5–6 rows. Now the outer flexes to
+      like it could only ever show 5-6 rows. Now the outer flexes to
       fit whatever the inner scroll wants (up to ~340px).
       Author: Bloodawn (KheivenD), 2026-05-03 (home-recent scroll fix).
     */
@@ -1601,7 +1601,7 @@
       border: 1px solid var(--border);
       border-radius: var(--radius);
       margin: 0 0 0.5rem 0;
-      overflow: hidden;        /* clip the rounded corners — inner div handles scrolling */
+      overflow: hidden;        /* clip the rounded corners - inner div handles scrolling */
       display: flex;
       flex-direction: column;
     }
@@ -2095,7 +2095,7 @@
   <!-- ═══════════════════ MAIN ═══════════════════ -->
   <main>
 
-    <!-- ════════ SIDEBAR — Configuration ════════ -->
+    <!-- ════════ SIDEBAR - Configuration ════════ -->
     <aside class="sidebar">
 
       <!-- ── STEP 1: Source ─────────────────────── -->
@@ -2180,7 +2180,7 @@
           </div>
         </div>
         <!--
-          Codec selector — added 2026-05-02 after the AV1 benchmark showed
+          Codec selector - added 2026-05-02 after the AV1 benchmark showed
           libsvtav1 averaging 25 % smaller output than libx264 on identical
           clips. Default stays libx264 because not every install ships with
           libsvtav1; check `ffmpeg -encoders | findstr av1` on Windows
@@ -2190,10 +2190,10 @@
         <div class="config-field" style="margin-top:0.4rem;">
           <label class="config-label" for="codec-select">Codec</label>
           <select id="codec-select" style="width:100%;font-family:var(--mono);font-size:0.65rem;">
-            <option value="auto" selected>Auto (per-mode) — recommended</option>
+            <option value="auto" selected>Auto (per-mode) - recommended</option>
             <option value="libsvtav1">libsvtav1 (AV1 / SVT-AV1)</option>
-            <option value="libaom-av1">libaom-av1 (AV1 reference — slower)</option>
-            <option value="libx264">libx264 (H.264 — universal)</option>
+            <option value="libaom-av1">libaom-av1 (AV1 reference - slower)</option>
+            <option value="libx264">libx264 (H.264 - universal)</option>
           </select>
           <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
             Auto: H.264 for Mode 0/1 (universal playback), AV1 for Mode 2/3 (max savings).
@@ -2212,7 +2212,7 @@
                  placeholder="auto · 18 (Mode 0/1/2) · 38 (Mode 3)"
                  style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
           <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
-            Lower = sharper / bigger. Higher = blurrier / smaller. Try 38–45 for tiny output.
+            Lower = sharper / bigger. Higher = blurrier / smaller. Try 38-45 for tiny output.
           </div>
         </div>
       </div>
@@ -2231,7 +2231,7 @@
         <label class="config-label" for="preset-select">Surveillance preset</label>
         <select id="preset-select" style="width:100%;font-family:var(--mono);font-size:0.7rem;"></select>
         <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
-          Pick what the camera watches — we set the mode + codec. Fine-tune with the cards below or Advanced.
+          Pick what the camera watches - we set the mode + codec. Fine-tune with the cards below or Advanced.
         </div>
       </div>
       <div class="preset-grid">
@@ -2473,10 +2473,10 @@
               <div class="config-field">
                 <label class="config-label">Modes to compare</label>
                 <div style="display:flex;flex-direction:column;gap:0.25rem;">
-                  <label style="font-family:var(--mono);font-size:0.6rem;display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="demo-mode0" value="mode0" checked /> Mode 0 — Live Surveillance</label>
-                  <label style="font-family:var(--mono);font-size:0.6rem;display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="demo-mode1" value="mode1" checked /> Mode 1 — Event Recording</label>
-                  <label style="font-family:var(--mono);font-size:0.6rem;display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="demo-mode2" value="mode2" /> Mode 2 — Smart Compress</label>
-                  <label style="font-family:var(--mono);font-size:0.6rem;display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="demo-mode3" value="mode3" /> Mode 3 — Object Only</label>
+                  <label style="font-family:var(--mono);font-size:0.6rem;display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="demo-mode0" value="mode0" checked /> Mode 0 - Live Surveillance</label>
+                  <label style="font-family:var(--mono);font-size:0.6rem;display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="demo-mode1" value="mode1" checked /> Mode 1 - Event Recording</label>
+                  <label style="font-family:var(--mono);font-size:0.6rem;display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="demo-mode2" value="mode2" /> Mode 2 - Smart Compress</label>
+                  <label style="font-family:var(--mono);font-size:0.6rem;display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="demo-mode3" value="mode3" /> Mode 3 - Object Only</label>
                 </div>
               </div>
               <div class="config-field" style="margin-top:0.5rem;">
@@ -2496,7 +2496,7 @@
                 </div>
               </div>
               <!--
-                Demo result list — populated by _demoRenderResults() once the
+                Demo result list - populated by _demoRenderResults() once the
                 background run finishes. Each row plays inline via playSegment()
                 so the operator never has to leave the browser to view output.
                 Owner: Bloodawn (KheivenD), 2026-05-02 (ROADMAP 5.3).
@@ -2512,7 +2512,7 @@
           </details>
         </div>
 
-        <!-- Live Stream — HLS -->
+        <!-- Live Stream - HLS -->
         <div class="config-section">
           <details>
             <summary>Live Stream (HLS)</summary>
@@ -2744,9 +2744,9 @@
           </div>
           <div class="home-hero-meta">
             <span class="home-hero-chip" id="hero-chip-camera">No source configured</span>
-            <span class="home-hero-chip" id="hero-chip-mode">Mode: —</span>
+            <span class="home-hero-chip" id="hero-chip-mode">Mode:  - </span>
             <span class="home-hero-chip enc" id="hero-chip-enc" style="display:none;">AES-256</span>
-            <span class="home-hero-chip" id="hero-chip-uptime" style="margin-left:auto;">Uptime: —</span>
+            <span class="home-hero-chip" id="hero-chip-uptime" style="margin-left:auto;">Uptime:  - </span>
           </div>
         </div>
 
@@ -2767,12 +2767,12 @@
             </div>
             <div class="stat-card green">
               <div class="stat-label">Speed</div>
-              <div class="stat-value" id="stat-fps">—</div>
+              <div class="stat-value" id="stat-fps"> - </div>
               <div class="stat-unit">frames / sec</div>
             </div>
             <div class="stat-card savings">
               <div class="stat-label">Storage Saved</div>
-              <div class="stat-value" id="stat-storage">—</div>
+              <div class="stat-value" id="stat-storage"> - </div>
               <div class="stat-unit" id="stat-storage-unit">MB used</div>
               <div class="savings-ratio" id="stat-savings-ratio"></div>
             </div>
@@ -2783,25 +2783,25 @@
             <div class="hw-cell">
               <span class="hw-label">CPU</span>
               <div class="hw-bar-track"><div class="hw-bar-fill cpu" id="hw-cpu-fill"></div></div>
-              <span class="hw-val" id="hw-cpu-val">—</span>
+              <span class="hw-val" id="hw-cpu-val"> - </span>
             </div>
             <div class="hw-cell">
               <span class="hw-label">RAM</span>
               <div class="hw-bar-track"><div class="hw-bar-fill ram" id="hw-ram-fill"></div></div>
-              <span class="hw-val" id="hw-ram-val">—</span>
+              <span class="hw-val" id="hw-ram-val"> - </span>
             </div>
             <div class="hw-cell" id="hw-battery-cell" style="display:none;">
               <span class="hw-label">BATT</span>
               <div class="hw-bar-track"><div class="hw-bar-fill bat" id="hw-bat-fill"></div></div>
-              <span class="hw-val" id="hw-bat-val">—</span>
+              <span class="hw-val" id="hw-bat-val"> - </span>
             </div>
             <div class="hw-cell hw-rate-cell">
               <span class="hw-label">MB/hr</span>
-              <span class="hw-val-big" id="hw-rate-val">—</span>
+              <span class="hw-val-big" id="hw-rate-val"> - </span>
             </div>
             <div class="hw-cell hw-eta-cell" id="hw-eta-cell" style="display:none;">
               <span class="hw-label">Est. runtime</span>
-              <span class="hw-val-big" id="hw-eta-val" style="color:var(--green);">—</span>
+              <span class="hw-val-big" id="hw-eta-val" style="color:var(--green);"> - </span>
             </div>
           </div>
 
@@ -2826,7 +2826,7 @@
             <div class="panel-header" style="padding:0.3rem 0.75rem;">
               <span class="panel-title" id="home-preview-label" style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;"></span>
               <!--
-                "Read Plates" — fires /api/enhance/plates on the loaded clip.
+                "Read Plates" - fires /api/enhance/plates on the loaded clip.
                 Author: Bloodawn (KheivenD), 2026-05-02 (post-process AI plate reader).
               -->
               <button class="log-clear-btn" onclick="readPlatesFromCurrentPreview('home')" title="Run AI super-resolution + license-plate OCR on this clip">▤ READ PLATES</button>
@@ -2845,7 +2845,7 @@
             <div id="hls-player-wrap">
               <video id="hls-video" controls playsinline muted style="width:100%;max-height:320px;border-radius:4px;background:#000;display:block;"></video>
               <p style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);margin-top:0.3rem;text-align:center;">
-                Target latency: ~4–6 s &nbsp;·&nbsp; H.264 ultrafast &nbsp;·&nbsp; no audio
+                Target latency: ~4-6 s &nbsp;·&nbsp; H.264 ultrafast &nbsp;·&nbsp; no audio
               </p>
             </div>
           </div>
@@ -2884,7 +2884,7 @@
           <!--
             Wrapping div is the scroll container (`overflow:auto`).
             Sticky moved from <tr> onto each <th> because Chrome/Safari
-            won't sticky-position a table-row element reliably — the
+            won't sticky-position a table-row element reliably - the
             cells fall back to in-flow and the data scrolls under them
             instead of past them.
             Author: Bloodawn (KheivenD), 2026-05-03 (home-recent scroll fix).
@@ -2895,7 +2895,7 @@
             down and messing up the view"):
               • each <th> gets position:sticky/top:0 with a HARD opaque
                 bg + drop shadow so data rows can't bleed through
-              • z-index 10 (was 2 — too low, sat under tbody td borders)
+              • z-index 10 (was 2 - too low, sat under tbody td borders)
               • the bg pulls from --surface2 (lighter than --surface)
                 so the sticky band is visually distinct from rows
             Author: Bloodawn (KheivenD), 2026-05-04 (sticky header fix).
@@ -2918,7 +2918,7 @@
           </div>
         </div>
 
-        <!-- Live log — pinned to bottom of HOME -->
+        <!-- Live log - pinned to bottom of HOME -->
         <div class="home-log-section" id="log-panel-container">
           <div class="panel-header">
             <span class="panel-title">Live Log</span>
@@ -2962,7 +2962,7 @@
             </div>
             <!--
               Single source of truth for the segment list. The player has
-              been moved out of this column entirely — the right-side
+              been moved out of this column entirely - the right-side
               detail card (#metrics-video) is now the only inline player.
               That removes the duplicate-video bug + lets the table
               breathe vertically.
@@ -2975,7 +2975,7 @@
                     <th title="Recording date and time (UTC)">Time</th>
                     <th title="Camera ID">Cam</th>
                     <th title="SVCS encoding mode: 0=all frames, 1=event-gated, 2=BG+patches, 3=object-only blackout">Mode</th>
-                    <th title="What was detected — vehicle, person, animal, unknown">Object</th>
+                    <th title="What was detected - vehicle, person, animal, unknown">Object</th>
                     <th title="Dominant color of the moving object (HSV histogram on ROI)">Color</th>
                     <th title="Scene type heuristic from motion patterns">Scene</th>
                     <th title="Lighting condition: day, night, dusk/dawn">Light</th>
@@ -3031,11 +3031,11 @@
             <!-- Library summary -->
             <div class="metrics-library-card">
               <div class="metrics-library-title">Library Summary</div>
-              <div class="metrics-library-row"><span>Total Segments</span><span id="mlib-segments">—</span></div>
-              <div class="metrics-library-row"><span>Total Size</span><span id="mlib-size">—</span></div>
-              <div class="metrics-library-row"><span>Storage Saved</span><span id="mlib-saved" style="color:var(--green);">—</span></div>
-              <div class="metrics-library-row"><span>Avg Duration</span><span id="mlib-avg-dur">—</span></div>
-              <div class="metrics-library-row"><span>Encrypted Files</span><span id="mlib-enc" style="color:var(--yellow);">—</span></div>
+              <div class="metrics-library-row"><span>Total Segments</span><span id="mlib-segments"> - </span></div>
+              <div class="metrics-library-row"><span>Total Size</span><span id="mlib-size"> - </span></div>
+              <div class="metrics-library-row"><span>Storage Saved</span><span id="mlib-saved" style="color:var(--green);"> - </span></div>
+              <div class="metrics-library-row"><span>Avg Duration</span><span id="mlib-avg-dur"> - </span></div>
+              <div class="metrics-library-row"><span>Encrypted Files</span><span id="mlib-enc" style="color:var(--yellow);"> - </span></div>
             </div>
 
             <!--
@@ -3043,7 +3043,7 @@
               writes a cpu_stats.json into its own output folder (avg,
               max, min, sample count, duration). When the user clicks
               a row in the metrics table, this card shows the stats
-              for THAT run only — no aggregation across other clips.
+              for THAT run only - no aggregation across other clips.
               File-backed so it survives restarts.
               Author: Bloodawn (KheivenD), 2026-05-03 (per-clip CPU stats).
             -->
@@ -3063,11 +3063,11 @@
               </div>
               <div class="metrics-library-row" style="margin-top:0.4rem;padding-top:0.4rem;border-top:1px solid var(--border);">
                 <span>Storage rate</span>
-                <span id="mode-cpu-rate" style="color:var(--teal);">—</span>
+                <span id="mode-cpu-rate" style="color:var(--teal);"> - </span>
               </div>
               <div class="metrics-library-row" id="mode-cpu-battery-row" style="display:none;">
                 <span>Est. battery runtime</span>
-                <span id="mode-cpu-battery" style="color:var(--green);">—</span>
+                <span id="mode-cpu-battery" style="color:var(--green);"> - </span>
               </div>
             </div>
 
@@ -3197,7 +3197,7 @@
           </table>
         </div>
 
-        <!-- Demo comparison section removed — accessible via sidebar Demo panel -->
+        <!-- Demo comparison section removed - accessible via sidebar Demo panel -->
 
       </div><!-- /tab-search -->
 
@@ -3430,7 +3430,7 @@
           </div>
           <div class="help-row">
             <span class="help-term">Segment Length</span>
-            <span class="help-def">How many seconds of video go into each output file. Shorter segments (10–30s) are easier to seek through but create many small files. Longer segments (2–5 min) are fewer files but harder to scrub.</span>
+            <span class="help-def">How many seconds of video go into each output file. Shorter segments (10-30s) are easier to seek through but create many small files. Longer segments (2-5 min) are fewer files but harder to scrub.</span>
           </div>
           <div class="help-row">
             <span class="help-term">BG Subtraction Method</span>
@@ -3438,7 +3438,7 @@
           </div>
           <div class="help-row">
             <span class="help-term">Warmup Frames</span>
-            <span class="help-def">Number of frames the background model observes before it starts detecting motion. During warmup, everything is treated as background. Set higher (200+) for outdoor scenes with slow-changing lighting; lower (30–60) for static indoor scenes.</span>
+            <span class="help-def">Number of frames the background model observes before it starts detecting motion. During warmup, everything is treated as background. Set higher (200+) for outdoor scenes with slow-changing lighting; lower (30-60) for static indoor scenes.</span>
           </div>
         </div>
       </div>
@@ -3450,7 +3450,7 @@
         <div class="help-rows">
           <div class="help-row">
             <span class="help-term">Compute Device</span>
-            <span class="help-def"><em>Auto-detect</em> picks the fastest available option. <em>NVIDIA GPU (CUDA)</em> requires an NVIDIA card with 2+ GB VRAM and PyTorch with CUDA installed; 5–20x faster than CPU. <em>Apple Silicon (MPS)</em> works on M1/M2/M3 Macs only; 2–5x faster than CPU. <em>CPU</em> works on any machine including laptops but is slowest. Phones and tablets are not supported.</span>
+            <span class="help-def"><em>Auto-detect</em> picks the fastest available option. <em>NVIDIA GPU (CUDA)</em> requires an NVIDIA card with 2+ GB VRAM and PyTorch with CUDA installed; 5-20x faster than CPU. <em>Apple Silicon (MPS)</em> works on M1/M2/M3 Macs only; 2-5x faster than CPU. <em>CPU</em> works on any machine including laptops but is slowest. Phones and tablets are not supported.</span>
           </div>
           <div class="help-row">
             <span class="help-term">SR Model</span>
@@ -3462,7 +3462,7 @@
           </div>
           <div class="help-row">
             <span class="help-term">Max ROI size (px)</span>
-            <span class="help-def">SR is skipped on any detection box wider or taller than this value in pixels. Very large boxes get little benefit from SR (the bicubic resize is already fine at that scale) and are expensive to process. 150–250px is the sweet spot.</span>
+            <span class="help-def">SR is skipped on any detection box wider or taller than this value in pixels. Very large boxes get little benefit from SR (the bicubic resize is already fine at that scale) and are expensive to process. 150-250px is the sweet spot.</span>
           </div>
         </div>
       </div>
@@ -3496,7 +3496,7 @@
           </div>
           <div class="help-row">
             <span class="help-term">Motion regions (ROIs)</span>
-            <span class="help-def">A region of interest — the bounding box around something that moved on a given frame. The "Motion" column counts every motion region across every frame of the clip. A single vehicle passing the camera might produce 50–200 motion regions over its time on screen. Sometimes shortened to "ROIs" in technical context — they're the same thing.</span>
+            <span class="help-def">A region of interest - the bounding box around something that moved on a given frame. The "Motion" column counts every motion region across every frame of the clip. A single vehicle passing the camera might produce 50-200 motion regions over its time on screen. Sometimes shortened to "ROIs" in technical context - they're the same thing.</span>
           </div>
           <div class="help-row">
             <span class="help-term">Quality</span>
@@ -3551,7 +3551,7 @@
           </div>
           <div class="help-row">
             <span class="help-term">Live Stream (HLS)</span>
-            <span class="help-def">Streams an RTSP camera or video file to the browser in real time using HTTP Live Streaming. Latency is ~4–6 seconds. Requires FFmpeg. The annotated overlay shows the active mode label and elapsed time.</span>
+            <span class="help-def">Streams an RTSP camera or video file to the browser in real time using HTTP Live Streaming. Latency is ~4-6 seconds. Requires FFmpeg. The annotated overlay shows the active mode label and elapsed time.</span>
           </div>
           <div class="help-row">
             <span class="help-term">Local RTSP Server</span>
@@ -3563,7 +3563,7 @@
 
       <!-- Metrics Tab -->
       <div class="help-section">
-        <div class="help-section-title"> Metrics Tab — Clip Library</div>
+        <div class="help-section-title"> Metrics Tab - Clip Library</div>
         <div class="help-rows">
           <div class="help-row">
             <span class="help-term">Browsing clips</span>
@@ -3586,7 +3586,7 @@
 
       <!-- Search Tab -->
       <div class="help-section">
-        <div class="help-section-title">Search Tab — Archive Query</div>
+        <div class="help-section-title">Search Tab - Archive Query</div>
         <div class="help-rows">
           <div class="help-row">
             <span class="help-term">Searching clips</span>
@@ -3594,7 +3594,7 @@
           </div>
           <div class="help-row">
             <span class="help-term">BUSIEST</span>
-            <span class="help-def">Shows the 50 most active clips — ordered by number of detected objects. Useful for finding the highest-activity periods quickly.</span>
+            <span class="help-def">Shows the 50 most active clips - ordered by number of detected objects. Useful for finding the highest-activity periods quickly.</span>
           </div>
           <div class="help-row">
             <span class="help-term">DAILY SUMMARY</span>
@@ -3609,11 +3609,11 @@
 
       <!-- Encrypt Tab -->
       <div class="help-section">
-        <div class="help-section-title"> Encrypt Tab — File Security</div>
+        <div class="help-section-title"> Encrypt Tab - File Security</div>
         <div class="help-rows">
           <div class="help-row">
             <span class="help-term">Encrypting a clip</span>
-            <span class="help-def">Paste or browse to any .mp4 output file. Choose a password or a key file. Click ENCRYPT — the original file is replaced with a locked .enc file that cannot be played without the key. Encrypted clips are moved to the Encrypted/ subfolder in your OneDrive automatically.</span>
+            <span class="help-def">Paste or browse to any .mp4 output file. Choose a password or a key file. Click ENCRYPT - the original file is replaced with a locked .enc file that cannot be played without the key. Encrypted clips are moved to the Encrypted/ subfolder in your OneDrive automatically.</span>
           </div>
           <div class="help-row">
             <span class="help-term">Decrypting a clip</span>
@@ -3621,7 +3621,7 @@
           </div>
           <div class="help-row">
             <span class="help-term">Key files vs passwords</span>
-            <span class="help-def">Passwords are easier but less secure. Key files are a random 256-bit binary file — more secure for automated systems. Use the GENERATE KEY button to create one. Store the key file separately from the encrypted video.</span>
+            <span class="help-def">Passwords are easier but less secure. Key files are a random 256-bit binary file - more secure for automated systems. Use the GENERATE KEY button to create one. Store the key file separately from the encrypted video.</span>
           </div>
           <div class="help-row">
             <span class="help-term">OneDrive Encrypted folder</span>
@@ -3639,7 +3639,7 @@
              style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.35rem 0.75rem;background:var(--surface3);border:1px solid var(--border-bright);border-radius:var(--radius);color:var(--text-bright);font-family:var(--mono);font-size:0.7rem;text-decoration:none;transition:background 0.15s;"
              onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='var(--surface3)'">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-            View on GitHub — Technical Breakdown
+            View on GitHub - Technical Breakdown
           </a>
         </div>
       </div>
@@ -3685,7 +3685,7 @@
         DECRYPT &amp; PLAY
       </button>
       <p style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);margin:0;">
-        The decrypted video streams to your browser — nothing is saved to disk.
+        The decrypted video streams to your browser - nothing is saved to disk.
         The encrypted file stays locked.
       </p>
     </div>
@@ -3736,7 +3736,7 @@
   <script src="{{ url_for('static', filename='js/cameras.js') }}"></script>
   <script src="{{ url_for('static', filename='js/usage.js') }}"></script>
 
-<!-- AI Plate Reader modal — Bloodawn (KheivenD), 2026-05-02 -->
+<!-- AI Plate Reader modal - Bloodawn (KheivenD), 2026-05-02 -->
 <div id="plate-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center;">
   <div style="background:var(--surface1);border:1px solid var(--border);border-radius:6px;width:min(640px,90vw);max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.45);">
     <div class="panel-header" style="padding:0.5rem 0.75rem;">

@@ -10,8 +10,8 @@ ROI combination. Answers two questions the team has been guessing about:
      ROI. Both modes concentrate intelligence value inside small bboxes,
      so the SR gain there matters more than gain elsewhere.)
 
-  2. Does cropping to the ROI before SR — instead of running SR on the
-     whole frame and then looking inside the box — change the result?
+  2. Does cropping to the ROI before SR - instead of running SR on the
+     whole frame and then looking inside the box - change the result?
      ROI-only SR is roughly 10x faster on a 1080p frame with a small
      plate-sized box. If the in-ROI sharpness is the same either way,
      ROI-only SR is the obvious choice.
@@ -26,25 +26,25 @@ For each sampled frame the harness measures three variants:
 Metrics per variant:
 
     sharpness_roi     Laplacian variance of the upscaled ROI (proxy for
-                      perceived edge sharpness — higher is sharper).
+                      perceived edge sharpness - higher is sharper).
     psnr_vs_baseline  PSNR of the variant against the bicubic baseline
                       cropped+upscaled ROI. None when not comparable.
     ssim_vs_baseline  SSIM ditto.
     ocr_confidence    Mean per-frame OCR confidence on the upscaled ROI.
-                      Optional — only computed when an OCR backend is
+                      Optional - only computed when an OCR backend is
                       installed and run_ocr=True.
     ocr_text          Best read text per frame, for sanity-checking.
 
 Honest caveats:
 
-  * Sharpness gain is necessary but not sufficient for "more readable" —
+  * Sharpness gain is necessary but not sufficient for "more readable"  - 
     a hallucinated SR can score higher Laplacian variance while inventing
     detail. That is why we also report OCR confidence: it is the closest
     practical proxy for "an automated reader can act on this".
   * PSNR/SSIM here compare against bicubic, not against a true
     high-resolution ground truth (we don't have one for surveillance
     footage). They measure how much the SR variant DIVERGES from the
-    bicubic upscale — high divergence + high sharpness suggests the SR
+    bicubic upscale - high divergence + high sharpness suggests the SR
     is doing real work; high divergence + low OCR is a hallucination
     warning.
 
@@ -119,7 +119,7 @@ class BenchmarkResult:
 
 
 def measure_sharpness(image: np.ndarray) -> float:
-    """Laplacian variance — the standard "is it in focus?" proxy.
+    """Laplacian variance - the standard "is it in focus?" proxy.
 
     Higher value = more high-frequency content = sharper-looking image.
     Returns 0.0 on empty or single-pixel inputs to keep callers safe.
@@ -172,7 +172,7 @@ def measure_ssim(reference: np.ndarray, candidate: np.ndarray) -> Optional[float
         win -= 1
     try:
         return float(_ssim(ref_g, cand_g, win_size=win, data_range=255))
-    except Exception:  # noqa: BLE001 — skimage occasionally raises ValueError on tiny crops
+    except Exception:  # noqa: BLE001 - skimage occasionally raises ValueError on tiny crops
         return None
 
 
@@ -266,12 +266,12 @@ def _verdict(deltas: Dict[str, Any]) -> str:
         return "SR provides minimal sharpness gain on this segment."
 
     # If ROI-only SR matches full-frame SR within 5 % sharpness AND within
-    # 0.05 OCR confidence, recommend ROI-only — it's far cheaper.
+    # 0.05 OCR confidence, recommend ROI-only - it's far cheaper.
     if abs(full_gain - roi_gain) < 5 and abs(ocr_full - ocr_roi) < 0.05:
         return "ROI-only SR matches full-frame SR; use ROI-only for ~10x speedup."
 
     if full_gain > roi_gain + 5:
-        return "Full-frame SR sharper than ROI-only — keep full-frame for this clip."
+        return "Full-frame SR sharper than ROI-only - keep full-frame for this clip."
 
     return "ROI-only SR competitive; full-frame SR adds context but at higher cost."
 
@@ -455,7 +455,7 @@ def benchmark_enhancement(
             v.avg_ocr_confidence = round(sums[key]["ocr_conf"] / sums[key]["ocr_n"], 3)
             v.ocr_reads = sums[key]["ocr_n"]
 
-    # Deltas — the actually-actionable numbers.
+    # Deltas - the actually-actionable numbers.
     base = variants["no_enhancement"].avg_sharpness_roi or 1e-6
     deltas: Dict[str, Any] = {
         "roi_sharpness_gain_full_sr_pct": round(

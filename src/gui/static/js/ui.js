@@ -1,11 +1,11 @@
 /*
  * src/gui/static/js/ui.js
  *
- * SVCS dashboard — ui module. Carved verbatim from the former single
+ * SVCS dashboard - ui module. Carved verbatim from the former single
  * inline <script> in index.html (TASK 1.5). Loaded as a classic script in
  * original execution order, so behavior is identical; all functions stay
  * global (reachable from inline on* handlers and the other modules).
- * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — JS split).
+ * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - JS split).
  */
 function setPipelineRunning(running) {
   // Reset segment counter so the first new segment fires a notification
@@ -61,7 +61,7 @@ function fmtDuration(s) {
 }
 function formatTimestamp(ts) {
   // "20260407T143022Z" → "2026-04-07 14:30:22"
-  if (!ts) return '—';
+  if (!ts) return ' - ';
   try {
     const y = ts.slice(0,4), mo = ts.slice(4,6), d = ts.slice(6,8);
     const h = ts.slice(9,11), mi = ts.slice(11,13), s = ts.slice(13,15);
@@ -104,7 +104,7 @@ function _colorSwatch(label) {
  *
  * Strategy: `<camera_id>_segment_NNN.mp4` → `<camera_id>` is what we
  * already have. So the segment basename doesn't add new info there.
- * BUT — we look at the parent directory name first, because demo runs
+ * BUT - we look at the parent directory name first, because demo runs
  * write to `<output_root>/demo_comp_<source-filename>/...`, and the
  * pipeline's output dir often encodes the source clip too. That gives
  * us the source filename even for cam_00 recordings.
@@ -117,7 +117,7 @@ function _colorSwatch(label) {
  * under each demo run, so we can reverse-engineer which mode was used
  * without adding a column to the segments DB schema.
  *
- * Returns one of "Mode 0..3" or "—" if the path doesn't reveal it.
+ * Returns one of "Mode 0..3" or " - " if the path doesn't reveal it.
  *
  * Author: Bloodawn (KheivenD), 2026-05-03 (mode column).
  */
@@ -145,7 +145,7 @@ function _segMode(s) {
     return 'Split-screen';
   }
 
-  // 3. Direct subfolder marker — most reliable signal for single-mode files
+  // 3. Direct subfolder marker - most reliable signal for single-mode files
   const m = fp.match(/[\\/]mode([0-3])\b/);
   if (m) return 'Mode ' + m[1];
 
@@ -153,12 +153,12 @@ function _segMode(s) {
   const m2 = fp.match(/_mode([0-3])(?:[._]|$)/);
   if (m2) return 'Mode ' + m2[1];
 
-  return '—';
+  return ' - ';
 }
 
 function _segDisplayName(s) {
   const fp = String(s.file_path || '');
-  if (!fp) return s.camera_id || '—';
+  if (!fp) return s.camera_id || ' - ';
   // Split on either Windows or POSIX separator
   const parts = fp.split(/[\\/]/);
   // Walk up looking for a parent dir that smells like a source clip.
@@ -179,7 +179,7 @@ function _segDisplayName(s) {
   // Last resort: the segment basename without its own extension/segment idx
   const base = parts[parts.length - 1] || '';
   const stem = base.replace(/\.[^.]+$/, '').replace(/_segment_\d+$/i, '');
-  return stem || (s.camera_id || '—');
+  return stem || (s.camera_id || ' - ');
 }
 
 /**

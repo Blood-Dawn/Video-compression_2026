@@ -10,7 +10,7 @@ multi-GB to a few hundred MB (PLAN-V2 §6).
 
 The backend is intentionally detector-agnostic in shape: it takes a BGR image
 (OpenCV) and returns a list of Detection(class_id, class_name, score, xyxy) in
-the ORIGINAL image's pixel coordinates — the same information ObjectFilter
+the ORIGINAL image's pixel coordinates - the same information ObjectFilter
 extracts from ultralytics result objects. A future swap to RT-DETR/another
 permissive detector only has to produce the same Detection list.
 
@@ -20,7 +20,7 @@ and ship as an optional component (not committed). When onnxruntime or the
 .onnx file is missing, ``available`` is False and the caller falls back to the
 torch backend (or pass-through).
 
-Author: Bloodawn (KheivenD), 2026-06-02 (TASK 2.1 — ONNX detection backend).
+Author: Bloodawn (KheivenD), 2026-06-02 (TASK 2.1 - ONNX detection backend).
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ class YoloOnnxDetector:
         confidence: minimum class score to keep a detection (0-1).
         iou:        IoU threshold for non-max suppression.
         imgsz:      square input size the model was exported at (default 640).
-        device:     "auto" / "cuda" / "cpu" — selects the ORT provider.
+        device:     "auto" / "cuda" / "cpu" - selects the ORT provider.
     """
 
     def __init__(

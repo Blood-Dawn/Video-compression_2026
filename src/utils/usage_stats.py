@@ -4,9 +4,9 @@ src/utils/usage_stats.py
 Opt-in anonymous usage statistics (M5 TASK 5.2).
 
 A SEPARATE channel from crash reporting (utils.crash_reporting). It records a
-tiny amount of product-shaping signal — which presets and codecs people use,
+tiny amount of product-shaping signal - which presets and codecs people use,
 whether encodes succeed, the *category* of errors, and which camera-ingestion
-path is in use (RTSP/ONVIF vs watch-folder vs bridge) — and nothing else.
+path is in use (RTSP/ONVIF vs watch-folder vs bridge) - and nothing else.
 
 Hard privacy guarantees, enforced in code (not just by policy):
   * **Default OFF.** Consent is unknown on first run; nothing is collected or
@@ -14,7 +14,7 @@ Hard privacy guarantees, enforced in code (not just by policy):
     (SVCS_DISABLE_USAGE_STATS) forces off even if consent was given.
   * **No footage, file contents, paths, or filenames.** Every event passes
     through a per-event field whitelist, and any value that looks like a path,
-    URL, email, or IP is dropped — so even a mislabelled field can't leak one.
+    URL, email, or IP is dropped - so even a mislabelled field can't leak one.
   * **No PII and no reinstall-surviving identifiers.** No machine ID, no user
     name, no UUID. Categorical fields are coerced to a fixed vocabulary or
     "other".
@@ -22,7 +22,7 @@ Hard privacy guarantees, enforced in code (not just by policy):
     file; they are only POSTed anywhere if the operator sets an explicit
     endpoint (SVCS_USAGE_STATS_URL). The casual install never phones home.
 
-Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5.2 — opt-in usage stats).
+Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5.2 - opt-in usage stats).
 """
 
 from __future__ import annotations

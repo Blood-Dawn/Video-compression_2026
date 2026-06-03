@@ -1,5 +1,5 @@
 """
-installer/launcher.py  —  PyInstaller entry point for SVCS desktop.
+installer/launcher.py  -  PyInstaller entry point for SVCS desktop.
 
 This is the script PyInstaller bundles as the main executable. Keeping
 it tiny and dependency-free makes packaging more predictable: heavyweight
@@ -88,7 +88,7 @@ def main() -> int:
         # the default Python traceback dialog. run_gui.py lives at the
         # repo root (not under src/gui/) and re-exports main().
         from run_gui import main as run_gui_main
-    except Exception:  # noqa: BLE001  — top-level startup must not crash silently
+    except Exception:  # noqa: BLE001  - top-level startup must not crash silently
         sys.stderr.write(
             "SVCS failed to start while importing the dashboard.\n"
             "Please report this with the traceback below.\n\n"

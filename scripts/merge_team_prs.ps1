@@ -36,7 +36,7 @@ git pull origin dev
 Write-OK 'dev is up to date'
 
 # ---------------------------------------------------------------------------
-# PR #8 — Victor: Enhancement Benchmarking
+# PR #8 - Victor: Enhancement Benchmarking
 # ---------------------------------------------------------------------------
 Write-Step 'Merging PR #8 (victort29/feature/enhancement-milestone2)...'
 git fetch origin feature/enhancement-milestone2
@@ -76,7 +76,7 @@ Closes #8'
 Write-OK 'PR #8 committed'
 
 # ---------------------------------------------------------------------------
-# PR #9 — Jorge: Algorithm Comparison and Stress Test
+# PR #9 - Jorge: Algorithm Comparison and Stress Test
 # ---------------------------------------------------------------------------
 Write-Step 'Merging PR #9 (sanchez-jorge/feature/benchmarking-milestone2)...'
 git fetch origin feature/benchmarking-milestone2
@@ -117,7 +117,7 @@ Closes #9'
 Write-OK 'PR #9 committed'
 
 # ---------------------------------------------------------------------------
-# PR #10 — Jorge: Detection Tuning
+# PR #10 - Jorge: Detection Tuning
 # ---------------------------------------------------------------------------
 Write-Step 'Merging PR #10 (sanchez-jorge/feature/detection-tuning)...'
 git fetch origin feature/detection-tuning

@@ -109,7 +109,7 @@ def main():
         print(f"Enhancer loaded: {enhancer.backend} backend on {enhancer.device}")
     except Exception as e:
         print(f"[WARN] Could not load Enhancer: {e}")
-        print("       Bicubic fallback will be used for both paths — SR result will match baseline.")
+        print("       Bicubic fallback will be used for both paths - SR result will match baseline.")
         enhancer = None
 
     cap = cv2.VideoCapture(str(TEST_CLIP))
@@ -271,7 +271,7 @@ def main():
 
     if psnr_gain > 1.0:
         md_lines.append(
-            f"SR improves PSNR by {psnr_gain:.2f} dB over bicubic — a meaningful "
+            f"SR improves PSNR by {psnr_gain:.2f} dB over bicubic - a meaningful "
             f"perceptual improvement on small ROI crops at x{SCALE}."
         )
     elif psnr_gain > 0.1:

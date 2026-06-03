@@ -3,7 +3,7 @@ src/pipeline/presets.py
 
 Surveillance-first named presets (M3 TASK 3.1).
 
-Operators shouldn't have to reason about "Mode 0–3" — they think in terms of
+Operators shouldn't have to reason about "Mode 0-3" - they think in terms of
 *what the camera is watching*. Each preset maps a human name to a concrete
 encode config tuple (mode, foreground-CRF, background-CRF, codec, ...) built on
 the settled decisions:
@@ -17,7 +17,7 @@ presets are the default surface. A resolved preset is a plain dict that the
 /api/start config and the pipeline already understand (with an added
 ``background_crf`` the encoder honors for the dual-CRF background).
 
-Author: Bloodawn (KheivenD), 2026-06-03 (TASK 3.1 — surveillance presets).
+Author: Bloodawn (KheivenD), 2026-06-03 (TASK 3.1 - surveillance presets).
 """
 
 from __future__ import annotations
@@ -66,7 +66,7 @@ class Preset:
         }
 
 
-# Ordered registry — surveillance family first, then a couple of general ones.
+# Ordered registry - surveillance family first, then a couple of general ones.
 # Rationale per preset is in the description + comments. CRF choices follow the
 # progressive scheme and keep foreground <= background (foreground is always the
 # higher-quality stream).
@@ -75,7 +75,7 @@ _PRESET_LIST: List[Preset] = [
         key="continuous_cctv",
         label="Continuous CCTV (max savings)",
         description="24/7 static camera. Records only when targets are present and "
-                    "drops idle background entirely — the biggest storage win.",
+                    "drops idle background entirely - the biggest storage win.",
         mode="mode2", foreground_crf=23, background_crf=51, codec="auto",
     ),
     Preset(
@@ -115,12 +115,12 @@ _PRESET_LIST: List[Preset] = [
     ),
     # ── Consumer cameras (M-CAM TASK 4) ─────────────────────────────────────
     # Tuned for consumer footage: lower-res, noisier sensors, mostly-static
-    # scenes with sparse events. CRFs are deliberately CONSERVATIVE — consumer
+    # scenes with sparse events. CRFs are deliberately CONSERVATIVE - consumer
     # cameras already soften detail, so we don't compress the foreground hard.
     Preset(
         key="indoor_cam",
         label="Indoor cam (pets / home)",
-        description="An indoor room camera — pets, kids, general home monitoring. "
+        description="An indoor room camera - pets, kids, general home monitoring. "
                     "Keeps every frame (dual-CRF) with a conservative foreground so "
                     "faces and pets stay legible on a noisy indoor sensor.",
         mode="mode1", foreground_crf=20, background_crf=44, codec="auto",
@@ -154,7 +154,7 @@ _PRESET_LIST: List[Preset] = [
     Preset(
         key="generic",
         label="Generic",
-        description="Balanced default when you're not sure — dual-CRF with standard settings.",
+        description="Balanced default when you're not sure - dual-CRF with standard settings.",
         mode="mode1", foreground_crf=18, background_crf=45, surveillance=False,
     ),
 ]

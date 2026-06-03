@@ -7,7 +7,7 @@ Covers: encode_segment() happy path, MP4 output, DB row insertion,
         get_file_size(), get_storage_report().
 
 All tests use tiny (16x16) frames so FFmpeg runs in milliseconds.
-Requires ffmpeg on PATH — skipped automatically if not found.
+Requires ffmpeg on PATH - skipped automatically if not found.
 """
 
 import shutil
@@ -41,17 +41,17 @@ def db_path(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Skip marker — skip all tests if ffmpeg is not installed
+# Skip marker - skip all tests if ffmpeg is not installed
 # ---------------------------------------------------------------------------
 
 pytestmark = pytest.mark.skipif(
     shutil.which("ffmpeg") is None,
-    reason="ffmpeg not found on PATH — skipping encoder tests",
+    reason="ffmpeg not found on PATH - skipping encoder tests",
 )
 
 
 # ---------------------------------------------------------------------------
-# encode_segment() — happy path
+# encode_segment() - happy path
 # ---------------------------------------------------------------------------
 
 class TestEncodeSegment:
@@ -149,7 +149,7 @@ class TestEncodeSegment:
         assert Path(out["file_path"]).exists()
 
     def test_background_crf_used_when_no_bboxes(self, encoder, tiny_frames):
-        """No bboxes → background CRF path — file still written successfully."""
+        """No bboxes → background CRF path - file still written successfully."""
         bboxes = [[] for _ in tiny_frames]
         out = encoder.encode_segment(tiny_frames, bboxes_per_frame=bboxes,
                                      camera_id="cam_bg", fps=10.0)

@@ -1,11 +1,11 @@
 /*
  * src/gui/static/js/metrics.js
  *
- * SVCS dashboard — metrics module. Carved verbatim from the former single
+ * SVCS dashboard - metrics module. Carved verbatim from the former single
  * inline <script> in index.html (TASK 1.5). Loaded as a classic script in
  * original execution order, so behavior is identical; all functions stay
  * global (reachable from inline on* handlers and the other modules).
- * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — JS split).
+ * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - JS split).
  */
 function openHelp() {
   document.getElementById('help-overlay').classList.add('open');
@@ -134,7 +134,7 @@ function _applyHardwareMetrics(d) {
   };
   const rows = document.getElementById('mode-cpu-rows');
   // If a row is currently selected in the metrics table, leave the
-  // CPU card alone — it's showing per-clip stats for that recording
+  // CPU card alone - it's showing per-clip stats for that recording
   // and the global poller would clobber them on every tick.
   // Author: Bloodawn (KheivenD), 2026-05-03 (per-clip CPU stats).
   if (rows && !_cpuCardLockedToSelection) {
@@ -200,8 +200,8 @@ function switchTab(name) {
   });
   // When switching to metrics, ensure library summary is current
   if (name === 'metrics') _updateLibrarySummary(_segmentData);
-  // Demo is now in the sidebar, not a tab — nothing to lazy-load here
-  // Demo comparison videos are in a collapsed <details> — only load on expand
+  // Demo is now in the sidebar, not a tab - nothing to lazy-load here
+  // Demo comparison videos are in a collapsed <details> - only load on expand
 }
 
 // ── Metrics table filter ──────────────────────────────────────
@@ -247,7 +247,7 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────
-// AI Plate Reader — post-process SR + ALPR on a saved segment
+// AI Plate Reader - post-process SR + ALPR on a saved segment
 //
 // Wires the inline preview "READ PLATES" button (and any future caller)
 // to /api/enhance/plates. Pulls the absolute file path back out of the

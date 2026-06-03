@@ -56,7 +56,7 @@ def reset_pipeline_state(tmp_path, monkeypatch):
     as True and cause the next test's /api/start to return 409.
 
     DB isolation: /api/segments discovers metadata.db under EVERY candidate
-    root — the configured output_dir, the demo's last_output_root, AND a hard
+    root - the configured output_dir, the demo's last_output_root, AND a hard
     fallback to <repo>/outputs. Pointing output_dir at tmp_path isn't enough
     on its own (the repo's real outputs/ DB still leaks in), so we also clear
     the demo root and repoint the segment-discovery _ROOT at tmp_path.
@@ -65,8 +65,8 @@ def reset_pipeline_state(tmp_path, monkeypatch):
     its own module-level _ROOT (the <repo>/outputs fallback). Patch it there so
     the fallback candidate is an empty temp dir. gui_module._ROOT is patched too
     for any legacy reader.
-    Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.3 — DB test isolation);
-            updated 2026-06-02 (M1 TASK 1.3 — blueprint split).
+    Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.3 - DB test isolation);
+            updated 2026-06-02 (M1 TASK 1.3 - blueprint split).
     """
     monkeypatch.setattr(gui_module, "_ROOT", tmp_path)
     monkeypatch.setattr("gui.routes.files_bp._ROOT", tmp_path)
@@ -117,7 +117,7 @@ def fake_pipeline(monkeypatch):
 @pytest.fixture
 def db_with_segments(tmp_path):
     """
-    Temp SQLite DB with two segments — one with a target, one without.
+    Temp SQLite DB with two segments - one with a target, one without.
     Returns the tmp_path so tests can point output_dir at it.
     """
     db_path = tmp_path / "metadata.db"
@@ -299,7 +299,7 @@ class TestApiStart:
         assert cfg["codec"] == "auto"
 
     def test_start_codec_passthrough(self, client, fake_pipeline):
-        """Selected codec must round-trip into the pipeline config — this
+        """Selected codec must round-trip into the pipeline config - this
         is what makes the GUI's new codec dropdown actually do anything.
         Author: Bloodawn (KheivenD), 2026-05-02."""
         resp = client.post(
@@ -452,7 +452,7 @@ class TestApiStorage:
 
 
 # ---------------------------------------------------------------------------
-# /api/demo/status — ROADMAP 5.3
+# /api/demo/status - ROADMAP 5.3
 # ---------------------------------------------------------------------------
 #
 # These tests verify the contract the front-end relies on for the in-browser
@@ -497,8 +497,8 @@ class TestApiDemoStatus:
         Simulate a finished demo run with split-screen + per-mode outputs.
 
         The front-end (`_demoCollectPlayables` in index.html) expects:
-          result.split_screen  – string URL or None
-          result.videos        – { mode: { view: url|null } }
+          result.split_screen  - string URL or None
+          result.videos        - { mode: { view: url|null } }
         Every URL must already start with `/api/media?path=` so the
         operator can play inline without hitting the local file system.
         """
@@ -556,12 +556,12 @@ class TestApiDemoHistory:
 
 
 # ---------------------------------------------------------------------------
-# /api/hls/latency — ROADMAP 5.1 (rolling end-to-end latency)
+# /api/hls/latency - ROADMAP 5.1 (rolling end-to-end latency)
 # ---------------------------------------------------------------------------
 #
 # These tests exercise the latency response shape and the bookkeeping the
 # annotator thread does on every new .ts segment. We don't spin up FFmpeg
-# here — the watcher logic is exercised by manipulating the deques directly
+# here - the watcher logic is exercised by manipulating the deques directly
 # the same way the watcher would, then asserting the API surfaces a coherent
 # rolling average.
 #
@@ -657,12 +657,12 @@ class TestApiHlsLatency:
 
 
 # ---------------------------------------------------------------------------
-# /api/enhance/plates — AI plate reader (Bloodawn / KheivenD, 2026-05-02)
+# /api/enhance/plates - AI plate reader (Bloodawn / KheivenD, 2026-05-02)
 # ---------------------------------------------------------------------------
 #
 # These tests confirm the routing/validation contract the GUI's READ PLATES
 # button relies on. The PlateReader pipeline itself is exercised in
-# tests/test_plate_reader.py with synthetic videos and a stub OCR backend —
+# tests/test_plate_reader.py with synthetic videos and a stub OCR backend  - 
 # we deliberately don't pull PaddleOCR / EasyOCR weights into CI here.
 
 class TestApiPlateReader:
@@ -696,13 +696,13 @@ class TestApiPlateReader:
         resp = client.post("/api/enhance/plates", json={"file_path": str(enc)})
         assert resp.status_code == 400
         # The error message must mention decryption so the operator knows
-        # what to do — otherwise the 400 is unhelpful.
+        # what to do - otherwise the 400 is unhelpful.
         msg = (resp.get_json() or {}).get("error", "").lower()
         assert "decrypt" in msg
 
 
 # ---------------------------------------------------------------------------
-# /api/enhance/benchmark — SR strategy comparison (Bloodawn / KheivenD)
+# /api/enhance/benchmark - SR strategy comparison (Bloodawn / KheivenD)
 # ---------------------------------------------------------------------------
 
 class TestApiEnhanceBenchmark:
@@ -788,7 +788,7 @@ class TestDefaultOutputDir:
 
 
 # ---------------------------------------------------------------------------
-# CRF override passthrough — added 2026-05-02 with the Mode 3 redo.
+# CRF override passthrough - added 2026-05-02 with the Mode 3 redo.
 # ---------------------------------------------------------------------------
 
 class TestStartCrfPassthrough:

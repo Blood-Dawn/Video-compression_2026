@@ -44,7 +44,7 @@ def test_registry_nonempty_and_includes_surveillance_family():
 
 def test_consumer_camera_family_present_and_conservative():
     """M-CAM TASK 4: the consumer-camera family exists and is tuned
-    conservatively (consumer sensors are noisy — don't smear detail)."""
+    conservatively (consumer sensors are noisy - don't smear detail)."""
     consumer = ("doorbell", "indoor_cam", "outdoor_yard", "baby_monitor")
     for k in consumer:
         assert k in P.PRESETS, f"missing consumer preset {k}"
@@ -55,7 +55,7 @@ def test_consumer_camera_family_present_and_conservative():
     # Indoor / baby keep every frame (dual-CRF), not object-only clips.
     assert P.get_preset("indoor_cam").mode == "mode1"
     assert P.get_preset("baby_monitor").mode == "mode1"
-    # A baby/pet can hold still — must not be gated out by object detection.
+    # A baby/pet can hold still - must not be gated out by object detection.
     assert P.get_preset("baby_monitor").object_filter is False
 
 
@@ -87,7 +87,7 @@ def test_preset_codec_is_auto_and_resolves_per_mode(key):
 
 @pytest.mark.parametrize("key", list(P.PRESETS))
 def test_preset_config_round_trips_through_json(key):
-    """A resolved config survives export -> import (JSON) unchanged — this is
+    """A resolved config survives export -> import (JSON) unchanged - this is
     how presets travel through /api/config/export + /api/config/import."""
     cfg = P.resolve_preset(key)
     restored = json.loads(json.dumps(cfg))

@@ -16,10 +16,10 @@ contract so a future move can't silently break it:
 
 Modules are resolved *live* inside each test via importlib, because
 `tests/test_default_output_dir.py` deletes `gui.app` from `sys.modules` and
-re-imports it per test — a module captured at collection time would be stale
+re-imports it per test - a module captured at collection time would be stale
 depending on test order. Resolving live keeps this guard order-independent.
 
-Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — re-export safety net).
+Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - re-export safety net).
 """
 
 import importlib

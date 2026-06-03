@@ -1,7 +1,7 @@
 # AI License-Plate Reader
 
 **Author:** Bloodawn (KheivenD)
-**Added:** 2026-05-02 — post-process AI enhancement upgrade for ROADMAP 5.4 / 6.x.
+**Added:** 2026-05-02 - post-process AI enhancement upgrade for ROADMAP 5.4 / 6.x.
 **Module:** `src/enhancement/plate_reader.py`
 **API:** `POST /api/enhance/plates`, `GET /api/enhance/plates/status`
 **GUI:** "▤ READ PLATES" button on the inline preview player.
@@ -126,7 +126,7 @@ The `verdict` field is the operator's plain-English read on whether to trust a p
 |---|---|---|
 | `high` | ≥ 3 frames agree, average OCR ≥ 0.60 | Trust this. Same text reproduced across multiple frames at strong per-frame confidence. |
 | `medium` | ≥ 2 frames agree, average OCR ≥ 0.50 | Trust with operator review. Two frames is a coincidence floor. |
-| `low` | ≥ 1 frame, OCR ≥ 0.70 | Single-frame strong read. Useful as a starting point — verify against a second frame before acting on it. |
+| `low` | ≥ 1 frame, OCR ≥ 0.70 | Single-frame strong read. Useful as a starting point - verify against a second frame before acting on it. |
 | `uncertain` | anything else | OCR engine returned text but it does not meet either consensus or single-strong-read threshold. **Do not act on uncertain reads.** |
 
 The combined `confidence` score is `0.6 * ocr_avg + 0.4 * consensus_ratio`, where `consensus_ratio = min(1.0, votes / max(3.0, frames_examined * 0.25))`. Both pieces matter: a great OCR confidence on a single frame can hallucinate, and weak per-frame OCR on many frames is still weak.
@@ -135,7 +135,7 @@ The combined `confidence` score is `0.6 * ocr_avg + 0.4 * consensus_ratio`, wher
 
 Three things to be honest with the sponsor about:
 
-1. **Resolution floor.** A 480p frame with a vehicle 50 m away yields a plate crop ~25-40 px tall. Even with 4x SR (100-160 px) the Shannon-Nyquist limit means many characters were never sampled. Real-ESRGAN cannot invent the missing detail — at best it removes blur and noise. Expected character accuracy on heavily compressed surveillance footage: **60-75%** without domain adaptation. Multi-frame consensus pushes that up but does not eliminate it.
+1. **Resolution floor.** A 480p frame with a vehicle 50 m away yields a plate crop ~25-40 px tall. Even with 4x SR (100-160 px) the Shannon-Nyquist limit means many characters were never sampled. Real-ESRGAN cannot invent the missing detail - at best it removes blur and noise. Expected character accuracy on heavily compressed surveillance footage: **60-75%** without domain adaptation. Multi-frame consensus pushes that up but does not eliminate it.
 
 2. **Compression artefacts.** This pipeline encodes background segments at CRF 45 (heavily lossy). If the plate is in a no-foreground frame and gets background CRF, the artefacts compound. For best plate-reading accuracy, run the reader on Mode 0 segments (full quality) or Mode 1 segments where the plate was inside an ROI.
 
@@ -144,7 +144,7 @@ Three things to be honest with the sponsor about:
 ## Operational recommendations
 
 - Run the reader on **Mode 0 or Mode 1 segments** for best accuracy. Mode 2/3 background-keyframe / object-only outputs intentionally degrade non-foreground pixels, which can include plate edges.
-- For long clips, leave `max_frames` at the default 60 and `sample_every_n_frames` at 5 — that's a 12-frame consensus pass on a 60-second segment, enough to flush single-frame hallucinations without burning runtime.
+- For long clips, leave `max_frames` at the default 60 and `sample_every_n_frames` at 5 - that's a 12-frame consensus pass on a 60-second segment, enough to flush single-frame hallucinations without burning runtime.
 - When the segments DB has `roi_count > 0`, pass the per-frame vehicle boxes via `roi_boxes`. This is the single biggest speedup on long clips.
 - Trust the verdict label. `uncertain` reads should not enter incident reports.
 

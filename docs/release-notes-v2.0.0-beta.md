@@ -1,20 +1,20 @@
-# SVCS v2.0.0-beta — draft release notes
+# SVCS v2.0.0-beta - draft release notes
 
 > **Draft for the owner to publish.** This is an **unsigned public beta**. Windows
-> SmartScreen will warn on launch — choose *More info → Run anyway*. A signed
+> SmartScreen will warn on launch - choose *More info → Run anyway*. A signed
 > build is planned (TASK 5b.1).
 
 **SVCS** (Selective Video Compression for Surveillance) shrinks 24/7 camera
 footage by keeping what moves at full quality and compressing the dead
-background hard — the same useful footage at a fraction of the size. Free and
-open source (AGPL-3.0). Runs offline on a regular PC — **no GPU required**, no
+background hard - the same useful footage at a fraction of the size. Free and
+open source (AGPL-3.0). Runs offline on a regular PC - **no GPU required**, no
 cloud, no telemetry by default.
 
 ## Highlights
 
 - **Surveillance-first presets.** Pick what the camera watches (Continuous CCTV,
   Motion-event, Doorbell, Multi-camera/NVR, Active scene, Archive) plus a
-  consumer family (Indoor cam, Outdoor yard, Baby/pet monitor) — no codec jargon.
+  consumer family (Indoor cam, Outdoor yard, Baby/pet monitor) - no codec jargon.
 - **Content auto-detection.** SVCS analyzes the first ~30 s of a clip and
   recommends a preset.
 - **Camera ingestion, three honest ways.** Direct RTSP/ONVIF (with LAN discovery),
@@ -38,8 +38,8 @@ System requirements: Windows 10/11 64-bit, any modern CPU (no GPU), 4 GB+ RAM,
 
 ## Known limitations
 
-- **Unsigned** — SmartScreen warning on first launch (signing is the next milestone).
-- Cloud-locked cameras (Ring/Nest/Arlo) require export or a bridge — see
+- **Unsigned** - SmartScreen warning on first launch (signing is the next milestone).
+- Cloud-locked cameras (Ring/Nest/Arlo) require export or a bridge - see
   `docs/camera-ingestion.md`.
 - Beta: please report issues on GitHub.
 

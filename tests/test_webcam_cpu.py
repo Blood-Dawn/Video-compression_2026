@@ -252,7 +252,7 @@ class TestWebcamHardware:
         src = FrameSource(0)
         ok, frame = src.read()
         src.release()
-        assert ok, "cv2.VideoCapture(0).read() returned False — no webcam connected?"
+        assert ok, "cv2.VideoCapture(0).read() returned False - no webcam connected?"
         assert frame is not None
         assert frame.ndim == 3 and frame.shape[2] == 3
 

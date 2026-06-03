@@ -8,10 +8,10 @@ under gui.routes. This pins:
   * the exact route count (48 non-static rules),
   * every expected URL is registered under the correct blueprint,
   * every `/api/...` (and /media) URL the dashboard's index.html fetches is
-    served by a registered route — so a renamed/dropped route can't silently
+    served by a registered route - so a renamed/dropped route can't silently
     break the frontend (its only contract is the URL string).
 
-Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — blueprint guard).
+Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - blueprint guard).
 """
 
 import re

@@ -14,7 +14,7 @@ The always-on sampler used to start at *import* time, which spawned a thread
 merely by importing the module (bad for tests and PyInstaller). It is now an
 explicit start_hw_sampler() invoked from gui.app.create_app().
 
-Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — cpu-sampler extraction,
+Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - cpu-sampler extraction,
 explicit hw-sampler start).
 """
 
@@ -66,7 +66,7 @@ try:
         _saved_avgs = json.loads(_MODE_AVG_FILE.read_text())
         if isinstance(_saved_avgs, dict):
             with _power_lock:
-                # Sanity-check structure — only accept entries that look
+                # Sanity-check structure - only accept entries that look
                 # like {"cpu_sum": x, "n": y, "avg": z}
                 for k, v in _saved_avgs.items():
                     if (isinstance(v, dict)
@@ -77,7 +77,7 @@ try:
                         entry["historical"] = True
                         _power_state["mode_avgs"][k] = entry
 except Exception as _exc:  # noqa: BLE001
-    # Corrupt file — ignore, will be overwritten on next sampler stop
+    # Corrupt file - ignore, will be overwritten on next sampler stop
     pass
 
 
@@ -139,7 +139,7 @@ def _cpu_sampler_loop(mode_key: str, output_dir: str | None = None) -> None:
         # Non-blocking 1-s wait so we can stop promptly
         _cpu_sampler_stop.wait(timeout=1.0)
 
-    # Session ended — update per-mode running average and persist it so
+    # Session ended - update per-mode running average and persist it so
     # the benchmark survives server restarts (was previously lost every
     # time the user closed the app).
     # Author: Bloodawn (KheivenD), 2026-05-03 (cpu-by-mode persistence).
@@ -196,7 +196,7 @@ def _start_cpu_sampler(mode_key: str, output_dir: str | None = None) -> None:
     """Spawn the background CPU sampler.
 
     ``output_dir`` is the folder where the pipeline is writing this run's
-    segments — the sampler stamps a ``cpu_stats.json`` there on stop so
+    segments - the sampler stamps a ``cpu_stats.json`` there on stop so
     the metrics tab can show CPU% for THIS clip rather than a global
     rolling average.
     Author: Bloodawn (KheivenD), 2026-05-03 (per-clip CPU stats).
@@ -265,7 +265,7 @@ def start_hw_sampler() -> None:
     Called from gui.app.create_app(). Previously this thread was started at
     import time; making it explicit keeps importing gui.app side-effect-free
     (no stray thread during tests / PyInstaller analysis).
-    Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — explicit start).
+    Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - explicit start).
     """
     global _bg_hw_thread
     if not _PSUTIL_OK:

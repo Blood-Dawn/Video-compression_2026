@@ -1,7 +1,7 @@
 # Build the Linux AppImage (M5b TASK 5b.2).
 #
 # Runs the AppImage build on a clean ubuntu-latest runner and uploads the result
-# as a CI artifact. It does NOT publish a GitHub Release — tagging/publishing is
+# as a CI artifact. It does NOT publish a GitHub Release - tagging/publishing is
 # the owner's gated step (see docs/RELEASE-CHECKLIST.md / docs/BLOCKERS.md).
 #
 # Triggers: manual (workflow_dispatch) and version tags (v*). On a tag it builds

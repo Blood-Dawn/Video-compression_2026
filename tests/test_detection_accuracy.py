@@ -4,7 +4,7 @@ test_detection_accuracy.py
 Verifies that BackgroundSubtractor detects foreground regions on real footage
 using CDnet 2014 benchmark videos from data/samples/cdnet_mp4/.
 
-No external clip or env var needed — the CDnet videos are bundled with the repo.
+No external clip or env var needed - the CDnet videos are bundled with the repo.
 Set TEST_CLIP=/path/to/clip.mp4 to override and use a specific clip instead.
 
 To run:
@@ -27,7 +27,7 @@ import pytest
 
 CDNET_ROOT = Path("data/samples/cdnet_mp4")
 
-# Preferred clips for each test role.  Ordered by preference — the first one
+# Preferred clips for each test role.  Ordered by preference - the first one
 # found on disk is used.  All are CDnet 2014 baseline sequences with clear,
 # consistent motion (or a stable background for the FP test).
 _MOTION_CLIPS = [
@@ -55,7 +55,7 @@ def _resolve_clip(candidates: list[Path]) -> Path | None:
 
 
 def _find_any_cdnet_clip() -> Path | None:
-    """Return any .mp4 from the CDnet tree — used as last-resort fallback."""
+    """Return any .mp4 from the CDnet tree - used as last-resort fallback."""
     if CDNET_ROOT.exists():
         for mp4 in sorted(CDNET_ROOT.rglob("*.mp4")):
             return mp4
@@ -91,7 +91,7 @@ def _find_static_clip() -> str | None:
     p = _resolve_clip(_STATIC_SCENE_CLIPS)
     if p:
         return str(p)
-    # 3. Fall back to any motion clip — warmup will still stabilise the model
+    # 3. Fall back to any motion clip - warmup will still stabilise the model
     return _find_motion_clip()
 
 
@@ -223,7 +223,7 @@ def test_no_crash_on_cdnet_category(category, clip_path):
     """BackgroundSubtractor must not crash on any CDnet category clip.
 
     Reads 30 frames from the first clip in each category.  Does not assert
-    detection — some categories (e.g. thermal, turbulence) may not trigger
+    detection - some categories (e.g. thermal, turbulence) may not trigger
     foreground detections with the default MOG2 params, and that's expected.
     What must not happen is an exception or a corrupt mask shape.
     """
@@ -258,7 +258,7 @@ def test_detection_on_nightVideos():
     """
     night_clip = CDNET_ROOT / "nightVideos" / "nightVideos_bridgeEntry.mp4"
     if not night_clip.exists():
-        pytest.skip(f"{night_clip} not found — run git lfs pull to get CDnet clips.")
+        pytest.skip(f"{night_clip} not found - run git lfs pull to get CDnet clips.")
 
     from src.background_subtraction.background_subtraction import BackgroundSubtractor
 

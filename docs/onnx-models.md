@@ -1,4 +1,4 @@
-# ONNX models (M2 — slim install path)
+# ONNX models (M2 - slim install path)
 
 Author: Bloodawn (KheivenD), 2026-06-02 (TASK 2.1).
 
@@ -6,11 +6,11 @@ The v2 installer drops from multi-GB to a few hundred MB by running inference on
 **ONNX Runtime** instead of PyTorch (PLAN-V2 §6). The `.onnx` weights are an
 **optional component**, not committed to the repo (`*.onnx` is gitignored). They
 are produced once from the PyTorch checkpoints and shipped alongside the
-installer (or fetched on first run — TASK 2.4).
+installer (or fetched on first run - TASK 2.4).
 
-## Detection — YOLOv8-nano (DONE, parity-verified)
+## Detection - YOLOv8-nano (DONE, parity-verified)
 
-- **Runtime:** `src/detection/onnx_backend.py` (`YoloOnnxDetector`) — letterbox
+- **Runtime:** `src/detection/onnx_backend.py` (`YoloOnnxDetector`) - letterbox
   640 preprocess → ONNX Runtime → decode `(1, 84, 8400)` + class-aware NMS →
   `Detection(class_id, class_name, score, xyxy)` in original-image coordinates.
 - **Selector:** `ObjectFilter(backend="torch" | "onnx" | "auto")`. Default is
@@ -34,7 +34,7 @@ installer (or fetched on first run — TASK 2.4).
   skips cleanly when `yolov8n.onnx` or the clip is absent (e.g. on CI, where the
   model is a build artifact and the clips are git-LFS).
 
-## Enhancement — Real-ESRGAN x4plus (DEFERRED — follow-up)
+## Enhancement - Real-ESRGAN x4plus (DEFERRED - follow-up)
 
 Per PLAN-V2 §6 / EXECUTION TASK 2.1 ("if x4plus won't export cleanly, ship
 detection-on-ONNX first, enhancement as a follow-up"), the Real-ESRGAN ONNX

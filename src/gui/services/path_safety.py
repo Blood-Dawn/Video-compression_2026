@@ -3,11 +3,11 @@ src/gui/services/path_safety.py
 
 Path-traversal guards for the dashboard, extracted from gui/app.py (TASK 1.2).
 
-These are pure functions — no shared state, no threads, no I/O beyond
+These are pure functions - no shared state, no threads, no I/O beyond
 ``Path.resolve()``. They gate every route that turns a user-supplied path or
 filename into a filesystem access (media serving, uploads, encrypt/decrypt).
 
-Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — path-safety extraction).
+Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - path-safety extraction).
 """
 
 from pathlib import Path

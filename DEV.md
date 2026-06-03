@@ -25,7 +25,7 @@ This document is for **team members setting up the project for the first time** 
 
 ## 1. What This Project Does
 
-Static surveillance cameras produce massive amounts of redundant video because most of the image never changes between frames  -  the wall, the pavement, the fence are always there. The only thing that matters intelligence-wise is moving objects: people walking, vehicles passing.
+Static surveillance cameras produce massive amounts of redundant video because most of the image never changes between frames - the wall, the pavement, the fence are always there. The only thing that matters intelligence-wise is moving objects: people walking, vehicles passing.
 
 This pipeline:
 1. **Reads** a video stream frame by frame
@@ -43,13 +43,13 @@ The result is approximately 6x smaller video files compared to standard H.264 co
 
 ### Operating System
 - Linux (Ubuntu 20.04+ recommended), macOS 12+, or Windows 10/11 with WSL2
-- Windows native is **not tested**  -  use WSL2 if you are on Windows
+- Windows native is **not tested** - use WSL2 if you are on Windows
 
 ### Python
 - Python **3.9 or higher** (3.11 recommended)
 - Check your version: `python3 --version`
 
-### FFmpeg (Required  -  must be installed as a system binary)
+### FFmpeg (Required - must be installed as a system binary)
 FFmpeg is not a Python package. It must be installed on your system separately.
 
 **Ubuntu/Debian / WSL2:**
@@ -62,7 +62,7 @@ sudo apt update && sudo apt install ffmpeg -y
 brew install ffmpeg
 ```
 
-**Windows (native  -  no WSL):**
+**Windows (native - no WSL):**
 
 Option A - Windows Package Manager (fastest):
 ```powershell
@@ -98,11 +98,11 @@ You should see output starting with `ffmpeg version 4.x` or higher. If you get `
 
 Follow these steps **in order**. Do not skip any step.
 
-### Option A — uv (recommended, requested by NIWC/Sean)
+### Option A - uv (recommended, requested by NIWC/Sean)
 
 uv manages the virtual environment, Python version, and dependency lock file for you. No manual venv creation needed.
 
-**Step 1 — Install uv**
+**Step 1 - Install uv**
 
 ```bash
 # Linux / macOS / WSL2
@@ -114,13 +114,13 @@ winget install astral-sh.uv
 
 Restart your terminal after installing so the `uv` command is on your PATH.
 
-**Step 2 — Clone the repo**
+**Step 2 - Clone the repo**
 ```bash
 git clone https://github.com/Blood-Dawn/capstone-compression.git
 cd capstone-compression
 ```
 
-**Step 3 — Install dependencies**
+**Step 3 - Install dependencies**
 ```bash
 uv sync
 ```
@@ -134,12 +134,12 @@ uv sync --extra enhance
 
 Note: `basicsr` and `realesrgan` pull in large CUDA packages. Skip `--extra enhance` if you are on a CPU-only machine and do not plan to use `--enhance`.
 
-**Step 3b — (GPU machines only) Install CUDA-enabled PyTorch**
+**Step 3b - (GPU machines only) Install CUDA-enabled PyTorch**
 
 `uv sync` installs PyTorch, but pip/uv will default to the CPU-only build unless you explicitly request the CUDA index. If you have an NVIDIA GPU, run this after `uv sync`:
 
 ```powershell
-# Windows (PowerShell) — RTX 5060 Ti / any NVIDIA GPU with CUDA 12.x driver
+# Windows (PowerShell) - RTX 5060 Ti / any NVIDIA GPU with CUDA 12.x driver
 pip install torch torchvision torchaudio `
   --index-url https://download.pytorch.org/whl/cu128 `
   --force-reinstall
@@ -161,11 +161,11 @@ print(torch.cuda.is_available())       # True
 print(torch.cuda.get_device_name(0))   # RTX 5060 Ti (or your GPU)
 ```
 
-Without this step, YOLO and the enhancement module run on CPU — both still work, just slower.
+Without this step, YOLO and the enhancement module run on CPU - both still work, just slower.
 
-**Step 4 — Run anything**
+**Step 4 - Run anything**
 
-Prefix commands with `uv run` — it automatically activates the managed virtualenv:
+Prefix commands with `uv run` - it automatically activates the managed virtualenv:
 ```bash
 uv run python src/pipeline/pipeline.py --help
 uv run python run_gui.py
@@ -180,17 +180,17 @@ source .venv/bin/activate      # Linux / macOS
 
 ---
 
-### Option B — pip (fallback)
+### Option B - pip (fallback)
 
 Use this if uv is unavailable on your machine.
 
-**Step 1 — Clone the repo**
+**Step 1 - Clone the repo**
 ```bash
 git clone https://github.com/Blood-Dawn/capstone-compression.git
 cd capstone-compression
 ```
 
-**Step 2 — Create a Python virtual environment**
+**Step 2 - Create a Python virtual environment**
 
 Linux / macOS:
 ```bash
@@ -207,19 +207,19 @@ source venv/Scripts/activate   # Git Bash
 
 Your terminal prompt should show `(venv)` when active.
 
-**Step 3 — Install Python dependencies**
+**Step 3 - Install Python dependencies**
 ```bash
 pip install -r requirements.txt
 ```
 
 This installs OpenCV, NumPy, FFmpeg-Python, scikit-image, ultralytics (YOLO), pytest, and all other required packages. It may take a few minutes.
 
-**Step 3b — (GPU machines only) Install CUDA-enabled PyTorch**
+**Step 3b - (GPU machines only) Install CUDA-enabled PyTorch**
 
 `pip install -r requirements.txt` installs the CPU-only PyTorch build by default. If you have an NVIDIA GPU, force-reinstall with the CUDA index after the main install:
 
 ```powershell
-# Windows — match cu128 to your CUDA version from nvidia-smi
+# Windows - match cu128 to your CUDA version from nvidia-smi
 pip install torch torchvision torchaudio `
   --index-url https://download.pytorch.org/whl/cu128 `
   --force-reinstall
@@ -234,22 +234,22 @@ pip install torch torchvision torchaudio \
 
 Verify: `python -c "import torch; print(torch.cuda.is_available())"` should print `True`.
 
-### Step 5  -  Verify FFmpeg Is on PATH
+### Step 5 - Verify FFmpeg Is on PATH
 ```bash
 ffmpeg -version
 ```
 If this fails, see [FFmpeg installation](#ffmpeg-required--must-be-installed-as-a-system-binary) above.
 
-### Step 6  -  Create Required Directories
+### Step 6 - Create Required Directories
 Some output directories are gitignored and need to be created locally:
 ```bash
 mkdir -p outputs logs data/samples
 ```
 
-### Step 7  -  Get a Test Video Clip
+### Step 7 - Get a Test Video Clip
 Video files are gitignored (they are too large for git). Ask a teammate for the shared test clips, or use any short `.mp4` file. Place it in `data/samples/`. A clip of a parking lot, hallway, or street corner works best.
 
-### Step 8  -  Run the Dependency Check Script
+### Step 8 - Run the Dependency Check Script
 ```bash
 bash check_deps.sh
 ```
@@ -365,12 +365,12 @@ capstone-compression/
 **Key class:** `BackgroundSubtractor`
 
 **Key methods:**
-- `__init__(method='MOG2', ...)`  -  Creates the subtractor. `method` can be `'MOG2'`, `'KNN'`, or `'GMG'`. MOG2 is the default and works best for most cases.
-- `apply(frame)`  -  Pass a single BGR frame (NumPy array). Returns `(mask, bounding_boxes)` where `mask` is a grayscale image and `bounding_boxes` is a list of `(x, y, w, h)` tuples.
-- `reset()`  -  Resets the background model. Call this when switching to a new video source.
+- `__init__(method='MOG2', ...)` - Creates the subtractor. `method` can be `'MOG2'`, `'KNN'`, or `'GMG'`. MOG2 is the default and works best for most cases.
+- `apply(frame)` - Pass a single BGR frame (NumPy array). Returns `(mask, bounding_boxes)` where `mask` is a grayscale image and `bounding_boxes` is a list of `(x, y, w, h)` tuples.
+- `reset()` - Resets the background model. Call this when switching to a new video source.
 
 **How it works internally:**
-OpenCV's background subtraction algorithms maintain a statistical model of what the "background" looks like based on the last N frames. When a new frame comes in, each pixel is compared to its expected background value. Pixels that deviate significantly are classified as foreground. MOG2 uses a Gaussian mixture model; KNN uses k-nearest neighbors in pixel color space. Both are adaptive  -  they update the background model over time to account for slow lighting changes.
+OpenCV's background subtraction algorithms maintain a statistical model of what the "background" looks like based on the last N frames. When a new frame comes in, each pixel is compared to its expected background value. Pixels that deviate significantly are classified as foreground. MOG2 uses a Gaussian mixture model; KNN uses k-nearest neighbors in pixel color space. Both are adaptive - they update the background model over time to account for slow lighting changes.
 
 **Example usage:**
 ```python
@@ -391,9 +391,9 @@ mask, bboxes = subtractor.apply(frame)
 **Key class:** `ROIEncoder`
 
 **Key methods:**
-- `__init__(output_dir, fg_crf=18, bg_crf=45, fps=30)`  -  Configure the encoder. `fg_crf` controls foreground quality (lower = better quality, larger file). `bg_crf` controls background quality (higher = worse quality, smaller file).
-- `encode_segment(frames, bboxes_per_frame, camera_id, timestamp)`  -  Encode a list of frames into a compressed video segment. Returns the output file path and file size.
-- `get_file_size(path)`  -  Returns the size of an output file in bytes.
+- `__init__(output_dir, fg_crf=18, bg_crf=45, fps=30)` - Configure the encoder. `fg_crf` controls foreground quality (lower = better quality, larger file). `bg_crf` controls background quality (higher = worse quality, smaller file).
+- `encode_segment(frames, bboxes_per_frame, camera_id, timestamp)` - Encode a list of frames into a compressed video segment. Returns the output file path and file size.
+- `get_file_size(path)` - Returns the size of an output file in bytes.
 
 **How it works internally:**
 FFmpeg is called as a subprocess via `ffmpeg-python`. The pipeline passes raw frames to FFmpeg through a pipe (stdin). FFmpeg encodes them using libx264 with the specified CRF values. ROI-specific quality is controlled using FFmpeg's `filter_complex` to apply different quantization levels to different spatial regions.
@@ -458,13 +458,13 @@ python src/pipeline/pipeline.py \
 **What it does:** Calculates quality and efficiency metrics for evaluating the pipeline.
 
 **Key functions:**
-- `compute_psnr(original, compressed)`  -  Peak Signal-to-Noise Ratio in dB. Higher is better. Above 30 dB is generally acceptable; above 40 dB is excellent.
-- `compute_ssim(original, compressed)`  -  Structural Similarity Index. Ranges 0 to 1. Above 0.85 is the target.
-- `compute_compression_ratio(original_bytes, compressed_bytes)`  -  Returns a float. `6.0` means the compressed file is 6x smaller. Target is ≥ 6x.
+- `compute_psnr(original, compressed)` - Peak Signal-to-Noise Ratio in dB. Higher is better. Above 30 dB is generally acceptable; above 40 dB is excellent.
+- `compute_ssim(original, compressed)` - Structural Similarity Index. Ranges 0 to 1. Above 0.85 is the target.
+- `compute_compression_ratio(original_bytes, compressed_bytes)` - Returns a float. `6.0` means the compressed file is 6x smaller. Target is ≥ 6x.
 
 ---
 
-### `src/utils/db.py` (Milestone 1  -  create this file)
+### `src/utils/db.py` (Milestone 1 - create this file)
 
 **What it will do:** Maintains a SQLite database that indexes every compressed video segment.
 
@@ -486,13 +486,13 @@ CREATE TABLE segments (
 
 ---
 
-### `src/enhancement/enhancer.py` (Milestone 2  -  create this file)
+### `src/enhancement/enhancer.py` (Milestone 2 - create this file)
 
 **What it will do:** Take a compressed frame or ROI and upscale it using Real-ESRGAN running in CPU mode.
 
 **Why we need this:** The background is stored at very low quality. After offload, analysts may want to enhance the footage for review. Super-resolution can recover some of the detail lost during aggressive compression.
 
-**Model to use:** Real-ESRGAN (`RealESRGAN_x4plus.pth`)  -  download from the official repo at [https://github.com/xinntao/Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN). Place model weights in `models/` (gitignored). Do not commit model weights to git.
+**Model to use:** Real-ESRGAN (`RealESRGAN_x4plus.pth`) - download from the official repo at [https://github.com/xinntao/Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN). Place model weights in `models/` (gitignored). Do not commit model weights to git.
 
 ---
 
@@ -561,7 +561,7 @@ If any test fails, **do not open a PR** until it is fixed.
 
 ### Daily Workflow
 ```bash
-# Start of day  -  sync your branch with the latest dev
+# Start of day - sync your branch with the latest dev
 git checkout dev
 git pull origin dev
 git checkout feature/your-branch-name
@@ -577,7 +577,7 @@ git push origin feature/your-branch-name
 1. Push your feature branch to GitHub
 2. Open a PR from `feature/your-branch-name` → `dev` on GitHub
 3. Assign one other team member as reviewer
-4. Do not merge your own PR  -  wait for approval
+4. Do not merge your own PR - wait for approval
 5. Once approved, the reviewer or you can merge
 
 ### Commit Message Format
@@ -638,7 +638,7 @@ mkdir -p data/samples
 The database hasn't been initialized yet. The pipeline creates the database on first run. Make sure the pipeline has been run at least once before querying.
 
 ### Foreground mask is all white (everything detected as foreground)
-The background model needs time to learn the background. The first 30-100 frames are the "learning phase"  -  the mask will be noisy. This is normal. The mask quality improves after the model stabilizes. You can also increase the `history` parameter in `BackgroundSubtractor.__init__`.
+The background model needs time to learn the background. The first 30-100 frames are the "learning phase" - the mask will be noisy. This is normal. The mask quality improves after the model stabilizes. You can also increase the `history` parameter in `BackgroundSubtractor.__init__`.
 
 ### Foreground mask detects nothing (all black)
 The `varThreshold` is too high (too strict). Lower it:
@@ -689,9 +689,9 @@ pytest tests/ -v
 
 The enhancement module applies CPU-compatible super-resolution to sharpen foreground ROI regions before they are encoded. This uses [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN).
 
-### Step 1 — Install the enhancement dependencies
+### Step 1 - Install the enhancement dependencies
 
-These are optional extras — only needed if you plan to use the `--enhance` flag.
+These are optional extras - only needed if you plan to use the `--enhance` flag.
 
 ```bash
 # uv (recommended)
@@ -706,7 +706,7 @@ On macOS you may need Xcode command-line tools first:
 xcode-select --install
 ```
 
-### Step 2 — Download model weights
+### Step 2 - Download model weights
 
 The model weights are **not** committed to git (they are ~67 MB and covered by the `*.pth` gitignore rule). Download them manually:
 
@@ -724,7 +724,7 @@ models/
 └── RealESRGAN_x4plus.pth   ← 67 MB, gitignored
 ```
 
-### Step 3 — Verify the module loads
+### Step 3 - Verify the module loads
 
 ```python
 from src.enhancement.enhancer import Enhancer
@@ -733,9 +733,9 @@ print(e.backend)   # "realesrgan" if weights + packages present, else "bicubic"
 print(e.device)    # "cpu", "cuda", or "mps"
 ```
 
-If it prints `"bicubic"`, either the packages are not installed or the weights file is missing. The pipeline will still run — just without AI sharpening.
+If it prints `"bicubic"`, either the packages are not installed or the weights file is missing. The pipeline will still run - just without AI sharpening.
 
-### Step 4 — Run the pipeline with enhancement
+### Step 4 - Run the pipeline with enhancement
 
 ```bash
 python src/pipeline/pipeline.py \
@@ -752,11 +752,11 @@ python src/pipeline/pipeline.py \
 | `--enhance` | off | Enable ROI super-resolution sharpening |
 | `--enhance-scale` | `4` | Intermediate upscale factor (must match model, default 4) |
 
-**Performance note:** Each foreground ROI is upscaled then downscaled back to original resolution on every frame. On a modern laptop CPU this adds ~50–200ms per frame depending on ROI size. Do **not** use `--enhance` on live camera feeds unless your hardware can sustain the load. It is intended for offline processing of stored footage.
+**Performance note:** Each foreground ROI is upscaled then downscaled back to original resolution on every frame. On a modern laptop CPU this adds ~50-200ms per frame depending on ROI size. Do **not** use `--enhance` on live camera feeds unless your hardware can sustain the load. It is intended for offline processing of stored footage.
 
 ### How it works
 
-`upscale_roi(frame, bbox)` extracts the bounding box region, runs it through Real-ESRGAN at 4× (or bicubic fallback), then downsamples the result back to the original bbox dimensions and composites it into the frame. The frame size stays the same — this is a sharpening pass, not a resize. The sharpened frame is then handed to the segment writer and encoded at the foreground CRF setting.
+`upscale_roi(frame, bbox)` extracts the bounding box region, runs it through Real-ESRGAN at 4× (or bicubic fallback), then downsamples the result back to the original bbox dimensions and composites it into the frame. The frame size stays the same - this is a sharpening pass, not a resize. The sharpened frame is then handed to the segment writer and encoded at the foreground CRF setting.
 
 ### Troubleshooting
 
@@ -767,32 +767,32 @@ Run `uv sync --extra enhance` (or `pip install basicsr realesrgan` in an activat
 The `.pth` file is missing from `models/`. Re-run the curl command in Step 2.
 
 **`CUDA not available` warning**
-Normal — the Enhancer always runs in CPU mode (`half=False`). This warning comes from PyTorch and can be ignored.
+Normal - the Enhancer always runs in CPU mode (`half=False`). This warning comes from PyTorch and can be ignored.
 
 **Enhancement is slow**
 Use `--enhance-scale 2` to run a lighter intermediate pass, or skip `--enhance` entirely and process footage offline after offload.
 
 ---
 
-*Last updated: April 2026 by Victor Teixeira (Milestone 2 — Enhancement Module). If you find anything in this guide that is wrong or out of date, update it and open a PR.*
+*Last updated: April 2026 by Victor Teixeira (Milestone 2 - Enhancement Module). If you find anything in this guide that is wrong or out of date, update it and open a PR.*
 
 ---
 
 ## 13. Getting Test Videos
 
-The test videos are not committed to the repo — they are too large for GitHub and are gitignored. Every team member needs to build their own local copy. This section explains exactly how.
+The test videos are not committed to the repo - they are too large for GitHub and are gitignored. Every team member needs to build their own local copy. This section explains exactly how.
 
 There are two datasets used across the project. **CDnet 2014** is used for background subtraction testing (pipeline modes, algorithm comparison, stress tests). **VIRAT** is used for person/vehicle detection testing. Build both.
 
 ---
 
-### CDnet 2014 — Background subtraction benchmark
+### CDnet 2014 - Background subtraction benchmark
 
 CDnet distributes footage as sequences of PNG image frames, not as video files. You download the frames and then use FFmpeg to stitch them into `.mp4` files. This is how the project's `data/samples/cdnet_mp4/` folder was originally built.
 
-**Step 1 — Download the image frames**
+**Step 1 - Download the image frames**
 
-Go to [changedetection.net](http://www.changedetection.net) and download the dataset. The site gives you a zip per category. Download whichever categories you need — baseline and nightVideos are the most useful for this project.
+Go to [changedetection.net](http://www.changedetection.net) and download the dataset. The site gives you a zip per category. Download whichever categories you need - baseline and nightVideos are the most useful for this project.
 
 Extract everything to `data/dataset/`. After extraction the structure looks like this:
 
@@ -815,7 +815,7 @@ data/dataset/
 
 `data/dataset/` is gitignored. The raw frames never get committed.
 
-**Step 2 — Convert a clip to MP4 with FFmpeg**
+**Step 2 - Convert a clip to MP4 with FFmpeg**
 
 For each clip, run this command. Replace `{category}` and `{clipname}` with the folder names from the dataset:
 
@@ -828,7 +828,7 @@ ffmpeg -framerate 25 \
   data/samples/cdnet_mp4/{category}/{clipname}.mp4
 ```
 
-Example — converting the highway clip from the baseline category:
+Example - converting the highway clip from the baseline category:
 
 ```bash
 ffmpeg -framerate 25 \
@@ -841,7 +841,7 @@ ffmpeg -framerate 25 \
 
 The output file goes into the matching category subfolder under `data/samples/cdnet_mp4/`. The naming convention is `{category}_{clipname}.mp4`.
 
-**Step 3 — Make sure the output folder exists first**
+**Step 3 - Make sure the output folder exists first**
 
 ```bash
 mkdir -p data/samples/cdnet_mp4/baseline
@@ -885,13 +885,13 @@ See `data/samples/cdnet_mp4/README.md` for which clip to use for each type of te
 
 ---
 
-### VIRAT — Person and vehicle activity dataset
+### VIRAT - Person and vehicle activity dataset
 
 Riley uses VIRAT for person/vehicle detection testing. It ships as actual video files, so there is no conversion step.
 
-**Step 1 — Download the videos**
+**Step 1 - Download the videos**
 
-Go to [viratdata.org](https://viratdata.org) and download the VIRAT Video Dataset. The site requires a short registration form. Download the ground camera videos (not aerial) — those are the ones that match surveillance camera scenarios.
+Go to [viratdata.org](https://viratdata.org) and download the VIRAT Video Dataset. The site requires a short registration form. Download the ground camera videos (not aerial) - those are the ones that match surveillance camera scenarios.
 
 Save the `.mp4` files to `data/samples/virat/`. That folder is gitignored.
 
@@ -902,59 +902,59 @@ data/samples/virat/
 └── ...
 ```
 
-**Step 2 — (Optional) Download annotations**
+**Step 2 - (Optional) Download annotations**
 
-If you need the activity annotations (person bounding boxes, vehicle labels), get them from the [Kitware DIVA annotations repo](https://github.com/kitware/viratannotations). Clone it to `data/viratannotations-master/` — that folder is also gitignored.
+If you need the activity annotations (person bounding boxes, vehicle labels), get them from the [Kitware DIVA annotations repo](https://github.com/kitware/viratannotations). Clone it to `data/viratannotations-master/` - that folder is also gitignored.
 
 ```bash
 git clone https://github.com/kitware/viratannotations.git data/viratannotations-master
 ```
 
-Annotations are in KPF format (YAML). You do not need them to run the pipeline — only if you are doing annotation-based evaluation.
+Annotations are in KPF format (YAML). You do not need them to run the pipeline - only if you are doing annotation-based evaluation.
 
 ---
 
-### Quick reference — which dataset for which tests
+### Quick reference - which dataset for which tests
 
 | Test file | Dataset to use |
 |---|---|
-| `tests/test_pipeline_stress.py` | CDnet — `baseline/baseline_pedestrians.mp4` is a good default |
-| `tests/test_background_subtraction.py` | CDnet — any baseline or nightVideos clip |
-| `tests/test_roi_encoder.py` | CDnet — any short clip |
+| `tests/test_pipeline_stress.py` | CDnet - `baseline/baseline_pedestrians.mp4` is a good default |
+| `tests/test_background_subtraction.py` | CDnet - any baseline or nightVideos clip |
+| `tests/test_roi_encoder.py` | CDnet - any short clip |
 | `tests/test_database.py` | No video needed (uses synthetic data) |
 | `tests/test_enhancer.py` | No video needed (uses synthetic frames) |
 | Riley's detection tests | VIRAT ground camera clips |
 
-If a test is hardcoded to a specific path that does not exist on your machine, check the test file for a `CDNET` or `VIRAT` path variable at the top and update it to match your local setup — or open a PR to make it use the standard paths from `data/samples/cdnet_mp4/` and `data/samples/virat/`.
+If a test is hardcoded to a specific path that does not exist on your machine, check the test file for a `CDNET` or `VIRAT` path variable at the top and update it to match your local setup - or open a PR to make it use the standard paths from `data/samples/cdnet_mp4/` and `data/samples/virat/`.
 
 ---
 
-*Section 13 added April 2026 — Kheiven D'Haiti.*
+*Section 13 added April 2026 - Kheiven D'Haiti.*
 
 ---
 
-## 14. Web App Architecture — File Access, Remote Use, and EXE Deployment
+## 14. Web App Architecture - File Access, Remote Use, and EXE Deployment
 
 This section explains how file access works in the web app and why the "Browse" button behaves differently depending on how and where the server is running.
 
 ### How the web server sees files
 
-SVCS is a Flask web application. When you run `python src/gui/app.py`, Flask starts a server process on your machine. That server process has access to your machine's file system. All file paths in the UI — the input source, output directory, browse dialog — refer to paths on the machine running Flask, not on the user's browser machine.
+SVCS is a Flask web application. When you run `python src/gui/app.py`, Flask starts a server process on your machine. That server process has access to your machine's file system. All file paths in the UI - the input source, output directory, browse dialog - refer to paths on the machine running Flask, not on the user's browser machine.
 
 This is normal for web apps. The browser is just a UI skin that sends HTTP requests to the Flask server.
 
-### The "Browse" button — server-side only
+### The "Browse" button - server-side only
 
 The Browse (`…`) button opens a native file dialog (via `tkinter`) on the machine where Flask is running. If you're running the server on your own PC and accessing it from the same PC, Browse works exactly as expected.
 
-If a teammate accesses the server from their own device (laptop, phone, etc.), clicking Browse opens a dialog on **your PC** — not theirs. They cannot use Browse to select a file from their device.
+If a teammate accesses the server from their own device (laptop, phone, etc.), clicking Browse opens a dialog on **your PC** - not theirs. They cannot use Browse to select a file from their device.
 
 **Server PC requirements for Browse to work:**
 - Python `tkinter` must be installed (bundled with most Python distributions on Windows; on Linux: `sudo apt install python3-tk`)
 - The server must be running in an environment with a display (not a headless SSH session without X11 forwarding)
 - On Windows, Browse works out of the box
 
-### Upload — the right way for remote users
+### Upload - the right way for remote users
 
 The Upload zone (prominent drag-and-drop area in Step 1 of the sidebar) lets any user upload a video from their own device, regardless of where the server is running. The file is copied to the server's `data/uploads/` folder, and the input source path is updated automatically.
 
@@ -963,7 +963,7 @@ Use Upload when:
 - You're using ngrok or another tunnel to share the server with teammates outside your network
 - The server is running headless (no monitor)
 
-### ngrok — sharing outside your local network
+### ngrok - sharing outside your local network
 
 If teammates are outside your WiFi network, they cannot reach `http://192.168.x.x:5000` directly. Use ngrok to create a public HTTPS tunnel:
 
@@ -972,23 +972,23 @@ If teammates are outside your WiFi network, they cannot reach `http://192.168.x.
 ngrok http 5000
 ```
 
-This prints a public URL like `https://abc123.ngrok-free.app`. Share that URL with your team. The free tier shows a browser warning on first load — click "Visit Site" to proceed.
+This prints a public URL like `https://abc123.ngrok-free.app`. Share that URL with your team. The free tier shows a browser warning on first load - click "Visit Site" to proceed.
 
 To skip the warning on repeated visits, teammates can add `?ngrok-skip-browser-warning=true` to the URL.
 
-Your personal auth token lives in the ngrok dashboard at https://dashboard.ngrok.com/authtokens. If you accidentally share a screenshot with your token visible, regenerate it immediately at that page — old tokens stop working as soon as you regenerate.
+Your personal auth token lives in the ngrok dashboard at https://dashboard.ngrok.com/authtokens. If you accidentally share a screenshot with your token visible, regenerate it immediately at that page - old tokens stop working as soon as you regenerate.
 
 For a persistent domain or subdomain (so the URL stays the same across sessions), upgrade to a paid ngrok plan or use a self-hosted alternative like [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/).
 
-### EXE deployment — how file access changes
+### EXE deployment - how file access changes
 
-When the app is packaged as a standalone `.exe` (planned — see ROADMAP), the Flask server runs embedded inside the executable on the user's own PC. In that case:
+When the app is packaged as a standalone `.exe` (planned - see ROADMAP), the Flask server runs embedded inside the executable on the user's own PC. In that case:
 - The "server" IS the user's machine
 - Browse opens a dialog on their own PC, so it works naturally
 - Upload is still available but less necessary
 - All paths resolve to the user's local file system
 
-The web app UI is the same in both modes. The only difference is that in EXE mode, Browse becomes fully functional for every user because there's no client/server separation — the app is self-contained.
+The web app UI is the same in both modes. The only difference is that in EXE mode, Browse becomes fully functional for every user because there's no client/server separation - the app is self-contained.
 
 ### Summary table
 
@@ -1001,29 +1001,29 @@ The web app UI is the same in both modes. The only difference is that in EXE mod
 
 ---
 
-*Section 14 added April 2026 — Kheiven D'Haiti / Bloodawn.*
+*Section 14 added April 2026 - Kheiven D'Haiti / Bloodawn.*
 
 ---
 
-## 15. Smart Detection Filter — YOLO Classification Gate
+## 15. Smart Detection Filter - YOLO Classification Gate
 
 This section explains why the YOLO filter exists, what problem it solves, how to enable it, and what is happening under the hood.
 
 ### The core problem: MOG2 cannot tell a leaf from a person
 
-MOG2 and KNN background subtraction detect ANY pixel change as foreground. On outdoor scenes with trees, flags, or water, this produces hundreds of bounding boxes per second from moving foliage. From MOG2's perspective, a branch swaying in the wind looks identical to a person walking — both cause pixel values to deviate from the background model.
+MOG2 and KNN background subtraction detect ANY pixel change as foreground. On outdoor scenes with trees, flags, or water, this produces hundreds of bounding boxes per second from moving foliage. From MOG2's perspective, a branch swaying in the wind looks identical to a person walking - both cause pixel values to deviate from the background model.
 
-The consequence: modes 1, 2, and 3 all require `has_targets=True` to gate their recording logic. If every frame has MOG2 detections (because of leaves), the gate never closes, and all three modes behave exactly like mode 0 — they record everything, save the same file sizes, and produce identical results. This is why mode 2 and mode 3 showed no measurable difference on outdoor footage.
+The consequence: modes 1, 2, and 3 all require `has_targets=True` to gate their recording logic. If every frame has MOG2 detections (because of leaves), the gate never closes, and all three modes behave exactly like mode 0 - they record everything, save the same file sizes, and produce identical results. This is why mode 2 and mode 3 showed no measurable difference on outdoor footage.
 
 ### The fix: a classification gate after background subtraction
 
-After MOG2 produces bounding boxes, each box is cropped from the frame and run through YOLOv8-nano, a 6 MB object detector that runs at real-time speed on CPU. If YOLO finds a target-class object (person, vehicle, animal, or a carried item like a backpack or suitcase) inside that crop, the box is kept. Everything else — leaves, branches, shadows, lighting changes — is discarded.
+After MOG2 produces bounding boxes, each box is cropped from the frame and run through YOLOv8-nano, a 6 MB object detector that runs at real-time speed on CPU. If YOLO finds a target-class object (person, vehicle, animal, or a carried item like a backpack or suitcase) inside that crop, the box is kept. Everything else - leaves, branches, shadows, lighting changes - is discarded.
 
 The pipeline only passes real detections downstream. This means mode 1 only records frames with actual targets. Mode 2's clean background keyframe refreshes properly during quiet periods. Mode 3 blacks out genuine background pixels instead of constantly blacking the whole frame.
 
 ### GPU installation prerequisite
 
-YOLOv8-nano runs on whatever device is available. On the RTX 5060 Ti (or any CUDA GPU), it is effectively free — inference on a small crop takes under 1ms. On CPU it still runs at real-time for the small crops MOG2 produces.
+YOLOv8-nano runs on whatever device is available. On the RTX 5060 Ti (or any CUDA GPU), it is effectively free - inference on a small crop takes under 1ms. On CPU it still runs at real-time for the small crops MOG2 produces.
 
 For the CUDA build to be available, PyTorch must be installed with CUDA support. The default `pip install torch` installs a CPU-only build. Force the CUDA build:
 
@@ -1033,7 +1033,7 @@ pip install torch torchvision torchaudio `
   --force-reinstall
 ```
 
-Replace `cu128` with the CUDA version that matches your driver (check `nvidia-smi` — it shows the supported CUDA version in the top-right corner). Common values: `cu118`, `cu121`, `cu124`, `cu128`.
+Replace `cu128` with the CUDA version that matches your driver (check `nvidia-smi` - it shows the supported CUDA version in the top-right corner). Common values: `cu118`, `cu121`, `cu124`, `cu128`.
 
 Verify CUDA is now visible to PyTorch:
 ```python
@@ -1056,7 +1056,7 @@ uv sync --extra yolo
 pip install ultralytics
 ```
 
-On first use, `ultralytics` automatically downloads `yolov8n.pt` (~6 MB) from the official model hub and caches it in your home directory. Subsequent runs load from cache — no internet required.
+On first use, `ultralytics` automatically downloads `yolov8n.pt` (~6 MB) from the official model hub and caches it in your home directory. Subsequent runs load from cache - no internet required.
 
 If `ultralytics` is not installed, the pipeline detects this at startup and falls back to pass-through mode (all MOG2 boxes are kept, same as before the filter was added). A warning is logged. The pipeline continues normally.
 
@@ -1065,9 +1065,9 @@ If `ultralytics` is not installed, the pipeline detects this at startup and fall
 Open the dashboard → Step 3 Advanced Settings → expand "Detection Engine". Check the "Smart filter (ignore leaves & shadows)" checkbox. A confidence slider appears below it.
 
 The confidence threshold controls how certain YOLO must be before accepting a detection:
-- **0.20–0.25**: Very sensitive — catches distant or partially occluded targets, but may let through some borderline false positives
-- **0.30** (default): Balanced — works well for most outdoor surveillance scenes
-- **0.50–0.70**: Strict — only accepts high-confidence detections; may miss targets that are small or partially obscured
+- **0.20-0.25**: Very sensitive - catches distant or partially occluded targets, but may let through some borderline false positives
+- **0.30** (default): Balanced - works well for most outdoor surveillance scenes
+- **0.50-0.70**: Strict - only accepts high-confidence detections; may miss targets that are small or partially obscured
 
 Start at 0.30. If you still see false triggers from leaves, raise it. If you're missing real targets, lower it.
 
@@ -1090,11 +1090,11 @@ run_pipeline(
 
 ### Static suppression grid
 
-The `ObjectFilter` class also maintains a 32×32 pixel suppression grid over the frame. Each cell tracks how many consecutive frames have produced only false detections in that spatial region. After 30 consecutive false-only frames, the cell is suppressed — MOG2 boxes whose center falls in a suppressed cell are skipped entirely, before YOLO even runs.
+The `ObjectFilter` class also maintains a 32×32 pixel suppression grid over the frame. Each cell tracks how many consecutive frames have produced only false detections in that spatial region. After 30 consecutive false-only frames, the cell is suppressed - MOG2 boxes whose center falls in a suppressed cell are skipped entirely, before YOLO even runs.
 
 When a real target appears in a previously suppressed region (e.g., a person walks through a section of frame that was all leaves), the suppression counter for those cells resets to zero immediately. The region comes back online for the next frame.
 
-This means the system learns the scene over time. A tree that always produces false detections gets suppressed within a few seconds. YOLO inference load drops because fewer crops need classification. And if someone actually walks under that tree, they will still be detected — the suppression reset guarantees this.
+This means the system learns the scene over time. A tree that always produces false detections gets suppressed within a few seconds. YOLO inference load drops because fewer crops need classification. And if someone actually walks under that tree, they will still be detected - the suppression reset guarantees this.
 
 The suppression grid is reset automatically when the pipeline closes (between runs or when a new source is loaded).
 
@@ -1111,7 +1111,7 @@ DEFAULT_TARGET_CLASSES = {
 }
 ```
 
-These are COCO dataset class names — the same vocabulary YOLOv8 was trained on. Everything outside this set (potted plant, kite, sports ball, bench, etc.) is treated as a false detection. If your deployment needs to detect something not in this list, pass a custom set to `ObjectFilter(target_classes={...})`.
+These are COCO dataset class names - the same vocabulary YOLOv8 was trained on. Everything outside this set (potted plant, kite, sports ball, bench, etc.) is treated as a false detection. If your deployment needs to detect something not in this list, pass a custom set to `ObjectFilter(target_classes={...})`.
 
 ### Architecture summary
 
@@ -1142,7 +1142,7 @@ get_mode_decision()            →  should this frame be buffered?
 ROIEncoder.write_frame()       →  encode to FFmpeg pipe
 ```
 
-*Section 15 added April 2026 — Kheiven D'Haiti / Bloodawn.*
+*Section 15 added April 2026 - Kheiven D'Haiti / Bloodawn.*
 
 ---
 
@@ -1154,7 +1154,7 @@ A quick reference for features added in the final sprint.
 
 Downloads the current pipeline's settings as a timestamped JSON file. In the dashboard: **SAVE CONFIG** button below START/STOP. On the command line, `GET /api/config/export` returns a `svcs_config_YYYYMMDD_HHMMSS.json` download. The JSON includes all encoding, detection, and enhancement parameters but deliberately excludes the encryption passphrase.
 
-Use this to save a working configuration on one machine and reproduce it exactly on another — the scenario Cody described in the April 15 meeting.
+Use this to save a working configuration on one machine and reproduce it exactly on another - the scenario Cody described in the April 15 meeting.
 
 ### HLS ingest latency measurement (`/api/hls/latency`)
 
@@ -1181,7 +1181,7 @@ SVCS_TEST_WEBCAM=1 uv run pytest tests/test_webcam_cpu.py::TestWebcamHardware -v
 uv run python scripts/test_sr_honest.py
 ```
 
-Results from the sandbox run (bicubic baseline, no Real-ESRGAN installed): PSNR 21.30 dB bicubic vs 21.26 dB SR — identical, as expected when both paths use bicubic. Run with `pip install basicsr realesrgan` and the real model weights for a meaningful comparison.
+Results from the sandbox run (bicubic baseline, no Real-ESRGAN installed): PSNR 21.30 dB bicubic vs 21.26 dB SR - identical, as expected when both paths use bicubic. Run with `pip install basicsr realesrgan` and the real model weights for a meaningful comparison.
 
 ### Live traffic footage (`scripts/pull_traffic_footage.py`)
 
@@ -1192,4 +1192,4 @@ uv run python scripts/pull_traffic_footage.py
 
 Clips are saved to `data/samples/traffic/`.
 
-*Section 16 added April 2026 — Kheiven D'Haiti / Bloodawn.*
+*Section 16 added April 2026 - Kheiven D'Haiti / Bloodawn.*

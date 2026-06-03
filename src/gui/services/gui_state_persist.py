@@ -9,11 +9,11 @@ _demo_state["last_output_root"] are blank, so /api/segments would only walk
 <repo>/outputs/. If the user's last pipeline run or demo wrote to OneDrive/SVCS
 or another folder, those segments would become invisible even though the files
 still exist. We store the last-known roots in a tiny JSON next to the Flask
-secret so they survive a restart. No secrets in this file — just paths.
+secret so they survive a restart. No secrets in this file - just paths.
 
 Imports gui.state (the shared status/demo dicts + their locks) and utils.paths.
 
-Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — state-persist extraction).
+Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - state-persist extraction).
 """
 
 import json

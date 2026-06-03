@@ -50,7 +50,7 @@ def api_plate_reader_status():
 
 
 def _import_enhancement_benchmark():
-    """Lazy import the benchmark — keeps app startup light."""
+    """Lazy import the benchmark - keeps app startup light."""
     try:
         from enhancement.enhancement_benchmark import benchmark_enhancement  # type: ignore
     except ImportError:
@@ -63,14 +63,14 @@ def api_enhance_benchmark():
     """Compare no-SR vs full-frame-SR vs ROI-only-SR on a saved segment.
 
     POST body (JSON):
-        file_path             – absolute path to a .mp4 segment (required)
-        roi_box               – [x, y, w, h] ROI in original frame coords (required)
-        sample_every_n_frames – stride between sampled frames (default 5)
-        max_frames            – cap on total frames sampled (default 20)
-        sr_scale              – 2 or 4 (default 4)
-        run_ocr               – also report OCR confidence per variant (default false)
-        ocr_backend           – "auto" | "paddleocr" | "easyocr" (default auto)
-        device                – "cuda" | "mps" | "cpu" | null (auto)
+        file_path             - absolute path to a .mp4 segment (required)
+        roi_box               - [x, y, w, h] ROI in original frame coords (required)
+        sample_every_n_frames - stride between sampled frames (default 5)
+        max_frames            - cap on total frames sampled (default 20)
+        sr_scale              - 2 or 4 (default 4)
+        run_ocr               - also report OCR confidence per variant (default false)
+        ocr_backend           - "auto" | "paddleocr" | "easyocr" (default auto)
+        device                - "cuda" | "mps" | "cpu" | null (auto)
 
     Returns the full ``BenchmarkResult`` JSON: per-variant sharpness /
     PSNR / SSIM / OCR confidence, deltas, and a plain-English verdict.
@@ -120,14 +120,14 @@ def api_plate_reader():
     """Run the plate reader on a saved segment.
 
     POST body (JSON):
-        file_path             – absolute path to a .mp4/.avi/.mov clip (required)
-        sample_every_n_frames – stride between sampled frames (default 5)
-        max_frames            – cap on total frames sampled (default 60)
-        roi_boxes             – optional list of [x, y, w, h] crops to focus on
-        min_consensus_votes   – minimum agreeing-frame count (default 1)
-        min_ocr_confidence    – per-frame OCR confidence floor (default 0.4)
-        device                – "cuda" | "mps" | "cpu" | null (auto)
-        ocr_backend           – "auto" | "paddleocr" | "easyocr" (default auto)
+        file_path             - absolute path to a .mp4/.avi/.mov clip (required)
+        sample_every_n_frames - stride between sampled frames (default 5)
+        max_frames            - cap on total frames sampled (default 60)
+        roi_boxes             - optional list of [x, y, w, h] crops to focus on
+        min_consensus_votes   - minimum agreeing-frame count (default 1)
+        min_ocr_confidence    - per-frame OCR confidence floor (default 0.4)
+        device                - "cuda" | "mps" | "cpu" | null (auto)
+        ocr_backend           - "auto" | "paddleocr" | "easyocr" (default auto)
 
     Returns the full ``PlateReadResult`` as JSON, including a ``best_read``
     string (or null) and per-candidate ``verdict`` flags so the operator can

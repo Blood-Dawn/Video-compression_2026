@@ -8,7 +8,7 @@ Critical invariants this test suite protects:
      no traces are sent. The casual install must never phone home.
   2. SVCS_ENABLE_SENTRY=1 without SENTRY_DSN is still a no-op.
   3. Both flags set + sentry-sdk installed -> Sentry initialized.
-  4. capture_exception() is a no-op when Sentry isn't enabled — it
+  4. capture_exception() is a no-op when Sentry isn't enabled - it
      must never raise, even if called with a non-Exception.
 
 Author: Bloodawn (KheivenD), 2026-05-14 (audit item: crash reporting).
@@ -45,7 +45,7 @@ def _reimport_crash_reporting():
     return crash_reporting
 
 
-# ── Defaults — must be off ─────────────────────────────────────────────────
+# ── Defaults - must be off ─────────────────────────────────────────────────
 
 
 class TestDefaultsAreOff:

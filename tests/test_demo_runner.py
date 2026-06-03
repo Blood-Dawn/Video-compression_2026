@@ -1,7 +1,7 @@
 """
 tests/test_demo_runner.py
 
-Covers gui.services.demo_runner — the background demo worker and the
+Covers gui.services.demo_runner - the background demo worker and the
 manifest -> result payload builder it feeds into _demo_state (read verbatim
 by /api/demo/status and static/js/demo.js::_demoNotifyDone).
 

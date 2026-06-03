@@ -134,12 +134,12 @@ def compute_enhancement_gain(
     same spatial dimensions (the enhancer resizes back to original bbox size).
 
     Returns a dict with:
-        sharpness_before  – Laplacian variance of the input crop
-        sharpness_after   – Laplacian variance of the enhanced crop
-        gain_pct          – percentage change (positive = improvement)
-        before_label      – human-readable resolution equivalent e.g. "~480p"
-        after_label       – human-readable resolution equivalent e.g. "~720p"
-        improved          – True if after > before
+        sharpness_before  - Laplacian variance of the input crop
+        sharpness_after   - Laplacian variance of the enhanced crop
+        gain_pct          - percentage change (positive = improvement)
+        before_label      - human-readable resolution equivalent e.g. "~480p"
+        after_label       - human-readable resolution equivalent e.g. "~720p"
+        improved          - True if after > before
     """
     before = compute_sharpness(before_roi)
     after = compute_sharpness(after_roi)

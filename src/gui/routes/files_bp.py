@@ -44,11 +44,11 @@ def api_segments():
     """Return the 50 most recent segments from the metadata DB.
 
     Query params (all optional):
-      object_type   – vehicle | person | person+vehicle | animal | unknown
-      color         – red | orange | yellow | green | blue | white | black | gray | ...
-      scene_type    – highway | intersection | parking | street | unknown
-      time_of_day   – day | night | dusk_dawn
-      camera_id     – filter by camera
+      object_type   - vehicle | person | person+vehicle | animal | unknown
+      color         - red | orange | yellow | green | blue | white | black | gray | ...
+      scene_type    - highway | intersection | parking | street | unknown
+      time_of_day   - day | night | dusk_dawn
+      camera_id     - filter by camera
     """
     with _state_lock:
         cfg = _status.get("config", {})
@@ -62,7 +62,7 @@ def api_segments():
     # videos are searchable).
     # The pipeline cfg's output_dir and the demo's last output_root can
     # legitimately differ (one might point to ./outputs/, the other to
-    # OneDrive/SVCS/) — the user's report was that demo recordings
+    # OneDrive/SVCS/) - the user's report was that demo recordings
     # weren't appearing in the metrics tab because we were only walking
     # the pipeline cfg root. Now we walk both, plus a hard fallback to
     # ./outputs/ for fresh clones, then de-dup by resolved path.
@@ -92,7 +92,7 @@ def api_segments():
 
     if not all_dbs:
         return jsonify({"segments": [], "db_path": str(output_root / "metadata.db"),
-                        "note": "No metadata.db found — run the pipeline or a demo first.",
+                        "note": "No metadata.db found - run the pipeline or a demo first.",
                         "roots_searched": [str(r) for r in candidate_roots]})
 
     # ── Build filter clause (same params applied to every db) ────────────────
@@ -169,7 +169,7 @@ def api_segments():
     all_rows.sort(key=lambda x: x[0][0], reverse=True)
     all_rows = all_rows[:row_limit]
 
-    # Cache cpu_stats.json reads — many segments share the same db_dir.
+    # Cache cpu_stats.json reads - many segments share the same db_dir.
     # Author: Bloodawn (KheivenD), 2026-05-03 (per-clip CPU stats).
     _cpu_cache: dict[str, dict | None] = {}
 
@@ -329,7 +329,7 @@ def api_media():
     p = Path(path).resolve()
 
     # Security: reject non-absolute paths (path traversal guard).
-    # We allow any absolute path to a video file that exists on disk — this
+    # We allow any absolute path to a video file that exists on disk - this
     # dashboard runs on localhost only, so the only risk would be a crafted
     # URL from the same machine, which is already trusted.
     if not p.is_absolute():
@@ -490,7 +490,7 @@ def api_open_folder():
         else:
             subprocess.Popen(["xdg-open", str(folder)])
     except Exception as exc:
-        log.warning("api_open_folder: failed to open %s — %s", folder, exc)
+        log.warning("api_open_folder: failed to open %s - %s", folder, exc)
         return jsonify({"error": str(exc)}), 500
 
     return jsonify({"ok": True, "path": str(folder)})
@@ -570,7 +570,7 @@ def api_segments_hide_one():
     stable identifier. Walks every metadata.db under the output root,
     sets hidden=1 on any matching row, leaves the file on disk alone.
 
-    Used by the per-row [X] button in the metrics table — the user just
+    Used by the per-row [X] button in the metrics table - the user just
     wants the entry off the dashboard, not the underlying file deleted.
 
     Author: Bloodawn (KheivenD), 2026-05-03 (cleanup of dead rows).
@@ -600,7 +600,7 @@ def api_segments_hide_one():
                 hidden_count += cur.rowcount
                 conn.commit()
         except Exception as exc:  # noqa: BLE001
-            log.warning("hide_one: skipped %s — %s", db_path, exc)
+            log.warning("hide_one: skipped %s - %s", db_path, exc)
             continue
 
     return jsonify({"ok": True, "hidden": hidden_count})
@@ -619,8 +619,8 @@ def api_segments_cleanup_missing():
 
     Author: Bloodawn (KheivenD), 2026-05-03 (cleanup of dead rows).
     """
-    # Walk every plausible root — pipeline output_dir, last demo
-    # output_root, project /outputs/ — same fan-out /api/segments uses.
+    # Walk every plausible root - pipeline output_dir, last demo
+    # output_root, project /outputs/ - same fan-out /api/segments uses.
     with _state_lock:
         cfg = _status.get("config", {})
     with _demo_lock:
@@ -676,7 +676,7 @@ def api_segments_cleanup_missing():
                     # ── Redundant per-mode demo rows ─────────────────────
                     # Pre-2026-05-04 the demo runner indexed BOTH every
                     # per-mode rendered video AND the split-screen
-                    # composite — five rows per demo run for what is
+                    # composite - five rows per demo run for what is
                     # effectively one output. Hide the per-mode rows in
                     # any demo_comp* dir that also has a *_split_M*
                     # composite row, so the table only shows the one
@@ -697,7 +697,7 @@ def api_segments_cleanup_missing():
                             redundant_demo_count += cur.rowcount
                     conn.commit()
             except Exception as exc:  # noqa: BLE001
-                log.warning("cleanup_missing: skipped %s — %s", db_path, exc)
+                log.warning("cleanup_missing: skipped %s - %s", db_path, exc)
                 continue
 
     total = hidden_count + redundant_demo_count

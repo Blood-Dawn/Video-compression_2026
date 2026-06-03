@@ -8,7 +8,7 @@ open-source wedge, links the GitHub Releases installer, documents SHA-256
 verification and system requirements, pulls in NO CDN/external resources (DoD-
 network / offline friendly), and makes no competitor comparisons.
 
-Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5.1 — download page).
+Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5.1 - download page).
 """
 
 import re
@@ -58,7 +58,7 @@ def test_leads_with_the_wedge(html):
 
 
 def test_no_cdn_or_external_resources(html):
-    # No external scripts, stylesheets, fonts, or CDN hosts — fully self-hosted.
+    # No external scripts, stylesheets, fonts, or CDN hosts - fully self-hosted.
     assert "<script" not in html.lower(), "download page should ship no JS"
     assert "cdn" not in html.lower()
     # Every href/src is either a relative asset or a github.com/repo link.

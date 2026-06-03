@@ -1,7 +1,7 @@
 /*
  * src/gui/static/js/presets.js
  *
- * SVCS dashboard — named surveillance presets (M3 TASK 3.1).
+ * SVCS dashboard - named surveillance presets (M3 TASK 3.1).
  *
  * Fetches /api/presets and exposes the catalog by NAME so operators pick
  * "Continuous CCTV (max savings)" instead of reasoning about "Mode 2". Applying

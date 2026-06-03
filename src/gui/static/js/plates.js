@@ -1,11 +1,11 @@
 /*
  * src/gui/static/js/plates.js
  *
- * SVCS dashboard — plates module. Carved verbatim from the former single
+ * SVCS dashboard - plates module. Carved verbatim from the former single
  * inline <script> in index.html (TASK 1.5). Loaded as a classic script in
  * original execution order, so behavior is identical; all functions stay
  * global (reachable from inline on* handlers and the other modules).
- * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — JS split).
+ * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - JS split).
  */
 function _platePathFromUrl(url) {
   if (!url) return '';
@@ -111,7 +111,7 @@ function _renderPlateResults(data, busy) {
       html += '<tr>' +
               '<td style="font-weight:bold;letter-spacing:1px;color:var(--text);">' + p.text + '</td>' +
               '<td><span style="color:' + vc + ';font-weight:bold;">' + (p.verdict || '').toUpperCase() + '</span></td>' +
-              '<td>' + (p.confidence !== undefined ? p.confidence.toFixed(2) : '—') + '</td>' +
+              '<td>' + (p.confidence !== undefined ? p.confidence.toFixed(2) : ' - ') + '</td>' +
               '<td>' + (p.votes || 0) + '</td>' +
               '<td style="color:var(--text-dim);">' + framesShort + '</td>' +
               '</tr>';
@@ -125,7 +125,7 @@ function _renderPlateResults(data, busy) {
     html += '</div>';
   }
 
-  // Honest caveat — sponsor flagged hallucination risk on plates at kickoff.
+  // Honest caveat - sponsor flagged hallucination risk on plates at kickoff.
   html += '<div style="margin-top:0.5rem;font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);font-style:italic;">' +
           'Verdict cap: HIGH ≥ 3 frames + OCR ≥ 0.60 · MEDIUM ≥ 2 frames + OCR ≥ 0.50 · ' +
           'low/uncertain reads should be operator-verified, not actioned.' +

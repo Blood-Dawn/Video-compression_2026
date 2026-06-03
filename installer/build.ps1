@@ -41,7 +41,7 @@ $BuildDir = Join-Path $RepoRoot "build"
 $BundleExe = Join-Path $DistDir "SVCS\SVCS.exe"
 
 # ── Code signing (TASK 5b.1) ──────────────────────────────────────────
-# The signing STEP is wired here; the cert is the owner's to provide (gated —
+# The signing STEP is wired here; the cert is the owner's to provide (gated  - 
 # see docs/BLOCKERS.md). Credentials come from the environment so no secret
 # ever lives in the repo:
 #   SVCS_SIGN_CERT        path to a .pfx               (or)
@@ -261,7 +261,7 @@ if ($SkipSmoke) {
     return
 }
 
-Write-Host "[4/4] Smoke test — launching exe and probing port $SmokePort..." -ForegroundColor Cyan
+Write-Host "[4/4] Smoke test - launching exe and probing port $SmokePort..." -ForegroundColor Cyan
 
 # Launch the exe in the background. --no-browser keeps it from popping
 # a window during CI / unattended runs.
@@ -289,7 +289,7 @@ while ((Get-Date) -lt $deadline) {
             break
         }
     } catch {
-        # Connection refused while Flask is still booting — keep trying.
+        # Connection refused while Flask is still booting - keep trying.
         Start-Sleep -Milliseconds 500
     }
 }
@@ -301,14 +301,14 @@ if (-not $proc.HasExited) {
 
 if ($probeOk) {
     Write-Host ""
-    Write-Host "✓ Smoke test passed — dashboard answered on $probeUrl" -ForegroundColor Green
+    Write-Host "✓ Smoke test passed - dashboard answered on $probeUrl" -ForegroundColor Green
     Write-Host ""
     Write-Host "Next:  double-click $BundleExe to use it for real,"
     Write-Host "       or hand off the dist\SVCS\ folder to Inno Setup."
     exit 0
 } else {
     Write-Host ""
-    Write-Host "✗ Smoke test FAILED — dashboard didn't answer within $SmokeTimeoutSec sec" -ForegroundColor Red
+    Write-Host "✗ Smoke test FAILED - dashboard didn't answer within $SmokeTimeoutSec sec" -ForegroundColor Red
     Write-Host "  Re-run with the exe directly to see the traceback:"
     Write-Host "    $BundleExe --no-sync --no-browser"
     exit 1

@@ -2,7 +2,7 @@
 
 A repeatable checklist for cutting a public release. The build/verify steps are
 done by whoever prepares the release; **tagging and publishing the GitHub Release
-is the owner's action** (it's a gated step — see `docs/BLOCKERS.md`).
+is the owner's action** (it's a gated step - see `docs/BLOCKERS.md`).
 
 Versions follow the installer name: `SVCS-Setup-<version>.exe`. The first public
 drop is the **unsigned beta** `v2.0.0-beta`.
@@ -11,9 +11,9 @@ drop is the **unsigned beta** `v2.0.0-beta`.
 
 ## 1. Pre-flight (clean checkout)
 
-- [ ] `git switch app && git pull` — release from `app`, working tree clean.
+- [ ] `git switch app && git pull` - release from `app`, working tree clean.
 - [ ] Confirm the version in `pyproject.toml` / installer matches the intended tag.
-- [ ] `uv sync --extra enhance --extra crash-reporting` — env matches the lockfile.
+- [ ] `uv sync --extra enhance --extra crash-reporting` - env matches the lockfile.
 
 ## 2. Quality gate
 
@@ -51,13 +51,13 @@ drop is the **unsigned beta** `v2.0.0-beta`.
 - [ ] Mark it a **pre-release**; the title/notes state clearly it is an
       **unsigned beta** and SmartScreen will warn.
 - [ ] **Owner action:** create the tag (`v2.0.0-beta`) and click *Publish*.
-      The agent does not tag or publish (gated — `docs/BLOCKERS.md`).
+      The agent does not tag or publish (gated - `docs/BLOCKERS.md`).
 
-## 6b. Code signing (GA — TASK 5b.1)  🚦 *needs a cert*
+## 6b. Code signing (GA - TASK 5b.1)  🚦 *needs a cert*
 
 The signing step is wired into `installer/build.ps1` (`-Sign`); it signs the
 bundle exe *and* the installer with `signtool`. It needs a Windows code-signing
-certificate, which is the **owner's to obtain** — investigate
+certificate, which is the **owner's to obtain** - investigate
 [SignPath.io's free OSS program](https://signpath.io/) before buying an EV cert.
 The unsigned **beta** ships without this; a **GA** build should be signed.
 
@@ -73,8 +73,8 @@ The unsigned **beta** ships without this; a **GA** build should be signed.
 
 - [ ] Confirm the download page link (`docs/site/index.html` → Releases/latest) resolves to the new asset.
 - [ ] Spot-check the published `SHA256SUMS.txt` against a fresh download.
-- [ ] Open a tracking issue for the next milestone (signing — TASK 5b.1).
+- [ ] Open a tracking issue for the next milestone (signing - TASK 5b.1).
 
 ---
 
-*Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5.4 — release checklist).*
+*Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5.4 - release checklist).*

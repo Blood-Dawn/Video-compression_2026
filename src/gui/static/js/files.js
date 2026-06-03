@@ -1,11 +1,11 @@
 /*
  * src/gui/static/js/files.js
  *
- * SVCS dashboard — files module. Carved verbatim from the former single
+ * SVCS dashboard - files module. Carved verbatim from the former single
  * inline <script> in index.html (TASK 1.5). Loaded as a classic script in
  * original execution order, so behavior is identical; all functions stay
  * global (reachable from inline on* handlers and the other modules).
- * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — JS split).
+ * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - JS split).
  */
 async function loadSegments() {
   try {
@@ -25,29 +25,29 @@ async function loadSegments() {
       const objType = escHtml(s.object_type || 'unknown');
       const isEnc = s.file_path && s.file_path.endsWith('.enc');
       const playBtn = isEnc
-        ? `<button class="btn-play-sm btn-enc" title="Encrypted — click to decrypt &amp; play" onclick="promptDecrypt('${jsAttr(s.file_path)}')">[ENC]</button>`
+        ? `<button class="btn-play-sm btn-enc" title="Encrypted - click to decrypt &amp; play" onclick="promptDecrypt('${jsAttr(s.file_path)}')">[ENC]</button>`
         : s.playable_url
           ? `<button class="btn-play-sm" onclick="playSegment('${jsAttr(s.playable_url)}','${jsAttr(s.file_path)}')">▶</button>`
-          : `<span style="color:var(--text-dim);font-size:0.6rem;">—</span>`;
+          : `<span style="color:var(--text-dim);font-size:0.6rem;"> - </span>`;
       const encBtn = isEnc
         ? `<span style="color:var(--yellow);font-size:0.6rem;" title="Already encrypted">[ENC]</span>`
         : s.file_path
           ? `<button class="btn-play-sm" style="color:var(--yellow);border-color:var(--yellow);" title="Encrypt this segment" onclick="promptEncryptSegment('${jsAttr(s.file_path)}')">[DEC]</button>`
-          : `<span style="color:var(--text-dim);font-size:0.6rem;">—</span>`;
+          : `<span style="color:var(--text-dim);font-size:0.6rem;"> - </span>`;
       const compMb = s.file_size_kb / 1024;
       const sizeStr = compMb >= 1 ? `${compMb.toFixed(1)} MB` : `${s.file_size_kb} KB`;
       const qualityStr = s.sharpness_label
         ? escHtml(s.sharpness_label.split(' ')[0])
-        : '<span style="color:var(--text-dim)">—</span>';
+        : '<span style="color:var(--text-dim)"> - </span>';
       const qualityColor = s.sharpness_label
         ? (s.sharpness_label.includes('blurry') || s.sharpness_label.includes('240p') ? 'var(--red)'
           : s.sharpness_label.includes('480p') ? 'var(--yellow)'
           : 'var(--green)')
         : '';
       // ── New columns 2026-05-03 (UI cleanup pass): Color / Scene /
-      //    Light / Cars / People — same data the SEARCH tab already had.
+      //    Light / Cars / People - same data the SEARCH tab already had.
       //    Author: Bloodawn (KheivenD).
-      const dash = '<span style="color:var(--text-dim)">—</span>';
+      const dash = '<span style="color:var(--text-dim)"> - </span>';
       const color = s.dominant_color
         ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${_colorSwatch(s.dominant_color)};margin-right:4px;vertical-align:middle;"></span>${escHtml(s.dominant_color)}`
         : dash;
@@ -68,8 +68,8 @@ async function loadSegments() {
       const camDisplay = (!s.camera_id || s.camera_id === 'cam_00')
         ? _segDisplayName(s)
         : s.camera_id;
-      // Flag rows where the underlying file is gone — play button will
-      // be a "—" (no playable_url) and the segment isn't an .enc file.
+      // Flag rows where the underlying file is gone - play button will
+      // be a " - " (no playable_url) and the segment isn't an .enc file.
       // Author: Bloodawn (KheivenD), 2026-05-03 (cleanup of dead rows).
       const isStale = !s.playable_url && !isEnc;
       const rowStyle = isStale
@@ -78,13 +78,13 @@ async function loadSegments() {
       const staleTag = isStale
         ? '<span style="color:var(--red);font-size:0.55rem;margin-left:0.3rem;" title="Source file is missing on disk">[missing]</span>'
         : '';
-      // [X] button — hides this row from the dashboard. Files on disk
+      // [X] button - hides this row from the dashboard. Files on disk
       // are not deleted; this just sets hidden=1 in the metadata DB.
       const hideBtn = s.file_path
         ? `<button class="btn-row-hide" title="Remove this row from the dashboard (file on disk is kept)" onclick="event.stopPropagation();_hideSegmentRow('${jsAttr(s.file_path)}')">×</button>`
-        : `<span style="color:var(--text-dim);font-size:0.6rem;">—</span>`;
+        : `<span style="color:var(--text-dim);font-size:0.6rem;"> - </span>`;
       const mode = _segMode(s);
-      const modeColor = mode === '—' ? 'var(--text-dim)'
+      const modeColor = mode === ' - ' ? 'var(--text-dim)'
         : mode.startsWith('Split') ? 'var(--purple)'
         : mode === 'Mode 0' ? 'var(--text)'
         : mode === 'Mode 1' ? 'var(--teal)'
@@ -119,7 +119,7 @@ function _updateHomeRecent(segments) {
   const count = document.getElementById('home-rec-count');
   if (!tbody) return;
   // /api/segments returns rows in DESC timestamp order, so the array
-  // is already newest-first. Was slice(0,8) — that capped the panel at
+  // is already newest-first. Was slice(0,8) - that capped the panel at
   // 8 rows and left the scroll bar with nothing to scroll past, which
   // looked broken when the user had 25+ recordings ("25 total" shown
   // up top but only 8 visible). Show ALL of them; the parent div has
@@ -134,7 +134,7 @@ function _updateHomeRecent(segments) {
   // Each row gets the same hover-tooltip handler the Metrics tab uses
   // (`_onSegRowEnter` + `_segmentData[idx]`). The idx we pass is the
   // *global* index in `_segmentData` because the recent slice mirrors
-  // the head of that array — newest-first in both places.
+  // the head of that array - newest-first in both places.
   tbody.innerHTML = recent.map((s, idx) => {
     const isEnc = s.file_path && s.file_path.endsWith('.enc');
     const objIcon = s.object_type === 'vehicle' ? '' : s.object_type === 'person' ? '' : s.target_detected ? '' : '';
@@ -142,7 +142,7 @@ function _updateHomeRecent(segments) {
       ? `<button class="btn-play-sm btn-enc" title="Encrypted" onclick="promptDecrypt('${jsAttr(s.file_path)}')">[ENC]</button>`
       : s.playable_url
         ? `<button class="btn-play-sm" onclick="playSegment('${jsAttr(s.playable_url)}','${jsAttr(s.file_path)}')">▶</button>`
-        : '—';
+        : ' - ';
     const sizeMb = (s.file_size_kb / 1024);
     const camDisplay = (!s.camera_id || s.camera_id === 'cam_00')
       ? _segDisplayName(s)
@@ -154,7 +154,7 @@ function _updateHomeRecent(segments) {
       style="border-bottom:1px solid rgba(42,68,102,0.4);cursor:pointer;">
       <td style="padding:0.25rem 0.5rem;color:var(--text-dim);white-space:nowrap;">${formatTimestamp(s.timestamp)}</td>
       <td style="padding:0.25rem 0.5rem;font-family:var(--mono);font-size:0.65rem;" title="${escHtml(s.camera_id)}">${escHtml(camDisplay)}</td>
-      <td style="padding:0.25rem 0.5rem;">${objIcon} ${escHtml(s.object_type || '—')}</td>
+      <td style="padding:0.25rem 0.5rem;">${objIcon} ${escHtml(s.object_type || ' - ')}</td>
       <td style="padding:0.25rem 0.5rem;text-align:right;font-family:var(--mono);font-size:0.65rem;">${sizeMb >= 1 ? sizeMb.toFixed(1) + ' MB' : s.file_size_kb + ' KB'}</td>
       <td style="padding:0.25rem 0.5rem;text-align:center;">${playBtn}</td>
     </tr>`;
@@ -177,11 +177,11 @@ function _updateLibrarySummary(segments) {
   const savedMb = rawMb > 0 ? rawMb - totalMb : 0;
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  set('mlib-segments', n > 0 ? n : '—');
-  set('mlib-size', totalMb >= 1 ? totalMb.toFixed(1) + ' MB' : (totalKb > 0 ? totalKb.toFixed(0) + ' KB' : '—'));
-  set('mlib-saved', savedMb > 1 ? '~' + savedMb.toFixed(0) + ' MB' : (n > 0 ? '<1 MB' : '—'));
-  set('mlib-avg-dur', n > 0 ? (totalDur / n).toFixed(1) + 's avg' : '—');
-  set('mlib-enc', encCount > 0 ? encCount + ' / ' + n : (n > 0 ? 'None' : '—'));
+  set('mlib-segments', n > 0 ? n : ' - ');
+  set('mlib-size', totalMb >= 1 ? totalMb.toFixed(1) + ' MB' : (totalKb > 0 ? totalKb.toFixed(0) + ' KB' : ' - '));
+  set('mlib-saved', savedMb > 1 ? '~' + savedMb.toFixed(0) + ' MB' : (n > 0 ? '<1 MB' : ' - '));
+  set('mlib-avg-dur', n > 0 ? (totalDur / n).toFixed(1) + 's avg' : ' - ');
+  set('mlib-enc', encCount > 0 ? encCount + ' / ' + n : (n > 0 ? 'None' : ' - '));
 }
 
 // ── Metrics row click ──────────────────────────────────────────
@@ -250,15 +250,15 @@ function showMetricsDetail(s) {
   const isEnc = s.file_path && s.file_path.endsWith('.enc');
   const compMb = (s.file_size_kb || 0) / 1024;
   const rawMb = (s.duration_s * (s.width || 640) * (s.height || 480) * 3 * (s.fps || 25)) / 1e6;
-  const ratio = rawMb > 0 && compMb > 0 ? (rawMb / compMb).toFixed(1) + '×' : '—';
-  // Detail card "Camera" should match the table cell — show the friendly
+  const ratio = rawMb > 0 && compMb > 0 ? (rawMb / compMb).toFixed(1) + '×' : ' - ';
+  // Detail card "Camera" should match the table cell - show the friendly
   // filename-derived name when camera_id is the legacy default.
   // Author: Bloodawn (KheivenD), 2026-05-03 (UI fix pass).
   const camDisplay = (!s.camera_id || s.camera_id === 'cam_00')
     ? _segDisplayName(s)
     : s.camera_id;
   const rows = [
-    ['Camera', camDisplay || '—'],
+    ['Camera', camDisplay || ' - '],
     ['Mode', _segMode(s)],
     ['Timestamp', formatTimestamp(s.timestamp)],
     ['Duration', s.duration_s + 's'],
@@ -266,16 +266,16 @@ function showMetricsDetail(s) {
     ['Target', s.target_detected ? '▲ YES' : '○ no'],
     ['Motion Regions', s.roi_count],
     ['Size', compMb >= 1 ? compMb.toFixed(2) + ' MB' : (s.file_size_kb || 0) + ' KB'],
-    ['Raw (est)', rawMb > 0 ? rawMb.toFixed(1) + ' MB' : '—'],
+    ['Raw (est)', rawMb > 0 ? rawMb.toFixed(1) + ' MB' : ' - '],
     ['Compression', ratio],
-    ['Quality', s.sharpness_label || '—'],
+    ['Quality', s.sharpness_label || ' - '],
     ['Encrypted', isEnc ? 'Yes (AES-256)' : 'No'],
   ];
   grid.innerHTML = rows.map(([k, v]) =>
     `<div class="metrics-meta-row"><span class="metrics-meta-key">${k}</span><span class="metrics-meta-val">${escHtml(String(v))}</span></div>`
   ).join('');
 
-  // Per-clip CPU stats — replaces the old global "CPU Usage by Mode"
+  // Per-clip CPU stats - replaces the old global "CPU Usage by Mode"
   // bars with stats for THIS recording only. Reads cpu_avg/max/min/etc
   // off the segment row, which the backend filled in from the run's
   // cpu_stats.json. Sticky across reloads (file-backed on disk).

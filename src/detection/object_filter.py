@@ -242,7 +242,7 @@ class ObjectFilter:
     the leaf/shadow filtering.
 
     Args:
-        confidence:      Minimum YOLO confidence to accept a detection (0–1).
+        confidence:      Minimum YOLO confidence to accept a detection (0-1).
         device:          "cuda", "cpu", or "auto" (auto-detects CUDA).
         target_classes:  Set of COCO class names to keep. Defaults to
                          DEFAULT_TARGET_CLASSES.
@@ -270,11 +270,11 @@ class ObjectFilter:
         self.use_suppression = use_suppression
         self.suppress_after = suppress_after
         # Inference backend selector (M2 TASK 2.1/2.2):
-        #   "auto"  — DEFAULT (TASK 2.2): ONNX Runtime if its model+runtime are
+        #   "auto"  - DEFAULT (TASK 2.2): ONNX Runtime if its model+runtime are
         #             available, else PyTorch. The slim install has no torch, so
         #             this resolves to ONNX; a torch-only env resolves to torch.
-        #   "onnx"  — force ONNX Runtime (slim install path).
-        #   "torch" — force ultralytics/PyTorch.
+        #   "onnx"  - force ONNX Runtime (slim install path).
+        #   "torch" - force ultralytics/PyTorch.
         # The detector interface is backend-agnostic, so a future RT-DETR /
         # permissive detector slots in here without touching the pipeline.
         self.backend = str(backend or "torch").lower()
@@ -402,7 +402,7 @@ class ObjectFilter:
                 continue
 
             if w < self.min_box_px or h < self.min_box_px:
-                # Too small to classify — pass through, label unknown
+                # Too small to classify - pass through, label unknown
                 self.last_detected_classes[len(kept)] = set()
                 kept.append(region)
                 continue

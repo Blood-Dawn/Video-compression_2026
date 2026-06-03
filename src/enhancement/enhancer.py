@@ -123,7 +123,7 @@ def detect_gpu() -> Dict:
             else:
                 result["note"] = (
                     f"{name}: {vram_mb} MB VRAM. GPU acceleration active. "
-                    "Expect 5–20× faster SR than CPU."
+                    "Expect 5-20× faster SR than CPU."
                 )
 
         # ── MPS (Apple Silicon) ──────────────────────────────────────
@@ -135,7 +135,7 @@ def detect_gpu() -> Dict:
             result["will_work"]   = True
             result["note"] = (
                 "Apple Silicon GPU (MPS) detected. Real-ESRGAN will run on the "
-                "Neural Engine / GPU cores. Expect 2–5× faster than CPU."
+                "Neural Engine / GPU cores. Expect 2-5× faster than CPU."
             )
             result["mobile_note"] = (
                 "MPS is Apple-only. Not supported on phones or Windows/Linux machines."

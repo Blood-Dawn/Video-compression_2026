@@ -8,7 +8,7 @@ default), and any payload that IS sent carries no PII or path fields. Also
 covers consent persistence, the env kill-switch, the field whitelist + PII
 scrub, categorical coercion, and the consent routes.
 
-Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5.2 — usage stats).
+Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5.2 - usage stats).
 """
 
 import sys
@@ -126,7 +126,7 @@ def test_invalid_categorical_coerced_to_vocab():
     assert payload["mode"] == "other"
     assert payload["codec"] == "other"
     assert payload["ingestion_path"] == "unknown"
-    # No H.265 ever — and it didn't pass through.
+    # No H.265 ever - and it didn't pass through.
     assert "265" not in repr(payload)
 
 

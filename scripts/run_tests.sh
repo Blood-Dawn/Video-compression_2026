@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.1 — reproducible test baseline).
+# Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.1 - reproducible test baseline).
 #
 # POSIX counterpart to run_tests.ps1 (for CI / Linux). Same contract:
 # sync with the documented extras, run the full suite with the project

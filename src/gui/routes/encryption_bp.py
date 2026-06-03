@@ -59,7 +59,7 @@ def api_keygen():
     """Generate a fresh 32-byte AES-256 key and save it as <output_dir>/camera.key.
 
     POST body (JSON, optional):
-      { "filename": "camera.key" }   — override the output filename
+      { "filename": "camera.key" }   - override the output filename
 
     Returns:
       { "path": "C:/...outputs/camera.key", "size": 32 }
@@ -70,7 +70,7 @@ def api_keygen():
     body     = request.get_json(silent=True) or {}
     raw_name = body.get("filename") or "camera.key"
 
-    # Sanitize filename — strip directories, allow only safe characters
+    # Sanitize filename - strip directories, allow only safe characters
     try:
         safe_name = _safe_filename(raw_name)
     except ValueError as e:
@@ -101,7 +101,7 @@ def _safe_segment_roots() -> list[Path]:
     Includes:
       • the configured output_dir (default: <project>/outputs/)
       • the project root itself (so data/samples/, data/raw/, etc. work
-        — those are the user's own clips checked into the repo)
+        - those are the user's own clips checked into the repo)
       • the auto-detected OneDrive root when present (covers
         OneDrive/SVCS/, OneDrive/SVCS/Encrypted/, etc.)
 
@@ -225,7 +225,7 @@ def api_decrypt():
             return jsonify({"error": f"Cannot read key file: {e}"}), 400
 
     # ── Save the decrypted plaintext to <enc_dir>/Decrypted/<name>.mp4 ──
-    # Was previously written to a temp file, streamed back, then deleted —
+    # Was previously written to a temp file, streamed back, then deleted  - 
     # which left the user asking "where did the file go?" since browsers
     # treat the response as a download/play but don't expose the path.
     # Now we keep a persistent copy on disk AND stream the bytes to the
@@ -238,7 +238,7 @@ def api_decrypt():
     except OSError as e:
         return jsonify({"error": f"Could not create Decrypted/ folder: {e}"}), 500
 
-    # Strip the trailing ".enc" — leaves e.g. "segment.mp4"
+    # Strip the trailing ".enc" - leaves e.g. "segment.mp4"
     plain_name = enc_path.name[:-4] if enc_path.name.lower().endswith(".enc") else enc_path.stem
     out_path = dec_dir / plain_name
 
@@ -328,7 +328,7 @@ def api_encrypt():
 
     src_path = Path(raw_path).resolve()
 
-    # Same trust check the decrypt route uses — only allow encrypting
+    # Same trust check the decrypt route uses - only allow encrypting
     # files inside the trusted roots so a misclick can't read arbitrary
     # files off disk.
     safe_roots = _safe_segment_roots()
@@ -446,7 +446,7 @@ def api_encrypt():
             conn.commit()
     except Exception as e:  # noqa: BLE001
         log.warning("api_encrypt: DB update failed: %s", e)
-        # Don't fail the request — file was encrypted successfully
+        # Don't fail the request - file was encrypted successfully
 
     size_kb = int(enc_path.stat().st_size / 1024)
     log.info("Encrypted segment: %s → %s (%d KB)  [original kept]",

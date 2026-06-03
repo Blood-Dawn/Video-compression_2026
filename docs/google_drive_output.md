@@ -1,4 +1,4 @@
-# Google Drive Output — Team Setup
+# Google Drive Output - Team Setup
 
 The SVCS dashboard can auto-route demo outputs to a shared Google Drive folder so
 the sponsor can view compressed video clips without anyone needing to send files
@@ -18,17 +18,17 @@ https://drive.google.com/drive/folders/1r032XVGXJeUYDZrw4eDdyXwZYCsbiH99
    - Click the folder name → **Organize** → **Add shortcut to Drive**
    - Choose **My Drive** as the destination and confirm
 
-3. **Let Drive for Desktop sync** — the shared folder will now appear inside your
+3. **Let Drive for Desktop sync** - the shared folder will now appear inside your
    local `My Drive` folder (usually `G:\My Drive\SVCS\` on Windows).
 
 ## Using it in the dashboard
 
-1. Open the SVCS dashboard — the **Save To** field auto-fills with the detected
+1. Open the SVCS dashboard - the **Save To** field auto-fills with the detected
    Google Drive path (`…\My Drive\SVCS`) on page load
-2. Start the pipeline — every saved segment syncs to Google Drive automatically
+2. Start the pipeline - every saved segment syncs to Google Drive automatically
 3. Click **🔗 View in Drive** at any time to open the shared folder in the browser
 
-> **Note:** Files typically appear in Drive within 10–30 seconds of being saved.
+> **Note:** Files typically appear in Drive within 10-30 seconds of being saved.
 
 ## How detection works
 

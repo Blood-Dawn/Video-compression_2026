@@ -1,11 +1,11 @@
 /*
  * src/gui/static/js/hls.js
  *
- * SVCS dashboard — hls module. Carved verbatim from the former single
+ * SVCS dashboard - hls module. Carved verbatim from the former single
  * inline <script> in index.html (TASK 1.5). Loaded as a classic script in
  * original execution order, so behavior is identical; all functions stay
  * global (reachable from inline on* handlers and the other modules).
- * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — JS split).
+ * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - JS split).
  */
 async function hlsStart() {
   const input   = document.getElementById('hls-input').value.trim();

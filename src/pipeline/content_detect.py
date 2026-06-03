@@ -4,7 +4,7 @@ src/pipeline/content_detect.py
 Rule-based content auto-detection (M3 TASK 3.2).
 
 Given a clip, sample its first ~30 seconds and extract cheap, explainable
-signals — how much of the frame moves (MOG2 foreground-area ratio), how often
+signals - how much of the frame moves (MOG2 foreground-area ratio), how often
 anything moves at all (activity fraction), how bursty that motion is (variance),
 the resolution / frame rate, and whether there's an audio track. A small
 decision tree then recommends one of the named surveillance presets from
@@ -17,7 +17,7 @@ The interface (``analyze_video`` -> ``ContentSignals``; ``recommend_preset`` ->
 ``PresetRecommendation``) is kept swappable so a future learned classifier can
 drop in behind ``detect_content`` without touching callers.
 
-Author: Bloodawn (KheivenD), 2026-06-03 (TASK 3.2 — content auto-detection).
+Author: Bloodawn (KheivenD), 2026-06-03 (TASK 3.2 - content auto-detection).
 """
 
 from __future__ import annotations
@@ -245,7 +245,7 @@ def recommend_preset(signals: ContentSignals) -> PresetRecommendation:
     elif s.activity_frac >= BUSY_ACTIVITY_FRAC:
         key = "active_scene"
         reason = (
-            f"Busy scene: {pct(s.activity_frac)} of frames had motion — "
+            f"Busy scene: {pct(s.activity_frac)} of frames had motion - "
             "near-constant activity."
         )
     # 2/3. Sparse, occasional motion -> doorbell if the subject fills the frame,

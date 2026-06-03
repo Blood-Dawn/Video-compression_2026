@@ -12,7 +12,7 @@ routes and the rest of the GUI share one server handle.
 
 `_ROOT` is computed locally from __file__ (repo root) for the tools/ dir.
 
-Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — rtsp-singleton extraction).
+Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - rtsp-singleton extraction).
 """
 
 from pathlib import Path

@@ -105,7 +105,7 @@ _MODE_LABELS = {
 }
 
 
-# Cached encoder availability — `_ffmpeg_has_encoder()` checks the ffmpeg
+# Cached encoder availability - `_ffmpeg_has_encoder()` checks the ffmpeg
 # binary on PATH for a given encoder name and caches the result. Used by
 # ROIEncoder to fall back from libsvtav1 → libx264 when the running ffmpeg
 # build doesn't ship libsvtav1 (Ubuntu 22.04 stock, basic Windows ffmpeg).
@@ -117,7 +117,7 @@ def _ffmpeg_has_encoder(name: str) -> bool:
     """Return True if `ffmpeg -encoders` lists the given encoder name.
 
     Cached per process. Falls back to False on any error so a missing
-    ffmpeg binary doesn't crash callers — they'll just see "encoder not
+    ffmpeg binary doesn't crash callers - they'll just see "encoder not
     available" and switch to libx264.
     """
     name = (name or "").strip().lower()
@@ -182,13 +182,13 @@ class ROIEncoder:
                    expired), "libaom-av1" (Alliance for Open Media reference
                    AV1, royalty-free), or "libsvtav1" (Intel SVT-AV1, faster
                    AV1 encoder when available). Author: Bloodawn (KheivenD),
-                   2026-05-02 — adds ROADMAP 4.2 codec selector.
+                   2026-05-02 - adds ROADMAP 4.2 codec selector.
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
         # Codec resolution with safe fallback. Default is libsvtav1 (set as
-        # of 2026-05-03 — gives ~25 % smaller output than libx264). If the
+        # of 2026-05-03 - gives ~25 % smaller output than libx264). If the
         # running ffmpeg doesn't ship libsvtav1 we silently fall back to
         # libx264 so a fresh clone on a stock Ubuntu / basic Windows ffmpeg
         # install keeps working without the user knowing what to do.
@@ -374,9 +374,9 @@ class ROIEncoder:
 
         Returns:
             Dict with keys:
-              file_path      – str path to the compressed output MP4
-              avg_sharpness  – mean Laplacian variance of target ROIs (float or None)
-              sharpness_label – perceptual resolution label e.g. "~720p (sharp)" (or None)
+              file_path      - str path to the compressed output MP4
+              avg_sharpness  - mean Laplacian variance of target ROIs (float or None)
+              sharpness_label - perceptual resolution label e.g. "~720p (sharp)" (or None)
 
         Raises:
             ValueError: If frames is empty or frames have inconsistent shapes.
@@ -578,7 +578,7 @@ class ROIEncoder:
         # were already translated in __init__. We also drop pix_fmt for
         # AV1 because libaom requires "yuv420p" but accepts no override
         # without breaking on some builds.
-        # Author: Bloodawn (KheivenD), 2026-05-02 (ROADMAP 4.2 — AV1).
+        # Author: Bloodawn (KheivenD), 2026-05-02 (ROADMAP 4.2 - AV1).
         codec = (self.codec or "libx264").lower()
         out_kwargs = {
             "vcodec":  codec,
@@ -788,7 +788,7 @@ class ROIEncoder:
         # ── Encryption ───────────────────────────────────────────────────────────
         # Encrypt AFTER audio mux so the final .mp4 is what gets locked.
         # The plaintext .mp4 is deleted by encrypt_file (delete_original=True).
-        # On failure we keep the plaintext and log a warning — never lose footage.
+        # On failure we keep the plaintext and log a warning - never lose footage.
         final_path = output_path
         if self._stream_encrypt:
             if not _CRYPTO_AVAILABLE:

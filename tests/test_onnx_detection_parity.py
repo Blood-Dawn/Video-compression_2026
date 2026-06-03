@@ -15,7 +15,7 @@ CDnet clips are present) but skips cleanly on CI, where:
 
 Export the model once with:  yolo export model=yolov8n.pt format=onnx imgsz=640
 
-Author: Bloodawn (KheivenD), 2026-06-02 (TASK 2.1 — ONNX/torch parity).
+Author: Bloodawn (KheivenD), 2026-06-02 (TASK 2.1 - ONNX/torch parity).
 """
 
 from __future__ import annotations

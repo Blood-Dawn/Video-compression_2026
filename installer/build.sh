@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# installer/build.sh — build a Linux AppImage for SVCS (M5b TASK 5b.2).
+# installer/build.sh - build a Linux AppImage for SVCS (M5b TASK 5b.2).
 #
 # Produces a single self-contained dist/SVCS-<arch>.AppImage that runs the
 # dashboard on a clean Ubuntu with no Python, FFmpeg, or pip required: it bundles
@@ -12,7 +12,7 @@
 #
 #   ./installer/build.sh
 #
-# Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5b.2 — Linux AppImage).
+# Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5b.2 - Linux AppImage).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${0}")/.." && pwd)"   # repo root

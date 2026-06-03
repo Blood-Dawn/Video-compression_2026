@@ -1,5 +1,5 @@
 """
-H264Writer — drop-in replacement for cv2.VideoWriter that produces H.264 MP4
+H264Writer - drop-in replacement for cv2.VideoWriter that produces H.264 MP4
 files playable in Chrome/Firefox/Safari without plugins.
 
 cv2.VideoWriter with fourcc "mp4v" produces MPEG-4 Part 2, which modern
@@ -95,7 +95,7 @@ class H264Writer:
             try:
                 self._proc.wait(timeout=30)
             except Exception:
-                # FFmpeg did not exit within 30 s — kill it so we don't hang forever.
+                # FFmpeg did not exit within 30 s - kill it so we don't hang forever.
                 try:
                     self._proc.kill()
                     self._proc.wait()

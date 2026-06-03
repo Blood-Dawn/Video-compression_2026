@@ -2,7 +2,7 @@
 src/gui/services/pipeline_runner.py
 
 Pipeline background-thread runner and the live frame/segment counters,
-extracted from gui/app.py (TASK 1.2 — last and most thread-heavy module).
+extracted from gui/app.py (TASK 1.2 - last and most thread-heavy module).
 
 `_run_pipeline_thread` is the target of the worker thread spawned by
 /api/start. It seeds gui.state._status, starts the per-mode CPU sampler,
@@ -16,7 +16,7 @@ monkeypatches gui_module._run_pipeline_thread) share one live value.
 Imports gui.state, gui.logging_setup, the gui_state_persist / cpu_sampler
 services (acyclic service->service), and pipeline.pipeline.run_pipeline.
 
-Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — pipeline-runner extraction).
+Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - pipeline-runner extraction).
 """
 
 import threading
@@ -100,7 +100,7 @@ def _ingestion_path(input_source) -> str:
     if s.startswith("rtsp://"):
         return "rtsp"
     # numeric (webcam index), http(s), or a local path all fall under "file"
-    # here — we deliberately don't distinguish further (no path detail leaves).
+    # here - we deliberately don't distinguish further (no path detail leaves).
     return "file"
 
 

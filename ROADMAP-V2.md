@@ -8,7 +8,7 @@ auto-detected presets.
 See `ARCHITECTURE.md` for the technical plan and `LICENSE-COMMERCIAL.md`
 for the dual-license strategy.
 
-## June 2026 — Desktop installer (Python, on `app` branch)
+## June 2026 - Desktop installer (Python, on `app` branch)
 
 | Milestone | Done when |
 |---|---|
@@ -23,7 +23,7 @@ for the dual-license strategy.
 | Public download page | Hosted on GitHub Pages or similar |
 | Crash reporting | Sentry SDK wired with opt-in toggle |
 
-## July 2026 — Rust core MVP (`kdev` branch)
+## July 2026 - Rust core MVP (`kdev` branch)
 
 | Milestone | Done when |
 |---|---|
@@ -34,7 +34,7 @@ for the dual-license strategy.
 | Mode dispatch ported | Per-frame mode decision logic in Rust |
 | Tests | 50%+ of the relevant Python tests have Rust equivalents |
 
-## August 2026 — Flutter UI + Android app (`app` branch)
+## August 2026 - Flutter UI + Android app (`app` branch)
 
 | Milestone | Done when |
 |---|---|
@@ -46,7 +46,7 @@ for the dual-license strategy.
 | Notification | Progress shown in notification shade |
 | Play Store internal track | Closed alpha published to ~10 testers |
 
-## September 2026 — Public beta
+## September 2026 - Public beta
 
 | Milestone | Done when |
 |---|---|

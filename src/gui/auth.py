@@ -3,7 +3,7 @@ src/gui/auth.py
 
 Dashboard authentication for non-localhost binds (M4 TASK 4.4).
 
-The dashboard ships bound to 0.0.0.0 (reachable on the LAN — the NAS/server
+The dashboard ships bound to 0.0.0.0 (reachable on the LAN - the NAS/server
 scenario), but it has no login, so anyone on the network could open it. That's a
 real exposure. This module enforces a simple policy:
 
@@ -16,11 +16,11 @@ real exposure. This module enforces a simple policy:
 
 The decision is pure and isolated (``decide_auth``) so it is unit-testable
 without a running server; ``install_basic_auth`` wires the actual before-request
-guard onto a Flask app. Auth is deliberately NOT installed inside create_app() —
+guard onto a Flask app. Auth is deliberately NOT installed inside create_app()  - 
 only the real server entry point (run_gui) installs it after deciding policy, so
 the test suite's in-process client and embedded uses stay unauthenticated.
 
-Author: Bloodawn (KheivenD), 2026-06-03 (TASK 4.4 — dashboard auth).
+Author: Bloodawn (KheivenD), 2026-06-03 (TASK 4.4 - dashboard auth).
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from typing import Mapping, Optional, Tuple
 
 from flask import Flask, Response, request
 
-# Hosts that mean "this machine only" — auth optional.
+# Hosts that mean "this machine only" - auth optional.
 _LOCALHOST_HOSTS = {"127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1", ""}
 
 ENV_USER = "SVCS_DASHBOARD_USER"
@@ -90,7 +90,7 @@ def decide_auth(
     """Decide the auth policy for a bind, or raise AuthConfigError.
 
     Raises AuthConfigError when binding beyond localhost without credentials and
-    without an explicit --no-auth opt-out — the server must not silently expose
+    without an explicit --no-auth opt-out - the server must not silently expose
     an unauthenticated dashboard on the network.
     """
     user, pw = resolve_credentials(username, password, env)
@@ -123,7 +123,7 @@ def install_basic_auth(app: Flask, username: str, password: str) -> None:
     """Enforce HTTP Basic Auth on every request to ``app``.
 
     Uses constant-time comparison so the guard doesn't leak the credential via
-    timing. Applies to all routes including static assets — the whole dashboard
+    timing. Applies to all routes including static assets - the whole dashboard
     is behind the login.
     """
     if not username or not password:

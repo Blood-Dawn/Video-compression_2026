@@ -1,11 +1,11 @@
 /*
  * src/gui/static/js/status.js
  *
- * SVCS dashboard — status module. Carved verbatim from the former single
+ * SVCS dashboard - status module. Carved verbatim from the former single
  * inline <script> in index.html (TASK 1.5). Loaded as a classic script in
  * original execution order, so behavior is identical; all functions stay
  * global (reachable from inline on* handlers and the other modules).
- * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — JS split).
+ * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - JS split).
  */
 function startPolling() {
   if (statusInterval) clearInterval(statusInterval);
@@ -23,13 +23,13 @@ async function pollStatus() {
 
     document.getElementById('stat-frames').textContent   = fmtNum(data.frame_count || 0);
     document.getElementById('stat-segments').textContent = fmtNum(data.segment_count || 0);
-    document.getElementById('stat-fps').textContent      = data.fps != null ? data.fps : '—';
+    document.getElementById('stat-fps').textContent      = data.fps != null ? data.fps : ' - ';
 
     // Notify when a new segment is saved
     const curSeg = data.segment_count || 0;
     if (data.running && _lastSegmentCount > 0 && curSeg > _lastSegmentCount) {
       const delta = curSeg - _lastSegmentCount;
-      pushNotif('SEGMENT SAVED', `${delta} new compressed clip${delta > 1 ? 's' : ''} written — ${curSeg} total`, 'success', null, 4000);
+      pushNotif('SEGMENT SAVED', `${delta} new compressed clip${delta > 1 ? 's' : ''} written - ${curSeg} total`, 'success', null, 4000);
     }
     _lastSegmentCount = curSeg;
 
@@ -110,10 +110,10 @@ function _updateHeroStrip(data) {
   }
 
   if (data.config) {
-    const src = data.config.input_source || data.config.camera_id || '—';
+    const src = data.config.input_source || data.config.camera_id || ' - ';
     camChip.textContent = src.split(/[\/]/).pop() || src;
     camChip.classList.toggle('lit', data.running);
-    const mode = data.config.mode || '—';
+    const mode = data.config.mode || ' - ';
     modeChip.textContent = 'Mode: ' + mode;
     const encrypted = !!(data.config.encrypt);
     encChip.style.display = encrypted ? '' : 'none';
@@ -126,7 +126,7 @@ function _updateHeroStrip(data) {
   } else if (data.running) {
     upChip.textContent = 'Starting…';
   } else {
-    upChip.textContent = 'Uptime: —';
+    upChip.textContent = 'Uptime:  - ';
   }
 }
 
@@ -144,7 +144,7 @@ async function pollStorage() {
         document.getElementById('stat-storage').textContent = (mb/1024).toFixed(2);
         document.getElementById('stat-storage-unit').textContent = 'GB used';
       } else {
-        document.getElementById('stat-storage').textContent = mb > 0 ? mb.toFixed(1) : '—';
+        document.getElementById('stat-storage').textContent = mb > 0 ? mb.toFixed(1) : ' - ';
         document.getElementById('stat-storage-unit').textContent = 'MB used';
       }
       // Compression ratio from segments table

@@ -6,10 +6,10 @@ Guards the dedicated "Upload Video" topbar tab (M1 TASK 1.7).
 Static checks on the rendered dashboard HTML: the UPLOAD nav button exists, sits
 second (right after HOME, before METRICS), the tab-upload page exists, and the
 upload dropzone (#upload-input) lives there exactly once (it was relocated from
-the sidebar, not duplicated). Frontend-only — the /api/upload route is unchanged,
+the sidebar, not duplicated). Frontend-only - the /api/upload route is unchanged,
 so route-count guards stay put.
 
-Author: Bloodawn (KheivenD), 2026-06-03 (TASK 1.7 — Upload tab).
+Author: Bloodawn (KheivenD), 2026-06-03 (TASK 1.7 - Upload tab).
 """
 
 import re

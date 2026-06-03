@@ -46,7 +46,7 @@ def api_presets():
 def api_detect_content():
     """Recommend a preset by analyzing a clip's first ~30s (M3 TASK 3.2).
 
-    Body: {"path": "<local video file>"} (a file already on disk — an upload or
+    Body: {"path": "<local video file>"} (a file already on disk - an upload or
     a scanned recording). Returns the recommended preset key, its label, a
     one-line human reason, the resolved encode config, and the raw signals so
     the UI can show *why* and let the operator override.
@@ -260,7 +260,7 @@ def api_gdrive_detect():
             "web_url": None,
             "hint": (
                 "No cloud sync folder found. "
-                "Make sure OneDrive is installed and signed in — "
+                "Make sure OneDrive is installed and signed in - "
                 "on Windows it comes pre-installed, just open it from the Start menu."
             ),
         })

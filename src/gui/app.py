@@ -28,7 +28,7 @@ from flask import Flask
 
 # ── path setup ────────────────────────────────────────────────────────────────
 # Allow imports from src/ regardless of working directory. The pipeline / DB /
-# encryption imports that used to live here moved out with the routes — each
+# encryption imports that used to live here moved out with the routes - each
 # blueprint and service now imports exactly what it needs (TASK 1.2/1.3).
 _SRC = Path(__file__).resolve().parent.parent
 _ROOT = _SRC.parent
@@ -67,7 +67,7 @@ except FileNotFoundError:
 # without churn. Importing gui.logging_setup also wires the root logger and
 # registers the atexit shutdown marker (side effect, as before).
 # Import direction is one-way: state <- logging_setup <- app.
-# Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — state/logging split).
+# Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - state/logging split).
 try:
     from gui import state as _state
     from gui.state import (
@@ -114,7 +114,7 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 
 # ── Security helpers ──────────────────────────────────────────────────────────
 # _safe_output_dir / _assert_within_output / _safe_filename now live in
-# gui.services.path_safety (imported below). `import re as _re` stays — the
+# gui.services.path_safety (imported below). `import re as _re` stays - the
 # route handlers still use it for camera_id / stream_name validation.
 import re as _re
 
@@ -139,7 +139,7 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 # ── Power / hardware metrics ───────────────────────────────────────────────────
 # The CPU/RAM/battery samplers (per-pipeline + always-on) now live in
 # gui.services.cpu_sampler. The always-on sampler is no longer started at import
-# time — create_app() calls start_hw_sampler() instead. _PSUTIL_OK is re-imported
+# time - create_app() calls start_hw_sampler() instead. _PSUTIL_OK is re-imported
 # here because the /api/system_metrics route still consults it.
 try:
     from gui.services.cpu_sampler import (
@@ -235,14 +235,14 @@ register_blueprints(app)
 # Most state names are mutable containers re-exported from gui.state as the
 # SAME object, so `gui.app.<name>` and `gui.state.<name>` are identical and
 # in-place mutation round-trips for free. A few names are *rebound* (reassigned,
-# not mutated in place) inside the owning submodule — e.g. the SSE log handler
+# not mutated in place) inside the owning submodule - e.g. the SSE log handler
 # does `state._log_id += 1`. A plain re-import would bind a stale copy here, and
 # the gui.app.* test contract reaches into these names for both reads AND
 # writes. We swap this module's class so those specific names are forwarded to
 # their owning module in both directions. The map below covers every rebound
 # name now owned by an extracted submodule (gui.state / hls_runner /
 # pipeline_runner); add to it whenever a future move relocates a rebound global.
-# Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — rebound forwarding).
+# Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - rebound forwarding).
 import types as _types
 
 # name -> owning module object. Forwarded names must NOT be bound in this

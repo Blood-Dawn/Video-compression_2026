@@ -1,24 +1,24 @@
-# Live Stream and Compression — Architecture Notes
-**EGN 4950C Group 16 — SVCS**
+# Live Stream and Compression - Architecture Notes
+**EGN 4950C Group 16 - SVCS**
 Last updated: Apr 20, 2026
 
 ---
 
-## Option A — How the current system works (two independent features)
+## Option A - How the current system works (two independent features)
 
 There are two completely separate systems in the dashboard right now. They do not share state, threads, or output. You can run both at the same time from the same source, but they operate independently.
 
 ---
 
-### Feature 1 — HLS Live Stream (monitoring/preview)
+### Feature 1 - HLS Live Stream (monitoring/preview)
 
 This is the "Live Stream (HLS)" section in the sidebar. Its only job is to let you watch a camera feed in the browser with ROI overlays. Nothing gets recorded or saved to disk.
 
-**Step by step — what happens when you click START STREAM:**
+**Step by step - what happens when you click START STREAM:**
 
 1. The browser POSTs to `/api/hls/start` with the input source, camera ID, and mode label.
 
-2. Flask starts `_hls_annotator_thread` as a daemon thread. The route returns immediately — the thread does all the work.
+2. Flask starts `_hls_annotator_thread` as a daemon thread. The route returns immediately - the thread does all the work.
 
 3. The thread opens the source with `cv2.VideoCapture`. For RTSP, it uses a Python-level 10-second timeout (OpenCV's built-in timeout property is ignored on Windows pip builds). For local files, it opens instantly.
 
@@ -56,11 +56,11 @@ This is the "Live Stream (HLS)" section in the sidebar. Its only job is to let y
 
 ---
 
-### Feature 2 — Compression Pipeline
+### Feature 2 - Compression Pipeline
 
 This is the "Pipeline Config" section at the top of the sidebar. It records, compresses, and archives footage to disk in real-time.
 
-**Step by step — what happens when you click START:**
+**Step by step - what happens when you click START:**
 
 1. The browser POSTs to `/api/start` with the full config (input source, mode, segment duration, etc.).
 
@@ -71,13 +71,13 @@ This is the "Pipeline Config" section at the top of the sidebar. It records, com
    - Runs `BackgroundSubtractor` on every frame to build the background model
    - Accumulates frames into a segment buffer (`segment_seconds` long, default 60s)
 
-4. **Mode 0** — Every frame goes into the buffer. At the end of each 60-second window, `ROIEncoder.encode_segment()` fires regardless of whether any motion was detected.
+4. **Mode 0** - Every frame goes into the buffer. At the end of each 60-second window, `ROIEncoder.encode_segment()` fires regardless of whether any motion was detected.
 
-5. **Mode 1** — Only frames where `get_foreground_regions()` returns at least one region are added to the buffer. Segments with zero motion frames are skipped entirely. This is where the storage savings come from on static cameras.
+5. **Mode 1** - Only frames where `get_foreground_regions()` returns at least one region are added to the buffer. Segments with zero motion frames are skipped entirely. This is where the storage savings come from on static cameras.
 
 6. When a segment is ready, `ROIEncoder.encode_segment()` runs FFmpeg with the **dual-CRF** approach:
-   - Foreground ROI regions: CRF 18 (high quality — these are the targets)
-   - Background regions: CRF 45 (aggressive compression — these are just context)
+   - Foreground ROI regions: CRF 18 (high quality - these are the targets)
+   - Background regions: CRF 45 (aggressive compression - these are just context)
    - This is what produces the 16.6× compression ratio at PSNR 41.2 dB
 
 7. The encoded `.mp4` segment is written to `outputs/` and a row is inserted into `metadata.db` (timestamp, camera ID, ROI count, object type, file size, duration).
@@ -86,7 +86,7 @@ This is the "Pipeline Config" section at the top of the sidebar. It records, com
 
 9. When you click STOP, the stop event is set and the pipeline exits cleanly after finishing the current segment.
 
-**Compression timing — it is neither "wait for space" nor "once per hour."** Compression happens continuously in real-time. One segment (60 seconds of footage by default) is compressed and written to disk every 60 seconds while the pipeline runs. There is no batch step.
+**Compression timing - it is neither "wait for space" nor "once per hour."** Compression happens continuously in real-time. One segment (60 seconds of footage by default) is compressed and written to disk every 60 seconds while the pipeline runs. There is no batch step.
 
 ---
 
@@ -98,7 +98,7 @@ You can run the HLS stream and the pipeline simultaneously from the same source 
 
 ---
 
-## Option B — Integrated live-stream pipeline (future work)
+## Option B - Integrated live-stream pipeline (future work)
 
 > **For team members who want to build this out after the current milestone.**
 
@@ -153,20 +153,20 @@ A new `LivePipeline` class that replaces both `_hls_annotator_thread` and `_run_
 
 ### What does NOT need to change
 
-- `ROIEncoder` — unchanged, still handles the dual-CRF FFmpeg call
-- `BackgroundSubtractor` — unchanged
-- `metadata.db` schema and queries — unchanged
-- `hls.js` playback and retry logic in the browser — unchanged
-- All existing tests — unchanged (the new module would get its own test file)
+- `ROIEncoder` - unchanged, still handles the dual-CRF FFmpeg call
+- `BackgroundSubtractor` - unchanged
+- `metadata.db` schema and queries - unchanged
+- `hls.js` playback and retry logic in the browser - unchanged
+- All existing tests - unchanged (the new module would get its own test file)
 
 ### Estimated scope
 
-About 2–3 days of focused work for one person:
+About 2-3 days of focused work for one person:
 
-- `src/pipeline/live_pipeline.py` — ~150 lines
-- Updates to `app.py` — ~80 lines
-- Updates to `index.html` — ~40 lines
-- `tests/test_live_pipeline.py` — ~20 tests following the same dummy-injection pattern as `test_pipeline.py`
+- `src/pipeline/live_pipeline.py` - ~150 lines
+- Updates to `app.py` - ~80 lines
+- Updates to `index.html` - ~40 lines
+- `tests/test_live_pipeline.py` - ~20 tests following the same dummy-injection pattern as `test_pipeline.py`
 
 The hardest part is making the `ROIEncoder` segment write happen in a non-blocking way so it does not cause dropped frames in the HLS stream. The recommended approach is a `queue.Queue` where the frame loop enqueues completed segments and a separate encoder thread dequeues and calls `encode_segment()`.
 

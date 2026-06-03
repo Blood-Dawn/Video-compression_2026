@@ -20,7 +20,7 @@
 ## Results (After Tuning)
 - Static scene: 0 detections (0% false positives)
 - Moving scene: consistent detection across frames
-- Detection occurs within ~1–3 frames after motion begins
+- Detection occurs within ~1-3 frames after motion begins
 
 ---
 

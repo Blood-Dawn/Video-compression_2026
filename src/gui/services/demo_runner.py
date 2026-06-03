@@ -9,10 +9,10 @@ tab's "CPU Usage by Mode" card populates from demo runs. The /api/demo* routes
 (still in app.py until TASK 1.3) spawn and read this.
 
 Imports gui.state (the shared demo dict + lock), gui.services.cpu_sampler (the
-per-mode sampler hooks — an acyclic service->service dependency), and
+per-mode sampler hooks - an acyclic service->service dependency), and
 gui.logging_setup.
 
-Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — demo-runner extraction).
+Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - demo-runner extraction).
 """
 
 import json
@@ -101,7 +101,7 @@ def _run_demo_thread(config: dict) -> None:
 
         # Start sampler when entering a new mode's pipeline, stop when
         # the pipeline phase reports done. Ignore phase=="render"/"stitch"
-        # — those are post-processing and shouldn't pollute the average.
+        # - those are post-processing and shouldn't pollute the average.
         # Pass mode_dir so cpu_stats.json lands in THIS run's output folder.
         try:
             if phase == "pipeline" and mode and done is False:

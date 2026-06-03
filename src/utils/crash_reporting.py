@@ -1,5 +1,5 @@
 """
-utils.crash_reporting  —  Opt-in Sentry initialization.
+utils.crash_reporting  -  Opt-in Sentry initialization.
 
 Crash reporting is opt-in for two reasons: privacy, and not wanting the
 casual / open-source install to phone home to our infra by default. The
@@ -7,7 +7,7 @@ flow:
 
 1. The user (or our premium installer) installs sentry-sdk via
    ``uv sync --extra crash-reporting``. Without the SDK, this module
-   is a no-op — every public function returns immediately.
+   is a no-op - every public function returns immediately.
 
 2. The runtime checks two environment variables, both of which must
    be set for any traces to leave the machine:
@@ -15,12 +15,12 @@ flow:
        SVCS_ENABLE_SENTRY=1
        SENTRY_DSN=https://<key>@o<org>.ingest.sentry.io/<project>
 
-3. PII scrubbing is enabled hard-coded — we don't ship request headers,
+3. PII scrubbing is enabled hard-coded - we don't ship request headers,
    cookies, or user IPs. Only the exception type, message, traceback
    frames, and (optional) build info travel.
 
 To test locally without sending to real Sentry, you can use any DSN with
-a fake key — the SDK still produces a structured event you can see in
+a fake key - the SDK still produces a structured event you can see in
 logs, and it'll drop the network call cleanly when the DSN doesn't
 resolve.
 
@@ -112,12 +112,12 @@ def init_crash_reporting(
             # performance data. We can crank this up later if we want
             # to track encoder hot paths.
             traces_sample_rate=0.0,
-            # Don't auto-attach local variables to frames — they may
+            # Don't auto-attach local variables to frames - they may
             # contain file paths or video filenames the user considers
             # sensitive.
             include_local_variables=False,
         )
-    except Exception as exc:  # noqa: BLE001  — never let init crash startup
+    except Exception as exc:  # noqa: BLE001  - never let init crash startup
         _log.warning("crash_reporting: sentry init failed: %s", exc)
         return False
 
@@ -135,7 +135,7 @@ def capture_exception(exc: BaseException) -> None:
     Use this from explicit try/except blocks where you want to record
     the error but not crash the surrounding flow (e.g. inside a Flask
     route handler that returns 500 to the user). Unhandled exceptions
-    are picked up automatically by Sentry's signal handlers — you do
+    are picked up automatically by Sentry's signal handlers - you do
     NOT need to call this for those.
     """
     if not _SENTRY_ENABLED:
@@ -143,7 +143,7 @@ def capture_exception(exc: BaseException) -> None:
     try:
         import sentry_sdk
         sentry_sdk.capture_exception(exc)
-    except Exception:  # noqa: BLE001 — reporting must not raise
+    except Exception:  # noqa: BLE001 - reporting must not raise
         pass
 
 

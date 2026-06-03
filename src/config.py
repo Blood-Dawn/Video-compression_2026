@@ -62,7 +62,7 @@ def default_codec_for_mode(mode: str) -> str:
     is fragmented and not royalty-free, unlike H.264. Explicit user codec
     selection always wins over this default (see pipeline.run_pipeline).
 
-    Author: Bloodawn (KheivenD), 2026-06-02 (TASK 1.6 — per-mode codec).
+    Author: Bloodawn (KheivenD), 2026-06-02 (TASK 1.6 - per-mode codec).
     """
     return "libsvtav1" if mode in ("mode2", "mode3") else "libx264"
 

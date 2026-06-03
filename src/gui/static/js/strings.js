@@ -1,7 +1,7 @@
 /*
  * src/gui/static/js/strings.js
  *
- * SVCS dashboard — user-facing string catalog (i18n groundwork, TASK 1.5).
+ * SVCS dashboard - user-facing string catalog (i18n groundwork, TASK 1.5).
  *
  * This is the single seam through which the dashboard's user-facing copy will
  * flow so the UI can be localized later WITHOUT touching feature logic. It is
@@ -16,7 +16,7 @@
  * For interpolated copy, keep a function:
  *     STRINGS.status.segments(3)  ->  "3 segments"
  *
- * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — i18n catalog).
+ * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - i18n catalog).
  */
 "use strict";
 

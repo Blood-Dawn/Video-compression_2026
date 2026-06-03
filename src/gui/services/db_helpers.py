@@ -12,7 +12,7 @@ archive routes pass an explicit ``archive_dir``).
 
 Imports gui.state (shared status dict + its lock) and flask.request.
 
-Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — db-helpers extraction).
+Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - db-helpers extraction).
 """
 
 from pathlib import Path

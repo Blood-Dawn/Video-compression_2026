@@ -1,11 +1,11 @@
 /*
  * src/gui/static/js/encryption.js
  *
- * SVCS dashboard — encryption module. Carved verbatim from the former single
+ * SVCS dashboard - encryption module. Carved verbatim from the former single
  * inline <script> in index.html (TASK 1.5). Loaded as a classic script in
  * original execution order, so behavior is identical; all functions stay
  * global (reachable from inline on* handlers and the other modules).
- * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — JS split).
+ * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - JS split).
  */
 function toggleEncPanel() {
   switchTab('encrypt');
@@ -39,7 +39,7 @@ async function browseDecFile() {
   } catch(e) { /* ignore */ }
 }
 
-// Called by per-row decrypt button — pre-fills the encrypt tab and switches to it
+// Called by per-row decrypt button - pre-fills the encrypt tab and switches to it
 function promptEncryptSegment(filePath) {
   document.getElementById('enc-src-path').value = filePath;
   const pwRadio = document.querySelector('input[name="enc-method"][value="password"]');
@@ -118,7 +118,7 @@ async function doDecryptPanel() {
       return;
     }
 
-    // Saved path comes back in a custom header — stream the bytes for
+    // Saved path comes back in a custom header - stream the bytes for
     // playback AND tell the user where the persistent copy landed.
     // Author: Bloodawn (KheivenD), 2026-05-03 (decrypt destination).
     const savedPath = res.headers.get('X-Decrypted-Path') || '';
@@ -198,7 +198,7 @@ function _renderArchiveSegments(segments, showToast) {
       ? `<button class="btn-play-sm btn-enc" onclick="event.stopPropagation();promptDecrypt('${jsAttr(s.file_path)}')">[ENC]</button>`
       : s.playable_url
         ? `<button class="btn-play-sm" onclick="event.stopPropagation();playSegment('${jsAttr(s.playable_url)}','${jsAttr(s.file_path)}')">▶</button>`
-        : '—';
+        : ' - ';
 
     // Type badge
     const typeLower = (s.object_type || 'unknown').toLowerCase();
@@ -212,20 +212,20 @@ function _renderArchiveSegments(segments, showToast) {
     const dotHex = _COLOR_HEX[colorVal] || '';
     const colorCell = colorVal
       ? `<span class="color-dot" style="background:${dotHex};"></span>${escHtml(colorVal)}`
-      : '<span style="color:var(--text-dim)">—</span>';
+      : '<span style="color:var(--text-dim)"> - </span>';
 
     // Scene
     const sceneIcons = { highway:'HWY', intersection:'INT', parking:'PKG', street:'STR' };
     const sceneIcon = sceneIcons[s.scene_type] || '';
     const sceneCell = s.scene_type && s.scene_type !== 'unknown'
       ? `${sceneIcon} ${escHtml(s.scene_type)}`
-      : '<span style="color:var(--text-dim)">—</span>';
+      : '<span style="color:var(--text-dim)"> - </span>';
 
     // Time of day
     const todIcons = { day:'DAY', night:'NGT', dusk_dawn:'DWN' };
     const todCell = s.time_of_day
       ? `${todIcons[s.time_of_day] || ''} ${escHtml(s.time_of_day)}`
-      : '<span style="color:var(--text-dim)">—</span>';
+      : '<span style="color:var(--text-dim)"> - </span>';
 
     const sizeMb = (s.file_size_kb / 1024).toFixed(1);
 
@@ -234,9 +234,9 @@ function _renderArchiveSegments(segments, showToast) {
       ? _segDisplayName(s)
       : s.camera_id;
 
-    // Mode column — same derivation as the metrics table
+    // Mode column - same derivation as the metrics table
     const mode = _segMode(s);
-    const modeColor = mode === '—' ? 'var(--text-dim)'
+    const modeColor = mode === ' - ' ? 'var(--text-dim)'
       : mode.startsWith('Split') ? 'var(--purple)'
       : mode === 'Mode 0' ? 'var(--text)'
       : mode === 'Mode 1' ? 'var(--teal)'
@@ -258,8 +258,8 @@ function _renderArchiveSegments(segments, showToast) {
       <td style="color:var(--amber);text-align:center">${s.roi_count}</td>
       <td style="color:var(--text-dim)">${s.duration_s}s</td>
       <td style="color:var(--text-dim)">${sizeMb} MB</td>
-      <td style="color:var(--teal);text-align:center">${(s.vehicle_count > 0) ? s.vehicle_count : (typeLower.includes('vehicle') ? '<span title="Detected (legacy segment)" style="opacity:0.6">+</span>' : '<span style="color:var(--text-dim)">—</span>')}</td>
-      <td style="color:var(--yellow);text-align:center">${(s.person_count > 0) ? s.person_count : (typeLower.includes('person') ? '<span title="Detected (legacy segment)" style="opacity:0.6">+</span>' : '<span style="color:var(--text-dim)">—</span>')}</td>
+      <td style="color:var(--teal);text-align:center">${(s.vehicle_count > 0) ? s.vehicle_count : (typeLower.includes('vehicle') ? '<span title="Detected (legacy segment)" style="opacity:0.6">+</span>' : '<span style="color:var(--text-dim)"> - </span>')}</td>
+      <td style="color:var(--yellow);text-align:center">${(s.person_count > 0) ? s.person_count : (typeLower.includes('person') ? '<span title="Detected (legacy segment)" style="opacity:0.6">+</span>' : '<span style="color:var(--text-dim)"> - </span>')}</td>
       <td>${playBtn}</td>
     </tr>`;
   }).join('');
@@ -270,7 +270,7 @@ function _renderArchiveSegments(segments, showToast) {
 // metrics tab uses with `_segmentData`.
 let _archiveSegmentData = [];
 
-// Hover handler for archive rows — feeds the same tooltip element the
+// Hover handler for archive rows - feeds the same tooltip element the
 // metrics table uses so the experience is identical across tabs.
 // Author: Bloodawn (KheivenD), 2026-05-03 (search hover).
 function _onArchiveRowEnter(evt, idx) {
@@ -291,7 +291,7 @@ function _renderArchiveDaily(rows) {
   count.textContent = `${rows.length} day${rows.length !== 1 ? 's' : ''}`;
   status.style.display = 'none';
 
-  // Override thead for daily view (now 13 cols total — added Mode)
+  // Override thead for daily view (now 13 cols total - added Mode)
   table.querySelector('thead tr').innerHTML = `
     <th>Date</th><th>Camera</th><th>Total Size</th><th>Total Duration</th>
     <th colspan="9"></th>`;
@@ -311,7 +311,7 @@ async function runArchiveSearch() {
   const spin = document.getElementById('arc-searching');
   spin.style.display = 'inline';
 
-  // Restore standard thead in case DAILY view changed it (13 cols now — Mode added)
+  // Restore standard thead in case DAILY view changed it (13 cols now - Mode added)
   document.getElementById('archive-results-table').querySelector('thead tr').innerHTML = `
     <th>Timestamp</th><th>Camera</th>
     <th title="SVCS encoding mode: 0=all frames, 1=event-gated, 2=BG+patches, 3=object-only blackout">Mode</th>

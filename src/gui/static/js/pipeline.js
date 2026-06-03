@@ -1,11 +1,11 @@
 /*
  * src/gui/static/js/pipeline.js
  *
- * SVCS dashboard — pipeline module. Carved verbatim from the former single
+ * SVCS dashboard - pipeline module. Carved verbatim from the former single
  * inline <script> in index.html (TASK 1.5). Loaded as a classic script in
  * original execution order, so behavior is identical; all functions stay
  * global (reachable from inline on* handlers and the other modules).
- * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — JS split).
+ * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - JS split).
  */
 /* ──────────────────────────────────────────────────────────────
    SVCS Dashboard: client-side logic
@@ -135,7 +135,7 @@ async function generateKeyFile() {
     if (sideKF) sideKF.value = data.path;
     if (sidebarResult) { sidebarResult.textContent = ` Key saved → ${data.path}`; sidebarResult.style.color = 'var(--green)'; }
 
-    // Update enc-panel — pre-fill both keyfile inputs and show result
+    // Update enc-panel - pre-fill both keyfile inputs and show result
     const encKF = document.getElementById('enc-keyfile-path');
     if (encKF) encKF.value = data.path;
     const decKF = document.getElementById('dec-keyfile-path');
@@ -274,7 +274,7 @@ async function clearSegments() {
 }
 
 // ── Hide a single segment row ─────────────────────────────────
-// Per-row [×] button. Doesn't delete the file — just sets hidden=1
+// Per-row [×] button. Doesn't delete the file - just sets hidden=1
 // in the metadata DB so the row stops showing up. Used for the
 // dangling test rows that have no file on disk.
 // Author: Bloodawn (KheivenD), 2026-05-03 (cleanup of dead rows).
@@ -304,12 +304,12 @@ async function _cleanupMissingSegments() {
       console.log(`[svcs] auto-hid ${data.hidden} dangling segment row(s)`);
     }
   } catch (e) {
-    // Best effort — never block dashboard startup on this sweep
+    // Best effort - never block dashboard startup on this sweep
     console.warn('cleanup_missing failed:', e);
   }
 }
 
-// ── Cloud storage output — auto-detect on load ──────────────────
+// ── Cloud storage output - auto-detect on load ──────────────────
 let _cloudWebUrl = null;   // populated by _initGDriveOutput, used by _openCloudFolder
 
 async function _initGDriveOutput() {
@@ -359,12 +359,12 @@ async function startPipeline() {
     encrypt_key_file: document.getElementById('encrypt-keyfile').value.trim(),
     object_filter:    document.getElementById('object-filter-toggle').checked,
     filter_confidence: parseFloat(document.getElementById('filter-confidence').value),
-    // Codec selector — Save To section. Pass through to /api/start. Default
+    // Codec selector - Save To section. Pass through to /api/start. Default
     // "auto" lets the backend pick the per-mode codec (H.264 for mode0/1, AV1
     // for mode2/3); explicit choices override. Author: Bloodawn (KheivenD),
     // 2026-05-02, updated 2026-06-02 (TASK 1.6 per-mode codec).
     codec:            (document.getElementById('codec-select') || {}).value || 'auto',
-    // CRF override. Empty string means "use the mode default" — the
+    // CRF override. Empty string means "use the mode default" - the
     // backend treats unset/blank as None and falls back to 18 / 38.
     crf:              ((document.getElementById('crf-input') || {}).value || '').trim(),
     // Named preset + background CRF (M3 TASK 3.1). Set by presets.js when the
@@ -547,7 +547,7 @@ function _applyImportedConfig(cfg) {
     if (el) el.value = String(cfg.filter_confidence);
   }
 
-  // Encryption (toggle only — credentials are never in the config file)
+  // Encryption (toggle only - credentials are never in the config file)
   const encToggle = document.getElementById('encrypt-toggle');
   if (encToggle && cfg.encrypt != null) {
     encToggle.checked = !!cfg.encrypt;
@@ -591,9 +591,9 @@ function _configImportToast(msg, isError = false) {
 // Polls /api/hls/latency after the manifest parses, surfacing two metrics
 // in the LIVE banner:
 //
-//   • ingest latency — one-shot, FFmpeg-launch → first .ts segment.
-//   • end-to-end avg — rolling median frame age across the last N segments
-//     (ROADMAP 5.1 — Cody's hardware-sizing ask from the April 22 meeting).
+//   • ingest latency - one-shot, FFmpeg-launch → first .ts segment.
+//   • end-to-end avg - rolling median frame age across the last N segments
+//     (ROADMAP 5.1 - Cody's hardware-sizing ask from the April 22 meeting).
 //
 // We keep polling for the first ~30 s to catch the ingest sample, then
 // downshift to a 5 s cadence so the rolling avg keeps refreshing without
@@ -746,9 +746,9 @@ function _showSegTooltip(evt, seg) {
 
   // Was anything detected?
   if (seg.target_detected) {
-    lines.push(`Motion detected — ${seg.object_type !== 'unknown' ? seg.object_type : 'object'} captured`);
+    lines.push(`Motion detected - ${seg.object_type !== 'unknown' ? seg.object_type : 'object'} captured`);
   } else {
-    lines.push(`Background only — no movement detected`);
+    lines.push(`Background only - no movement detected`);
   }
 
   // Compression result
@@ -769,16 +769,16 @@ function _showSegTooltip(evt, seg) {
   if (seg.sharpness_label) {
     const q = seg.sharpness_label;
     const readable = q.includes('blurry') ? 'Blurry (low res camera or motion blur)' :
-                     q.includes('1080') ? 'Sharp — 1080p quality' :
-                     q.includes('720')  ? 'Good — 720p quality'  :
-                     q.includes('480')  ? 'Fair — 480p quality'  :
-                     q.includes('240')  ? 'Poor — 240p quality'  : q;
+                     q.includes('1080') ? 'Sharp - 1080p quality' :
+                     q.includes('720')  ? 'Good - 720p quality'  :
+                     q.includes('480')  ? 'Fair - 480p quality'  :
+                     q.includes('240')  ? 'Poor - 240p quality'  : q;
     lines.push(`Quality: ${readable}`);
   }
 
   // Encryption
   if (isEnc) {
-    lines.push(` File is encrypted (AES-256) — password required to view`);
+    lines.push(` File is encrypted (AES-256) - password required to view`);
   }
 
   // Camera

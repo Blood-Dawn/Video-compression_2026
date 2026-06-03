@@ -108,7 +108,7 @@ def benchmark_upscale_frame(enhancer: Enhancer, n_frames: int) -> list:
     Time upscale_frame at each resolution.
 
     Returns a list of result dicts, one per resolution.
-    Note: result dicts do NOT include 'roi_size' — only upscale_roi results do.
+    Note: result dicts do NOT include 'roi_size' - only upscale_roi results do.
     """
     results = []
     for label, w, h in RESOLUTIONS:
@@ -121,7 +121,7 @@ def benchmark_upscale_frame(enhancer: Enhancer, n_frames: int) -> list:
             "backend": enhancer.backend,
             "resolution": label,
             "frame_size": f"{w}x{h}",
-            "roi_size": "",          # empty for frame benchmarks — keeps CSV schema uniform
+            "roi_size": "",          # empty for frame benchmarks - keeps CSV schema uniform
             "scale": enhancer.scale,
             **stats,
         })

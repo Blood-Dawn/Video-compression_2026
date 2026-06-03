@@ -1,4 +1,4 @@
-# Detection Tuning Results — Section 2.7
+# Detection Tuning Results - Section 2.7
 
 **Author:** Jorge Sanchez (@sanchez-jorge)
 **Branch:** feature/detection-tuning
@@ -60,6 +60,6 @@ Each condition trained the model on 60 background frames, then measured:
 
 ### Night
 - **MOG2**: `varThreshold=30, history=500, detectShadows=True, min_area=500` (use night_mode=True)
-- **KNN**: `history=500, detectShadows=True, min_area=500` (no CLAHE — increases FP on noisy bg)
+- **KNN**: `history=500, detectShadows=True, min_area=500` (no CLAHE - increases FP on noisy bg)
 
 ### Mixed / Transitional Light

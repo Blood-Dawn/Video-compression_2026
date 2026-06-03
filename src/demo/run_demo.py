@@ -51,7 +51,7 @@ NOTES:
 
 - Each mode runs independently using the same input.
 - Demo videos are rendered from pipeline metadata (NOT reprocessed frames).
-- Split-screen is automatically generated for 2–4 modes.
+- Split-screen is automatically generated for 2-4 modes.
 - If only one mode is used, split-screen is skipped.
 - File size comparisons for benchmarking should be computed from segment metadata (metadata.db),
   not from stitched demo outputs. Stitched videos include overlays and are not
@@ -130,7 +130,7 @@ def _aggregate_demo_metadata(mode_output_dirs: dict) -> dict:
     The split-screen row used to land in the dashboard with empty
     Color/Scene/Light/Motion columns because we never copied any of
     that data from the underlying mode runs (which DO have it). Here
-    we walk one mode's metadata.db (any mode — same source clip, so
+    we walk one mode's metadata.db (any mode - same source clip, so
     scene/lighting/color are identical) and aggregate the per-segment
     rows into a single set of values for the composite row.
 
@@ -157,7 +157,7 @@ def _aggregate_demo_metadata(mode_output_dirs: dict) -> dict:
     if not mode_output_dirs:
         return out
 
-    # Use the first mode's DB — all modes process the same source clip,
+    # Use the first mode's DB - all modes process the same source clip,
     # so scene_type / time_of_day / dominant_color are equivalent.
     sample_dir = next(iter(mode_output_dirs.values()))
     db_path = Path(sample_dir) / "metadata.db"
@@ -220,14 +220,14 @@ def _index_demo_outputs(
 
     Behavior change 2026-05-04 (Bloodawn / KheivenD): was writing one
     row per per-mode rendered demo video PLUS one row for the composite
-    — that flooded the metrics tab with 5 rows per demo run. The user
+    - that flooded the metrics tab with 5 rows per demo run. The user
     wants only the actual stitched output (the one video that contains
     all selected modes side-by-side). The per-mode renders are still
     on disk in this folder (you can play them by opening the file), but
     they're no longer indexed.
 
     Metadata for the row is aggregated from one of the underlying mode
-    dirs so the Color/Scene/Light/Motion columns aren't empty — every
+    dirs so the Color/Scene/Light/Motion columns aren't empty - every
     mode processes the same source so the per-clip metadata is shared.
     """
     import sqlite3
@@ -236,7 +236,7 @@ def _index_demo_outputs(
     if split_screen_path is None or not Path(split_screen_path).exists():
         # Single-mode demo (no composite to index). The pipeline already
         # wrote rows for each mode's own metadata.db, so there's nothing
-        # extra to do here — bailing out is correct.
+        # extra to do here - bailing out is correct.
         return
 
     db_path = stitched_dir / "metadata.db"
@@ -472,7 +472,7 @@ def run_all_demos(
             mode_output_dirs=mode_output_dirs,
         )
     except Exception as exc:  # noqa: BLE001
-        # Indexing failures shouldn't fail the demo — files are still on
+        # Indexing failures shouldn't fail the demo - files are still on
         # disk, only the dashboard table won't show them.
         print(f"[WARN] Demo indexing failed: {exc}")
 

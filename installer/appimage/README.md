@@ -38,7 +38,7 @@ in `docs/deployment_packaging.md`).
 
 ## Notes
 
-- The icon shipped by `build.sh` is a placeholder — replace `svcs.png` with real
+- The icon shipped by `build.sh` is a placeholder - replace `svcs.png` with real
   branding before GA.
 - No code-signing is needed for AppImages (unlike the Windows installer).
 

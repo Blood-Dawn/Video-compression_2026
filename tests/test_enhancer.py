@@ -21,7 +21,7 @@ from src.enhancement.enhancer import Enhancer
 
 @pytest.fixture
 def enhancer():
-    """Enhancer with no model path — always uses bicubic fallback."""
+    """Enhancer with no model path - always uses bicubic fallback."""
     return Enhancer(model_path="nonexistent_model.pth", scale=4)
 
 
@@ -44,7 +44,7 @@ def test_backend_is_bicubic_without_weights(enhancer):
 
 def test_backend_is_realesrgan_or_bicubic_with_default_path():
     """
-    Instantiating with the default path should never raise — it should
+    Instantiating with the default path should never raise - it should
     either load the model (if weights exist) or fall back gracefully.
     """
     e = Enhancer()
@@ -52,7 +52,7 @@ def test_backend_is_realesrgan_or_bicubic_with_default_path():
 
 
 # ---------------------------------------------------------------------------
-# upscale_frame — output shape
+# upscale_frame - output shape
 # ---------------------------------------------------------------------------
 
 def test_upscale_frame_output_shape_x4(enhancer, small_frame):
@@ -84,7 +84,7 @@ def test_upscale_frame_is_not_all_zeros(enhancer, small_frame):
 
 
 # ---------------------------------------------------------------------------
-# upscale_frame — error handling
+# upscale_frame - error handling
 # ---------------------------------------------------------------------------
 
 def test_upscale_frame_raises_on_empty_array(enhancer):
@@ -93,7 +93,7 @@ def test_upscale_frame_raises_on_empty_array(enhancer):
 
 
 # ---------------------------------------------------------------------------
-# upscale_roi — output shape equals input shape
+# upscale_roi - output shape equals input shape
 # ---------------------------------------------------------------------------
 
 def test_upscale_roi_output_shape_matches_input(enhancer, small_frame):
@@ -131,7 +131,7 @@ def test_upscale_roi_clamped_negative_coords(enhancer, small_frame):
 
 
 # ---------------------------------------------------------------------------
-# upscale_roi — error handling
+# upscale_roi - error handling
 # ---------------------------------------------------------------------------
 
 def test_upscale_roi_raises_on_empty_frame(enhancer):

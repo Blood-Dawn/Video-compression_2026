@@ -6,7 +6,7 @@ Covers: initialize_database, insert_segment, query_recent_targets,
         query_segments_by_target_count, query_daily_storage_summary.
 
 All tests use the tmp_db or seeded_db fixtures from conftest.py which
-create isolated SQLite databases in pytest's tmp_path — no side effects
+create isolated SQLite databases in pytest's tmp_path - no side effects
 on outputs/metadata.db.
 """
 
@@ -74,7 +74,7 @@ class TestInsertSegment:
         assert len(rows) == 1
 
     def test_multiple_inserts_no_duplicates(self, tmp_db):
-        """Inserting N rows should yield exactly N rows — no silent de-duplication."""
+        """Inserting N rows should yield exactly N rows - no silent de-duplication."""
         for i in range(3):
             insert_segment(
                 timestamp=f"202601010{i}0000Z",
@@ -151,7 +151,7 @@ class TestQueryRecentTargets:
         assert rows == []
 
     def test_hours_zero_returns_empty(self, tmp_db):
-        """hours=0 means look-back window is zero — no rows should qualify."""
+        """hours=0 means look-back window is zero - no rows should qualify."""
         insert_segment(
             timestamp="20200101T000000Z",   # definitely in the past
             camera_id="cam_01",
@@ -224,7 +224,7 @@ class TestQueryDailyStorageSummary:
         assert "cam_b" in cameras
 
     def test_total_bytes_correct(self, seeded_db):
-        """cam_a has two segments of 100k and 200k bytes — sum should be 300k."""
+        """cam_a has two segments of 100k and 200k bytes - sum should be 300k."""
         rows = query_daily_storage_summary(db_path=seeded_db)
         cam_a_row = next(r for r in rows if r[1] == "cam_a")
         assert cam_a_row[2] == 300_000

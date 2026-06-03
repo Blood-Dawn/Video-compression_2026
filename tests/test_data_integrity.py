@@ -45,12 +45,12 @@ from compression.roi_encoder import ROIEncoder
 
 # ─── Pass/fail thresholds ─────────────────────────────────────────────────────
 
-# Mean Absolute Error on ROI pixels (per channel, per pixel) — CRF 18 target
-FOREGROUND_MAE_THRESHOLD   = 3.0   # intensity units (0–255). CRF 18 is near-lossless.
+# Mean Absolute Error on ROI pixels (per channel, per pixel) - CRF 18 target
+FOREGROUND_MAE_THRESHOLD   = 3.0   # intensity units (0-255). CRF 18 is near-lossless.
 # Maximum single-pixel channel error allowed in the ROI
 FOREGROUND_MAX_PX_THRESHOLD = 20   # any pixel deviating more than this is a "loss event"
 # Maximum fraction of ROI pixels that may exceed FOREGROUND_MAX_PX_THRESHOLD
-FOREGROUND_LOSS_RATE_MAX   = 0.0   # 0% — zero tolerance for high-error pixels in ROI
+FOREGROUND_LOSS_RATE_MAX   = 0.0   # 0% - zero tolerance for high-error pixels in ROI
 
 # ─── Synthetic frame generation ───────────────────────────────────────────────
 
@@ -243,7 +243,7 @@ class TestForegroundROIIntegrity:
         for i, (orig, dec) in enumerate(zip(originals, decoded)):
             orig_roi = _roi_pixels(orig)
             dec_roi  = _roi_pixels(dec)
-            # Standard deviation measures spatial variation — if the decoder
+            # Standard deviation measures spatial variation - if the decoder
             # averages out the ROI, std drops dramatically.
             orig_std = float(orig_roi.std())
             dec_std  = float(dec_roi.std())
@@ -256,7 +256,7 @@ class TestForegroundROIIntegrity:
                 )
 
 
-# ─── Background quality (different assertion — degradation is acceptable) ─────
+# ─── Background quality (different assertion - degradation is acceptable) ─────
 
 class TestBackgroundCompression:
     def test_background_is_smaller_than_foreground_crf(self, encode_decode_pair, tmp_path):
@@ -322,7 +322,7 @@ class TestBackgroundCompression:
         )
 
 
-# ─── Mode 0 vs mode 1 smoke tests (encode only — no mode gating in encoder) ───
+# ─── Mode 0 vs mode 1 smoke tests (encode only - no mode gating in encoder) ───
 
 class TestIntegrityAcrossFrameCounts:
     """

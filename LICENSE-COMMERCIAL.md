@@ -1,10 +1,10 @@
 # Commercial License
 
-> **DORMANT — NOT OFFERED (2026-05-31).** SVCS v2 is **open-source only,
+> **DORMANT - NOT OFFERED (2026-05-31).** SVCS v2 is **open-source only,
 > under AGPL-3.0** (see `LICENSE`). No commercial license is currently sold
 > or offered, and the pricing/terms below are a non-binding draft. This file
 > is kept only as a starting point in case the team later forks a commercial
-> edition — and only if legally cleared to commercialize the work (the
+> edition - and only if legally cleared to commercialize the work (the
 > project is a DoD/DIU-sponsored FAU capstone; see PLAN-V2 §0/§13). Until
 > that happens, treat SVCS as AGPL-3.0 and ignore this document.
 

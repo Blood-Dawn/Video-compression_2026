@@ -77,7 +77,7 @@ PRs are reviewed within 7 days. Smaller PRs get merged faster.
 |---|---|
 | `main` | Stable release line. Tagged versions only. |
 | `dev` | Active development of the Python pipeline (v1 series). |
-| `app` | Primary branch — the open-source (AGPL-3.0) edition: installers, presets, camera ingestion, everything. |
+| `app` | Primary branch - the open-source (AGPL-3.0) edition: installers, presets, camera ingestion, everything. |
 | `premium` | **Dormant.** Held only as the seam for a possible future commercial fork. Nothing new lands here in v2. |
 | `kdev` | Experimental Rust port (v2 series). Not stable. |
 
@@ -92,16 +92,16 @@ Real-ESRGAN enhancement, and the AI plate reader.
 Some features stay behind optional `pyproject.toml` extras only to keep the
 default install small (not to gate them behind payment):
 
-- `[plates]` — the AI plate reader (EasyOCR). Free; split out because
+- `[plates]` - the AI plate reader (EasyOCR). Free; split out because
   EasyOCR is heavy. The dashboard hides the plate-reader controls when the
   backend isn't installed, so a base install shows no empty buttons.
-  (Note: install `[plates]` in a *separate* environment — see the warning
+  (Note: install `[plates]` in a *separate* environment - see the warning
   in `pyproject.toml`; easyocr's OpenCV conflicts with the core build.)
-- `[enhance]` — Real-ESRGAN super-resolution.
-- `[crash-reporting]` — opt-in Sentry (off by default).
+- `[enhance]` - Real-ESRGAN super-resolution.
+- `[crash-reporting]` - opt-in Sentry (off by default).
 
 The `premium` branch is dormant. If a commercial fork is ever pursued (and
-only if the team is legally cleared — see PLAN-V2 §0/§13), it would branch
+only if the team is legally cleared - see PLAN-V2 §0/§13), it would branch
 from a frozen open-source release at that point. There is **no** routine
 `app` -> `premium` mirroring; just push `app`.
 

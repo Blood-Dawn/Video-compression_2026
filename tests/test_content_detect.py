@@ -4,14 +4,14 @@ tests/test_content_detect.py
 Tests for rule-based content auto-detection (M3 TASK 3.2).
 
 Two layers:
-  * Unit — the decision tree (recommend_preset) is exercised on hand-built
+  * Unit - the decision tree (recommend_preset) is exercised on hand-built
     ContentSignals so every branch is asserted deterministically, no video I/O.
-  * Integration — tiny synthetic clips are generated on the fly (a static frame
+  * Integration - tiny synthetic clips are generated on the fly (a static frame
     vs. a large moving rectangle) and run through analyze_video + detect_content,
     so CI exercises the real MOG2 pipeline without any LFS assets. A real CDnet
     surveillance clip is used if present, otherwise that case is skipped.
 
-Author: Bloodawn (KheivenD), 2026-06-03 (TASK 3.2 — content auto-detection).
+Author: Bloodawn (KheivenD), 2026-06-03 (TASK 3.2 - content auto-detection).
 """
 
 import sys
@@ -59,7 +59,7 @@ def _write_clip(path: Path, make_frame, n_frames=80, size=(320, 240), fps=10.0):
     """Write an .avi (MJPG, intra-frame) clip; skip the test if no encoder.
 
     make_frame(i) -> HxWx3 uint8 BGR frame. MJPG is intra-only so identical
-    input frames decode with minimal temporal noise — important for the static
+    input frames decode with minimal temporal noise - important for the static
     case where we assert near-zero motion.
     """
     w, h = size
@@ -159,7 +159,7 @@ def test_analyze_busy_clip_recommends_active_scene(tmp_path):
 
     def frame(i):
         # A fresh field of coarse random blocks every frame: no pixel ever has a
-        # stable value, so MOG2 can't model any of it as background — the whole
+        # stable value, so MOG2 can't model any of it as background - the whole
         # frame reads as motion. Coarse (16px) blocks survive MJPG compression.
         small = rng.integers(0, 256, (15, 20, 3), dtype=np.uint8)
         return cv2.resize(small, (320, 240), interpolation=cv2.INTER_NEAREST)

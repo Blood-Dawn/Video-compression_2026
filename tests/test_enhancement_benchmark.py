@@ -4,7 +4,7 @@ tests/test_enhancement_benchmark.py
 Validates ``src/enhancement/enhancement_benchmark.py``. Strategy:
 
 * Test the pure metric helpers (sharpness, PSNR, SSIM) with synthetic
-  images of known characteristics — a flat block has near-zero Laplacian
+  images of known characteristics - a flat block has near-zero Laplacian
   variance, identical inputs give max PSNR, etc.
 * Test the variant production (full-frame SR vs ROI-only SR) with a
   stub Enhancer so we don't need Real-ESRGAN weights in CI.
@@ -55,7 +55,7 @@ class _SharpenStubEnhancer:
     Exists so we can exercise the comparison logic without pulling in the
     real Real-ESRGAN. We pick a sharpen kernel that yields detectably more
     Laplacian variance than plain bicubic, but doesn't introduce wild
-    hallucinations — exactly what the benchmark is supposed to detect.
+    hallucinations - exactly what the benchmark is supposed to detect.
 
     Author: Bloodawn (KheivenD)
     """

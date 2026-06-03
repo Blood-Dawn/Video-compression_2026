@@ -6,14 +6,14 @@ Logging wiring for the Flask dashboard, extracted from ``gui/app.py``.
 Owns the three handlers (SSE queue, rotating-less file, console), the root
 logger configuration, and the atexit shutdown marker. The file handler and
 ``_write_shutdown_log`` deliberately live together so the shutdown marker is
-guaranteed to land in ``svcs.log`` (atexit ordering — see REFACTOR-PLAN §5).
+guaranteed to land in ``svcs.log`` (atexit ordering - see REFACTOR-PLAN §5).
 
 Import layer: this module imports ``gui.state`` (for the live-log ring
 buffers and the rebound ``_log_id`` counter) and ``utils.paths`` (for the
 cache directory). Nothing in the ``services``/``routes`` layers may be
-imported here — the direction is one-way.
+imported here - the direction is one-way.
 
-Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — logging extraction).
+Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - logging extraction).
 """
 
 import atexit
@@ -40,7 +40,7 @@ class _QueueLogHandler(logging.Handler):
     resume without replaying duplicate lines after a reconnect.
 
     The ID counter (``state._log_id``) is *rebound* on every record, so it is
-    referenced through the ``state`` module rather than a local import — a
+    referenced through the ``state`` module rather than a local import - a
     plain ``from gui.state import _log_id`` would bind a stale copy.
     """
 

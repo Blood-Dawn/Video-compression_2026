@@ -83,6 +83,13 @@ datas = [
     # Author: Bloodawn (KheivenD), 2026-06-02 (frozen template-path fix).
     (str(SRC / "gui" / "templates"), "gui/templates"),
     (str(SRC / "gui" / "templates"), "src/gui/templates"),
+    # Static assets (the dashboard's JS modules + strings.js, split out of
+    # index.html in TASK 1.5). Same dual-path reasoning as templates: Flask's
+    # static_folder resolves relative to the app root_path (<bundle>/src/gui),
+    # so ship under both gui/static and src/gui/static or the frozen dashboard
+    # 404s on /static/js/*.js. Author: Bloodawn (KheivenD), 2026-06-02.
+    (str(SRC / "gui" / "static"), "gui/static"),
+    (str(SRC / "gui" / "static"), "src/gui/static"),
 ]
 
 # YOLOv8-nano: 6 MB, optional. Ships with the bundle so first-run

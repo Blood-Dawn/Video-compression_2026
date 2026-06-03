@@ -64,9 +64,16 @@ if (-not $env:VIRTUAL_ENV) {
 Write-Host "[1/4] Checking pyinstaller install..." -ForegroundColor Cyan
 $pyinstallerCheck = & python -c "import PyInstaller; print(PyInstaller.__version__)" 2>$null
 if ($LASTEXITCODE -ne 0) {
+    # PyInstaller is a build-time tool, not a project dependency, so a plain
+    # `uv sync` removes it. The repo's .venv is uv-managed and has no `pip`,
+    # so prefer `uv pip install`; fall back to `python -m pip` for non-uv envs.
+    # Author: Bloodawn (KheivenD), 2026-06-02 (uv-venv build robustness).
     Write-Host "      pyinstaller not found, installing into current venv..." -ForegroundColor Yellow
-    & python -m pip install --upgrade pyinstaller
-    if ($LASTEXITCODE -ne 0) { throw "pip install pyinstaller failed" }
+    & uv pip install --upgrade pyinstaller
+    if ($LASTEXITCODE -ne 0) {
+        & python -m pip install --upgrade pyinstaller
+        if ($LASTEXITCODE -ne 0) { throw "could not install pyinstaller (tried uv pip and python -m pip)" }
+    }
 } else {
     Write-Host "      pyinstaller $pyinstallerCheck OK" -ForegroundColor Green
 }

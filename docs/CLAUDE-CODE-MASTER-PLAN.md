@@ -77,7 +77,7 @@ Design authority: `docs/REFACTOR-PLAN-gui-app.md`. Hard constraints recap: keep 
   **Do:** add every new `gui.state`/`gui.logging_setup`/`gui.services.*`/`gui.routes.*` submodule to `hiddenimports`. Run `installer/build.ps1`; its smoke test (probe `http://127.0.0.1:5000/`) must pass against the refactored app.
   **Risks:** PyInstaller silently drops a dynamically-imported blueprint → runtime ImportError only in the frozen build. The smoke test is the guard.
 
-- [ ] **TASK 1.5 — split `index.html` into JS modules + extract strings.** Depends: 1.3. Split into 1.5a/b/c by feature if a commit exceeds ~500 lines.
+- [x] **TASK 1.5 — split `index.html` into JS modules + extract strings.** Depends: 1.3. Split into 1.5a/b/c by feature if a commit exceeds ~500 lines.
   **Files:** `src/gui/templates/index.html` (7,026 lines) → new `src/gui/static/js/*.js` grouped by feature (pipeline control, file browser, demo/quadrant, HLS player, metrics, encryption, presets); a single `src/gui/static/js/strings.js` catalog for user-facing strings (i18n groundwork — translate nothing).
   **Acceptance:** dashboard loads; every panel works; `test_gui_api` green. Keep the four-quadrant demo and HLS player intact (demo surface).
   **Risks:** a broken `fetch` URL or lost handler is silent until clicked — verify each panel; split by feature and test incrementally.

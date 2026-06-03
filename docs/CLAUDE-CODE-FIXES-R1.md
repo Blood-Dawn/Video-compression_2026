@@ -72,7 +72,7 @@ Branch `app`. Most of these are UI; do not change backend route URLs unless a ta
 
 ## FIX 8 - Update the Help / Reference section
 
-- [ ] **What:** Reflect everything above in the in-app Help (the "SVCS HELP & REFERENCE" overlay).
+- [x] **What:** Reflect everything above in the in-app Help (the "SVCS HELP & REFERENCE" overlay). *(DONE: the Help overlay's "Setup & Maintenance" section now documents the Setup/destination chooser (Open Setup button), the factory reset (Reset app data button, from FIX 2), the Library tab, the Tools tab (RTSP + HLS), the verbose-logging toggle, and a dependency-status check with a "Check dependencies" button that calls /api/setup/dependencies and lists ffmpeg/mediamtx/onnx with [ok]/[missing] and the resolved path. The existing Network Access section is kept. All ASCII (no em/en dashes). tests/test_help_reference.py (4) guards the new keywords, the kept Network Access section, and the dependency-check wiring. Browser-verified via the Preview MCP: Help opens with the new rows and "Check dependencies" populated "[ok] ffmpeg - ..."; no console errors. Suite green: 923 passed.)*
 - **Do:** document the Setup/destination chooser, the TOOLS tab (RTSP + HLS), the LIBRARY tab, the verbose-log toggle, the reset action, and the dependency-status check. Keep the existing Network Access section. No em/en dashes.
 - **Acceptance:** Help covers the new features accurately; a guard test that Help contains the new section keywords; suite green.
 

@@ -157,6 +157,25 @@ async function resetAppData() {
 }
 window.resetAppData = resetAppData;
 
+// Dependency status (FIX 5/8): show whether ffmpeg/mediamtx/onnx are found.
+async function checkDependencies() {
+  const out = document.getElementById("help-deps-result");
+  if (out) out.textContent = "Checking...";
+  try {
+    const data = await (await fetch("/api/setup/dependencies")).json();
+    const deps = data.dependencies || {};
+    const lines = Object.keys(deps).map((k) => {
+      const d = deps[k];
+      const mark = d.present ? "[ok]" : "[missing]";
+      return mark + " " + k + (d.present && d.path ? " - " + d.path : "");
+    });
+    if (out) out.innerHTML = lines.join("<br>");
+  } catch (e) {
+    if (out) out.textContent = "Could not check dependencies.";
+  }
+}
+window.checkDependencies = checkDependencies;
+
 async function initSetup() {
   let st;
   try {

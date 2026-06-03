@@ -3369,6 +3369,31 @@
               <button class="btn btn-ghost" style="margin-left:6px;color:var(--red);border-color:var(--red);" onclick="resetAppData()">Reset app data</button>
             </span>
           </div>
+          <div class="help-row">
+            <span class="help-term">Library tab</span>
+            <span class="help-def">Browse the videos in a folder (defaults to your output folder)
+              as a thumbnail grid or list, preview one with metadata, and send it straight into
+              the compressor with "Compress this video".</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Tools tab (RTSP + HLS)</span>
+            <span class="help-def">Advanced streaming tools moved out of the sidebar: run a local
+              RTSP server (MediaMTX) and view a live HLS stream in the browser.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Verbose logging</span>
+            <span class="help-def">A checkbox in Advanced settings. Normal shows the key steps;
+              Verbose adds per-frame progress and per-segment detail (detections, size, ratio,
+              percent done) to the live log and the console.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Dependency status</span>
+            <span class="help-def">Checks that FFmpeg, the MediaMTX RTSP binary, and the ONNX
+              detection model are found (in the bundle, your app-data tools folder, or on PATH).
+              <button class="btn btn-ghost" style="margin-left:6px;" onclick="checkDependencies()">Check dependencies</button>
+              <span id="help-deps-result" style="display:block;margin-top:4px;font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);"></span>
+            </span>
+          </div>
         </div>
       </div>
 

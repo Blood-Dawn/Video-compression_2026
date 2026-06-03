@@ -148,6 +148,7 @@ def run_pipeline(
     codec: Optional[str] = None,
     crf: int = None,
     background_crf: Optional[int] = None,
+    verbose: bool = False,
 ):
     """
     Main pipeline loop.
@@ -248,6 +249,9 @@ def run_pipeline(
     fps = src.fps
     frame_w = src.width
     frame_h = src.height
+    # Total source frames if known (files report it; live streams are 0). Used
+    # for the percent-done progress logging (FIX 7).
+    total_frames = int(getattr(src, "total_frames", 0) or 0)
     frames_per_segment = max(1, int(fps * segment_seconds))
     mode2_clean_frames = max(1, int(round(fps * mode2_clean_seconds)))
     mode2_background_lag_frames = max(0, int(round(fps * mode2_background_lag_seconds)))
@@ -264,6 +268,11 @@ def run_pipeline(
     log.info(f"Mode: {mode}")
     warmup_secs = (effective_warmup / fps) if fps > 0 else 0.0
     log.info(f"Warmup: {effective_warmup} frames (~{warmup_secs:.1f}s)")
+    if total_frames > 0:
+        log.info("Source length: %d frames (~%.1fs)", total_frames,
+                 (total_frames / fps) if fps > 0 else 0.0)
+    if verbose:
+        log.info("Verbose logging ON: per-frame progress and per-segment detail.")
     if mode == "mode2":
         log.info(
             "Mode2 clean background guard: %.1fs (%d consecutive frames)",
@@ -510,6 +519,20 @@ def run_pipeline(
         if out.get("sharpness_label"):
             log.info("Target ROI sharpness: %s (score=%.1f)",
                      out["sharpness_label"], out["avg_sharpness"])
+        # FIX 7: per-segment detail - detections, output size, a rough ratio vs
+        # raw frames, and overall progress. Useful at Normal verbosity too.
+        try:
+            _seg_bytes = Path(out["file_path"]).stat().st_size
+        except OSError:
+            _seg_bytes = 0
+        _raw_bytes = max(1, frames_in_segment) * max(1, frame_w) * max(1, frame_h) * 3
+        _ratio = (_raw_bytes / _seg_bytes) if _seg_bytes else 0.0
+        _pct = ((" | %.0f%% of source" % (100.0 * source_frame_index / total_frames))
+                if total_frames > 0 else "")
+        log.info("  segment %d detail: %d people, %d vehicles | %d frames | "
+                 "%.1f KB (~%.1fx vs raw)%s",
+                 segment_index + 1, _pcount, _vcount, frames_in_segment,
+                 _seg_bytes / 1024.0, _ratio, _pct)
         frames_in_segment = 0
         target_frames_this_segment = 0
         segment_index += 1
@@ -583,6 +606,16 @@ def run_pipeline(
             # --- END WARMUP GATE ---
 
             post_warmup_frame_count += 1
+
+            # FIX 7: verbose per-N-frames progress to the SSE log + console.
+            if verbose and post_warmup_frame_count % 100 == 0:
+                if total_frames > 0:
+                    _p = 100.0 * source_frame_index / total_frames
+                    log.info("Progress: frame %d/%d (%.0f%%), segment %d",
+                             source_frame_index, total_frames, _p, segment_index + 1)
+                else:
+                    log.info("Progress: %d frames processed, segment %d",
+                             source_frame_index, segment_index + 1)
 
             # Optional: enhance foreground ROIs before encoding.
             #

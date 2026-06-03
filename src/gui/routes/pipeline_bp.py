@@ -143,6 +143,8 @@ def api_start():
         "background_crf": (int(data.get("background_crf"))
                            if str(data.get("background_crf", "")).strip() else None),
         "preset": (str(data.get("preset")).strip() or None) if data.get("preset") else None,
+        # FIX 7: verbose logging toggle (Normal vs Verbose) for the run.
+        "verbose": bool(data.get("verbose", False)),
     }
 
     _pipeline_runner._stop_event = threading.Event()

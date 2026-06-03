@@ -2444,6 +2444,13 @@
                 </label>
                 <p class="config-hint">Uses YOLOv8-nano to confirm each moving region is a real target (person, vehicle, animal) before recording. Eliminates false triggers from trees, flags, and lighting changes. Requires <code>ultralytics</code> package.</p>
               </div>
+              <div class="config-field" style="margin-top:0.75rem;">
+                <label class="config-label" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
+                  <input type="checkbox" id="verbose-toggle" />
+                  Verbose logging
+                </label>
+                <p class="config-hint">Normal shows the key steps. Verbose adds per-frame progress and per-segment detail (detections, size, ratio, percent done) to the live log and console.</p>
+              </div>
               <div class="config-field" id="filter-confidence-row" style="display:none;">
                 <label class="config-label" for="filter-confidence">Filter Confidence</label>
                 <input type="range" id="filter-confidence" min="0.10" max="0.70" step="0.05" value="0.30"

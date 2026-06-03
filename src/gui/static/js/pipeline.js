@@ -372,6 +372,8 @@ async function startPipeline() {
     background_crf:   (window._svcsPreset && window._svcsPreset.background_crf != null
                        ? String(window._svcsPreset.background_crf) : ''),
     preset:           (window._svcsPreset && window._svcsPreset.key) || '',
+    // Verbose logging toggle (FIX 7): adds per-frame / per-segment detail.
+    verbose:          (document.getElementById('verbose-toggle') || {}).checked || false,
   };
 
   try {

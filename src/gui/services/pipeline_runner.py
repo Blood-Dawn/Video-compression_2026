@@ -223,6 +223,7 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             codec=config.get("codec"),
             crf=config.get("crf"),
             background_crf=config.get("background_crf"),
+            verbose=bool(config.get("verbose", False)),
         )
         _record_encode_stat(config, success=True)
 

@@ -101,7 +101,7 @@ Design authority: `docs/REFACTOR-PLAN-gui-app.md`. Hard constraints recap: keep 
 
 Goal: installer download 2.5–4.7 GB → ~400–600 MB **without a rewrite** (PLAN-V2 §6/§8). The codec decision is settled (TASK 1.6) — presets just reference the per-mode default.
 
-- [ ] **TASK 2.1 — ONNX inference backend (YOLOv8n + Real-ESRGAN).** Depends: M1 (clean modules) or may start after 1.3.
+- [x] **TASK 2.1 — ONNX inference backend (YOLOv8n + Real-ESRGAN).** Depends: M1 (clean modules) or may start after 1.3. *(Detection-ONNX DONE + parity-tested; Real-ESRGAN ONNX deferred to a follow-up per the plan's "ship detection-on-ONNX first" allowance — see docs/onnx-models.md.)*
   **Files:** `src/detection/object_filter.py`, `src/enhancement/enhancer.py`, new `src/detection/onnx_backend.py`, new `src/enhancement/onnx_backend.py`, `pyproject.toml`.
   **Do:** export YOLOv8n and Real-ESRGAN to ONNX; add an `onnxruntime` backend selectable alongside the existing torch one (keep torch behind a `[torch]` extra for parity/export during transition). **Keep the detector interface backend-agnostic** (this is the RT-DETR/permissive seam).
   **Acceptance:** a parity test asserts ONNX detection boxes match the torch backend within an agreed tolerance (box IoU / count) on `data/samples/cdnet_mp4/...`. Suite green. Models stored/documented as an optional component, not committed binaries.

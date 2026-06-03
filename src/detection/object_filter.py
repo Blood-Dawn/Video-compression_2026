@@ -262,12 +262,21 @@ class ObjectFilter:
         min_box_px: int = _MIN_CLASSIFY_PX,
         use_suppression: bool = True,
         suppress_after: int = 30,
+        backend: str = "torch",
     ) -> None:
         self.confidence = confidence
         self.target_classes = target_classes if target_classes is not None else DEFAULT_TARGET_CLASSES
         self.min_box_px = min_box_px
         self.use_suppression = use_suppression
         self.suppress_after = suppress_after
+        # Inference backend selector (M2 TASK 2.1):
+        #   "torch" — ultralytics/PyTorch (default during the migration).
+        #   "onnx"  — ONNX Runtime (slim install path; TASK 2.2 flips the
+        #             default once parity is proven and torch goes optional).
+        #   "auto"  — ONNX if its model+runtime are available, else torch.
+        # The detector interface is backend-agnostic, so a future RT-DETR /
+        # permissive detector slots in here without touching the pipeline.
+        self.backend = str(backend or "torch").lower()
 
         # Resolve device
         if device == "auto":
@@ -279,7 +288,9 @@ class ObjectFilter:
         else:
             self._device = device
 
-        self._model = None
+        self._model = None        # ultralytics YOLO (torch backend)
+        self._onnx = None         # YoloOnnxDetector (onnx backend)
+        self._backend = "none"    # which backend actually loaded
         self._available = False
         self._load_model()
 
@@ -294,6 +305,36 @@ class ObjectFilter:
     # ------------------------------------------------------------------
 
     def _load_model(self) -> None:
+        # Try ONNX first when requested ("onnx" or "auto"). It falls through to
+        # the torch backend if the runtime or the exported .onnx is missing.
+        if self.backend in ("onnx", "auto") and self._load_onnx():
+            return
+        if self.backend == "onnx":
+            # Explicit onnx request that couldn't load: stay in pass-through
+            # rather than silently switching to torch (which TASK 2.2 removes).
+            log.warning("ObjectFilter: ONNX backend requested but unavailable "
+                        "(pass-through mode).")
+            return
+        self._load_torch()
+
+    def _load_onnx(self) -> bool:
+        try:
+            from detection.onnx_backend import YoloOnnxDetector
+        except ImportError:
+            try:
+                from src.detection.onnx_backend import YoloOnnxDetector  # type: ignore
+            except ImportError:
+                return False
+        det = YoloOnnxDetector(confidence=self.confidence, device=self._device)
+        if not det.available:
+            return False
+        self._onnx = det
+        self._backend = "onnx"
+        self._available = True
+        log.info("ObjectFilter: YOLOv8-nano (ONNX Runtime) loaded on %s", self._device.upper())
+        return True
+
+    def _load_torch(self) -> None:
         try:
             from ultralytics import YOLO  # type: ignore
         except ImportError:
@@ -308,8 +349,9 @@ class ObjectFilter:
             # Run on the right device
             if self._device == "cuda":
                 self._model.to("cuda")
+            self._backend = "torch"
             self._available = True
-            log.info("ObjectFilter: YOLOv8-nano loaded on %s", self._device.upper())
+            log.info("ObjectFilter: YOLOv8-nano (PyTorch) loaded on %s", self._device.upper())
         except Exception as exc:
             log.warning("ObjectFilter: failed to load YOLOv8-nano (%s) (pass-through mode).", exc)
 
@@ -421,13 +463,19 @@ class ObjectFilter:
         found: set[str] = set()
 
         try:
-            results = self._model(crop, verbose=False, conf=self.confidence, device=self._device)
-            for result in results:
-                for box in result.boxes:
-                    cls_id   = int(box.cls[0])
-                    cls_name = result.names.get(cls_id, "")
-                    if cls_name in self.target_classes:
-                        found.add(cls_name)
+            if self._backend == "onnx":
+                # ONNX backend returns the set of detected COCO class names.
+                for name in self._onnx.class_names_in(crop, conf=self.confidence):
+                    if name in self.target_classes:
+                        found.add(name)
+            else:
+                results = self._model(crop, verbose=False, conf=self.confidence, device=self._device)
+                for result in results:
+                    for box in result.boxes:
+                        cls_id   = int(box.cls[0])
+                        cls_name = result.names.get(cls_id, "")
+                        if cls_name in self.target_classes:
+                            found.add(cls_name)
         except Exception as exc:
             log.debug("YOLO classify error: %s", exc)
             return found  # on error pass through

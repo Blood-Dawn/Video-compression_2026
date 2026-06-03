@@ -84,9 +84,29 @@ dependencies = [
     # repo root automatically on first run so nothing is lost.
     # Author: Bloodawn (KheivenD), 2026-05-14 (installer prep).
     "platformdirs>=4.0.0",
+    # ONNX Runtime — cross-platform inference engine for the slim install
+    # path (PLAN-V2 §6, M2). The detector (and, where it exports cleanly, the
+    # enhancer) can run on ONNX Runtime instead of PyTorch, which is what lets
+    # the installer drop from multi-GB to a few hundred MB once torch becomes
+    # optional (TASK 2.2). Pure-CPU wheel by default; tiny (~15 MB) next to
+    # torch. The exported .onnx weights ship as an optional component, not a
+    # committed binary. Author: Bloodawn (KheivenD), 2026-06-02 (TASK 2.1).
+    "onnxruntime>=1.16.0",
 ]
 
 [project.optional-dependencies]
+# One-time ONNX export tooling (dev/build only — NOT needed at runtime).
+# `yolo export model=yolov8n.pt format=onnx` and the Real-ESRGAN export need
+# these; the produced .onnx files are shipped as the optional weights
+# component. Install with: uv sync --extra onnx-export
+# onnx is capped < 1.18: onnx >= 1.18 needs ml_dtypes >= 0.5 (float4_e2m1fn),
+# but the [enhance] extra pins ml_dtypes 0.4.1 (via tb-nightly), and `import
+# onnx` then crashes. 1.16/1.17 export YOLOv8 to ONNX fine with 0.4.1.
+onnx-export = [
+    "onnx>=1.16.0,<1.18.0",
+    "onnxslim>=0.1.0",
+]
+
 # Super-resolution enhancement — only needed if using --enhance flag.
 # Install with: uv sync --extra enhance
 enhance = [

@@ -100,6 +100,10 @@ ffmpeg_tmp/
 # MediaMTX binary (downloaded on demand — not committed)
 tools/mediamtx/
 
+# Vendored FFmpeg (fetched by installer/build.ps1 — a ~243 MB build artifact,
+# never committed). Author: Bloodawn (KheivenD), 2026-06-03 (TASK 2.3).
+tools/ffmpeg/
+
 # Legacy state files. As of 2026-05-14 these live in the platform
 # app-data dir (see src/utils/paths.py), but we keep these entries
 # so older dev clones with the files still in the repo root stay

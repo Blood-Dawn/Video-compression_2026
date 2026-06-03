@@ -313,66 +313,17 @@ async function _cleanupMissingSegments() {
 let _cloudWebUrl = null;   // populated by _initGDriveOutput, used by _openCloudFolder
 
 async function _initGDriveOutput() {
-  const outputEl = document.getElementById('output-dir');
+  // FIX 1: no silent cloud default. The output folder comes from the user's
+  // explicit Setup choice (see setup.js, /api/setup/state). This function used
+  // to auto-detect OneDrive/Drive and fill the field; it now only refreshes the
+  // status line and hides the "View Online" button unless the chosen path is a
+  // cloud folder. setup.js owns populating #output-dir.
   const statusEl = document.getElementById('gdrive-status');
   const viewBtn  = document.getElementById('gdrive-view-btn');
-  const demoOutEl = document.getElementById('demo-output-dir');
-
-  // Don't override if the user already typed something
-  if (outputEl.value && outputEl.value !== outputEl.placeholder) return;
-
-  // Show "Detecting…" indicator on the input itself so the user can see
-  // why the field is empty for a moment after page load. Author:
-  // Bloodawn (KheivenD), 2026-05-02 (audit follow-up).
-  outputEl.placeholder = 'Detecting cloud sync — please wait…';
-  outputEl.classList.add('detecting');
-  statusEl.textContent = ' Detecting cloud sync…';
-  statusEl.style.color = 'var(--text-dim)';
-
-  try {
-    const res  = await fetch('/api/gdrive/detect');
-    const data = await res.json();
-
-    if (data.found) {
-      _cloudWebUrl         = data.web_url;
-      outputEl.value       = data.output_path;
-      outputEl.placeholder = data.output_path;
-      // Pre-fill demo output dir with the same OneDrive SVCS path
-      if (demoOutEl && !demoOutEl.value) {
-        demoOutEl.value       = data.output_path;
-        demoOutEl.placeholder = data.output_path;
-      }
-      // Show provider name in button and status
-      const provider = data.provider || 'Cloud';
-      const isOneDrive = provider.toLowerCase().includes('onedrive');
-      if (viewBtn) {
-        viewBtn.textContent = isOneDrive ? ' View in OneDrive' : ' View in Drive';
-        viewBtn.style.borderColor = isOneDrive ? '#0078d460' : '#1a73e860';
-      }
-      statusEl.textContent = ` Syncing to ${provider} — outputs appear online within seconds.`;
-      statusEl.style.color      = '#4caf50';
-      statusEl.style.background = 'rgba(76,175,80,0.08)';
-    } else {
-      outputEl.value       = '';
-      outputEl.placeholder = 'Default: outputs/';
-      if (demoOutEl && !demoOutEl.value) demoOutEl.placeholder = 'Default: outputs/';
-      if (viewBtn) viewBtn.style.display = 'none';
-      statusEl.textContent = '[!] ' + data.hint;
-      statusEl.style.color      = '#f5a623';
-      statusEl.style.background = 'rgba(245,166,35,0.08)';
-    }
-  } catch (e) {
-    outputEl.placeholder = 'Default: outputs/';
-    if (demoOutEl && !demoOutEl.value) demoOutEl.placeholder = 'Default: outputs/';
-    statusEl.textContent = 'Cloud detection unavailable — server will resolve at start.';
-    statusEl.style.color = 'var(--text-dim)';
-    if (viewBtn) viewBtn.style.display = 'none';
-  } finally {
-    // Always clear the "detecting" indicator so the placeholder reflects
-    // the resolved state (or the lack of one). The server-side
-    // _default_output_dir() takes care of empty fields, so leaving the
-    // input blank is now safe — the spinner is purely informational.
-    outputEl.classList.remove('detecting');
+  if (viewBtn && !_cloudWebUrl) viewBtn.style.display = 'none';
+  if (statusEl) {
+    statusEl.textContent = '';
+    statusEl.style.background = 'transparent';
   }
 }
 

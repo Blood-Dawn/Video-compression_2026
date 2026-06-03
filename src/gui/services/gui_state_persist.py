@@ -34,7 +34,13 @@ _GUI_STATE_FILE = _paths.state_file("gui_state.json")
 
 
 def _load_gui_state() -> None:
-    """Seed _status['config'] and _demo_state['last_output_root'] from disk."""
+    """Seed _status['config'] and _demo_state['last_output_root'] from disk.
+
+    FIX 1: also restores the explicit destination choice - the output_dir,
+    the encrypted-output dir, and whether the first-run Setup was completed -
+    so the app does not re-prompt every launch and never re-derives a cloud
+    default on its own.
+    """
     try:
         if not _GUI_STATE_FILE.exists():
             return
@@ -42,12 +48,17 @@ def _load_gui_state() -> None:
         if not isinstance(data, dict):
             return
         out_dir = data.get("output_dir") or ""
+        enc_dir = data.get("encrypted_dir") or ""
+        setup_done = bool(data.get("setup_complete", False))
         demo_root = data.get("last_demo_output_root") or ""
-        if out_dir:
-            with _state_lock:
+        with _state_lock:
+            cfg = _status.setdefault("config", {})
+            if out_dir:
                 # Only seed config.output_dir if nothing real has set it yet.
-                cfg = _status.setdefault("config", {})
                 cfg.setdefault("output_dir", str(out_dir))
+            if enc_dir:
+                cfg.setdefault("encrypted_dir", str(enc_dir))
+            _status.setdefault("setup_complete", setup_done)
         if demo_root:
             with _demo_lock:
                 _demo_state.setdefault("last_output_root", str(demo_root))
@@ -56,15 +67,19 @@ def _load_gui_state() -> None:
 
 
 def _save_gui_state() -> None:
-    """Snapshot the current output_dir + last_demo_output_root to disk."""
+    """Snapshot output_dir + encrypted_dir + setup flag + demo root to disk."""
     try:
         with _state_lock:
             cfg = _status.get("config", {})
             out_dir = cfg.get("output_dir", "")
+            enc_dir = cfg.get("encrypted_dir", "")
+            setup_done = bool(_status.get("setup_complete", False))
         with _demo_lock:
             demo_root = _demo_state.get("last_output_root", "")
         payload = {
             "output_dir": str(out_dir or ""),
+            "encrypted_dir": str(enc_dir or ""),
+            "setup_complete": setup_done,
             "last_demo_output_root": str(demo_root or ""),
             "saved_at": time.time(),
         }
@@ -72,3 +87,27 @@ def _save_gui_state() -> None:
     except Exception:  # noqa: BLE001
         # Persistence is best effort. Never block a route on it.
         pass
+
+
+def save_setup_choice(output_dir: str, encrypted_dir: str = "") -> None:
+    """Record the user's explicit destination choice and mark Setup complete.
+
+    Stores the chosen output_dir (and optional encrypted_dir) into the live
+    config and flips ``setup_complete`` so the first-run Setup page is not shown
+    again. Persists immediately.
+    """
+    out = (output_dir or "").strip()
+    enc = (encrypted_dir or "").strip()
+    with _state_lock:
+        cfg = _status.setdefault("config", {})
+        if out:
+            cfg["output_dir"] = out
+        cfg["encrypted_dir"] = enc
+        _status["setup_complete"] = True
+    _save_gui_state()
+
+
+def is_setup_complete() -> bool:
+    """True once the user has made an explicit destination choice."""
+    with _state_lock:
+        return bool(_status.get("setup_complete", False))

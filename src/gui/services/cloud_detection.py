@@ -37,55 +37,171 @@ _ROOT = Path(__file__).resolve().parents[3]
 def _default_output_dir() -> str:
     """Return the canonical default output directory.
 
-    Resolution order:
-      1. Persisted output_dir from the last pipeline run (loaded by
-         _load_gui_state() at startup from the platform state file).
-      2. The user's videos folder discovered by
-         ``src.utils.paths.default_videos_dir()`` (``~/Videos/SVCS`` on
-         Windows / Linux, ``~/Movies/SVCS`` on macOS).
-      3. Cloud sync root (OneDrive school / personal / Google Drive)
-         ONLY when the user has explicitly opted in by toggling
-         ``Prefer cloud output`` in the dashboard. This was previously
-         baked in as the default, which surprised users who didn't
-         have OneDrive and made the app harder to package as an
-         installer. As of 2026-05-14 it's opt-in.
-      4. Repo-relative ``outputs/`` for dev clones with no other
-         signal (final fallback).
+    Resolution order (FIX 1, 2026-06-03 - no implicit cloud default):
+      1. The user's explicitly chosen / persisted output_dir (loaded by
+         _load_gui_state() at startup, or set during a run). If the user
+         picked a cloud folder in Setup, that cloud path lives here, so a
+         cloud destination is only ever returned when the user chose it.
+      2. A NEUTRAL LOCAL folder from ``src.utils.paths.default_videos_dir()``
+         (``~/Videos/SVCS`` on Windows / Linux, ``~/Movies/SVCS`` on macOS).
+      3. Repo-relative ``outputs/`` for dev clones (final fallback).
 
-    Returns an absolute string path so call sites can pass it straight
-    to ``Path(...)``.
+    The app NEVER falls through to a OneDrive / Google Drive / iCloud root on
+    its own. Cloud roots are only OFFERED in the Setup page; selecting one
+    persists it as output_dir, which is then returned by branch (1).
 
-    Author: Bloodawn (KheivenD), 2026-05-14 (productization: OneDrive
-    no longer the implicit default).
+    Returns an absolute string path so call sites can pass it straight to
+    ``Path(...)``.
+
+    Author: Bloodawn (KheivenD), 2026-06-03 (FIX 1: explicit destination only,
+    local fallback, never an implicit cloud default).
     """
-    # (1) Restore last-known output_dir from persistent state.
+    # (1) The user's explicit choice (persisted) wins.
     with _state_lock:
         cfg = _status.get("config", {})
         persisted = (cfg.get("output_dir") or "").strip()
     if persisted and Path(persisted).is_absolute():
         return persisted
 
-    # (3) Cloud sync, only when explicitly opted in.
-    try:
-        cfg_prefer_cloud = (cfg or {}).get("prefer_cloud_output", False)
-    except Exception:  # noqa: BLE001
-        cfg_prefer_cloud = False
-    if cfg_prefer_cloud:
-        try:
-            cloud_root, _label, _url = _detect_cloud_root()
-            if cloud_root is not None:
-                return str(cloud_root / _CLOUD_SUBFOLDER)
-        except Exception:  # noqa: BLE001
-            pass
-
-    # (2) Platform default (Videos / Movies / Videos folder + SVCS).
+    # (2) Neutral LOCAL default. Deliberately not a cloud root.
     try:
         return str(_paths.default_videos_dir())
     except Exception:  # noqa: BLE001
         pass
 
-    # (4) Last-resort dev fallback.
+    # (3) Last-resort dev fallback.
     return str(_ROOT / "outputs")
+
+
+# Stable identifiers for the destination "kinds" the Setup page offers.
+DEST_LOCAL = "local"
+DEST_DRIVE = "drive"
+DEST_ONEDRIVE = "onedrive"
+DEST_GDRIVE = "gdrive"
+DEST_ICLOUD = "icloud"
+DEST_CUSTOM = "custom"
+
+
+def _detect_icloud_root() -> "Path | None":
+    """Return the local iCloud Drive root if present, else None.
+
+    Best effort and OS-specific:
+      * macOS: ``~/Library/Mobile Documents/com~apple~CloudDocs``
+      * Windows: ``%USERPROFILE%\\iCloudDrive`` (iCloud for Windows)
+    Detection varies by install; when it cannot be found the Setup page still
+    offers a Custom path the user can point at iCloud manually.
+    """
+    home = Path.home()
+    candidates = [
+        home / "Library" / "Mobile Documents" / "com~apple~CloudDocs",  # macOS
+        home / "iCloudDrive",                                            # Windows
+        home / "iCloud Drive",
+    ]
+    for c in candidates:
+        try:
+            if c.is_dir():
+                return c
+        except OSError:
+            continue
+    return None
+
+
+def _windows_drive_roots() -> "list[Path]":
+    """Return existing drive roots on Windows (C:\\, D:\\, ...). Empty elsewhere."""
+    import os as _os
+    if _os.name != "nt":
+        return []
+    import string
+    roots = []
+    for letter in string.ascii_uppercase:
+        p = Path(f"{letter}:\\")
+        try:
+            if p.exists():
+                roots.append(p)
+        except OSError:
+            continue
+    return roots
+
+
+def list_destinations() -> "list[dict]":
+    """Enumerate OFFERED output destinations. None is ever auto-selected.
+
+    Returns a list of option dicts the Setup page renders. Each has:
+      ``kind`` (one of DEST_*), ``label`` (human text), ``path`` (suggested
+      absolute path or "" for a free-form custom entry), and ``available``
+      (whether the underlying root was detected). Cloud roots appear only when
+      detected; otherwise the user can still use the Custom path option.
+
+    The first entry is always the neutral LOCAL default, but it is presented as
+    an option, not pre-applied - the caller decides what (if anything) to use.
+    """
+    out: "list[dict]" = []
+
+    # Neutral local default (Videos/SVCS or similar).
+    try:
+        local = str(_paths.default_videos_dir())
+    except Exception:  # noqa: BLE001
+        local = str(_ROOT / "outputs")
+    out.append({
+        "kind": DEST_LOCAL,
+        "label": "Local folder (recommended)",
+        "path": local,
+        "available": True,
+    })
+
+    # Drive letters (Windows) so the user can target an external/secondary disk.
+    for root in _windows_drive_roots():
+        out.append({
+            "kind": DEST_DRIVE,
+            "label": f"Drive {root.drive or str(root)}",
+            "path": str(root / "SVCS"),
+            "available": True,
+        })
+
+    # OneDrive (business/school preferred, then personal), only if detected.
+    try:
+        od_root, od_label = _detect_onedrive_root(prefer_business=True)
+    except Exception:  # noqa: BLE001
+        od_root, od_label = None, None
+    if od_root is not None:
+        out.append({
+            "kind": DEST_ONEDRIVE,
+            "label": od_label or "OneDrive",
+            "path": str(od_root / _CLOUD_SUBFOLDER),
+            "available": True,
+        })
+
+    # Google Drive for Desktop, only if detected.
+    try:
+        gd_root = _detect_gdrive_root()
+    except Exception:  # noqa: BLE001
+        gd_root = None
+    if gd_root is not None:
+        out.append({
+            "kind": DEST_GDRIVE,
+            "label": "Google Drive",
+            "path": str(gd_root / _CLOUD_SUBFOLDER),
+            "available": True,
+        })
+
+    # iCloud Drive, only if detected.
+    icloud = _detect_icloud_root()
+    if icloud is not None:
+        out.append({
+            "kind": DEST_ICLOUD,
+            "label": "iCloud Drive",
+            "path": str(icloud / _CLOUD_SUBFOLDER),
+            "available": True,
+        })
+
+    # Always offer a free-form custom path.
+    out.append({
+        "kind": DEST_CUSTOM,
+        "label": "Custom path...",
+        "path": "",
+        "available": True,
+    })
+    return out
 
 
 # ── Cloud storage helpers ─────────────────────────────────────────────────────

@@ -1,19 +1,18 @@
 """
 tests/test_default_output_dir.py
 
-Verifies the new resolution order in src/gui/app.py::_default_output_dir
-after the 2026-05-14 productization change. OneDrive is no longer the
-implicit default; the order is now:
+Verifies the resolution order in _default_output_dir after FIX 1
+(2026-06-03). There is NO implicit cloud default anymore; the order is:
 
-    1. Persisted output_dir from last pipeline run
-    2. Cloud sync root (only when prefer_cloud_output=True)
-    3. platforms.default_videos_dir() — Videos/Movies/Documents
-    4. <repo>/outputs/  as a dev fallback
+    1. The user's explicit / persisted output_dir (a cloud folder only
+       appears here if the user chose it in Setup)
+    2. paths.default_videos_dir() - a neutral LOCAL Videos/Movies folder
+    3. <repo>/outputs/  as a dev fallback
 
-If any of these slip out of order the casual user gets a surprising
-output location on first run.
+The app must never fall through to a OneDrive / Google Drive / iCloud root
+on its own. Cloud roots are only OFFERED in Setup.
 
-Author: Bloodawn (KheivenD), 2026-05-14.
+Author: Bloodawn (KheivenD), 2026-06-03 (FIX 1).
 """
 
 from __future__ import annotations
@@ -108,7 +107,7 @@ class TestPersistedTakesPriority:
 class TestPlatformVideosDir:
 
     def test_falls_back_to_videos_dir(self, app_mod, reset_state):
-        """No persisted, no cloud opt-in -> default_videos_dir."""
+        """No persisted choice -> neutral LOCAL default_videos_dir."""
         with app_mod._state_lock:
             app_mod._status["config"] = {}
 
@@ -117,13 +116,14 @@ class TestPlatformVideosDir:
         assert result.endswith("SVCS") or "outputs" in result
 
 
-class TestCloudOptIn:
+class TestNoImplicitCloud:
+    """FIX 1: the app must never return a cloud root it detected on its own."""
 
-    def test_cloud_not_used_when_flag_off(self, app_mod, cloud_mod, reset_state):
+    def test_cloud_never_used_even_if_detected(self, app_mod, cloud_mod, reset_state):
+        # Empty config: even if a cloud root is detectable, it must NOT be used.
         with app_mod._state_lock:
-            app_mod._status["config"] = {"prefer_cloud_output": False}
+            app_mod._status["config"] = {}
 
-        # Even if cloud detection would succeed, we must not return its path
         fake_cloud = Path("/fake/cloud/root")
         with mock.patch.object(
             cloud_mod, "_detect_cloud_root",
@@ -132,32 +132,25 @@ class TestCloudOptIn:
             result = app_mod._default_output_dir()
         assert "fake/cloud" not in result.replace("\\", "/")
 
-    def test_cloud_used_when_flag_on(self, app_mod, cloud_mod, reset_state, tmp_path):
+    def test_legacy_prefer_cloud_flag_is_ignored(self, app_mod, cloud_mod, reset_state):
+        # The old prefer_cloud_output opt-in no longer derives a cloud path.
         with app_mod._state_lock:
             app_mod._status["config"] = {"prefer_cloud_output": True}
 
-        fake_cloud = tmp_path / "fake_cloud_root"
-        fake_cloud.mkdir()
+        fake_cloud = Path("/fake/cloud/root")
         with mock.patch.object(
             cloud_mod, "_detect_cloud_root",
             return_value=(fake_cloud, "OneDrive", "https://example.com"),
         ):
             result = app_mod._default_output_dir()
-        # Cloud subfolder name comes from the _CLOUD_SUBFOLDER constant (gui.state)
-        assert str(fake_cloud) in result
+        assert "fake/cloud" not in result.replace("\\", "/")
 
-    def test_cloud_flag_on_but_detection_fails(self, app_mod, cloud_mod, reset_state):
+    def test_explicit_chosen_path_is_honored(self, app_mod, reset_state, tmp_path):
+        # A user who chose a cloud (or any) folder in Setup gets exactly it.
+        chosen = tmp_path / "MyCloud" / "SVCS"
         with app_mod._state_lock:
-            app_mod._status["config"] = {"prefer_cloud_output": True}
-
-        with mock.patch.object(
-            cloud_mod, "_detect_cloud_root",
-            return_value=(None, None, None),
-        ):
-            result = app_mod._default_output_dir()
-        # Should fall through to videos dir
-        assert result  # non-empty
-        assert "None" not in result
+            app_mod._status["config"] = {"output_dir": str(chosen)}
+        assert app_mod._default_output_dir() == str(chosen)
 
 
 class TestAbsoluteness:

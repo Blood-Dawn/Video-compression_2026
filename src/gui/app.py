@@ -187,7 +187,7 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 # at import time so `from gui.app import app` (used by run_gui.py and the test
 # suite) has every route without calling create_app().
 def register_blueprints(flask_app: Flask) -> None:
-    """Register all 14 route blueprints on the given Flask app."""
+    """Register all 15 route blueprints on the given Flask app."""
     try:
         from gui.routes.ui_bp import ui_bp
         from gui.routes.sse_bp import sse_bp
@@ -203,6 +203,7 @@ def register_blueprints(flask_app: Flask) -> None:
         from gui.routes.pipeline_bp import pipeline_bp
         from gui.routes.cameras_bp import cameras_bp
         from gui.routes.usage_bp import usage_bp
+        from gui.routes.setup_bp import setup_bp
     except ModuleNotFoundError:  # pragma: no cover - import path shim
         from src.gui.routes.ui_bp import ui_bp
         from src.gui.routes.sse_bp import sse_bp
@@ -218,9 +219,10 @@ def register_blueprints(flask_app: Flask) -> None:
         from src.gui.routes.pipeline_bp import pipeline_bp
         from src.gui.routes.cameras_bp import cameras_bp
         from src.gui.routes.usage_bp import usage_bp
+        from src.gui.routes.setup_bp import setup_bp
     for bp in (ui_bp, sse_bp, metrics_bp, presets_bp, encryption_bp, plates_bp,
                queries_bp, rtsp_bp, demo_bp, hls_bp, files_bp, pipeline_bp,
-               cameras_bp, usage_bp):
+               cameras_bp, usage_bp, setup_bp):
         flask_app.register_blueprint(bp)
 
 
@@ -283,15 +285,9 @@ def create_app() -> Flask:
     # go through create_app(), so the dashboard's CPU/RAM strip is live.
     start_hw_sampler()
 
-    # Pre-create OneDrive/SVCS/Encrypted/ if OneDrive is available
-    try:
-        od_root, _ = _detect_onedrive_root(prefer_business=True)
-        if od_root is not None:
-            enc_dir = od_root / "SVCS" / "Encrypted"
-            enc_dir.mkdir(parents=True, exist_ok=True)
-            log.info("OneDrive Encrypted folder ready: %s", enc_dir)
-    except Exception:
-        pass
+    # FIX 1: do NOT pre-create any cloud (OneDrive/Drive/iCloud) folder on
+    # startup. A cloud destination is only ever created when the user explicitly
+    # chooses one in the Setup page (/api/setup/choose creates the folders).
     return app
 
 

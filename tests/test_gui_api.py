@@ -748,44 +748,35 @@ class TestApiEnhanceBenchmark:
 # ---------------------------------------------------------------------------
 
 class TestDefaultOutputDir:
-    """Regression for the output-dir resolution order, updated for the
-    2026-05-14 productization change. New order:
-      1. persisted absolute output_dir (highest priority)
-      2. cloud sync root — ONLY when the user opts in (prefer_cloud_output)
-      3. platform videos folder (~/Videos/SVCS etc.)
-      4. repo outputs/ (last-resort dev fallback)
-    OneDrive is no longer the implicit default.
+    """Regression for the output-dir resolution order, updated for FIX 1
+    (2026-06-03). New order, with NO implicit cloud default:
+      1. the user's explicit / persisted absolute output_dir (a cloud folder
+         appears here only if the user chose it in Setup)
+      2. neutral LOCAL platform videos folder (~/Videos/SVCS etc.)
+      3. repo outputs/ (last-resort dev fallback)
+    The app never falls through to a detected cloud root on its own.
     """
 
     def _clear_persisted(self):
         # The autouse fixture seeds an absolute output_dir; clear it so the
-        # lower-priority branches (cloud / videos) are exercised.
+        # lower-priority branches (videos / dev fallback) are exercised.
         with gui_module._state_lock:
             gui_module._status["config"]["output_dir"] = ""
 
-    def test_default_output_dir_uses_cloud_when_opted_in(self, monkeypatch, tmp_path):
+    def test_explicit_chosen_path_wins(self, monkeypatch, tmp_path):
+        # Whatever the user chose in Setup (here a "cloud-like" path) is honored.
+        chosen = tmp_path / "MyOneDrive" / "SVCS"
+        with gui_module._state_lock:
+            gui_module._status["config"]["output_dir"] = str(chosen)
+        assert gui_module._default_output_dir() == str(chosen)
+
+    def test_never_uses_detected_cloud_on_its_own(self, monkeypatch, tmp_path):
+        # Even with a cloud root detectable AND the legacy opt-in flag set, the
+        # resolver must fall through to the neutral LOCAL videos folder.
         self._clear_persisted()
-        cloud = tmp_path / "FakeOneDrive"
-        cloud.mkdir()
         with gui_module._state_lock:
             gui_module._status["config"]["prefer_cloud_output"] = True
-        # TASK 1.2: _default_output_dir + _detect_cloud_root live in
-        # gui.services.cloud_detection now; patch the detector there so the
-        # call inside _default_output_dir (resolved via that module) sees it.
-        monkeypatch.setattr(
-            "gui.services.cloud_detection._detect_cloud_root",
-            lambda: (cloud, "FakeOneDrive", "https://example/test"),
-        )
-        result = gui_module._default_output_dir()
-        assert result == str(cloud / gui_module._CLOUD_SUBFOLDER)
-
-    def test_default_output_dir_ignores_cloud_when_not_opted_in(self, monkeypatch, tmp_path):
-        # Cloud is opt-in: even with a cloud root present, without the flag
-        # the default must fall through to the platform videos folder.
-        self._clear_persisted()
         fake_videos = tmp_path / "Videos" / "SVCS"
-        # _detect_cloud_root lives in the cloud_detection service (TASK 1.2);
-        # not opted in here so it is never called, but patch the real home.
         monkeypatch.setattr(
             "gui.services.cloud_detection._detect_cloud_root",
             lambda: (tmp_path / "FakeOneDrive", "FakeOneDrive", "https://example/test"),
@@ -793,6 +784,7 @@ class TestDefaultOutputDir:
         monkeypatch.setattr(gui_module._paths, "default_videos_dir", lambda: fake_videos)
         result = gui_module._default_output_dir()
         assert result == str(fake_videos)
+        assert "FakeOneDrive" not in result
 
 
 # ---------------------------------------------------------------------------

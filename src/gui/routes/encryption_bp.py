@@ -354,19 +354,17 @@ def api_encrypt():
         except OSError as e:
             return jsonify({"error": f"Cannot read key file: {e}"}), 400
 
-    # ── Pick the destination folder (NEW: don't overwrite source) ─────────────
-    # Default: a sibling "Encrypted/" folder next to the source clip.
-    # If OneDrive is detected, prefer OneDrive/SVCS/Encrypted/ so the
-    # locked copy syncs to the cloud automatically — but ONLY when the
-    # source is already somewhere in OneDrive (we don't want to silently
-    # leak a file from data/samples/ into OneDrive).
-    enc_subdir = src_path.parent / "Encrypted"
-    try:
-        od_root, _ = _detect_onedrive_root(prefer_business=True)
-        if od_root is not None and od_root in src_path.parents:
-            enc_subdir = od_root / "SVCS" / "Encrypted"
-    except Exception:
-        pass
+    # ── Pick the destination folder (don't overwrite source) ──────────────────
+    # FIX 1: use the user's CHOSEN encrypted-output folder from Setup if set.
+    # Otherwise fall back to a sibling "Encrypted/" folder next to the source
+    # clip. We no longer silently redirect to OneDrive: a cloud destination is
+    # only ever used when the user explicitly chose one in Setup.
+    with _state_lock:
+        chosen_enc = (_status.get("config", {}).get("encrypted_dir") or "").strip()
+    if chosen_enc:
+        enc_subdir = Path(chosen_enc)
+    else:
+        enc_subdir = src_path.parent / "Encrypted"
 
     try:
         enc_subdir.mkdir(parents=True, exist_ok=True)

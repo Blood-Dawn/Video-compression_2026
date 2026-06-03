@@ -2159,16 +2159,19 @@
         <div class="config-field">
           <label class="config-label" for="output-dir">Save To</label>
           <div style="display:flex;gap:0.4rem;align-items:center;">
-            <input type="text" id="output-dir" placeholder="Detecting Google Drive…" style="flex:1;" />
+            <input type="text" id="output-dir" placeholder="Chosen in Setup (or type a folder)" style="flex:1;" />
             <button type="button" id="gdrive-view-btn"
               onclick="_openCloudFolder()"
               title="Open cloud sync folder in browser"
-              style="padding:0.25rem 0.55rem;font-size:0.65rem;background:#0078d420;border:1px solid #0078d460;border-radius:4px;color:#6ab0f5;cursor:pointer;white-space:nowrap;font-family:var(--mono);flex-shrink:0;">
+              style="display:none;padding:0.25rem 0.55rem;font-size:0.65rem;background:#0078d420;border:1px solid #0078d460;border-radius:4px;color:#6ab0f5;cursor:pointer;white-space:nowrap;font-family:var(--mono);flex-shrink:0;">
               View Online
+            </button>
+            <button type="button" onclick="openSetup()" title="Change output destination"
+              style="padding:0.25rem 0.55rem;font-size:0.65rem;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--text-dim);cursor:pointer;white-space:nowrap;font-family:var(--mono);flex-shrink:0;">
+              Change...
             </button>
           </div>
           <div id="gdrive-status" style="font-size:0.6rem;margin-top:3px;padding:3px 6px;border-radius:3px;font-family:var(--mono);color:var(--text-dim);">
-            Detecting Google Drive…
           </div>
         </div>
         <!--
@@ -3583,7 +3586,29 @@
        so global functions stay reachable from inline on* handlers and across
        files; load order matches the original single-script execution order, so
        behavior is identical. strings.js (i18n catalog) loads first. -->
+  <!-- First-run Setup overlay (FIX 1): explicit destination choice, no cloud default -->
+  <div id="setup-overlay" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(8,9,12,0.86);align-items:center;justify-content:center;">
+    <div style="background:var(--panel,#181b22);border:1px solid var(--border,#2a2f3a);border-radius:10px;max-width:560px;width:calc(100% - 40px);padding:22px 24px;box-shadow:0 12px 40px rgba(0,0,0,.5);">
+      <h2 style="margin:0 0 6px;font-size:1.2rem;">Welcome to SVCS</h2>
+      <p style="margin:0 0 16px;color:var(--text-dim,#9aa3b2);font-size:0.8rem;line-height:1.5;">
+        Choose where compressed videos are saved. Nothing is sent to any cloud unless you pick a cloud folder here.
+      </p>
+      <label class="config-label" for="setup-dest-select">Destination</label>
+      <select id="setup-dest-select" style="width:100%;margin-bottom:10px;font-family:var(--mono);font-size:0.72rem;"></select>
+      <label class="config-label" for="setup-output-dir">Output folder</label>
+      <input type="text" id="setup-output-dir" style="width:100%;margin-bottom:10px;" placeholder="folder where compressed videos are saved" />
+      <label class="config-label" for="setup-encrypted-dir">Encrypted output folder</label>
+      <input type="text" id="setup-encrypted-dir" style="width:100%;margin-bottom:6px;" placeholder="defaults to an Encrypted subfolder of the output" />
+      <div id="setup-error" style="color:var(--red,#ff5555);font-size:0.7rem;min-height:1em;margin-bottom:8px;"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn btn-ghost" onclick="saveSetup(true)">Skip (use local folder)</button>
+        <button class="btn btn-primary" onclick="saveSetup(false)">Save and continue</button>
+      </div>
+    </div>
+  </div>
+
   <script src="{{ url_for('static', filename='js/strings.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/setup.js') }}"></script>
   <script src="{{ url_for('static', filename='js/pipeline.js') }}"></script>
   <script src="{{ url_for('static', filename='js/status.js') }}"></script>
   <script src="{{ url_for('static', filename='js/files.js') }}"></script>

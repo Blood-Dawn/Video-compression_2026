@@ -408,10 +408,11 @@ async function startPipeline() {
     encrypt_key_file: document.getElementById('encrypt-keyfile').value.trim(),
     object_filter:    document.getElementById('object-filter-toggle').checked,
     filter_confidence: parseFloat(document.getElementById('filter-confidence').value),
-    // Codec selector — Save To section. Pass through to /api/start so
-    // the user can pick libsvtav1 without editing code.
-    // Author: Bloodawn (KheivenD), 2026-05-02.
-    codec:            (document.getElementById('codec-select') || {}).value || 'libsvtav1',
+    // Codec selector — Save To section. Pass through to /api/start. Default
+    // "auto" lets the backend pick the per-mode codec (H.264 for mode0/1, AV1
+    // for mode2/3); explicit choices override. Author: Bloodawn (KheivenD),
+    // 2026-05-02, updated 2026-06-02 (TASK 1.6 per-mode codec).
+    codec:            (document.getElementById('codec-select') || {}).value || 'auto',
     // CRF override. Empty string means "use the mode default" — the
     // backend treats unset/blank as None and falls back to 18 / 38.
     crf:              ((document.getElementById('crf-input') || {}).value || '').trim(),

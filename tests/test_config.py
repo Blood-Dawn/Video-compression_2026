@@ -49,6 +49,20 @@ class TestCompressionDefaults:
     def test_fallback_codec_is_h264(self):
         assert config.FALLBACK_CODEC == "libx264"
 
+    def test_default_codec_for_mode(self):
+        """Per-mode codec policy (TASK 1.6, codec gate resolved 2026-06-01):
+        mode0/mode1 -> H.264 (universal playback + patent safety),
+        mode2/mode3 -> AV1 (max savings on the surviving object bytes).
+        H.265 is never selected."""
+        assert config.default_codec_for_mode("mode0") == "libx264"
+        assert config.default_codec_for_mode("mode1") == "libx264"
+        assert config.default_codec_for_mode("mode2") == "libsvtav1"
+        assert config.default_codec_for_mode("mode3") == "libsvtav1"
+        # No mapping ever yields an H.265/HEVC encoder.
+        for m in ("mode0", "mode1", "mode2", "mode3"):
+            assert "265" not in config.default_codec_for_mode(m)
+            assert "hevc" not in config.default_codec_for_mode(m).lower()
+
     def test_segment_seconds_is_positive(self):
         assert config.SEGMENT_SECONDS == 60
         assert config.SEGMENT_SECONDS > 0

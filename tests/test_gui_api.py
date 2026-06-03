@@ -289,14 +289,14 @@ class TestApiStart:
         assert cfg["enhance"] is False
         assert cfg["encrypt"] is False
 
-    def test_start_codec_default_is_libsvtav1(self, client, fake_pipeline):
-        """Default codec is libsvtav1 (flipped 2026-05-03). ROIEncoder
-        auto-falls-back to libx264 at construction time when the running
-        ffmpeg doesn't have libsvtav1, so this default is safe even on
-        machines without a modern ffmpeg build."""
+    def test_start_codec_default_is_auto(self, client, fake_pipeline):
+        """Default codec is now "auto" (TASK 1.6). The backend resolves "auto"
+        per-mode in run_pipeline (H.264 for mode0/1, AV1 for mode2/3); the GUI
+        no longer hard-defaults to libsvtav1. ROIEncoder still auto-falls-back
+        to libx264 at construction when ffmpeg lacks the chosen encoder."""
         resp = client.post("/api/start", json={"input_source": "data/test.mp4"})
         cfg = resp.get_json()["config"]
-        assert cfg["codec"] == "libsvtav1"
+        assert cfg["codec"] == "auto"
 
     def test_start_codec_passthrough(self, client, fake_pipeline):
         """Selected codec must round-trip into the pipeline config — this

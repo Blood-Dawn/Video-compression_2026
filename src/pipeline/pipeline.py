@@ -50,6 +50,7 @@ from detection.object_filter import (
     _VEHICLE_CLASSES,
     _PERSON_CLASSES,
 )
+from config import default_codec_for_mode
 
 import json as _json
 
@@ -144,7 +145,7 @@ def run_pipeline(
     object_filter: bool = False,
     filter_confidence: float = 0.30,
     stop_event=None,
-    codec: str = "libsvtav1",
+    codec: Optional[str] = None,
     crf: int = None,
 ):
     """
@@ -301,6 +302,15 @@ def run_pipeline(
         resolved_crf = 23
     else:
         resolved_crf = 18
+
+    # Codec resolution (TASK 1.6, codec gate RESOLVED 2026-06-01). When the
+    # caller passes no explicit codec (codec is None / "auto"), pick the
+    # per-mode default: mode0/mode1 -> H.264 (libx264), mode2/mode3 -> AV1
+    # (libsvtav1). An explicit codec always wins. ROIEncoder still auto-falls
+    # back to FALLBACK_CODEC if the running FFmpeg lacks the chosen encoder.
+    # Author: Bloodawn (KheivenD), 2026-06-02 (per-mode codec).
+    if codec is None or str(codec).strip().lower() in ("", "auto"):
+        codec = default_codec_for_mode(mode)
 
     encoder = ROIEncoder(
         output_dir=output_dir,

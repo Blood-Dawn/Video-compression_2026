@@ -119,14 +119,18 @@ def api_start():
         "encrypt_key_file": encrypt_key_file,
         "object_filter": bool(data.get("object_filter", False)),
         "filter_confidence": float(data.get("filter_confidence", 0.30)),
-        # Codec selector (ROADMAP 4.2). Three valid values:
-        #   "libsvtav1" — DEFAULT as of 2026-05-03. Netflix-grade SVT-AV1.
-        #   "libaom-av1"— reference AV1, slower than SVT.
-        #   "libx264"   — H.264 fallback. Always available.
-        # ROIEncoder auto-falls-back to libx264 if libsvtav1 isn't in the
-        # running ffmpeg build, so a fresh clone on a stock ffmpeg keeps
-        # working. Author: Bloodawn (KheivenD), 2026-05-03.
-        "codec": str(data.get("codec", "libsvtav1") or "libsvtav1").strip(),
+        # Codec selector. Valid values:
+        #   "auto"      — DEFAULT (TASK 1.6). Backend picks the per-mode codec:
+        #                 H.264 (libx264) for mode0/mode1, AV1 (libsvtav1) for
+        #                 mode2/mode3 (config.default_codec_for_mode).
+        #   "libsvtav1" — explicit AV1 (SVT-AV1).
+        #   "libaom-av1"— explicit AV1 reference, slower than SVT.
+        #   "libx264"   — explicit H.264, always available.
+        # H.265/HEVC is intentionally not offered (patent licensing). ROIEncoder
+        # auto-falls-back to libx264 if the chosen encoder isn't in the running
+        # ffmpeg build. Author: Bloodawn (KheivenD), 2026-05-03, updated
+        # 2026-06-02 (per-mode codec default).
+        "codec": str(data.get("codec", "auto") or "auto").strip(),
         # Foreground CRF. None means "use the mode default" (18 for
         # Mode 0/1/2, 38 for Mode 3). User can override from the Save To
         # section in the sidebar. Lower = better quality, larger file.

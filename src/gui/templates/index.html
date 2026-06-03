@@ -2163,12 +2163,14 @@
         <div class="config-field" style="margin-top:0.4rem;">
           <label class="config-label" for="codec-select">Codec</label>
           <select id="codec-select" style="width:100%;font-family:var(--mono);font-size:0.65rem;">
-            <option value="libsvtav1" selected>libsvtav1 (AV1 / SVT-AV1 — default)</option>
+            <option value="auto" selected>Auto (per-mode) — recommended</option>
+            <option value="libsvtav1">libsvtav1 (AV1 / SVT-AV1)</option>
             <option value="libaom-av1">libaom-av1 (AV1 reference — slower)</option>
-            <option value="libx264">libx264 (H.264 fallback — universal)</option>
+            <option value="libx264">libx264 (H.264 — universal)</option>
           </select>
           <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
-            Default is AV1. Server auto-falls-back to libx264 if your ffmpeg lacks libsvtav1.
+            Auto: H.264 for Mode 0/1 (universal playback), AV1 for Mode 2/3 (max savings).
+            No H.265. Server auto-falls-back to libx264 if your ffmpeg lacks libsvtav1.
           </div>
         </div>
         <!--

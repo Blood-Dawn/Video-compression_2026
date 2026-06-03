@@ -84,7 +84,7 @@ Design authority: `docs/REFACTOR-PLAN-gui-app.md`. Hard constraints recap: keep 
 
 **M1 done when:** `app.py` ~80 lines; 12 blueprints + services + state + logging_setup in place; `index.html` logic in `static/js/*`; new guard tests green; `svcs.spec` updated + smoke test passes.
 
-- [ ] **TASK 1.6 — per-mode default codec (gate resolved).** Depends: 1.3 (clean routes/config), do after M1.
+- [x] **TASK 1.6 — per-mode default codec (gate resolved).** Depends: 1.3 (clean routes/config), do after M1.
   **Decision (final):** mode0/mode1 → `libx264` (H.264); mode2/mode3 → `libsvtav1` (AV1). No H.265. Explicit user selection always wins; "Auto (per-mode)" is the default.
   **Files:** `src/config.py`, `src/pipeline/pipeline.py`, `src/gui/app.py` (the two `config.get("codec", ...)` sites + the codec dropdown), `src/gui/static/js/presets.js` or the codec UI, `tests/test_config.py`, `tests/test_gui_api.py`, `tests/test_pipeline.py`.
   **Do:**

@@ -47,6 +47,25 @@ MODE3_CRF = 38
 DEFAULT_CODEC = "libsvtav1"
 FALLBACK_CODEC = "libx264"
 
+
+def default_codec_for_mode(mode: str) -> str:
+    """Per-mode default codec (codec gate RESOLVED 2026-06-01).
+
+    mode0 / mode1 -> H.264 (libx264): every frame is kept, so universal
+    playback and patent safety matter more than the last few percent of
+    size; H.264 plays everywhere and is the safest royalty position.
+    mode2 / mode3 -> AV1 (libsvtav1): these drop idle background and keep
+    only objects, so the surviving bytes should be squeezed hardest with
+    the royalty-free AV1 codec.
+
+    H.265/HEVC is deliberately NOT an option anywhere: its patent licensing
+    is fragmented and not royalty-free, unlike H.264. Explicit user codec
+    selection always wins over this default (see pipeline.run_pipeline).
+
+    Author: Bloodawn (KheivenD), 2026-06-02 (TASK 1.6 — per-mode codec).
+    """
+    return "libsvtav1" if mode in ("mode2", "mode3") else "libx264"
+
 # How many seconds of footage end up in a single .mp4 segment.
 # 60 s was a sponsor requirement, kept for now. Mobile devs might
 # prefer shorter segments for snappier seeking; we expose this as a
@@ -174,6 +193,7 @@ __all__ = [
     "MODE3_CRF",
     "DEFAULT_CODEC",
     "FALLBACK_CODEC",
+    "default_codec_for_mode",
     "SEGMENT_SECONDS",
     "WARMUP_FRAMES",
     "MIN_AREA_PX",

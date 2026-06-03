@@ -839,3 +839,70 @@ class TestMode3Behavior:
         # run_pipeline now forwards the input source for provenance.
         assert calls["source_path"] == "dummy.mp4"
         assert calls["get_storage_report"] == 1
+
+
+class TestPerModeCodec:
+    """TASK 1.6: run_pipeline resolves the codec per-mode when the caller passes
+    no explicit codec (None / "auto"): mode0/mode1 -> H.264 (libx264),
+    mode2/mode3 -> AV1 (libsvtav1). An explicit codec always wins. H.265 is
+    never chosen. Author: Bloodawn (KheivenD), 2026-06-02."""
+
+    def _run_capture_codec(self, monkeypatch, tmp_path, mode, codec):
+        encoder_kwargs = {}
+        frames = [np.full((16, 16, 3), 1, dtype=np.uint8)]
+        regions_per_frame = [[DummyRegion()]]
+        monkeypatch.setattr(
+            "pipeline.pipeline.FrameSource",
+            lambda *_a, **_k: DummyFrameSource(frames, fps=2.0, width=16, height=16),
+        )
+        monkeypatch.setattr(
+            "pipeline.pipeline.BackgroundSubtractor",
+            lambda *a, **k: SequenceSubtractor(regions_per_frame, *a, **k),
+        )
+        monkeypatch.setattr(
+            "pipeline.pipeline.initialize_database", lambda *_a, **_k: None
+        )
+
+        class RecordingEncoder(DummyEncoder):
+            def __init__(self, *args, **kwargs):
+                encoder_kwargs.update(kwargs)
+                super().__init__(
+                    {"encode_segment": 0, "get_storage_report": 0}, *args, **kwargs
+                )
+
+        monkeypatch.setattr("pipeline.pipeline.ROIEncoder", RecordingEncoder)
+        run_pipeline(
+            input_source="dummy.mp4",
+            camera_id="cam_test",
+            output_dir=str(tmp_path),
+            segment_seconds=60,
+            bg_method="MOG2",
+            mode=mode,
+            show_preview=False,
+            warmup_frames=0,
+            codec=codec,
+        )
+        return encoder_kwargs.get("codec")
+
+    @pytest.mark.parametrize(
+        "mode,expected",
+        [("mode0", "libx264"), ("mode1", "libx264"),
+         ("mode2", "libsvtav1"), ("mode3", "libsvtav1")],
+    )
+    def test_auto_codec_resolves_per_mode(self, monkeypatch, tmp_path, mode, expected):
+        # codec=None means "auto" -> per-mode default.
+        assert self._run_capture_codec(monkeypatch, tmp_path, mode, None) == expected
+
+    @pytest.mark.parametrize(
+        "mode,expected",
+        [("mode0", "libx264"), ("mode2", "libsvtav1")],
+    )
+    def test_auto_string_resolves_per_mode(self, monkeypatch, tmp_path, mode, expected):
+        # the GUI passes the literal "auto"; it resolves the same way as None.
+        assert self._run_capture_codec(monkeypatch, tmp_path, mode, "auto") == expected
+
+    def test_explicit_codec_overrides_per_mode_default(self, monkeypatch, tmp_path):
+        # mode2 would auto-pick AV1; an explicit libx264 must win.
+        assert self._run_capture_codec(monkeypatch, tmp_path, "mode2", "libx264") == "libx264"
+        # mode0 would auto-pick H.264; an explicit libsvtav1 must win.
+        assert self._run_capture_codec(monkeypatch, tmp_path, "mode0", "libsvtav1") == "libsvtav1"

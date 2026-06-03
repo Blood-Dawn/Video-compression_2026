@@ -172,7 +172,9 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             object_filter=config.get("object_filter", False),
             filter_confidence=float(config.get("filter_confidence", 0.30)),
             stop_event=stop_event,
-            codec=config.get("codec", "libsvtav1"),
+            # "auto" / None -> run_pipeline picks the per-mode default codec
+            # (H.264 for mode0/1, AV1 for mode2/3); explicit values pass through.
+            codec=config.get("codec"),
             crf=config.get("crf"),
         )
 

@@ -67,6 +67,7 @@ SAMPLES = [
     ("POST", "/api/enhance/benchmark"),
     ("POST", "/api/enhance/plates"),
     ("GET", "/api/presets"),
+    ("POST", "/api/detect_content"),
     ("POST", "/api/config/import"),
     ("GET", "/api/config/export"),
     ("GET", "/api/gdrive/detect"),
@@ -92,4 +93,4 @@ def test_url_resolves(method, url):
 def test_sample_count_matches_route_count():
     """Every registered non-static route has a resolution sample here."""
     rules = [r for r in flask_app.url_map.iter_rules() if r.endpoint != "static"]
-    assert len(SAMPLES) == len(rules) == 49
+    assert len(SAMPLES) == len(rules) == 50

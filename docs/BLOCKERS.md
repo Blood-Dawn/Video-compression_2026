@@ -16,7 +16,32 @@ and pushed — and paused at the M2 boundary (not a gate; a deliberate stop befo
 high-risk ML-parity work in a long session). The first gates appear at M5
 (publishing) and M5b (signing).
 
-### Execution status: M2 TASK 2.1 + 2.2 DONE
+### Execution status (updated 2026-06-03): M1 + M2 complete; M3 in progress
+
+Done & pushed: **all of M1 (1.1–1.6)**, **all of M2 (2.1 ONNX, 2.2 torch-optional,
+2.3 FFmpeg, 2.4 Inno installer)**, and **M3 TASK 3.1 (surveillance presets)**.
+Suite green (702 passed). Slim installer **SVCS-Setup-2.0.0.dev0.exe = 210 MB**.
+
+**Next: TASK 3.2 (content auto-detection, rule-based).** Depends on 3.1 (done).
+- New `src/pipeline/content_detect.py`: analyze the first ~30 s of a clip,
+  extract foreground-area ratio (reuse MOG2 output), scene-change rate, motion
+  variance, resolution, fps, luma/colour, audio presence; a small decision tree
+  maps to a recommended preset *key* from `pipeline/presets.py`
+  (very-low-foreground+static → continuous_cctv; sparse motion → motion_event/
+  doorbell; busy multi-object → active_scene). NOT a CNN; keep the interface
+  swappable. Add a `/api/detect_content` route (or extend presets_bp) returning
+  the recommended preset key + the signals — bumps the route guard tests to 50.
+- `tests/test_content_detect.py`: a CDnet surveillance clip → continuous_cctv;
+  provide a tiny synthetic fixture so CI exercises the logic without LFS clips.
+- The CDnet clips are present locally (data/samples/cdnet_mp4/...).
+
+Then M-CAM (ONVIF/watch-folder), M4 (watch-folder hardening, dashboard auth,
+Docker), M5 (download page, opt-in stats, docs, 🚦beta), M5b (🚦signing, Linux
+AppImage, 🚦macOS). Optional/deferred: 3.3 (adaptive per-segment bitrate).
+
+---
+
+### (historical) Execution status: M2 TASK 2.1 + 2.2 DONE
 
 - **TASK 2.1 (ONNX detection backend):** done + parity-tested. Real-ESRGAN ONNX
   deferred (see `docs/onnx-models.md`).

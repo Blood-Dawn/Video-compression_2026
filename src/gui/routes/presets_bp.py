@@ -8,6 +8,7 @@ Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - blueprints).
 
 import json
 from datetime import datetime
+from pathlib import Path
 from flask import Blueprint, current_app, jsonify, request
 
 try:
@@ -15,11 +16,13 @@ try:
     from gui.logging_setup import log
     from gui.services.cloud_detection import _default_output_dir, _detect_onedrive_root, _detect_gdrive_root, _detect_cloud_root
     from pipeline.presets import list_presets, resolve_preset, PRESETS, DEFAULT_PRESET, VALID_CODECS
+    from pipeline.content_detect import detect_content
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.state import (_state_lock, _status, _VALID_MODES, _VALID_BG, _VALID_DEVICES, _VALID_MODELS, _CLOUD_SUBFOLDER)
     from src.gui.logging_setup import log
     from src.gui.services.cloud_detection import _default_output_dir, _detect_onedrive_root, _detect_gdrive_root, _detect_cloud_root
     from src.pipeline.presets import list_presets, resolve_preset, PRESETS, DEFAULT_PRESET, VALID_CODECS
+    from src.pipeline.content_detect import detect_content
 
 presets_bp = Blueprint("presets", __name__)
 
@@ -38,6 +41,59 @@ def api_presets():
         "default": DEFAULT_PRESET,
         "configs": resolved,
     })
+
+@presets_bp.route("/api/detect_content", methods=["POST"])
+def api_detect_content():
+    """Recommend a preset by analyzing a clip's first ~30s (M3 TASK 3.2).
+
+    Body: {"path": "<local video file>"} (a file already on disk — an upload or
+    a scanned recording). Returns the recommended preset key, its label, a
+    one-line human reason, the resolved encode config, and the raw signals so
+    the UI can show *why* and let the operator override.
+
+    Returns:
+        {"ok": true, "preset": "continuous_cctv", "label": "...",
+         "reason": "...", "config": {...}, "signals": {...}}
+        {"error": "..."} with 400 on bad input / unreadable video.
+    """
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data, dict):
+        return jsonify({"error": "Request body must be a JSON object"}), 400
+
+    raw = str(data.get("path", "")).strip()
+    if not raw:
+        return jsonify({"error": "Missing 'path' to a local video file"}), 400
+
+    # Resolve and guard: must be an existing regular file, no traversal tricks.
+    try:
+        p = Path(raw).resolve()
+    except (OSError, ValueError):
+        return jsonify({"error": "Invalid path"}), 400
+    if ".." in p.parts:
+        return jsonify({"error": "Path traversal not allowed"}), 400
+    if not p.is_file():
+        return jsonify({"error": f"No such file: {raw}"}), 400
+
+    try:
+        rec = detect_content(str(p))
+    except FileNotFoundError:
+        return jsonify({"error": f"No such file: {raw}"}), 400
+    except ValueError as exc:
+        return jsonify({"error": f"Could not analyze video: {exc}"}), 400
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("detect_content failed for %s: %s", raw, exc)
+        return jsonify({"error": "Content detection failed"}), 400
+
+    log.info("Auto-detected preset '%s' for %s (%s)", rec.preset, p.name, rec.reason)
+    return jsonify({
+        "ok": True,
+        "preset": rec.preset,
+        "label": rec.label,
+        "reason": rec.reason,
+        "config": resolve_preset(rec.preset),
+        "signals": rec.signals.as_dict(),
+    })
+
 
 @presets_bp.route("/api/config/import", methods=["POST"])
 def api_config_import():

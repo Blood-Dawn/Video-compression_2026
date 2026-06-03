@@ -115,6 +115,17 @@ def tools_dir() -> Path:
     return d
 
 
+def thumbs_dir() -> Path:
+    """Return the writable cache directory for Library video thumbnails.
+
+    Lives under the OS cache dir (regenerable) so it can be cleared safely and
+    does not bloat the data dir. Created on first call. (FIX 6.)
+    """
+    d = cache_dir() / "thumbs"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def state_file(name: str) -> Path:
     """Return the full path to a named state file in the data dir.
 

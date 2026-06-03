@@ -187,7 +187,7 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 # at import time so `from gui.app import app` (used by run_gui.py and the test
 # suite) has every route without calling create_app().
 def register_blueprints(flask_app: Flask) -> None:
-    """Register all 15 route blueprints on the given Flask app."""
+    """Register all 16 route blueprints on the given Flask app."""
     try:
         from gui.routes.ui_bp import ui_bp
         from gui.routes.sse_bp import sse_bp
@@ -204,6 +204,7 @@ def register_blueprints(flask_app: Flask) -> None:
         from gui.routes.cameras_bp import cameras_bp
         from gui.routes.usage_bp import usage_bp
         from gui.routes.setup_bp import setup_bp
+        from gui.routes.library_bp import library_bp
     except ModuleNotFoundError:  # pragma: no cover - import path shim
         from src.gui.routes.ui_bp import ui_bp
         from src.gui.routes.sse_bp import sse_bp
@@ -220,9 +221,10 @@ def register_blueprints(flask_app: Flask) -> None:
         from src.gui.routes.cameras_bp import cameras_bp
         from src.gui.routes.usage_bp import usage_bp
         from src.gui.routes.setup_bp import setup_bp
+        from src.gui.routes.library_bp import library_bp
     for bp in (ui_bp, sse_bp, metrics_bp, presets_bp, encryption_bp, plates_bp,
                queries_bp, rtsp_bp, demo_bp, hls_bp, files_bp, pipeline_bp,
-               cameras_bp, usage_bp, setup_bp):
+               cameras_bp, usage_bp, setup_bp, library_bp):
         flask_app.register_blueprint(bp)
 
 

@@ -87,12 +87,17 @@ EXPECTED = {
     "/api/setup/choose": "setup",
     "/api/setup/reset": "setup",
     "/api/setup/dependencies": "setup",
+    "/api/library/videos": "library",
+    "/api/library/meta": "library",
+    "/api/library/thumb": "library",
+    "/api/library/file": "library",
+    "/api/library/compress": "library",
 }
 
 EXPECTED_BLUEPRINTS = {
     "ui", "sse", "metrics", "presets", "encryption", "plates",
     "queries", "rtsp", "demo", "hls", "files", "pipeline", "cameras", "usage",
-    "setup",
+    "setup", "library",
 }
 
 
@@ -102,7 +107,7 @@ def _rules():
 
 def test_route_count():
     rules = _rules()
-    assert len(rules) == 59, f"expected 59 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 64, f"expected 64 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_twelve_blueprints_registered():

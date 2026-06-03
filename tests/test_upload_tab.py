@@ -40,13 +40,15 @@ def test_upload_nav_button_exists(html):
 
 def test_upload_is_second_after_home_before_metrics(html):
     order = _nav_order(html)
-    assert order[:3] == ["home", "upload", "metrics"], order
+    assert order[0] == "home" and order[1] == "upload", order
     assert order.index("upload") < order.index("metrics")
 
 
 def test_full_nav_order(html):
-    # TOOLS was inserted between SEARCH and ENCRYPT in FIX 4.
-    assert _nav_order(html) == ["home", "upload", "metrics", "search", "tools", "encrypt"]
+    # FIX 4 inserted TOOLS (between SEARCH and ENCRYPT); FIX 6 inserted LIBRARY
+    # (right after UPLOAD).
+    assert _nav_order(html) == [
+        "home", "upload", "library", "metrics", "search", "tools", "encrypt"]
 
 
 def test_upload_tab_page_exists(html):

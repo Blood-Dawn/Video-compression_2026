@@ -933,6 +933,7 @@
     .tab-btn:hover { color: var(--text-primary); }
     .tab-btn[data-tab="home"].active    { color: var(--amber);  border-bottom-color: var(--amber); }
     .tab-btn[data-tab="upload"].active  { color: var(--purple); border-bottom-color: var(--purple); }
+    .tab-btn[data-tab="library"].active { color: #ff9e5e;       border-bottom-color: #ff9e5e; }
     .tab-btn[data-tab="metrics"].active { color: var(--green);  border-bottom-color: var(--green); }
     .tab-btn[data-tab="search"].active  { color: var(--teal);   border-bottom-color: var(--teal); }
     .tab-btn[data-tab="tools"].active   { color: #5aa9ff;       border-bottom-color: #5aa9ff; }
@@ -2639,6 +2640,7 @@
       <nav class="tab-nav">
         <button class="tab-btn active" data-tab="home"    onclick="switchTab('home')">HOME</button>
         <button class="tab-btn"        data-tab="upload"  onclick="switchTab('upload')">UPLOAD</button>
+        <button class="tab-btn"        data-tab="library" onclick="switchTab('library')">LIBRARY</button>
         <button class="tab-btn"        data-tab="metrics" onclick="switchTab('metrics')">METRICS</button>
         <button class="tab-btn"        data-tab="search"  onclick="switchTab('search')">SEARCH</button>
         <button class="tab-btn"        data-tab="tools"   onclick="switchTab('tools')">TOOLS</button>
@@ -2685,6 +2687,42 @@
           <p style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);line-height:1.5;margin-bottom:0.75rem;">
             Advanced streaming tools: run a local RTSP server (MediaMTX) and view a live HLS stream in the browser.
           </p>
+        </div>
+      </div>
+
+      <!-- ══════════════════ LIBRARY TAB (FIX 6) ══════════════════ -->
+      <div id="tab-library" class="tab-page">
+        <div class="tab-page-header">
+          <span class="tab-page-title">Library</span>
+          <span id="library-count" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-left:0.75rem;"></span>
+        </div>
+
+        <!-- Folder picker + view toggle -->
+        <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;">
+          <input type="text" id="library-folder" placeholder="folder to browse (defaults to your output folder)"
+                 style="flex:1;min-width:200px;" />
+          <button class="btn btn-ghost" onclick="loadLibrary()">Load</button>
+          <button class="btn btn-ghost" id="library-view-grid" onclick="setLibraryView('grid')">Grid</button>
+          <button class="btn btn-ghost" id="library-view-list" onclick="setLibraryView('list')">List</button>
+        </div>
+        <div id="library-status" style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);margin-bottom:0.5rem;"></div>
+
+        <!-- Grid / list of videos -->
+        <div id="library-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:0.6rem;overflow-y:auto;align-content:start;"></div>
+
+        <!-- Detail view (single video) -->
+        <div id="library-detail" style="display:none;">
+          <button class="btn btn-ghost" onclick="closeLibraryDetail()" style="margin-bottom:0.5rem;">&larr; Back to library</button>
+          <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+            <video id="library-player" controls playsinline
+                   style="flex:2;min-width:280px;max-height:360px;background:#000;border-radius:4px;"></video>
+            <div style="flex:1;min-width:200px;">
+              <div id="library-detail-name" style="font-family:var(--mono);font-size:0.8rem;margin-bottom:0.5rem;word-break:break-all;"></div>
+              <div id="library-detail-meta" style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);line-height:1.7;"></div>
+              <button class="btn btn-primary" style="margin-top:0.75rem;width:100%;justify-content:center;"
+                      onclick="compressLibrarySelection()">Compress this video</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -3659,6 +3697,7 @@
   <script src="{{ url_for('static', filename='js/hls.js') }}"></script>
   <script src="{{ url_for('static', filename='js/rtsp.js') }}"></script>
   <script src="{{ url_for('static', filename='js/tools.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/library.js') }}"></script>
   <script src="{{ url_for('static', filename='js/metrics.js') }}"></script>
   <script src="{{ url_for('static', filename='js/plates.js') }}"></script>
   <script src="{{ url_for('static', filename='js/presets.js') }}"></script>

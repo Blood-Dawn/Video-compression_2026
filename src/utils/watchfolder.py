@@ -29,7 +29,9 @@ import logging
 import re
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -52,6 +54,112 @@ INGESTED_SUFFIX = ".ingested"
 # the file as interrupted (not ingested) and retry it — explicit crash-resume.
 # E.g. "clip.mp4" -> "clip.mp4.processing"
 PROCESSING_SUFFIX = ".processing"
+
+
+@dataclass(frozen=True)
+class WatchProfile:
+    """A watch-folder profile tuned to a common camera export/recording layout.
+
+    Profiles are data-driven (not hard-coded per vendor): they set how the tree
+    is scanned (recursive for per-camera/per-day folders), how fast the source
+    writes (stable_checks/settle — a microSD dump copies fast, a NAS sync is
+    slow and bursty), and how the encode preset is chosen (auto-detected per
+    clip, or a fixed preset for a known layout). A specific camera family maps to
+    one of these in docs/camera-ingestion.md.
+    """
+    key: str
+    label: str
+    description: str
+    recursive: bool = False
+    auto_preset: bool = True
+    preset: Optional[str] = None
+    stable_checks: int = 2
+    settle_seconds: float = 1.0
+    camera_prefix: str = "external"
+
+    def scan_kwargs(self) -> dict:
+        """The subset of scan_and_ingest kwargs this profile fixes."""
+        return {
+            "recursive": self.recursive,
+            "auto_preset": self.auto_preset,
+            "preset": self.preset,
+            "stable_checks": self.stable_checks,
+            "settle_seconds": self.settle_seconds,
+            "camera_prefix": self.camera_prefix,
+        }
+
+
+# Ordered registry of layouts. Adding a layout is one entry — no code branch.
+_PROFILE_LIST: List[WatchProfile] = [
+    WatchProfile(
+        key="continuous",
+        label="Timestamped continuous recordings",
+        description="A static camera writing back-to-back time-stamped files "
+                    "(hourly CCTV clips, dashcam loops). Fixed Continuous-CCTV "
+                    "preset for the biggest storage win.",
+        recursive=True, auto_preset=False, preset="continuous_cctv",
+        stable_checks=2, camera_prefix="cctv",
+    ),
+    WatchProfile(
+        key="motion_events",
+        label="Per-event motion clips",
+        description="A folder of short clips, one per motion event (most "
+                    "consumer cams). Auto-detect per clip — a porch visit and a "
+                    "passing car want different settings.",
+        recursive=True, auto_preset=True, camera_prefix="event",
+    ),
+    WatchProfile(
+        key="microsd_dump",
+        label="microSD / SD-card dump",
+        description="A card pulled from a camera and copied in bulk. Files land "
+                    "fast and complete; scan subfolders (DCIM-style trees).",
+        recursive=True, auto_preset=True, stable_checks=2, camera_prefix="sdcard",
+    ),
+    WatchProfile(
+        key="nas_sync",
+        label="NAS / cloud-sync folder",
+        description="Files arriving via a NAS or cloud sync client, which write "
+                    "slowly and can pause mid-copy. Extra stability checks avoid "
+                    "ingesting a half-synced file.",
+        recursive=True, auto_preset=True, stable_checks=4, settle_seconds=2.0,
+        camera_prefix="nas",
+    ),
+    WatchProfile(
+        key="nvr_export",
+        label="NVR export tree",
+        description="An NVR's export, typically nested per-camera/per-day. "
+                    "Recursive scan; the per-camera subfolder name becomes part "
+                    "of the camera ID. Auto-detect per clip.",
+        recursive=True, auto_preset=True, stable_checks=3, camera_prefix="nvr",
+    ),
+    WatchProfile(
+        key="generic",
+        label="Generic drop folder",
+        description="A flat folder you drop files into. Non-recursive, "
+                    "auto-detect per clip.",
+        recursive=False, auto_preset=True, camera_prefix="external",
+    ),
+]
+
+WATCHFOLDER_PROFILES: Dict[str, WatchProfile] = {p.key: p for p in _PROFILE_LIST}
+DEFAULT_PROFILE = "generic"
+
+
+def list_profiles() -> List[dict]:
+    """Catalog of profiles (key/label/description) for docs and the CLI."""
+    return [
+        {"key": p.key, "label": p.label, "description": p.description,
+         "recursive": p.recursive, "auto_preset": p.auto_preset, "preset": p.preset}
+        for p in _PROFILE_LIST
+    ]
+
+
+def get_profile(key: str) -> WatchProfile:
+    """Return the WatchProfile for ``key`` or raise KeyError."""
+    try:
+        return WATCHFOLDER_PROFILES[key]
+    except KeyError:
+        raise KeyError(f"unknown watch-folder profile: {key!r}") from None
 
 
 def _sanitize_camera_id(name: str) -> str:
@@ -193,6 +301,7 @@ def scan_and_ingest(
     stable_checks: int = 2,
     auto_preset: bool = False,
     preset=None,
+    recursive: bool = False,
 ) -> int:
     """
     Scan watch_dir once for new video files and ingest any that are found.
@@ -222,14 +331,18 @@ def scan_and_ingest(
         stable_checks: Consecutive unchanged size reads required before ingest.
         auto_preset: Auto-detect a preset per file (TASK 3.2).
         preset: Explicit preset key to use for every file (overrides auto_preset).
+        recursive: Scan subfolders too (NVR/microSD/NAS trees). The immediate
+            parent folder name is folded into the camera ID so per-camera
+            subfolders stay distinguishable.
 
     Returns:
         Number of files ingested in this scan.
     """
     ingested_count = 0
 
+    walker = watch_dir.rglob("*") if recursive else watch_dir.iterdir()
     candidates = [
-        f for f in watch_dir.iterdir()
+        f for f in walker
         if f.is_file()
         and f.suffix.lower() in SUPPORTED_EXTENSIONS
         and not _already_ingested(f)
@@ -248,7 +361,13 @@ def scan_and_ingest(
             log.info(f"Skipping (still writing): {video_path.name}")
             continue
 
-        camera_id = _build_camera_id(video_path, camera_prefix)
+        # For nested trees, fold the immediate parent folder into the camera ID
+        # so two clips named the same under different camera folders stay apart.
+        file_prefix = camera_prefix
+        if recursive and video_path.parent != watch_dir:
+            sub = _sanitize_camera_id(video_path.parent.name)
+            file_prefix = f"{camera_prefix}_{sub}" if camera_prefix else sub
+        camera_id = _build_camera_id(video_path, file_prefix)
         log.info(f"Ingesting: {video_path.name} -> camera_id={camera_id!r}")
 
         if dry_run:
@@ -298,6 +417,8 @@ def run_watchfolder(
     stable_checks: int = 2,
     auto_preset: bool = False,
     preset=None,
+    recursive: bool = False,
+    profile: Optional[str] = None,
 ) -> None:
     """
     Run the watchfolder daemon loop indefinitely.
@@ -315,7 +436,31 @@ def run_watchfolder(
         segment_seconds: Segment duration in seconds.
         warmup_frames: Background model warmup frames.
         dry_run: If True, detect files but skip encoding.
+        settle_seconds / stable_checks: Partial-write stability tuning.
+        auto_preset / preset: Per-file or fixed preset selection.
+        recursive: Scan subfolders (NVR/microSD/NAS trees).
+        profile: A named export-layout profile (see WATCHFOLDER_PROFILES) that
+            sets recursive/auto_preset/preset/stability/camera_prefix defaults.
+            Explicitly passed args still take precedence over the profile.
     """
+    # A profile supplies layout-appropriate defaults; an explicitly-passed value
+    # (different from this function's own default) wins over the profile.
+    if profile:
+        prof = get_profile(profile)
+        pk = prof.scan_kwargs()
+        if recursive is False:
+            recursive = pk["recursive"]
+        if auto_preset is False:
+            auto_preset = pk["auto_preset"]
+        if preset is None:
+            preset = pk["preset"]
+        if stable_checks == 2:
+            stable_checks = pk["stable_checks"]
+        if settle_seconds == 1.0:
+            settle_seconds = pk["settle_seconds"]
+        if camera_prefix == "external":
+            camera_prefix = pk["camera_prefix"]
+
     watch_path = Path(watch_dir)
     watch_path.mkdir(parents=True, exist_ok=True)
 
@@ -324,6 +469,10 @@ def run_watchfolder(
     log.info(f"Output   : {output_dir}")
     log.info(f"Interval : {poll_interval}s")
     log.info(f"Formats  : {', '.join(sorted(SUPPORTED_EXTENSIONS))}")
+    if profile:
+        log.info(f"Profile  : {profile} ({get_profile(profile).label})")
+    if recursive:
+        log.info("Recursive: scanning subfolders.")
     if dry_run:
         log.info("DRY RUN mode. No encoding will occur.")
     if auto_preset:
@@ -347,6 +496,7 @@ def run_watchfolder(
                 stable_checks=stable_checks,
                 auto_preset=auto_preset,
                 preset=preset,
+                recursive=recursive,
             )
             total_ingested += count
             if count:
@@ -444,6 +594,21 @@ if __name__ == "__main__":
         default=None,
         help="Apply a named preset to every file (overrides --auto-preset).",
     )
+    parser.add_argument(
+        "--profile",
+        default=None,
+        choices=sorted(WATCHFOLDER_PROFILES),
+        help=(
+            "Export-layout profile that sets sensible defaults for a camera "
+            "family (recursive scan, stability, preset). See "
+            "docs/camera-ingestion.md. One of: " + ", ".join(sorted(WATCHFOLDER_PROFILES))
+        ),
+    )
+    parser.add_argument(
+        "--recursive",
+        action="store_true",
+        help="Scan subfolders too (NVR/microSD/NAS export trees).",
+    )
     args = parser.parse_args()
 
     run_watchfolder(
@@ -459,4 +624,6 @@ if __name__ == "__main__":
         stable_checks=args.stable_checks,
         auto_preset=args.auto_preset,
         preset=args.preset,
+        recursive=args.recursive,
+        profile=args.profile,
     )

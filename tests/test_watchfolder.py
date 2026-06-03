@@ -19,9 +19,12 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 import utils.watchfolder as wf
 from utils.watchfolder import (
+    DEFAULT_PROFILE,
     INGESTED_SUFFIX,
     PROCESSING_SUFFIX,
     SUPPORTED_EXTENSIONS,
+    WATCHFOLDER_PROFILES,
+    WatchProfile,
     _already_ingested,
     _build_camera_id,
     _clear_processing,
@@ -32,6 +35,8 @@ from utils.watchfolder import (
     _resolve_encode_config,
     _sanitize_camera_id,
     _was_interrupted,
+    get_profile,
+    list_profiles,
     scan_and_ingest,
 )
 
@@ -198,6 +203,68 @@ class TestAutoPreset:
         assert kwargs["mode"] == "mode2"          # continuous_cctv -> mode2
         assert kwargs["codec"] == "auto"
         assert kwargs["crf"] == 23
+
+
+class TestWatchProfiles:
+    def test_catalog_non_empty_and_default_present(self):
+        profiles = list_profiles()
+        assert profiles  # at least one
+        keys = {p["key"] for p in profiles}
+        assert DEFAULT_PROFILE in keys
+        # The camera-export layouts the plan calls out are all represented.
+        assert {"continuous", "motion_events", "microsd_dump",
+                "nas_sync", "nvr_export"} <= keys
+
+    def test_every_profile_resolves_and_has_valid_preset(self):
+        from pipeline.presets import PRESETS
+        for key in WATCHFOLDER_PROFILES:
+            prof = get_profile(key)
+            assert isinstance(prof, WatchProfile)
+            # preset is either unset (auto-detect) or a real preset key.
+            assert prof.preset is None or prof.preset in PRESETS
+            sk = prof.scan_kwargs()
+            assert set(sk) == {"recursive", "auto_preset", "preset",
+                               "stable_checks", "settle_seconds", "camera_prefix"}
+            assert sk["stable_checks"] >= 1
+
+    def test_unknown_profile_raises(self):
+        with pytest.raises(KeyError):
+            get_profile("no_such_profile")
+
+    def test_nas_profile_is_more_conservative(self):
+        # NAS sync writes slowly: it must require more stability than a flat drop.
+        assert get_profile("nas_sync").stable_checks > get_profile("generic").stable_checks
+        assert get_profile("nas_sync").recursive is True
+
+
+class TestRecursiveScan:
+    def test_recursive_finds_nested_file(self, tmp_path):
+        sub = tmp_path / "day1"
+        sub.mkdir()
+        _make_video(sub, "clip.mp4")
+        count = scan_and_ingest(watch_dir=tmp_path, output_dir=str(tmp_path),
+                                dry_run=True, recursive=True)
+        assert count == 1
+
+    def test_non_recursive_ignores_subfolders(self, tmp_path):
+        sub = tmp_path / "cam7"
+        sub.mkdir()
+        _make_video(sub, "clip.mp4")
+        count = scan_and_ingest(watch_dir=tmp_path, output_dir=str(tmp_path),
+                                dry_run=True, recursive=False)
+        assert count == 0
+
+    def test_recursive_folds_subfolder_into_camera_id(self, tmp_path):
+        sub = tmp_path / "cam7"
+        sub.mkdir()
+        _make_video(sub, "clip.mp4")
+        with patch("pipeline.pipeline.run_pipeline") as mock_run:
+            scan_and_ingest(watch_dir=tmp_path, output_dir=str(tmp_path),
+                            settle_seconds=0.01, stable_checks=1, recursive=True,
+                            camera_prefix="nvr")
+        _, kwargs = mock_run.call_args
+        assert "cam7" in kwargs["camera_id"]
+        assert kwargs["camera_id"].startswith("nvr_cam7")
 
 class TestScanAndIngest:
     def test_empty_folder_returns_zero(self, tmp_path):

@@ -929,6 +929,7 @@
     }
     .tab-btn:hover { color: var(--text-primary); }
     .tab-btn[data-tab="home"].active    { color: var(--amber);  border-bottom-color: var(--amber); }
+    .tab-btn[data-tab="upload"].active  { color: var(--purple); border-bottom-color: var(--purple); }
     .tab-btn[data-tab="metrics"].active { color: var(--green);  border-bottom-color: var(--green); }
     .tab-btn[data-tab="search"].active  { color: var(--teal);   border-bottom-color: var(--teal); }
     .tab-btn[data-tab="encrypt"].active { color: var(--yellow); border-bottom-color: var(--yellow); }
@@ -2100,17 +2101,12 @@
       </div>
       <div class="config-section">
 
-        <!-- Primary: drag-and-drop / click-to-upload zone -->
-        <label class="upload-zone" for="upload-input" id="upload-zone">
-          <input type="file" id="upload-input" accept="video/*,.mp4,.avi,.mov,.mkv,.h264,.m4v"
-                 style="display:none" onchange="_uploadVideo(this)" />
-          <span class="upload-zone-icon">+</span>
-          <span class="upload-zone-text">Click to upload a video<br>
-            <small>MP4, AVI, MOV, MKV supported</small>
-          </span>
-        </label>
-        <div id="upload-status" style="font-size:0.65rem;color:var(--text-dim);margin-top:0.3rem;min-height:1.1em;"></div>
-        <div id="video-list" style="margin-top:0.3rem;"></div>
+        <!-- Primary upload UI now lives in the dedicated UPLOAD tab (TASK 1.7).
+             This button jumps there; the advanced server-path stays here. -->
+        <button type="button" class="btn" style="width:100%;justify-content:center;"
+                onclick="switchTab('upload')" title="Open the Upload tab">
+          ⬆ Upload a video →
+        </button>
 
         <!-- Secondary: server-side path / browse (advanced / server only) -->
         <details class="source-advanced" id="source-advanced-toggle">
@@ -2635,6 +2631,7 @@
       <!-- Tab strip -->
       <nav class="tab-nav">
         <button class="tab-btn active" data-tab="home"    onclick="switchTab('home')">HOME</button>
+        <button class="tab-btn"        data-tab="upload"  onclick="switchTab('upload')">UPLOAD</button>
         <button class="tab-btn"        data-tab="metrics" onclick="switchTab('metrics')">METRICS</button>
         <button class="tab-btn"        data-tab="search"  onclick="switchTab('search')">SEARCH</button>
         <button class="tab-btn"        data-tab="encrypt" onclick="switchTab('encrypt')">ENCRYPT</button>
@@ -2642,6 +2639,31 @@
           <button class="btn btn-ghost" style="font-size:0.6rem;padding:0.2rem 0.6rem;" onclick="loadSegments()" title="Refresh segments">↻</button>
         </div>
       </nav>
+
+      <!-- ══════════════════ UPLOAD TAB (TASK 1.7) ══════════════════ -->
+      <div id="tab-upload" class="tab-page">
+        <div class="tab-page-header">
+          <span class="tab-page-title">Upload a video</span>
+        </div>
+        <div style="max-width:520px;">
+          <!-- Primary: drag-and-drop / click-to-upload zone (moved from sidebar) -->
+          <label class="upload-zone" for="upload-input" id="upload-zone">
+            <input type="file" id="upload-input" accept="video/*,.mp4,.avi,.mov,.mkv,.h264,.m4v"
+                   style="display:none" onchange="_uploadVideo(this)" />
+            <span class="upload-zone-icon">+</span>
+            <span class="upload-zone-text">Click to upload a video<br>
+              <small>MP4, AVI, MOV, MKV supported</small>
+            </span>
+          </label>
+          <div id="upload-status" style="font-size:0.7rem;color:var(--text-dim);margin-top:0.5rem;min-height:1.1em;"></div>
+          <div id="video-list" style="margin-top:0.5rem;"></div>
+          <div style="font-size:0.65rem;color:var(--text-dim);margin-top:0.8rem;line-height:1.5;">
+            After uploading, pick a <strong>preset</strong> and press <strong>Start</strong>
+            in the sidebar. For a live camera or a server-side file, use
+            <em>Server file path (advanced)</em> in the sidebar.
+          </div>
+        </div>
+      </div>
 
       <!-- ══════════════════ HOME TAB ══════════════════ -->
       <div id="tab-home" class="tab-page active">

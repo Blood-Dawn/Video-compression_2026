@@ -14,12 +14,30 @@ try:
     from gui.state import (_state_lock, _status, _VALID_MODES, _VALID_BG, _VALID_DEVICES, _VALID_MODELS, _CLOUD_SUBFOLDER)
     from gui.logging_setup import log
     from gui.services.cloud_detection import _default_output_dir, _detect_onedrive_root, _detect_gdrive_root, _detect_cloud_root
+    from pipeline.presets import list_presets, resolve_preset, PRESETS, DEFAULT_PRESET, VALID_CODECS
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.state import (_state_lock, _status, _VALID_MODES, _VALID_BG, _VALID_DEVICES, _VALID_MODELS, _CLOUD_SUBFOLDER)
     from src.gui.logging_setup import log
     from src.gui.services.cloud_detection import _default_output_dir, _detect_onedrive_root, _detect_gdrive_root, _detect_cloud_root
+    from src.pipeline.presets import list_presets, resolve_preset, PRESETS, DEFAULT_PRESET, VALID_CODECS
 
 presets_bp = Blueprint("presets", __name__)
+
+
+@presets_bp.route("/api/presets", methods=["GET"])
+def api_presets():
+    """Named surveillance presets for the dashboard (M3 TASK 3.1).
+
+    Returns the ordered catalog the UI shows (modes are hidden behind these
+    names), the default selection, and the fully-resolved encode config for
+    each so the front-end can apply a preset to the form without a round-trip.
+    """
+    resolved = {key: resolve_preset(key) for key in PRESETS}
+    return jsonify({
+        "presets": list_presets(),
+        "default": DEFAULT_PRESET,
+        "configs": resolved,
+    })
 
 @presets_bp.route("/api/config/import", methods=["POST"])
 def api_config_import():
@@ -95,6 +113,13 @@ def api_config_import():
         "object_filter":    _bool("object_filter"),
         "filter_confidence":_float("filter_confidence", 0.30, lo=0.05, hi=0.95),
         "encrypt":          _bool("encrypt"),
+        # Preset + per-mode codec/CRF (M3 TASK 3.1). preset is the named preset
+        # key (or None for a hand-tuned config); crf None means "use the mode
+        # default". background_crf drives the dual-CRF background stream.
+        "preset":           (str(data.get("preset")) if str(data.get("preset", "")) in PRESETS else None),
+        "codec":            _choice("codec", VALID_CODECS, "auto"),
+        "crf":              _int("crf", None, lo=0, hi=63),
+        "background_crf":   _int("background_crf", 45, lo=0, hi=63),
         # NOTE: credentials (encrypt_password, encrypt_key_file) are never stored
     }
 
@@ -135,6 +160,11 @@ def api_config_export():
         "object_filter": cfg.get("object_filter", False),
         "filter_confidence": cfg.get("filter_confidence", 0.30),
         "encrypt": cfg.get("encrypt", False),
+        # Preset + per-mode codec/CRF (M3 TASK 3.1).
+        "preset": cfg.get("preset"),
+        "codec": cfg.get("codec", "auto"),
+        "crf": cfg.get("crf"),
+        "background_crf": cfg.get("background_crf", 45),
     }
 
     filename = f"svcs_config_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.json"

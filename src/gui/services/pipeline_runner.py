@@ -176,6 +176,7 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             # (H.264 for mode0/1, AV1 for mode2/3); explicit values pass through.
             codec=config.get("codec"),
             crf=config.get("crf"),
+            background_crf=config.get("background_crf"),
         )
 
     except Exception as exc:

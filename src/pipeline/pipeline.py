@@ -147,6 +147,7 @@ def run_pipeline(
     stop_event=None,
     codec: Optional[str] = None,
     crf: int = None,
+    background_crf: Optional[int] = None,
 ):
     """
     Main pipeline loop.
@@ -312,15 +313,20 @@ def run_pipeline(
     if codec is None or str(codec).strip().lower() in ("", "auto"):
         codec = default_codec_for_mode(mode)
 
+    # Background CRF (dual-CRF background stream). None keeps the encoder's own
+    # default; a preset (M3 TASK 3.1) or explicit caller can raise it for more
+    # background compression. Author: Bloodawn (KheivenD), 2026-06-03.
+    _bg_crf = int(background_crf) if background_crf is not None else 40
     encoder = ROIEncoder(
         output_dir=output_dir,
         db_path=db_path,
         preset=encode_preset,
         codec=codec,
         foreground_crf=resolved_crf,
+        background_crf=_bg_crf,
     )
-    log.info("Encoder: codec=%s, foreground_crf=%d (mode=%s)",
-             codec, resolved_crf, mode)
+    log.info("Encoder: codec=%s, foreground_crf=%d, background_crf=%d (mode=%s)",
+             codec, resolved_crf, _bg_crf, mode)
     initialize_database(db_path)
 
     obj_filter: Optional[ObjectFilter] = None

@@ -70,6 +70,7 @@ EXPECTED = {
     "/api/enhance/plates/status": "plates",
     "/api/enhance/benchmark": "plates",
     "/api/enhance/plates": "plates",
+    "/api/presets": "presets",
     "/api/config/import": "presets",
     "/api/config/export": "presets",
     "/api/gdrive/detect": "presets",
@@ -88,9 +89,9 @@ def _rules():
     return {r.rule: r for r in flask_app.url_map.iter_rules() if r.endpoint != "static"}
 
 
-def test_route_count_is_48():
+def test_route_count():
     rules = _rules()
-    assert len(rules) == 48, f"expected 48 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 49, f"expected 49 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_twelve_blueprints_registered():

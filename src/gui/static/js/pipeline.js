@@ -416,6 +416,11 @@ async function startPipeline() {
     // CRF override. Empty string means "use the mode default" — the
     // backend treats unset/blank as None and falls back to 18 / 38.
     crf:              ((document.getElementById('crf-input') || {}).value || '').trim(),
+    // Named preset + background CRF (M3 TASK 3.1). Set by presets.js when the
+    // operator picks a named surveillance preset; blank otherwise.
+    background_crf:   (window._svcsPreset && window._svcsPreset.background_crf != null
+                       ? String(window._svcsPreset.background_crf) : ''),
+    preset:           (window._svcsPreset && window._svcsPreset.key) || '',
   };
 
   try {

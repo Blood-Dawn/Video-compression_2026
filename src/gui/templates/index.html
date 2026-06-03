@@ -2196,6 +2196,17 @@
         <span class="step-label">Preset</span>
         <span class="step-sub">Choose compression style</span>
       </div>
+      <!-- M3 TASK 3.1: named surveillance presets. Picking one applies its mode
+           + encode settings (CRF, codec, object filter) to the form; the raw
+           Mode cards below stay as the advanced picker. Populated by presets.js
+           from /api/presets. -->
+      <div class="config-field" style="margin-bottom:0.5rem;">
+        <label class="config-label" for="preset-select">Surveillance preset</label>
+        <select id="preset-select" style="width:100%;font-family:var(--mono);font-size:0.7rem;"></select>
+        <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
+          Pick what the camera watches — we set the mode + codec. Fine-tune with the cards below or Advanced.
+        </div>
+      </div>
       <div class="preset-grid">
         <!-- hidden select kept for backward compat with JS startPipeline() -->
         <select id="mode-select" style="display:none;">
@@ -3538,6 +3549,7 @@
   <script src="{{ url_for('static', filename='js/rtsp.js') }}"></script>
   <script src="{{ url_for('static', filename='js/metrics.js') }}"></script>
   <script src="{{ url_for('static', filename='js/plates.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/presets.js') }}"></script>
 
 <!-- AI Plate Reader modal — Bloodawn (KheivenD), 2026-05-02 -->
 <div id="plate-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center;">

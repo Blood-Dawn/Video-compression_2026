@@ -136,6 +136,13 @@ def api_start():
         # section in the sidebar. Lower = better quality, larger file.
         # Author: Bloodawn (KheivenD), 2026-05-02 (Mode 3 redo).
         "crf": (int(data.get("crf")) if str(data.get("crf", "")).strip() else None),
+        # Background CRF + named preset (M3 TASK 3.1). background_crf drives the
+        # dual-CRF background stream; preset is the named surveillance preset the
+        # config came from (informational / for export). None background_crf
+        # keeps the encoder default.
+        "background_crf": (int(data.get("background_crf"))
+                           if str(data.get("background_crf", "")).strip() else None),
+        "preset": (str(data.get("preset")).strip() or None) if data.get("preset") else None,
     }
 
     _pipeline_runner._stop_event = threading.Event()

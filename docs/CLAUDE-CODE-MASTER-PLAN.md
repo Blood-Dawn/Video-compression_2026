@@ -136,7 +136,7 @@ Goal: installer download 2.5–4.7 GB → ~400–600 MB **without a rewrite** (P
 
 ## M3 — Surveillance presets + content auto-detection
 
-- [ ] **TASK 3.1 — preset system v1 (surveillance-centric, modes hidden).** Depends: 2.2, 1.6 (per-mode codec).
+- [x] **TASK 3.1 — preset system v1 (surveillance-centric, modes hidden).** Depends: 2.2, 1.6 (per-mode codec). *(src/pipeline/presets.py — 8 named presets (Continuous CCTV, Motion-event, Doorbell, Multi-camera/NVR, Active scene, Archive + Screen recording, Generic) → (mode, fg-CRF, bg-CRF, codec); /api/presets endpoint; config import/export carry preset+codec+crf+background_crf; pipeline honors background_crf; presets.js + a named-preset dropdown (modes stay behind Advanced). tests/test_presets.py (29) + browser-verified.)*
   **Files:** new `src/pipeline/presets.py`, `src/config.py`, `src/gui/routes/presets_bp.py`, `src/gui/static/js/presets.js`.
   **Do:** named presets, surveillance-first: **Continuous CCTV (max savings)**, **Motion-event cam**, **Doorbell**, **Multi-camera / NVR**, **Active scene**, **Archive (visually lossless)**, plus a couple general (Screen recording, Generic). Each maps to a `(mode, foreground-CRF, background-CRF, codec)` tuple consistent with the decided CRF progression (mode0/1=18, mode2=23, mode3=38). **UI exposes presets by name**, raw mode picker behind an "Advanced" toggle. Extend the existing preset import/export (config blueprint), don't reinvent.
   **Acceptance:** `tests/test_presets.py` — each preset resolves to a valid encode config and round-trips through import/export. Document each preset's mode mapping + rationale in comments.

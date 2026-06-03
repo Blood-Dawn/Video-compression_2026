@@ -126,6 +126,62 @@ def api_setup_choose():
     })
 
 
+def _dep_entry(present: bool, path) -> dict:
+    return {"present": bool(present), "path": (str(path) if path else "")}
+
+
+@setup_bp.route("/api/setup/dependencies", methods=["GET"])
+def api_setup_dependencies():
+    """Report whether the external dependencies are available (FIX 5).
+
+    Covers FFmpeg/FFprobe (bundled-or-PATH), the MediaMTX RTSP binary (resolved
+    across bundle / %APPDATA% tools / PATH / legacy), and the ONNX detection
+    model. Lets Setup/Help show a clear "installed" status instead of a stale
+    "NOT INSTALLED" caused by checking the wrong path.
+    """
+    import shutil
+
+    deps = {}
+
+    # FFmpeg / FFprobe.
+    try:
+        from utils.ffmpeg import ffmpeg_path, ffprobe_path
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.utils.ffmpeg import ffmpeg_path, ffprobe_path
+    for key, resolver in (("ffmpeg", ffmpeg_path), ("ffprobe", ffprobe_path)):
+        try:
+            p = resolver()
+            present = Path(p).is_file() or shutil.which(p) is not None
+        except Exception:  # noqa: BLE001
+            p, present = "", False
+        deps[key] = _dep_entry(present, p if present else "")
+
+    # MediaMTX RTSP server binary.
+    try:
+        from gui.services.rtsp import _rtsp_mgr
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.gui.services.rtsp import _rtsp_mgr
+    try:
+        mtx = _rtsp_mgr.resolved_binary()
+    except Exception:  # noqa: BLE001
+        mtx = None
+    deps["mediamtx"] = _dep_entry(mtx is not None, mtx)
+
+    # ONNX detection model.
+    try:
+        from detection.onnx_backend import _default_model_path
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.detection.onnx_backend import _default_model_path
+    try:
+        model = _default_model_path()
+        present = Path(model).is_file()
+    except Exception:  # noqa: BLE001
+        model, present = "", False
+    deps["onnx_model"] = _dep_entry(present, model if present else "")
+
+    return jsonify({"dependencies": deps})
+
+
 @setup_bp.route("/api/setup/reset", methods=["POST"])
 def api_setup_reset():
     """Factory reset (FIX 2): clear per-install state and return to first-run.

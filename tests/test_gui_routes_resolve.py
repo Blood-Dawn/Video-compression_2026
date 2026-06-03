@@ -82,6 +82,7 @@ SAMPLES = [
     ("GET", "/api/setup/destinations"),
     ("POST", "/api/setup/choose"),
     ("POST", "/api/setup/reset"),
+    ("GET", "/api/setup/dependencies"),
 ]
 
 
@@ -101,4 +102,4 @@ def test_url_resolves(method, url):
 def test_sample_count_matches_route_count():
     """Every registered non-static route has a resolution sample here."""
     rules = [r for r in flask_app.url_map.iter_rules() if r.endpoint != "static"]
-    assert len(SAMPLES) == len(rules) == 58
+    assert len(SAMPLES) == len(rules) == 59

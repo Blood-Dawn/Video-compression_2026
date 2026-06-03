@@ -86,6 +86,7 @@ EXPECTED = {
     "/api/setup/destinations": "setup",
     "/api/setup/choose": "setup",
     "/api/setup/reset": "setup",
+    "/api/setup/dependencies": "setup",
 }
 
 EXPECTED_BLUEPRINTS = {
@@ -101,7 +102,7 @@ def _rules():
 
 def test_route_count():
     rules = _rules()
-    assert len(rules) == 58, f"expected 58 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 59, f"expected 59 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_twelve_blueprints_registered():

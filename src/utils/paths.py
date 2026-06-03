@@ -102,6 +102,19 @@ def cache_dir() -> Path:
     return d
 
 
+def tools_dir() -> Path:
+    """Return the writable directory for downloaded helper binaries.
+
+    MediaMTX (and any future bundled-on-demand tool) is downloaded here. It must
+    be writable even when the app itself is installed read-only (Program Files /
+    /Applications), so it lives under data_dir()/tools, not next to the exe.
+    Created on first call. (FIX 5.)
+    """
+    d = data_dir() / "tools"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def state_file(name: str) -> Path:
     """Return the full path to a named state file in the data dir.
 

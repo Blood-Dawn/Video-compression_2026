@@ -19,14 +19,17 @@ Typical flow:
 Author: EGN 4950C Group 16
 """
 
+import os
 import platform
+import shutil
 import subprocess
+import sys
 import tarfile
 import threading
 import urllib.request
 import zipfile
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable, List, Optional
 
 try:                                       # bundled-first ffmpeg resolution (TASK 2.3)
     from utils.ffmpeg import ffmpeg_path
@@ -71,8 +74,13 @@ def _platform_asset() -> tuple[str, str]:
 class RtspServerManager:
     """Download, start, stop, and monitor a local MediaMTX RTSP server."""
 
-    def __init__(self, tools_dir: Path):
+    def __init__(self, tools_dir: Path, extra_search_dirs: Optional[List[Path]] = None):
+        # tools_dir is the WRITABLE location downloads land in (under %APPDATA%
+        # for an installed app). extra_search_dirs are additional read-only
+        # places an existing binary may already live (the frozen bundle, the
+        # legacy repo tools/ dir). FIX 5.
         self.tools_dir = tools_dir
+        self.extra_search_dirs: List[Path] = list(extra_search_dirs or [])
         self._lock = threading.Lock()
 
         # subprocess handles
@@ -98,10 +106,53 @@ class RtspServerManager:
 
     @property
     def binary_path(self) -> Path:
+        """The download destination (must be writable). Resolution for an
+        EXISTING binary is done by resolved_binary(), which checks more places."""
         return self.tools_dir / "mediamtx" / self._exe_name
 
+    def _search_locations(self) -> List[Path]:
+        """Candidate mediamtx paths, in priority order (FIX 5).
+
+        Order: the writable tools dir (where we download), then any extra search
+        dirs (frozen bundle / legacy repo tools/), then the frozen bundle next to
+        the executable, then PATH. The first one that exists wins.
+        """
+        exe = self._exe_name
+        cands: List[Path] = [self.tools_dir / "mediamtx" / exe]
+        for d in self.extra_search_dirs:
+            cands.append(Path(d) / "mediamtx" / exe)
+            cands.append(Path(d) / exe)
+
+        # Frozen bundle: next to the executable and the PyInstaller _MEIPASS root.
+        roots: List[Path] = []
+        if getattr(sys, "frozen", False):
+            roots.append(Path(sys.executable).resolve().parent)
+        meipass = getattr(sys, "_MEIPASS", None)
+        if meipass:
+            roots.append(Path(meipass))
+        for r in roots:
+            cands.append(r / "tools" / "mediamtx" / exe)
+            cands.append(r / "mediamtx" / exe)
+            cands.append(r / exe)
+
+        # System PATH.
+        on_path = shutil.which("mediamtx")
+        if on_path:
+            cands.append(Path(on_path))
+        return cands
+
+    def resolved_binary(self) -> Optional[Path]:
+        """Return the first existing mediamtx binary across all locations, or None."""
+        for p in self._search_locations():
+            try:
+                if p.is_file():
+                    return p
+            except OSError:
+                continue
+        return None
+
     def binary_present(self) -> bool:
-        return self.binary_path.exists()
+        return self.resolved_binary() is not None
 
     # ── download ──────────────────────────────────────────────────────────────
 
@@ -176,15 +227,16 @@ class RtspServerManager:
         with self._lock:
             if self._server_running:
                 raise RuntimeError("RTSP server is already running")
-        if not self.binary_present():
+        binary = self.resolved_binary()
+        if binary is None:
             raise RuntimeError("MediaMTX binary not found. Run download first.")
 
         # MediaMTX works fine with no config file; defaults open port 8554
         proc = subprocess.Popen(
-            [str(self.binary_path)],
+            [str(binary)],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            cwd=str(self.binary_path.parent),
+            cwd=str(binary.parent),
         )
         with self._lock:
             self._proc = proc

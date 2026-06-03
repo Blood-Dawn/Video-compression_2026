@@ -19,10 +19,18 @@ from pathlib import Path
 
 try:
     from utils.rtsp_server import RtspServerManager
+    from utils import paths as _paths
 except ModuleNotFoundError:                # pragma: no cover - import path shim
     from src.utils.rtsp_server import RtspServerManager
+    from src.utils import paths as _paths
 
-# Repo root (…/src/gui/services/rtsp.py -> parents[3]); MediaMTX tools live here.
+# Repo root (…/src/gui/services/rtsp.py -> parents[3]); the legacy tools/ dir.
 _ROOT = Path(__file__).resolve().parents[3]
 
-_rtsp_mgr = RtspServerManager(tools_dir=_ROOT / "tools")
+# FIX 5: download MediaMTX into a WRITABLE per-user tools dir (works in a
+# read-only Program Files install), but still detect an existing binary in the
+# legacy repo tools/ dir, the frozen bundle, or on PATH (handled by the manager).
+_rtsp_mgr = RtspServerManager(
+    tools_dir=_paths.tools_dir(),
+    extra_search_dirs=[_ROOT / "tools"],
+)

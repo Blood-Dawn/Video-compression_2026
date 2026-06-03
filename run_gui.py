@@ -259,7 +259,10 @@ def main():
     # used to surface as an opaque ImportError dump.
     # Author: Bloodawn (KheivenD), 2026-05-03 (run_gui hardening).
     try:
-        from gui.app import app  # noqa: E402
+        # Use the app factory so the always-on hardware sampler starts (it is
+        # no longer started at import time as of the TASK 1.2 gui refactor).
+        from gui.app import create_app  # noqa: E402
+        app = create_app()
     except ModuleNotFoundError as exc:
         missing = exc.name or str(exc)
         print(f"\n  [fatal] Could not import gui.app — missing module: {missing!r}")

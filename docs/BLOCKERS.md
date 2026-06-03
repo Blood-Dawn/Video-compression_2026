@@ -11,6 +11,30 @@ Author: Bloodawn (KheivenD), 2026-06-02 (autonomous v2 build).
 
 ## Open items
 
+### ✅ AUTONOMOUS RUN COMPLETE — every non-gated task M1 → M5b is done (2026-06-03)
+
+All non-gated tasks are implemented, tested green, committed, and pushed to
+`app`. Final suite: **857 passed, 4 skipped** (3 webcam + 1 opt-in Docker build).
+Done: **M1** 1.1–1.6 **+ 1.7** (Upload tab); **M2** 2.1–2.4 (installer 210 MB);
+**M3** 3.1, 3.2 (3.3 optional-deferred); **M-CAM** 1–4; **M4** 4.1, 4.4, 4.2
+(Docker image built + served + auth-verified); **M5** 5.1, 5.2, 5.3 (+5.4 prep);
+**M5b** 5b.2 (AppImage, CI-built) + 5b.1 step (signing wired).
+
+**Everything that remains is GATED on the owner — nothing is blocked on code:**
+
+| Task | Why gated | What's ready | Owner action |
+|------|-----------|--------------|--------------|
+| **5.4** publish beta | human tags/publishes | RELEASE-CHECKLIST + draft notes | build on a release box, tag `v2.0.0-beta`, publish pre-release |
+| **5b.1** Windows signing | needs a cert | `build.ps1 -Sign` wired | get a cert (try SignPath OSS), set env vars, build `-Installer -Sign` |
+| **5b.2** AppImage publish | publish is owner's | build.sh + CI build+smoke green | confirm the AppImage CI job, attach artifact to the Release |
+| **5b.3** macOS dmg | needs Apple cert + a Mac | — (deferred per plan) | provide Apple Developer cert; build/notarize on macOS |
+| **3.3** adaptive bitrate | optional / defer | building blocks exist | say "go" if wanted |
+| **6.1 / 6.2** Rust spike | explicit go-ahead, on `kdev` | — | say "go" to start the measured spike |
+
+Details for each gate are in the sections below.
+
+### (historical) Open items at the M2 boundary
+
 **No hard gates hit yet.** The run completed all of M1 (TASK 1.1–1.6) — green
 and pushed — and paused at the M2 boundary (not a gate; a deliberate stop before
 high-risk ML-parity work in a long session). The first gates appear at M5

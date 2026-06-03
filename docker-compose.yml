@@ -1,0 +1,34 @@
+# SVCS dashboard — server scenario (M4 TASK 4.2).
+#
+#   docker compose up --build
+#
+# Then open http://localhost:5000 and log in with the credentials below.
+# CHANGE THE DEFAULT PASSWORD before exposing this beyond localhost. Basic Auth
+# is plaintext on the wire — terminate TLS at a reverse proxy for real networks
+# (see docs/deployment_packaging.md).
+
+services:
+  svcs:
+    build: .
+    image: svcs:latest
+    container_name: svcs-dashboard
+    ports:
+      - "5000:5000"
+    environment:
+      # Dashboard Basic-Auth credentials (required for the 0.0.0.0 bind).
+      SVCS_DASHBOARD_USER: "${SVCS_DASHBOARD_USER:-operator}"
+      SVCS_DASHBOARD_PASSWORD: "${SVCS_DASHBOARD_PASSWORD:-changeme}"
+    volumes:
+      # Compressed output (mount your own storage / NAS path here).
+      - ./outputs:/app/outputs
+      # Drop-folder / source media to ingest (read-only).
+      - ./data:/app/data:ro
+    restart: unless-stopped
+    healthcheck:
+      # No -f: a 401 (auth challenge) still means the server is up and the auth
+      # guard is live, so any HTTP response counts as healthy.
+      test: ["CMD", "curl", "-sS", "-o", "/dev/null", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

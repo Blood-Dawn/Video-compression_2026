@@ -68,22 +68,36 @@ docker run -p 5000:5000 -v /camera/output:/app/outputs svcs:latest
 
 **Cons:**
 - Docker daemon itself must be approved on the target server
-- Container images can be large (2–4 GB with FFmpeg + Python + torch)
 - IronBank hardened base images add build complexity
 
-**Status:** Not implemented. Would require a `Dockerfile` and `docker-compose.yml`.
+**Status: IMPLEMENTED** (TASK 4.2). The repo ships a `Dockerfile` and
+`docker-compose.yml`. The image builds on the **slim ONNX path** (post-M2): object
+detection runs on ONNX Runtime, not torch. The built image is ~2 GB (Debian +
+apt ffmpeg with all codecs + onnxruntime + opencv and their transitive deps) —
+still well under the 4 GB+ a torch/CUDA image would be, and it could be trimmed
+further with a multi-stage build or ffmpeg's slimmer variants. FFmpeg comes from the distro
+(`apt install ffmpeg`, on PATH — `utils.ffmpeg` resolves it). Dependencies install
+from the committed `uv.lock` for reproducibility, and the `yolov8n.onnx` detection
+model is baked in.
 
-**Rough Dockerfile structure:**
-```dockerfile
-FROM python:3.11-slim
-RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
-WORKDIR /app
-COPY pyproject.toml uv.lock ./
-RUN pip install uv && uv sync --frozen
-COPY src/ ./src/
-EXPOSE 5000
-CMD ["uv", "run", "python", "src/gui/app.py", "--host", "0.0.0.0"]
+```bash
+# Compose (recommended) — set a real password first:
+SVCS_DASHBOARD_PASSWORD='a-long-passphrase' docker compose up --build
+# open http://localhost:5000  (log in with operator / your-password)
+
+# Or plain docker:
+docker build -t svcs:latest .
+docker run -p 5000:5000 \
+  -e SVCS_DASHBOARD_USER=operator -e SVCS_DASHBOARD_PASSWORD='…' \
+  -v "$PWD/outputs:/app/outputs" -v "$PWD/data:/app/data:ro" svcs:latest
 ```
+
+Because the container binds `0.0.0.0`, the TASK 4.4 auth policy applies: pass the
+`SVCS_DASHBOARD_USER` / `SVCS_DASHBOARD_PASSWORD` env vars (compose wires them
+through) or the container exits rather than serving an unauthenticated dashboard.
+Terminate TLS at a reverse proxy / ingress for anything past a trusted LAN. The
+artifacts are guarded by `tests/test_docker_artifacts.py` (static checks always;
+a real build+serve test under `SVCS_TEST_DOCKER=1`).
 
 ---
 

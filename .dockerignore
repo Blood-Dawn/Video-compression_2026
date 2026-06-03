@@ -1,0 +1,36 @@
+# Keep the build context small and reproducible. The image installs deps from
+# uv.lock and copies only the app source + the ONNX model.
+.git
+.venv
+venv
+__pycache__
+**/__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+
+# Build / packaging artifacts (the image builds its own env).
+build
+dist
+installer/build
+installer/dist
+tools/                # vendored Windows FFmpeg — the container uses apt ffmpeg
+*.spec
+
+# Bulk data and outputs are mounted at runtime, not baked in.
+data
+outputs
+drop
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.ts
+# ...but DO ship the detection model (it's small and required).
+!yolov8n.onnx
+
+# Local cruft
+.idea
+.vscode
+*.log
+node_modules

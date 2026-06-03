@@ -2318,12 +2318,12 @@ def api_hls_segment(camera_id: str, ts_file: str):
 #   POST /api/rtsp/push           – start FFmpeg looping a file into the server
 #   POST /api/rtsp/stop_push      – stop the FFmpeg push
 
+# _rtsp_mgr (the local MediaMTX server singleton) now lives in
+# gui.services.rtsp; the /api/rtsp/* routes below drive it.
 try:
-    from utils.rtsp_server import RtspServerManager
-except ModuleNotFoundError:
-    from src.utils.rtsp_server import RtspServerManager
-
-_rtsp_mgr = RtspServerManager(tools_dir=_ROOT / "tools")
+    from gui.services.rtsp import _rtsp_mgr
+except ModuleNotFoundError:  # pragma: no cover - import path shim
+    from src.gui.services.rtsp import _rtsp_mgr
 
 
 @app.route("/api/rtsp/status")

@@ -76,6 +76,12 @@ def _set_frozen_env() -> None:
         os.environ.setdefault("SVCS_BUNDLE_ROOT", str(_bundle_root()))
         if "--no-sync" not in sys.argv:
             sys.argv.append("--no-sync")
+        # The desktop install is single-user and local. Bind to localhost so the
+        # dashboard auth gate (which requires credentials for any non-localhost
+        # bind) does not refuse to start the double-click app. A user who wants
+        # LAN access can run the server scenario (Docker / source) instead.
+        if "--host" not in sys.argv:
+            sys.argv.extend(["--host", "127.0.0.1"])
 
 
 def main() -> int:

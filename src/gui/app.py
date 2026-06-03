@@ -1475,48 +1475,16 @@ def api_segments_cleanup_missing():
 
 
 # ── Archive query routes (Ashleyn's DB queries) ───────────────────────────────
-
-def _get_db_path() -> Path:
-    """Return the metadata.db path from the last-used config, or default."""
-    with _state_lock:
-        cfg = _status.get("config", {})
-    return Path(cfg.get("output_dir", str(_ROOT / "outputs"))) / "metadata.db"
-
-
-def _get_archive_db_path() -> Path:
-    """Return metadata.db from an explicit archive folder, defaulting to outputs/."""
-    archive_dir = request.args.get("archive_dir", "").strip()
-    if archive_dir:
-        return Path(archive_dir).expanduser().resolve() / "metadata.db"
-    return (_ROOT / "outputs" / "metadata.db").resolve()
-
-
-def _rows_to_segment_list(rows, base_dir: Path | None = None) -> list:
-    """Convert raw DB tuples to JSON-serialisable dicts."""
-    segs = []
-    for r in rows:
-        # schema: id, timestamp, camera_id, target_detected, roi_count,
-        #         file_size, duration, file_path, object_type
-        abs_path = Path(r[7])
-        if not abs_path.is_absolute() and base_dir is not None:
-            abs_path = base_dir / abs_path
-        abs_path = abs_path.resolve()
-        playable_url = None
-        if abs_path.exists() and abs_path.suffix.lower() in {".mp4", ".webm", ".mov", ".avi"}:
-            playable_url = f"/api/media?path={quote(str(abs_path))}"
-        segs.append({
-            "id": r[0],
-            "timestamp": r[1],
-            "camera_id": r[2],
-            "target_detected": bool(r[3]),
-            "roi_count": r[4],
-            "file_size_kb": round(r[5] / 1024, 1),
-            "duration_s": round(r[6], 1),
-            "file_path": r[7],
-            "object_type": r[8] if len(r) > 8 else "unknown",
-            "playable_url": playable_url,
-        })
-    return segs
+# _get_db_path / _get_archive_db_path / _rows_to_segment_list now live in
+# gui.services.db_helpers (imported below).
+try:
+    from gui.services.db_helpers import (
+        _get_db_path, _get_archive_db_path, _rows_to_segment_list,
+    )
+except ModuleNotFoundError:  # pragma: no cover - import path shim
+    from src.gui.services.db_helpers import (
+        _get_db_path, _get_archive_db_path, _rows_to_segment_list,
+    )
 
 
 @app.route("/api/query_segments")

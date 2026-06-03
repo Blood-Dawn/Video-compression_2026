@@ -95,7 +95,9 @@
 
     /* ─────────────── HEADER ─────────────── */
     header {
-      background: var(--surface);
+      /* FIX 3: pin the top bar opaque and above all scrolling content so no
+         header text bleeds through when a tab or the page scrolls. */
+      background-color: #10192a;   /* solid, never see-through */
       border-bottom: 1px solid var(--border);
       padding: 0 1.5rem;
       display: flex;
@@ -103,7 +105,8 @@
       justify-content: space-between;
       gap: 1.5rem;
       height: 56px;
-      position: sticky; top: 0; z-index: 100;
+      position: sticky; top: 0; z-index: 1000;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.55);
     }
     .logo {
       display: flex;

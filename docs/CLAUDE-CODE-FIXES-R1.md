@@ -36,7 +36,7 @@ Branch `app`. Most of these are UI; do not change backend route URLs unless a ta
 
 ## FIX 3 - Sticky top header (fix scroll bleed-through)
 
-- [ ] **What:** When scrolling, the top section's text shows through / overlaps content. Make the top header (SVCS title bar + tab nav) stay pinned on top, opaque, above scrolling content.
+- [x] **What:** When scrolling, the top section's text shows through / overlaps content. Make the top header (SVCS title bar + tab nav) stay pinned on top, opaque, above scrolling content. *(DONE: the header keeps position:sticky/top:0 but now has a forced solid opaque background-color (#10192a, never see-through), z-index raised 100 to 1000 so it sits above every in-flow and sticky-sub-header element, and a drop shadow for clear separation. tests/test_sticky_header.py guards sticky + z-index>=1000 + opaque (no alpha) so it cannot regress. Browser-verified via the Preview MCP at a short mobile viewport that forces document scroll: after scrolling 300px the header stays at top:0/bottom:56 fully opaque with content scrolling cleanly beneath it and no bleed-through; no console errors. Suite green: 883 passed.)*
 - **Do:** give the header `position: sticky` (or fixed) with an opaque background var, a high `z-index`, and ensure scrollable panels start below it (padding/top offset). No text from the header should be visible bleeding into scrolled content.
 - **Files:** `index.html` (the header/topbar CSS + the scroll container).
 - **Acceptance:** scroll every tab - header stays pinned and opaque, no bleed-through. Browser-verify.

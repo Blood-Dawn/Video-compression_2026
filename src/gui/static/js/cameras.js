@@ -80,6 +80,25 @@ function _renderCameras(cameras) {
   });
 }
 
+// Honest help for cloud-locked cameras (Ring/Nest/Arlo) with no RTSP/export:
+// point the operator at a local bridge. SVCS never touches the vendor cloud.
+function showBridgeHelp() {
+  const msg =
+    "Ring / Nest / Arlo have no RTSP stream. Two honest options:\n\n"
+    + "1. Export clips from the camera's app to a folder, then use the "
+    + "export/watch-folder path.\n"
+    + "2. Run a local bridge (Scrypted, Home Assistant, or Frigate) that "
+    + "re-exposes the camera as a local RTSP URL, then paste that URL above.\n\n"
+    + "SVCS never logs into or scrapes a vendor cloud — the bridge does, on "
+    + "your hardware. See docs/camera-ingestion.md for setup.";
+  if (typeof pushNotif === "function") {
+    pushNotif("Cloud-locked camera?", msg, "info", null, 12000);
+  } else {
+    _camStatus(msg);
+  }
+}
+window.showBridgeHelp = showBridgeHelp;
+
 async function discoverCameras() {
   _camStatus("Scanning the local network for ONVIF cameras…");
   const list = document.getElementById("camera-list");

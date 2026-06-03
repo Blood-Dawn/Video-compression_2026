@@ -96,12 +96,53 @@ and stays distinct from `cam8`.
 
 ## 3. Bridge ingestion (cloud-locked cameras)
 
-*Documented in the next task (M-CAM.3).* Short version: for Ring/Nest/Arlo with
-no RTSP and no useful export, run a local **bridge** — Home Assistant, Scrypted,
-or Frigate — that re-exposes the camera as a local RTSP stream. SVCS then ingests
-that stream exactly like any other RTSP camera (path 1). SVCS never talks to the
-vendor cloud; the bridge does, on your hardware, under your control.
+Some consumer cameras — **Ring, Nest, Arlo**, and similar — have **no RTSP
+stream and no useful local export**. Their video only leaves the device through
+the vendor's app and cloud. SVCS will **not** scrape a vendor cloud, log into
+your account, or screen-scrape an app: that's against their terms, fragile, and
+not something we'll ship.
+
+The honest, supported answer is a **local bridge**. A bridge is a separate piece
+of software you run on your own hardware that talks to the camera (often through
+the same APIs the vendor app uses, with *your* credentials, under *your*
+control) and **re-exposes it as a standard local RTSP stream**. SVCS then ingests
+that RTSP stream exactly like any other camera (Path 1 above). SVCS never touches
+the vendor cloud — the bridge does, on your machine.
+
+### What to expect (be realistic)
+
+- **It's extra setup.** You install and configure the bridge yourself; it's a
+  one-time job but it isn't one click.
+- **Coverage depends on the bridge, not on SVCS.** Whether your specific Ring/
+  Nest/Arlo model can be bridged — and how reliably — is determined by the
+  bridge project and the vendor's current API, both of which change over time.
+- **Latency and reliability vary.** A cloud-locked camera bridged to RTSP is
+  usually fine for recording/compression, but expect more lag and the occasional
+  reconnect compared with a native-RTSP camera.
+- **If the camera *can* export clips, prefer that** (Path 2). Export-folder
+  ingestion is simpler and more robust than bridging, and works offline.
+
+### Bridge options
+
+| Bridge | Good fit | Notes |
+|--------|----------|-------|
+| **[Scrypted](https://www.scrypted.app/)** | Ring, Nest, Arlo, HomeKit cameras | Purpose-built for re-exposing cameras over RTSP/RTMP/HomeKit; usually the smoothest path for cloud cams. |
+| **[Home Assistant](https://www.home-assistant.io/)** | You already run HA | Camera integrations + the `go2rtc`/WebRTC stack can publish an RTSP URL. |
+| **[Frigate](https://frigate.video/)** | NVR-style setups | Consumes RTSP and does its own detection; can also restream. Best when the camera is *already* RTSP and you want an NVR in front of SVCS. |
+
+### How to connect a bridged camera to SVCS
+
+1. Set up the bridge for your camera and confirm it gives you a working RTSP URL
+   (test it in [VLC](https://www.videolan.org/): *Open Network Stream →* paste
+   the `rtsp://…` URL).
+2. In SVCS, **Add camera** and paste that RTSP URL into the source field (or run
+   ONVIF discovery if the bridge advertises ONVIF).
+3. SVCS records and compresses it like any other RTSP camera.
+
+> **Summary:** SVCS supports exactly two honest paths for cloud-locked cameras —
+> **export their clips to a watch-folder (Path 2)**, or **bridge them to local
+> RTSP (Path 3)**. There is no vendor-cloud integration, by design.
 
 ---
 
-*Author: Bloodawn (KheivenD), 2026-06-03 (M-CAM TASK 2 — export-folder profiles).*
+*Author: Bloodawn (KheivenD), 2026-06-03 (M-CAM TASK 2 export-folder profiles; M-CAM TASK 3 bridge guide).*

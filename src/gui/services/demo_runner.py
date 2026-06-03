@@ -15,7 +15,9 @@ gui.logging_setup.
 Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — demo-runner extraction).
 """
 
+import json
 from pathlib import Path
+from urllib.parse import quote
 
 try:
     from gui.state import _demo_lock, _demo_state
@@ -25,6 +27,50 @@ except ModuleNotFoundError:                # pragma: no cover - import path shim
     from src.gui.state import _demo_lock, _demo_state
     from src.gui.logging_setup import log
     from src.gui.services.cpu_sampler import _start_cpu_sampler, _stop_cpu_sampler
+
+
+def _build_demo_result_from_manifest(manifest_path: Path) -> dict:
+    """Build the GUI demo result payload from a stitched demo manifest.
+
+    Reads the manifest.json written by run_all_demos() and assembles the dict
+    that /api/demo/status returns (verbatim, via the shared _demo_state) and
+    that static/js/demo.js's _demoNotifyDone() consumes. Required keys read by
+    the frontend: ``modes``, ``videos`` ({mode: {view: url|None}}),
+    ``split_screen`` (url|None) and ``dir`` (run folder name). ``metrics`` and
+    ``manifest_path`` are passed through for the dashboard demo viewer.
+
+    Mirrors the per-run shaping in routes/demo_bp.py::api_demo_history so a
+    just-finished run and a historical run present an identical structure.
+
+    Originally defined in gui/app.py; dropped during an earlier refactor, which
+    left _run_demo_thread calling an undefined name (NameError on any full demo
+    run). Restored here. -- 2026-06-02.
+    """
+    with open(manifest_path, encoding="utf-8") as f:
+        manifest = json.load(f)
+
+    videos: dict = {}
+    for mode, view_map in manifest.get("outputs", {}).items():
+        videos[mode] = {}
+        for view, file_path in view_map.items():
+            p = Path(file_path).resolve()
+            videos[mode][view] = f"/api/media?path={quote(str(p))}" if p.exists() else None
+
+    split_screen_url = None
+    stitched_dir = Path(manifest.get("stitched_dir", ""))
+    if stitched_dir.exists():
+        for candidate in stitched_dir.glob("demo_splitscreen*.mp4"):
+            split_screen_url = f"/api/media?path={quote(str(candidate.resolve()))}"
+            break
+
+    return {
+        "manifest_path": str(manifest_path),
+        "modes": manifest.get("modes", []),
+        "videos": videos,
+        "split_screen": split_screen_url,
+        "metrics": manifest.get("metrics", {}),
+        "dir": manifest_path.parent.name,
+    }
 
 
 def _run_demo_thread(config: dict) -> None:
@@ -124,13 +170,7 @@ def _run_demo_thread(config: dict) -> None:
 
     try:
         manifest_path = manifests[0]
-        # NOTE (pre-existing, carried verbatim in the TASK 1.2 refactor): the
-        # _build_demo_result_from_manifest helper this calls is not defined
-        # anywhere in the source tree, so this branch raises NameError if a
-        # full demo run reaches it. No test exercises it (demo tests only read
-        # /api/demo/status + /history). Preserved as-is to keep the refactor
-        # behavior-neutral; flagged separately for a real fix. -- Bloodawn, 2026-06-02
-        result = _build_demo_result_from_manifest(manifest_path)  # noqa: F821
+        result = _build_demo_result_from_manifest(manifest_path)
     except Exception as exc:
         _update(running=False, status="error", error=f"Could not read manifest: {exc}")
         return

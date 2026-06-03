@@ -51,22 +51,13 @@ dependencies = [
     # Testing
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
-    # YOLO smart detection filter.
-    # YOLOv8-nano classifies MOG2 bounding boxes so leaves/shadows are not
-    # recorded. Falls back to pass-through if this package is missing at
-    # runtime. On first use, downloads yolov8n.pt (~6 MB) automatically.
-    # License: AGPL-3.0. That's compatible with our open-source edition
-    # because we also ship the regular app under AGPL-3.0 (see LICENSE).
-    # Commercial-tier customers who can't comply with AGPL pay us through
-    # LICENSE-COMMERCIAL.md; that deal covers either an Ultralytics
-    # enterprise license sublicensed to them, or a swap to a permissive
-    # detector (MediaPipe / RT-DETR) which is on the v2 roadmap anyway.
-    "ultralytics>=8.0.0",
-    # PyTorch core for Real-ESRGAN enhancement (BSD-3) and YOLO above.
-    # Pinned to the CUDA 12.8 build via [tool.uv.sources] below; the CPU
-    # build is served by PyPI by default which breaks our enhancer GPU path.
-    "torch>=2.0.0",
-    "torchvision>=0.15.0",
+    # NOTE (M2 TASK 2.2): ultralytics / torch / torchvision moved OUT of the
+    # core dependencies into the optional [torch] extra below. The default
+    # (slim) install runs object detection on ONNX Runtime (onnxruntime, core)
+    # and has no PyTorch — which is what drops the installer from multi-GB to a
+    # few hundred MB (PLAN-V2 §6). torch is still pulled when you install
+    # [torch] (parity/export/the torch detector) or [enhance] (Real-ESRGAN,
+    # which depends on torch). Author: Bloodawn (KheivenD), 2026-06-03.
     # AES-256-GCM segment encryption (the ENCRYPT tab in the dashboard).
     # Was previously imported lazily in src/utils/encryption.py without
     # being declared here, so a fresh `uv sync` left users without it
@@ -105,6 +96,19 @@ dependencies = [
 onnx-export = [
     "onnx>=1.16.0,<1.18.0",
     "onnxslim>=0.1.0",
+]
+
+# PyTorch detector + model-export/parity stack (M2 TASK 2.2). The DEFAULT
+# (slim) install does NOT include this: object detection runs on ONNX Runtime
+# (onnxruntime, a core dep). Install with `--extra torch` for the PyTorch
+# object-detection backend, ONNX model export, the ONNX/torch parity test, or
+# development against the torch path. ultralytics is AGPL-3.0 (fine for our
+# AGPL app). torch/torchvision resolve to the CUDA 12.8 build via
+# [tool.uv.sources]. Author: Bloodawn (KheivenD), 2026-06-03.
+torch = [
+    "ultralytics>=8.0.0",
+    "torch>=2.0.0",
+    "torchvision>=0.15.0",
 ]
 
 # Super-resolution enhancement — only needed if using --enhance flag.

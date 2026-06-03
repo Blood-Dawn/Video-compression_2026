@@ -75,8 +75,13 @@ jobs:
       # (which already satisfies torch>=2.0.0) is kept instead of being
       # replaced by the multi-GB CUDA build. Everything else resolves from
       # PyPI as normal. No [plates] (easyocr/opencv conflict).
+      #
+      # [torch] is included because M2 TASK 2.2 moved torch/torchvision/
+      # ultralytics out of core into that extra (default install runs detection
+      # on ONNX Runtime). CI still exercises the torch path, so it installs the
+      # extra; the CPU torch from the step above already satisfies it.
       - name: Install project + extras
-        run: uv pip install -e ".[enhance,crash-reporting]" --no-sources
+        run: uv pip install -e ".[enhance,crash-reporting,torch]" --no-sources
 
       - name: Show key versions
         run: |

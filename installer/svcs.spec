@@ -92,12 +92,16 @@ datas = [
     (str(SRC / "gui" / "static"), "src/gui/static"),
 ]
 
-# YOLOv8-nano: 6 MB, optional. Ships with the bundle so first-run
-# detection works offline. ultralytics will auto-download from
-# Ultralytics' hub on first miss, but that requires internet.
-_yolo_pt = REPO_ROOT / "yolov8n.pt"
-if _yolo_pt.exists():
-    datas.append((str(_yolo_pt), "."))
+# YOLOv8-nano weights for the ONNX detector (M2 TASK 2.2). The slim build runs
+# detection on ONNX Runtime, so it ships yolov8n.onnx (~12 MB), NOT the torch
+# yolov8n.pt checkpoint (which is useless without the excluded torch). The
+# detector resolves <bundle>/yolov8n.onnx at runtime. If absent, detection
+# degrades to pass-through; TASK 2.4 turns these weights into an optional,
+# first-run-fetchable installer component. Export once with:
+#   yolo export model=yolov8n.pt format=onnx imgsz=640
+_yolo_onnx = REPO_ROOT / "yolov8n.onnx"
+if _yolo_onnx.exists():
+    datas.append((str(_yolo_onnx), "."))
 
 # Make sure the LICENSE text travels with the binary — required by AGPL.
 _license = REPO_ROOT / "LICENSE"
@@ -123,20 +127,16 @@ hiddenimports = [
     # module at a time (gui.app, then utils.db.schema, …).
     *_firstparty_hidden,
 
-    # Ultralytics ships hundreds of submodules; PyInstaller misses a
-    # few because they're imported via string lookup.
-    "ultralytics",
-    "ultralytics.models",
-    "ultralytics.models.yolo",
-    "ultralytics.engine",
-    "ultralytics.utils",
-    "ultralytics.cfg",
-
-    # torch dynamically imports its backends. Without these, frozen
-    # builds explode with "No module named torch._C._cpu" on startup.
-    "torch",
-    "torch._C",
-    "torchvision",
+    # M2 TASK 2.2: the SLIM default build runs object detection on ONNX
+    # Runtime, NOT PyTorch — so ultralytics / torch / torchvision are NO LONGER
+    # hiddenimports here and are actively EXCLUDED below. onnxruntime is the
+    # inference engine instead. (gui.app imports nothing torch eagerly — the
+    # detector/enhancer import torch lazily — so the frozen app starts fine
+    # without it; verified by an import audit.) Author: Bloodawn (KheivenD),
+    # 2026-06-03.
+    "onnxruntime",
+    "onnxruntime.capi",
+    "onnxruntime.capi._pybind_state",
 
     # Cryptography backends. (The old hazmat.backends.openssl path was
     # removed in cryptography >= 42; the default backend is auto-loaded.)
@@ -209,6 +209,23 @@ excludes = [
     # weights and call them. Saves ~300 MB.
     "sympy",
 
+    # ── M2 TASK 2.2: PyTorch + the torch detector/enhancer stack ──────────
+    # The slim default build runs detection on ONNX Runtime and ships no torch.
+    # Excluding the whole PyTorch + CUDA + ultralytics + Real-ESRGAN stack is
+    # what drops the bundle from multi-GB to a few hundred MB. The runtime code
+    # imports these only lazily and degrades gracefully (ONNX detection; bicubic
+    # enhancement) when absent, so the frozen app starts and serves fine.
+    # Author: Bloodawn (KheivenD), 2026-06-03.
+    "torch",
+    "torchvision",
+    "torchaudio",
+    "ultralytics",
+    "basicsr",
+    "realesrgan",
+    "gfpgan",
+    "facexlib",
+    "nvidia",                 # nvidia-* CUDA runtime wheels pulled by CUDA torch
+    "triton",
     # torch's own test machinery — never needed at runtime.
     "torch.testing",
     "torch.utils.tensorboard",

@@ -262,18 +262,19 @@ class ObjectFilter:
         min_box_px: int = _MIN_CLASSIFY_PX,
         use_suppression: bool = True,
         suppress_after: int = 30,
-        backend: str = "torch",
+        backend: str = "auto",
     ) -> None:
         self.confidence = confidence
         self.target_classes = target_classes if target_classes is not None else DEFAULT_TARGET_CLASSES
         self.min_box_px = min_box_px
         self.use_suppression = use_suppression
         self.suppress_after = suppress_after
-        # Inference backend selector (M2 TASK 2.1):
-        #   "torch" — ultralytics/PyTorch (default during the migration).
-        #   "onnx"  — ONNX Runtime (slim install path; TASK 2.2 flips the
-        #             default once parity is proven and torch goes optional).
-        #   "auto"  — ONNX if its model+runtime are available, else torch.
+        # Inference backend selector (M2 TASK 2.1/2.2):
+        #   "auto"  — DEFAULT (TASK 2.2): ONNX Runtime if its model+runtime are
+        #             available, else PyTorch. The slim install has no torch, so
+        #             this resolves to ONNX; a torch-only env resolves to torch.
+        #   "onnx"  — force ONNX Runtime (slim install path).
+        #   "torch" — force ultralytics/PyTorch.
         # The detector interface is backend-agnostic, so a future RT-DETR /
         # permissive detector slots in here without touching the pipeline.
         self.backend = str(backend or "torch").lower()

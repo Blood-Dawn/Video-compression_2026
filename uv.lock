@@ -3909,10 +3909,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "scikit-image" },
     { name = "scipy" },
-    { name = "torch" },
-    { name = "torchvision" },
     { name = "tqdm" },
-    { name = "ultralytics" },
 ]
 
 [package.optional-dependencies]
@@ -3929,6 +3926,11 @@ onnx-export = [
 ]
 plates = [
     { name = "easyocr" },
+]
+torch = [
+    { name = "torch" },
+    { name = "torchvision" },
+    { name = "ultralytics" },
 ]
 
 [package.metadata]
@@ -3957,12 +3959,12 @@ requires-dist = [
     { name = "scikit-image", specifier = ">=0.21.0" },
     { name = "scipy", specifier = ">=1.11.0" },
     { name = "sentry-sdk", marker = "extra == 'crash-reporting'", specifier = ">=2.0.0" },
-    { name = "torch", specifier = ">=2.0.0", index = "https://download.pytorch.org/whl/cu128" },
-    { name = "torchvision", specifier = ">=0.15.0", index = "https://download.pytorch.org/whl/cu128" },
+    { name = "torch", marker = "extra == 'torch'", specifier = ">=2.0.0", index = "https://download.pytorch.org/whl/cu128" },
+    { name = "torchvision", marker = "extra == 'torch'", specifier = ">=0.15.0", index = "https://download.pytorch.org/whl/cu128" },
     { name = "tqdm", specifier = ">=4.65.0" },
-    { name = "ultralytics", specifier = ">=8.0.0" },
+    { name = "ultralytics", marker = "extra == 'torch'", specifier = ">=8.0.0" },
 ]
-provides-extras = ["onnx-export", "enhance", "plates", "crash-reporting"]
+provides-extras = ["onnx-export", "torch", "enhance", "plates", "crash-reporting"]
 
 [[package]]
 name = "wcwidth"

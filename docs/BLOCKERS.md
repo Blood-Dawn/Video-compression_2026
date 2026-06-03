@@ -16,29 +16,31 @@ and pushed — and paused at the M2 boundary (not a gate; a deliberate stop befo
 high-risk ML-parity work in a long session). The first gates appear at M5
 (publishing) and M5b (signing).
 
-### Execution paused: start of M2 (TASK 2.1, ONNX backend)
+### Execution status: M2 TASK 2.1 + 2.2 DONE
 
-Where the next session resumes, with the scouting already done:
+- **TASK 2.1 (ONNX detection backend):** done + parity-tested. Real-ESRGAN ONNX
+  deferred (see `docs/onnx-models.md`).
+- **TASK 2.2 (default ONNX, torch optional):** done. torch/torchvision/
+  ultralytics → `[torch]` extra; `ObjectFilter` default backend is now
+  onnx-first; `svcs.spec` excludes torch/CUDA/Real-ESRGAN. **Slim bundle
+  measured: 4632 MB → 339 MB**, smoke green, ONNX detection bundled. Suite green
+  (662). The test runner + CI add `--extra torch`.
 
-- **Deps:** `onnxruntime` and `onnx` are NOT installed and NOT in `pyproject.toml`.
-  Add `onnxruntime` to core deps (inference runtime) and `onnx` (+`onnxslim`) for
-  the one-time export. `uv sync` will then provision them. Note: ad-hoc
-  `uv pip install` packages get wiped by the next `uv sync` (this bit the
-  PyInstaller build — see TASK 1.4 commit), so put real deps in `pyproject.toml`.
-- **Model:** `yolov8n.pt` (6.5 MB) is present at the repo root; `ultralytics`
-  8.4.45 and `torch` 2.11.0+cu128 are installed, so `yolo export
-  model=yolov8n.pt format=onnx imgsz=640` will produce `yolov8n.onnx` (a build
-  artifact — do NOT commit it; ship it as the optional weights component).
-- **Parity clips:** the CDnet sample mp4s ARE present locally under
-  `data/samples/cdnet_mp4/` (e.g. `baseline/baseline_highway.mp4` has vehicles),
-  so the TASK 2.1 parity test can run locally. They are git-LFS and absent on CI,
-  so gate that test with a skip when the clip is missing.
-- **Interface to match:** `src/detection/object_filter.py` —
-  `ObjectFilter._classify_box_labels()` runs the model on a crop and collects
-  COCO class names. Add `src/detection/onnx_backend.py` (a `YoloOnnxDetector`
-  doing letterbox-640 preprocess → onnxruntime → decode (1,84,8400) + NMS → class
-  names), then make `ObjectFilter` backend-selectable (`backend="torch"|"onnx"|
-  "auto"`), keeping torch the default during transition (TASK 2.2 flips it).
+**Next: TASK 2.3 (bundle LGPL FFmpeg) and TASK 2.4 (Inno Setup installer).**
+- 2.3 has no deps (parallel-able): vendor a pinned LGPL FFmpeg binary, resolve
+  ffmpeg from the bundle first then PATH, add a `docs/ffmpeg-licensing.md`
+  (LGPL/GPL/x264/x265 matrix), and a test asserting the app finds the bundled
+  ffmpeg when PATH lacks it. The current code shells out to `ffmpeg` on PATH
+  (e.g. roi_encoder, hls_runner) — add a single resolver in `src/utils/` and
+  route those callsites through it.
+- 2.4 (depends 2.2, 2.3, 1.6): write `installer/svcs.iss` (Inno Setup) with an
+  optional ONNX-weights component; `iscc` is Windows-only and not in CI.
+
+**Env gotcha hit during 2.2:** killing python/uv mid-operation can leave
+`onnxruntime-*.dist-info` without its package dir, so `uv sync` thinks it's
+installed and the build omits it. Fix: `uv pip install --reinstall onnxruntime`;
+always confirm `import onnxruntime` before a build. (Also: a `uv sync` wipes the
+ad-hoc PyInstaller; build.ps1 reinstalls it via `uv pip`.)
 
 ---
 

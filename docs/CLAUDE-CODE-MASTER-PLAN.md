@@ -95,6 +95,13 @@ Design authority: `docs/REFACTOR-PLAN-gui-app.md`. Hard constraints recap: keep 
   **Acceptance:** mode0/1 encode H.264, mode2/3 encode AV1 when codec is "auto"; explicit codec overrides; suite green. (Validate outputs with ffprobe, not cv2 — AV1 decode.)
   **Risks:** the GUI default change touches the codec-default test; update it deliberately. Don't change `FALLBACK_CODEC` behavior (still kicks in when ffmpeg lacks AV1 at encoder construction).
 
+- [ ] **TASK 1.7 — dedicated "Upload Video" topbar tab (owner request, 2026-06-02).** Depends: 1.5 (JS split, done). **Independent of M2–M5b — slot it in after the current task; do not reorder/restart M2 work for it.**
+  **Goal:** the video-upload UI gets its own top-level tab in the dashboard topbar, positioned **immediately after Home**. New nav order: **HOME · UPLOAD · METRICS · SEARCH · ENCRYPT**.
+  **Files:** `src/gui/templates/index.html` (the `<nav class="tab-nav">` buttons ~line 2602, a new `tab-page` div, and the `.tab-btn[data-tab="upload"].active` CSS rule), the JS that owns `switchTab()` and the upload zone (`src/gui/static/js/ui.js` / `files.js`, or a new `upload.js`), `src/gui/static/js/strings.js` for the label.
+  **Do:** add a `tab-btn data-tab="upload"` button labelled **UPLOAD** right after the `home` button; create `<div id="tab-upload" class="tab-page">` and move the existing upload zone (the "Click to upload a video" dropzone + SAVE-TO + advanced server-file-path + the SOURCE controls) into it. Wire `switchTab('upload')` and give the tab its active-color CSS rule (pick an unused accent, consistent with the others). The Home tab keeps live status/preview; it may keep a small "Upload a video →" shortcut that switches to the Upload tab, but the primary upload UI lives in the Upload tab now.
+  **Acceptance:** topbar shows HOME · UPLOAD · METRICS · SEARCH · ENCRYPT with Upload second; clicking Upload reveals the upload panel; uploading still works end-to-end (the `/api/upload` route and file picker are unchanged — this is frontend-only). Browser-verify the tab switches and an upload succeeds. Suite stays green; if any test asserts the tab set/order, update it. Add a lightweight assertion (e.g. in a gui test or a static-HTML check) that the `data-tab="upload"` nav button exists and precedes `metrics`.
+  **Risks:** frontend-only, low risk. Don't break the four-quadrant demo or the Home preview player; keep the upload wiring (dropzone → `/api/upload`) intact when relocating it. No backend route changes (so blueprint/route-count tests stay at 48).
+
 ---
 
 ## M2 — Slim the installer (PyTorch → ONNX, bundle FFmpeg, Inno Setup)
@@ -107,7 +114,7 @@ Goal: installer download 2.5–4.7 GB → ~400–600 MB **without a rewrite** (P
   **Acceptance:** a parity test asserts ONNX detection boxes match the torch backend within an agreed tolerance (box IoU / count) on `data/samples/cdnet_mp4/...`. Suite green. Models stored/documented as an optional component, not committed binaries.
   **Risks:** Real-ESRGAN ONNX export is finicky (dynamic shapes/custom ops). If x4plus won't export cleanly, ship **detection-on-ONNX first**, enhancement as a follow-up — document the blocker, don't block the milestone.
 
-- [ ] **TASK 2.2 — default to ONNX; make torch optional; shrink exclude list.** Depends: 2.1.
+- [x] **TASK 2.2 — default to ONNX; make torch optional; shrink exclude list.** Depends: 2.1. *(torch/torchvision/ultralytics → `[torch]` extra; ObjectFilter default → onnx-first; svcs.spec excludes torch/CUDA/Real-ESRGAN; slim bundle **4632 MB → 339 MB**, smoke green — docs/build-metrics.md.)*
   **Files:** `pyproject.toml`, `installer/svcs.spec`, new `docs/build-metrics.md`.
   **Do:** default install path uses ONNX Runtime; move `torch`/`torchvision`/`ultralytics` to an optional `[torch]` extra (parity/export only). Exclude torch/CUDA from the casual bundle in `svcs.spec`. Record measured unpacked bundle size in `docs/build-metrics.md`.
   **Acceptance:** default build ships no torch; smoke test passes; recorded size drops sharply from the 4.7 GB first build.

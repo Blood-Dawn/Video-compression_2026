@@ -42,11 +42,15 @@ if (-not $NoSync) {
     # test files fail at import). See docs/test-baseline.md "OpenCV / easyocr
     # conflict". Plate-reader tests are gated with importorskip and validated in a
     # separate environment until the dependency is fixed (TASK 0.3b).
+    # --extra torch: as of M2 TASK 2.2 torch/torchvision/ultralytics are an
+    # optional extra (the default install runs detection on ONNX Runtime). The
+    # test env still installs them so the torch detector backend, the ONNX/torch
+    # parity test, and the enhancement path are all exercised.
     if ($WithPlates) {
         Write-Host "    WARNING: --WithPlates pulls easyocr; this currently breaks cv2." -ForegroundColor Yellow
-        uv sync --extra enhance --extra crash-reporting --extra plates
+        uv sync --extra enhance --extra crash-reporting --extra torch --extra plates
     } else {
-        uv sync --extra enhance --extra crash-reporting
+        uv sync --extra enhance --extra crash-reporting --extra torch
     }
 
     Write-Host "==> Sanity-checking OpenCV (cv2 must be whole)..." -ForegroundColor Cyan

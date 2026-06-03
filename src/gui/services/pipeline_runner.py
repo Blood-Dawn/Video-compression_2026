@@ -92,6 +92,52 @@ def _patch_encoder(enc_obj):
     return enc_obj
 
 
+# ── Opt-in usage stats (TASK 5.2) ─────────────────────────────────────────────
+
+def _ingestion_path(input_source) -> str:
+    """Classify the source into a coarse, non-identifying ingestion category."""
+    s = str(input_source).strip().lower()
+    if s.startswith("rtsp://"):
+        return "rtsp"
+    # numeric (webcam index), http(s), or a local path all fall under "file"
+    # here — we deliberately don't distinguish further (no path detail leaves).
+    return "file"
+
+
+def _record_encode_stat(config: dict, success: bool, error: BaseException = None) -> None:
+    """Record an anonymous encode outcome IF the user opted in (else no-op).
+
+    Only categorical, non-identifying fields leave: preset, mode, codec, the
+    success flag, an error *category*, and the ingestion path. usage_stats
+    re-validates and scrubs everything; this never raises.
+    """
+    try:
+        try:
+            from utils import usage_stats
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.utils import usage_stats
+        category = "none"
+        if not success:
+            name = type(error).__name__.lower() if error is not None else ""
+            if "timeout" in name:
+                category = "timeout"
+            elif any(k in name for k in ("io", "os", "file", "permission")):
+                category = "io"
+            else:
+                category = "encode"
+        usage_stats.record_event(
+            "encode",
+            preset=config.get("preset"),
+            mode=config.get("mode", "mode0"),
+            codec=config.get("codec") or "auto",
+            success=bool(success),
+            error_category=category,
+            ingestion_path=_ingestion_path(config.get("input_source", "")),
+        )
+    except Exception:  # noqa: BLE001 - telemetry must never affect the pipeline
+        pass
+
+
 # ── Pipeline thread runner ────────────────────────────────────────────────────
 
 def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
@@ -178,11 +224,13 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             crf=config.get("crf"),
             background_crf=config.get("background_crf"),
         )
+        _record_encode_stat(config, success=True)
 
     except Exception as exc:
         log.error(f"Pipeline error: {exc}", exc_info=True)
         with _state_lock:
             _status["error"] = str(exc)
+        _record_encode_stat(config, success=False, error=exc)
     finally:
         # Always restore monkey patches, even if run_pipeline raised.
         try:

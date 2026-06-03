@@ -80,11 +80,13 @@ EXPECTED = {
     "/api/encrypt": "encryption",
     "/api/cameras/discover": "cameras",
     "/api/cameras/rtsp_url": "cameras",
+    "/api/usage_stats": "usage",
+    "/api/usage_stats/consent": "usage",
 }
 
 EXPECTED_BLUEPRINTS = {
     "ui", "sse", "metrics", "presets", "encryption", "plates",
-    "queries", "rtsp", "demo", "hls", "files", "pipeline", "cameras",
+    "queries", "rtsp", "demo", "hls", "files", "pipeline", "cameras", "usage",
 }
 
 
@@ -94,7 +96,7 @@ def _rules():
 
 def test_route_count():
     rules = _rules()
-    assert len(rules) == 52, f"expected 52 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 54, f"expected 54 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_twelve_blueprints_registered():

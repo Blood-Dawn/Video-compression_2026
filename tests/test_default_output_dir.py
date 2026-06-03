@@ -42,6 +42,15 @@ def _import_app():
     return app
 
 
+def _cloud_mod():
+    # TASK 1.2: _default_output_dir + the cloud-root detectors moved out of
+    # gui.app into gui.services.cloud_detection. _default_output_dir resolves
+    # _detect_cloud_root via that module's globals, so the cloud-opt-in tests
+    # must patch it there, not on gui.app (where it's only a re-export).
+    from gui.services import cloud_detection
+    return cloud_detection
+
+
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
 
@@ -49,6 +58,12 @@ def _import_app():
 def app_mod():
     """Fresh import of gui.app."""
     return _import_app()
+
+
+@pytest.fixture
+def cloud_mod():
+    """The cloud_detection service module — home of _detect_cloud_root."""
+    return _cloud_mod()
 
 
 @pytest.fixture
@@ -104,39 +119,39 @@ class TestPlatformVideosDir:
 
 class TestCloudOptIn:
 
-    def test_cloud_not_used_when_flag_off(self, app_mod, reset_state):
+    def test_cloud_not_used_when_flag_off(self, app_mod, cloud_mod, reset_state):
         with app_mod._state_lock:
             app_mod._status["config"] = {"prefer_cloud_output": False}
 
         # Even if cloud detection would succeed, we must not return its path
         fake_cloud = Path("/fake/cloud/root")
         with mock.patch.object(
-            app_mod, "_detect_cloud_root",
+            cloud_mod, "_detect_cloud_root",
             return_value=(fake_cloud, "OneDrive", "https://example.com"),
         ):
             result = app_mod._default_output_dir()
         assert "fake/cloud" not in result.replace("\\", "/")
 
-    def test_cloud_used_when_flag_on(self, app_mod, reset_state, tmp_path):
+    def test_cloud_used_when_flag_on(self, app_mod, cloud_mod, reset_state, tmp_path):
         with app_mod._state_lock:
             app_mod._status["config"] = {"prefer_cloud_output": True}
 
         fake_cloud = tmp_path / "fake_cloud_root"
         fake_cloud.mkdir()
         with mock.patch.object(
-            app_mod, "_detect_cloud_root",
+            cloud_mod, "_detect_cloud_root",
             return_value=(fake_cloud, "OneDrive", "https://example.com"),
         ):
             result = app_mod._default_output_dir()
-        # Cloud subfolder name comes from _CLOUD_SUBFOLDER constant in app.py
+        # Cloud subfolder name comes from the _CLOUD_SUBFOLDER constant (gui.state)
         assert str(fake_cloud) in result
 
-    def test_cloud_flag_on_but_detection_fails(self, app_mod, reset_state):
+    def test_cloud_flag_on_but_detection_fails(self, app_mod, cloud_mod, reset_state):
         with app_mod._state_lock:
             app_mod._status["config"] = {"prefer_cloud_output": True}
 
         with mock.patch.object(
-            app_mod, "_detect_cloud_root",
+            cloud_mod, "_detect_cloud_root",
             return_value=(None, None, None),
         ):
             result = app_mod._default_output_dir()

@@ -760,8 +760,11 @@ class TestDefaultOutputDir:
         cloud.mkdir()
         with gui_module._state_lock:
             gui_module._status["config"]["prefer_cloud_output"] = True
+        # TASK 1.2: _default_output_dir + _detect_cloud_root live in
+        # gui.services.cloud_detection now; patch the detector there so the
+        # call inside _default_output_dir (resolved via that module) sees it.
         monkeypatch.setattr(
-            gui_module, "_detect_cloud_root",
+            "gui.services.cloud_detection._detect_cloud_root",
             lambda: (cloud, "FakeOneDrive", "https://example/test"),
         )
         result = gui_module._default_output_dir()
@@ -772,8 +775,10 @@ class TestDefaultOutputDir:
         # the default must fall through to the platform videos folder.
         self._clear_persisted()
         fake_videos = tmp_path / "Videos" / "SVCS"
+        # _detect_cloud_root lives in the cloud_detection service (TASK 1.2);
+        # not opted in here so it is never called, but patch the real home.
         monkeypatch.setattr(
-            gui_module, "_detect_cloud_root",
+            "gui.services.cloud_detection._detect_cloud_root",
             lambda: (tmp_path / "FakeOneDrive", "FakeOneDrive", "https://example/test"),
         )
         monkeypatch.setattr(gui_module._paths, "default_videos_dir", lambda: fake_videos)

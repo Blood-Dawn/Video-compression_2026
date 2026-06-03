@@ -47,34 +47,52 @@ SUPPORTED_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".ts", ".mts", ".m2ts"}
 # E.g. "clip.mp4" -> "clip.mp4.ingested"
 INGESTED_SUFFIX = ".ingested"
 
+# In-progress marker written just before encoding starts and removed on success.
+# If the daemon crashes mid-encode the marker survives; on the next scan we treat
+# the file as interrupted (not ingested) and retry it — explicit crash-resume.
+# E.g. "clip.mp4" -> "clip.mp4.processing"
+PROCESSING_SUFFIX = ".processing"
+
 
 def _sanitize_camera_id(name: str) -> str:
     """Strip unsafe characters from a camera ID (alphanumeric, _ and - only)."""
     return re.sub(r"[^a-zA-Z0-9_-]", "_", name)
 
 
-def _is_fully_written(path: Path, settle_seconds: float = 1.0) -> bool:
+def _is_fully_written(
+    path: Path,
+    settle_seconds: float = 1.0,
+    stable_checks: int = 2,
+) -> bool:
     """
-    Return True only if the file size has stopped growing.
+    Return True only if the file size is non-zero and has stopped growing.
 
-    Body cameras sometimes copy files slowly. We wait one poll cycle and
-    check that the file size is stable before ingesting, so we never try
-    to encode a partially-written file.
+    Cameras, NAS sync clients and network copies write files incrementally and
+    can even pause mid-copy. A single before/after comparison can be fooled by a
+    copy that happens to pause across one poll. We instead require the size to be
+    identical across ``stable_checks`` consecutive polls spaced ``settle_seconds``
+    apart; any change (or a zero size) means "still writing" and we return False,
+    so the caller retries on the next scan cycle.
 
     Args:
         path: Path to the video file.
-        settle_seconds: How long to wait between size checks.
+        settle_seconds: Seconds to wait between size checks.
+        stable_checks: Number of consecutive unchanged reads required (>=1).
 
     Returns:
-        True if the file size is non-zero and stable.
+        True if the file size is non-zero and stable across every check.
     """
     try:
-        size_before = path.stat().st_size
-        if size_before == 0:
+        size = path.stat().st_size
+        if size == 0:
             return False
-        time.sleep(settle_seconds)
-        size_after = path.stat().st_size
-        return size_before == size_after
+        for _ in range(max(1, stable_checks)):
+            time.sleep(settle_seconds)
+            new_size = path.stat().st_size
+            if new_size != size or new_size == 0:
+                return False
+            size = new_size
+        return True
     except OSError:
         return False
 
@@ -88,6 +106,65 @@ def _mark_ingested(video_path: Path) -> None:
     """Write a sentinel file next to the video so it is never processed again."""
     sentinel = video_path.with_suffix(video_path.suffix + INGESTED_SUFFIX)
     sentinel.touch()
+
+
+def _processing_path(video_path: Path) -> Path:
+    """Path of the in-progress marker for a video."""
+    return video_path.with_suffix(video_path.suffix + PROCESSING_SUFFIX)
+
+
+def _mark_processing(video_path: Path) -> None:
+    """Write the in-progress marker (encode about to start)."""
+    _processing_path(video_path).touch()
+
+
+def _clear_processing(video_path: Path) -> None:
+    """Remove the in-progress marker (encode finished or being retried)."""
+    try:
+        _processing_path(video_path).unlink()
+    except OSError:
+        pass
+
+
+def _was_interrupted(video_path: Path) -> bool:
+    """True if a prior encode of this (not-yet-ingested) file was interrupted."""
+    return _processing_path(video_path).exists() and not _already_ingested(video_path)
+
+
+def _resolve_encode_config(video_path: Path, auto_preset: bool, preset):
+    """Resolve the per-file encode parameters for run_pipeline.
+
+    If an explicit ``preset`` key is given, use it. Else if ``auto_preset`` is
+    set, run rule-based content detection (TASK 3.2) on the clip and use the
+    recommended preset. Detection failures degrade to the pipeline defaults (an
+    empty dict) so ingestion never blocks on a flaky probe.
+
+    Returns:
+        (kwargs dict for run_pipeline, chosen preset key or None)
+    """
+    key = preset
+    if auto_preset and not key:
+        try:
+            from pipeline.content_detect import detect_content
+            key = detect_content(str(video_path)).preset
+        except Exception as exc:  # detection is best-effort
+            log.warning("Preset auto-detect failed for %s: %s", video_path.name, exc)
+            key = None
+    if not key:
+        return {}, None
+    try:
+        from pipeline.presets import resolve_preset
+        cfg = resolve_preset(key)
+    except Exception as exc:  # pragma: no cover - defensive
+        log.warning("Could not resolve preset %r: %s", key, exc)
+        return {}, None
+    return {
+        "mode": cfg["mode"],
+        "crf": cfg["crf"],
+        "background_crf": cfg["background_crf"],
+        "codec": cfg["codec"],
+        "object_filter": cfg["object_filter"],
+    }, key
 
 
 def _build_camera_id(video_path: Path, prefix: str) -> str:
@@ -112,14 +189,26 @@ def scan_and_ingest(
     segment_seconds: int = 60,
     warmup_frames: int = 120,
     dry_run: bool = False,
+    settle_seconds: float = 1.0,
+    stable_checks: int = 2,
+    auto_preset: bool = False,
+    preset=None,
 ) -> int:
     """
     Scan watch_dir once for new video files and ingest any that are found.
 
     Skips files that:
-      - Have already been ingested (sentinel file exists).
-      - Are still being written (file size is still growing).
+      - Have already been ingested (``.ingested`` sentinel exists) — dedupe.
+      - Are still being written (size not stable across ``stable_checks`` polls).
       - Have unsupported extensions.
+
+    Crash-resume: a ``.processing`` marker is written immediately before encoding
+    and removed on success. A file that still carries that marker (without an
+    ``.ingested`` sentinel) was interrupted by a crash and is retried.
+
+    Preset auto-detection: when ``auto_preset`` is set (and no explicit
+    ``preset``), each clip is analyzed (TASK 3.2) and encoded with the
+    recommended surveillance preset.
 
     Args:
         watch_dir: Directory to scan for new video files.
@@ -129,6 +218,10 @@ def scan_and_ingest(
         segment_seconds: Segment duration passed to the pipeline.
         warmup_frames: Warmup frames passed to the pipeline.
         dry_run: If True, detect files but skip encoding (for testing).
+        settle_seconds: Seconds between size-stability checks.
+        stable_checks: Consecutive unchanged size reads required before ingest.
+        auto_preset: Auto-detect a preset per file (TASK 3.2).
+        preset: Explicit preset key to use for every file (overrides auto_preset).
 
     Returns:
         Number of files ingested in this scan.
@@ -148,7 +241,10 @@ def scan_and_ingest(
     log.info(f"Found {len(candidates)} new file(s) in {watch_dir}")
 
     for video_path in candidates:
-        if not _is_fully_written(video_path):
+        if _was_interrupted(video_path):
+            log.info(f"Resuming after interrupted encode: {video_path.name}")
+
+        if not _is_fully_written(video_path, settle_seconds, stable_checks):
             log.info(f"Skipping (still writing): {video_path.name}")
             continue
 
@@ -161,6 +257,11 @@ def scan_and_ingest(
             ingested_count += 1
             continue
 
+        encode_kwargs, chosen = _resolve_encode_config(video_path, auto_preset, preset)
+        if chosen:
+            log.info(f"  preset: {chosen} ({encode_kwargs.get('mode')})")
+
+        _mark_processing(video_path)
         try:
             from pipeline.pipeline import run_pipeline
             run_pipeline(
@@ -170,11 +271,15 @@ def scan_and_ingest(
                 segment_seconds=segment_seconds,
                 bg_method=bg_method,
                 warmup_frames=warmup_frames,
+                **encode_kwargs,
             )
             _mark_ingested(video_path)
+            _clear_processing(video_path)
             ingested_count += 1
             log.info(f"Done: {video_path.name}")
         except Exception as exc:
+            # Leave the .processing marker in place: the next scan logs a resume
+            # and retries this file rather than silently dropping it.
             log.error(f"Failed to ingest {video_path.name}: {exc}")
 
     return ingested_count
@@ -189,6 +294,10 @@ def run_watchfolder(
     segment_seconds: int = 60,
     warmup_frames: int = 120,
     dry_run: bool = False,
+    settle_seconds: float = 1.0,
+    stable_checks: int = 2,
+    auto_preset: bool = False,
+    preset=None,
 ) -> None:
     """
     Run the watchfolder daemon loop indefinitely.
@@ -217,6 +326,10 @@ def run_watchfolder(
     log.info(f"Formats  : {', '.join(sorted(SUPPORTED_EXTENSIONS))}")
     if dry_run:
         log.info("DRY RUN mode. No encoding will occur.")
+    if auto_preset:
+        log.info("Auto-preset: content detection chooses a preset per file.")
+    elif preset:
+        log.info(f"Preset    : {preset} (applied to every file)")
 
     total_ingested = 0
 
@@ -230,6 +343,10 @@ def run_watchfolder(
                 segment_seconds=segment_seconds,
                 warmup_frames=warmup_frames,
                 dry_run=dry_run,
+                settle_seconds=settle_seconds,
+                stable_checks=stable_checks,
+                auto_preset=auto_preset,
+                preset=preset,
             )
             total_ingested += count
             if count:
@@ -302,6 +419,31 @@ if __name__ == "__main__":
         action="store_true",
         help="Detect files but do not encode (for testing)",
     )
+    parser.add_argument(
+        "--stable-checks",
+        type=int,
+        default=2,
+        help=(
+            "Consecutive unchanged size reads required before a file is "
+            "considered fully written (default: 2). Raise for slow NAS sync."
+        ),
+    )
+    parser.add_argument(
+        "--settle",
+        type=float,
+        default=1.0,
+        help="Seconds between size-stability checks (default: 1.0)",
+    )
+    parser.add_argument(
+        "--auto-preset",
+        action="store_true",
+        help="Auto-detect a surveillance preset per file (content analysis).",
+    )
+    parser.add_argument(
+        "--preset",
+        default=None,
+        help="Apply a named preset to every file (overrides --auto-preset).",
+    )
     args = parser.parse_args()
 
     run_watchfolder(
@@ -313,4 +455,8 @@ if __name__ == "__main__":
         segment_seconds=args.segment,
         warmup_frames=args.warmup,
         dry_run=args.dry_run,
+        settle_seconds=args.settle,
+        stable_checks=args.stable_checks,
+        auto_preset=args.auto_preset,
+        preset=args.preset,
     )

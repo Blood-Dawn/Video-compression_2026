@@ -181,7 +181,7 @@ Honest split (PLAN-V2 §2/§6 Pushback 4): RTSP/ONVIF cameras ingest directly; c
 
 ## M4 — Self-host hardening
 
-- [ ] **TASK 4.1 — harden watch-folder automation.** Depends: 1.3, 3.1.
+- [x] **TASK 4.1 — harden watch-folder automation.** Depends: 1.3, 3.1. *(watchfolder.py: partial-write detection now requires size stable across N consecutive polls (stable_checks, default 2) instead of one before/after read, so a copy that pauses mid-write can't be ingested early; explicit crash-resume via a .processing marker written before each encode and cleared on success — a file still carrying it (without .ingested) was interrupted and is retried (logged "Resuming after interrupted encode"); a failed encode leaves the marker so the file is never silently dropped; preset auto-detection wired in — auto_preset runs content_detect (3.2) per clip and encodes with the recommended preset's mode/crf/background_crf/codec/object_filter, with explicit --preset override, all degrading to defaults if detection fails. New CLI flags --stable-checks/--settle/--auto-preset/--preset. tests/test_watchfolder.py +25 (now 36): growing-file-not-ready, multi-check stability, crash-resume (success clears marker, failure retains it, interrupted file retried), and auto-preset wiring asserting the detected preset reaches run_pipeline. Underpins M-CAM.2.)*
   **Files:** `src/utils/watchfolder.py`, `tests/test_watchfolder.py`.
   **Do:** point at a directory → new media detected, preset auto-detected (3.2), compressed in background, written out; handle partial writes (size stable for N seconds before processing), dedupe, crash-resume.
   **Acceptance:** extend `tests/test_watchfolder.py` for partial-write + resume. Underpins M-CAM.2.

@@ -17,14 +17,21 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+import utils.watchfolder as wf
 from utils.watchfolder import (
     INGESTED_SUFFIX,
+    PROCESSING_SUFFIX,
     SUPPORTED_EXTENSIONS,
     _already_ingested,
     _build_camera_id,
+    _clear_processing,
     _is_fully_written,
     _mark_ingested,
+    _mark_processing,
+    _processing_path,
+    _resolve_encode_config,
     _sanitize_camera_id,
+    _was_interrupted,
     scan_and_ingest,
 )
 
@@ -76,14 +83,121 @@ class TestIngestedSentinel:
 class TestIsFullyWritten:
     def test_stable_file_returns_true(self, tmp_path):
         p = _make_video(tmp_path, "clip.mp4", size=512)
-        assert _is_fully_written(p, settle_seconds=0.05)
+        assert _is_fully_written(p, settle_seconds=0.01)
     def test_empty_file_returns_false(self, tmp_path):
         p = tmp_path / "empty.mp4"
         p.write_bytes(b"")
-        assert not _is_fully_written(p, settle_seconds=0.05)
+        assert not _is_fully_written(p, settle_seconds=0.01)
     def test_missing_file_returns_false(self, tmp_path):
         p = tmp_path / "nonexistent.mp4"
-        assert not _is_fully_written(p, settle_seconds=0.05)
+        assert not _is_fully_written(p, settle_seconds=0.01)
+    def test_stable_across_multiple_checks(self, tmp_path):
+        p = _make_video(tmp_path, "clip.mp4", size=2048)
+        assert _is_fully_written(p, settle_seconds=0.01, stable_checks=4)
+    def test_growing_file_is_not_ready(self, tmp_path, monkeypatch):
+        # Partial-write: grow the file on every "sleep" so its size never
+        # stabilises across the required consecutive checks -> not ready.
+        p = _make_video(tmp_path, "clip.mp4", size=100)
+
+        def _grow(_seconds):
+            p.write_bytes(b"0" * (p.stat().st_size + 100))
+
+        monkeypatch.setattr(wf.time, "sleep", _grow)
+        assert not _is_fully_written(p, settle_seconds=0.01, stable_checks=2)
+    def test_file_that_stops_growing_becomes_ready(self, tmp_path, monkeypatch):
+        # Grows for the first sleep, then stabilises: with one stable check it's
+        # still not ready (it changed once); the next scan cycle would see it
+        # stable. Here we prove a now-stable file passes with stable_checks=1.
+        p = _make_video(tmp_path, "clip.mp4", size=300)
+        assert _is_fully_written(p, settle_seconds=0.01, stable_checks=1)
+
+
+class TestCrashResume:
+    def test_not_interrupted_initially(self, tmp_path):
+        p = _make_video(tmp_path, "clip.mp4")
+        assert not _was_interrupted(p)
+    def test_processing_marker_means_interrupted(self, tmp_path):
+        p = _make_video(tmp_path, "clip.mp4")
+        _mark_processing(p)
+        assert _processing_path(p).name == "clip.mp4" + PROCESSING_SUFFIX
+        assert _was_interrupted(p)
+    def test_ingested_file_is_not_interrupted(self, tmp_path):
+        p = _make_video(tmp_path, "clip.mp4")
+        _mark_processing(p)
+        _mark_ingested(p)  # finished after the marker
+        assert not _was_interrupted(p)  # ingested wins
+    def test_clear_processing_removes_marker(self, tmp_path):
+        p = _make_video(tmp_path, "clip.mp4")
+        _mark_processing(p)
+        _clear_processing(p)
+        assert not _processing_path(p).exists()
+    def test_successful_ingest_clears_marker_and_marks_ingested(self, tmp_path):
+        p = _make_video(tmp_path, "clip.mp4")
+        with patch("pipeline.pipeline.run_pipeline") as mock_run:
+            count = scan_and_ingest(watch_dir=tmp_path, output_dir=str(tmp_path),
+                                    settle_seconds=0.01, stable_checks=1)
+        assert count == 1
+        assert mock_run.called
+        assert _already_ingested(p)
+        assert not _processing_path(p).exists()  # cleared on success
+    def test_failed_ingest_leaves_processing_marker_for_retry(self, tmp_path):
+        p = _make_video(tmp_path, "clip.mp4")
+        with patch("pipeline.pipeline.run_pipeline", side_effect=RuntimeError("boom")):
+            count = scan_and_ingest(watch_dir=tmp_path, output_dir=str(tmp_path),
+                                    settle_seconds=0.01, stable_checks=1)
+        assert count == 0
+        assert not _already_ingested(p)        # not marked done
+        assert _processing_path(p).exists()    # marker survives -> retried next scan
+    def test_interrupted_file_is_retried_and_succeeds(self, tmp_path):
+        p = _make_video(tmp_path, "clip.mp4")
+        _mark_processing(p)  # simulate a crash mid-encode on a previous run
+        with patch("pipeline.pipeline.run_pipeline") as mock_run:
+            count = scan_and_ingest(watch_dir=tmp_path, output_dir=str(tmp_path),
+                                    settle_seconds=0.01, stable_checks=1)
+        assert count == 1
+        assert mock_run.called
+        assert _already_ingested(p)
+        assert not _processing_path(p).exists()
+
+
+class TestAutoPreset:
+    def test_resolve_explicit_preset(self, tmp_path):
+        p = _make_video(tmp_path, "clip.mp4")
+        kwargs, key = _resolve_encode_config(p, auto_preset=False, preset="doorbell")
+        assert key == "doorbell"
+        assert kwargs["mode"] == "mode3"  # doorbell maps to mode3
+        assert "crf" in kwargs and "background_crf" in kwargs and "codec" in kwargs
+
+    def test_resolve_none_when_disabled(self, tmp_path):
+        p = _make_video(tmp_path, "clip.mp4")
+        kwargs, key = _resolve_encode_config(p, auto_preset=False, preset=None)
+        assert kwargs == {} and key is None
+
+    def test_auto_detect_failure_degrades_to_defaults(self, tmp_path):
+        p = _make_video(tmp_path, "clip.mp4")
+        with patch("pipeline.content_detect.detect_content",
+                   side_effect=ValueError("unreadable")):
+            kwargs, key = _resolve_encode_config(p, auto_preset=True, preset=None)
+        assert kwargs == {} and key is None  # never blocks ingestion
+
+    def test_scan_passes_autodetected_preset_to_pipeline(self, tmp_path):
+        from pipeline.content_detect import PresetRecommendation, ContentSignals
+        p = _make_video(tmp_path, "clip.mp4")
+
+        rec = PresetRecommendation(
+            preset="continuous_cctv", label="Continuous CCTV", reason="static",
+            signals=ContentSignals(640, 480, 30.0, 10, 10.0, 0.0, 0.0, 0.0, 0.0, False),
+        )
+        with patch("pipeline.content_detect.detect_content", return_value=rec), \
+             patch("pipeline.pipeline.run_pipeline") as mock_run:
+            count = scan_and_ingest(watch_dir=tmp_path, output_dir=str(tmp_path),
+                                    settle_seconds=0.01, stable_checks=1,
+                                    auto_preset=True)
+        assert count == 1
+        _, kwargs = mock_run.call_args
+        assert kwargs["mode"] == "mode2"          # continuous_cctv -> mode2
+        assert kwargs["codec"] == "auto"
+        assert kwargs["crf"] == 23
 
 class TestScanAndIngest:
     def test_empty_folder_returns_zero(self, tmp_path):

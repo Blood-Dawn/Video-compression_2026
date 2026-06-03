@@ -59,11 +59,17 @@ def reset_pipeline_state(tmp_path, monkeypatch):
     root — the configured output_dir, the demo's last_output_root, AND a hard
     fallback to <repo>/outputs. Pointing output_dir at tmp_path isn't enough
     on its own (the repo's real outputs/ DB still leaks in), so we also clear
-    the demo root and repoint gui_module._ROOT at tmp_path. Now every
-    candidate root is an empty temp dir and tests see only the DB they create.
-    Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.3 — DB test isolation).
+    the demo root and repoint the segment-discovery _ROOT at tmp_path.
+
+    TASK 1.3: the segments routes moved into gui.routes.files_bp, which holds
+    its own module-level _ROOT (the <repo>/outputs fallback). Patch it there so
+    the fallback candidate is an empty temp dir. gui_module._ROOT is patched too
+    for any legacy reader.
+    Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.3 — DB test isolation);
+            updated 2026-06-02 (M1 TASK 1.3 — blueprint split).
     """
     monkeypatch.setattr(gui_module, "_ROOT", tmp_path)
+    monkeypatch.setattr("gui.routes.files_bp._ROOT", tmp_path)
     with gui_module._state_lock:
         gui_module._status.update({
             "running": False,
@@ -92,6 +98,9 @@ def fake_pipeline(monkeypatch):
     waits for the stop_event, then sets running=False.
 
     This lets start/stop state-transition tests work without any real video.
+
+    TASK 1.3: /api/start moved into gui.routes.pipeline_bp, which calls its own
+    imported _run_pipeline_thread, so patch the function there (not on gui.app).
     """
     def _fake(config, stop_event):
         with gui_module._state_lock:
@@ -102,7 +111,7 @@ def fake_pipeline(monkeypatch):
         with gui_module._state_lock:
             gui_module._status["running"] = False
 
-    monkeypatch.setattr(gui_module, "_run_pipeline_thread", _fake)
+    monkeypatch.setattr("gui.routes.pipeline_bp._run_pipeline_thread", _fake)
 
 
 @pytest.fixture

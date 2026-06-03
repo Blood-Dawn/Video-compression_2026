@@ -66,7 +66,7 @@ Design authority: `docs/REFACTOR-PLAN-gui-app.md`. Hard constraints recap: keep 
   **Acceptance:** suite green after each module; `gui.app.*` contract intact; no circular imports.
   **Risks:** circular imports (keep direction one-way); the SSE generator closure; atexit ordering; the pipeline-thread forwarding. If a module won't extract cleanly, leave a thin shim in `app.py` and note it.
 
-- [ ] **TASK 1.3 — carve 48 routes into 12 blueprints.** Depends: 1.2.
+- [x] **TASK 1.3 — carve 48 routes into 12 blueprints.** Depends: 1.2.
   **Files:** new `src/gui/routes/*_bp.py` (12, per REFACTOR-PLAN §1); `src/gui/app.py` (→ thin: `app` + `create_app()` + `register_blueprints()` + re-exports, ~80 lines).
   **Order (smallest first):** ui → sse → metrics → presets → encryption → plates → queries → rtsp → demo → hls → files → pipeline.
   **Acceptance:** add `tests/test_gui_blueprint_registration.py` (asserts the route count and that each expected endpoint exists) and `tests/test_gui_routes_resolve.py` (every URL pattern resolves via `app.url_map`). Suite green.

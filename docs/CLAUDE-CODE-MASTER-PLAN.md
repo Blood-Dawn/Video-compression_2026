@@ -60,7 +60,7 @@ Design authority: `docs/REFACTOR-PLAN-gui-app.md`. Hard constraints recap: keep 
 
 - [x] **TASK 1.1** — extract `state.py` + `logging_setup.py` (DONE, green).
 
-- [ ] **TASK 1.2 — extract the services layer.** Depends: 1.1.
+- [x] **TASK 1.2 — extract the services layer.** Depends: 1.1.
   **Files:** new `src/gui/services/{path_safety,cloud_detection,gui_state_persist,db_helpers,cpu_sampler,rtsp,demo_runner,hls_runner,pipeline_runner}.py`; `src/gui/app.py`.
   **Do:** move each service per REFACTOR-PLAN §2/§3, **one module per commit**, in the §4 order; `pipeline_runner` **last** (most threading). Convert the import-time `_bg_hw_thread` start into an explicit `start_hw_sampler()` called from `create_app()`. Route the rebound `_pipeline_thread`/`_stop_event` through the 1.1 forwarder so `gui_module._pipeline_thread = None` (in tests) still works.
   **Acceptance:** suite green after each module; `gui.app.*` contract intact; no circular imports.

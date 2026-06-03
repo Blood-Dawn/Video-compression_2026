@@ -139,10 +139,20 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     )
     from src.gui.logging_setup import log, _LOG_FILE
 
-# ── Shared pipeline state (protected by _state_lock, from gui.state) ──────────
-_pipeline_thread: threading.Thread | None = None
-_stop_event: threading.Event | None = None
-_active_encoder = None   # set by _patched_re_init so stop can abort a hung FFmpeg pipe
+# ── Pipeline thread runner ────────────────────────────────────────────────────
+# _patch_frame_source / _patch_encoder / _run_pipeline_thread and the rebindable
+# _pipeline_thread / _stop_event / _active_encoder handles now live in
+# gui.services.pipeline_runner. The handles are forwarded from this module (see
+# _FORWARDED_GLOBALS) so /api/start and /api/stop and the tests share one live
+# value. _run_pipeline_thread is re-exported into this module's namespace (NOT
+# forwarded) so tests can monkeypatch gui_module._run_pipeline_thread and the
+# /api/start route's bare-name call picks up the fake.
+try:
+    from gui.services import pipeline_runner as _pipeline_runner
+    from gui.services.pipeline_runner import _run_pipeline_thread
+except ModuleNotFoundError:  # pragma: no cover - import path shim
+    from src.gui.services import pipeline_runner as _pipeline_runner
+    from src.gui.services.pipeline_runner import _run_pipeline_thread
 
 # ── Security helpers ──────────────────────────────────────────────────────────
 # _safe_output_dir / _assert_within_output / _safe_filename now live in
@@ -210,160 +220,8 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 # this module. The file handler and the shutdown marker stay co-located in
 # logging_setup so the atexit ordering keeps landing the marker in svcs.log.
 
-# ── Frame-count interceptor ───────────────────────────────────────────────────
-# We wrap the FrameSource.read() method at runtime to count decoded frames
-# without touching the core pipeline code.
-
-def _patch_frame_source(src_obj):
-    """Monkey-patch src.read() to increment _status['frame_count'].
-    Also reads total_frames from the source so the progress bar knows the denominator.
-    """
-    # Push total frame count into status so the progress bar has a denominator.
-    # total_frames == 0 for live cameras/RTSP; progress bar shows a spinner instead.
-    total = getattr(src_obj, "total_frames", 0) or 0
-    with _state_lock:
-        _status["total_frames"] = int(total)
-
-    original_read = src_obj.read
-
-    def _counted_read():
-        ret, frame = original_read()
-        if ret:
-            with _state_lock:
-                _status["frame_count"] += 1
-        return ret, frame
-
-    src_obj.read = _counted_read
-    return src_obj
-
-
-# ── Segment-count interceptor ─────────────────────────────────────────────────
-# We patch ROIEncoder.encode_segment() to count encoded segments without
-# modifying roi_encoder.py.
-
-def _patch_encoder(enc_obj):
-    original_encode = enc_obj.encode_segment
-
-    def _counted_encode(*args, **kwargs):
-        result = original_encode(*args, **kwargs)
-        with _state_lock:
-            _status["segment_count"] += 1
-        return result
-
-    enc_obj.encode_segment = _counted_encode
-    return enc_obj
-
-
-# ── Pipeline thread runner ────────────────────────────────────────────────────
-
-def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
-    """Target function for the pipeline background thread."""
-    with _state_lock:
-        _status["running"] = True
-        _status["frame_count"] = 0
-        _status["segment_count"] = 0
-        _status["total_frames"] = 0
-        _status["error"] = None
-        _status["start_time"] = time.time()
-        _status["config"] = config
-
-    # Persist the chosen output_dir so the GUI can re-find segments after
-    # a server restart. See _save_gui_state() up top.
-    _save_gui_state()
-
-    # Start CPU/RAM/battery sampler (labels samples under the active mode
-    # AND attributes them to this run's output folder so the per-clip
-    # CPU stats land alongside its segments).
-    _mode_key = config.get("mode", "mode0")
-    _start_cpu_sampler(_mode_key, output_dir=config.get("output_dir"))
-
-    log.info("━" * 60)
-    log.info("GUI PIPELINE START")
-    log.info(f"  Input:   {config.get('input_source', '0')}")
-    log.info(f"  Mode:    {config.get('mode', 'mode0')}")
-    log.info(f"  Output:  {config.get('output_dir', 'outputs/')}")
-    log.info("━" * 60)
-
-    _orig_fs_init = None
-    _orig_re_init = None
-    try:
-        # Patch FrameSource and ROIEncoder lazily. Import here so we can wrap.
-        try:
-            import utils.frame_source as _fs
-            import compression.roi_encoder as _re
-        except ModuleNotFoundError:
-            import src.utils.frame_source as _fs
-            import src.compression.roi_encoder as _re
-
-        _orig_fs_init = _fs.FrameSource.__init__
-        _orig_re_init = _re.ROIEncoder.__init__
-
-        def _patched_fs_init(self_inner, *a, **kw):
-            _orig_fs_init(self_inner, *a, **kw)
-            _patch_frame_source(self_inner)
-
-        def _patched_re_init(self_inner, *a, **kw):
-            global _active_encoder
-            _orig_re_init(self_inner, *a, **kw)
-            _patch_encoder(self_inner)
-            _active_encoder = self_inner   # expose to stop handler
-
-        _fs.FrameSource.__init__ = _patched_fs_init
-        _re.ROIEncoder.__init__ = _patched_re_init
-
-        run_pipeline(
-            input_source=config.get("input_source", 0),
-            camera_id=config.get("camera_id", "cam_00"),
-            output_dir=config.get("output_dir", str(_ROOT / "outputs")),
-            segment_seconds=int(config.get("segment_seconds", 60)),
-            bg_method=config.get("bg_method", "MOG2"),
-            mode=config.get("mode", "mode0"),
-            demo=False,          # demo metadata not needed from GUI
-            show_preview=False,
-            warmup_frames=int(config.get("warmup_frames", 120)),
-            enhance=config.get("enhance", False),
-            enhance_model=config.get("enhance_model", "bicubic"),
-            enhance_scale=int(config.get("enhance_scale", 4)),
-            enhance_every_n=int(config.get("enhance_every_n", 5)),
-            enhance_max_roi_px=int(config.get("enhance_max_roi_px", 200)),
-            enhance_device=config.get("enhance_device", "auto"),
-            upscale_output=config.get("upscale_output", False),
-            encrypt=config.get("encrypt", False),
-            encrypt_password=config.get("encrypt_password") or None,
-            encrypt_key_file=config.get("encrypt_key_file") or None,
-            object_filter=config.get("object_filter", False),
-            filter_confidence=float(config.get("filter_confidence", 0.30)),
-            stop_event=stop_event,
-            codec=config.get("codec", "libsvtav1"),
-            crf=config.get("crf"),
-        )
-
-    except Exception as exc:
-        log.error(f"Pipeline error: {exc}", exc_info=True)
-        with _state_lock:
-            _status["error"] = str(exc)
-    finally:
-        # Always restore monkey patches, even if run_pipeline raised.
-        try:
-            try:
-                import utils.frame_source as _fs
-                import compression.roi_encoder as _re
-            except ModuleNotFoundError:
-                import src.utils.frame_source as _fs
-                import src.compression.roi_encoder as _re
-            if _orig_fs_init is not None:
-                _fs.FrameSource.__init__ = _orig_fs_init
-            if _orig_re_init is not None:
-                _re.ROIEncoder.__init__ = _orig_re_init
-        except Exception:
-            pass
-
-        with _state_lock:
-            _status["running"] = False
-        global _active_encoder
-        _active_encoder = None
-        _stop_cpu_sampler()
-        log.info("Pipeline stopped.")
+# _patch_frame_source / _patch_encoder / _run_pipeline_thread now live in
+# gui.services.pipeline_runner (imported above).
 
 
 # ── API routes ────────────────────────────────────────────────────────────────
@@ -455,8 +313,8 @@ def api_status():
 
 @app.route("/api/start", methods=["POST"])
 def api_start():
-    global _pipeline_thread, _stop_event
-
+    # _pipeline_thread / _stop_event are owned by gui.services.pipeline_runner;
+    # assign through the module so the forwarder and /api/stop see the value.
     with _state_lock:
         if _status["running"]:
             return jsonify({"error": "Pipeline already running"}), 409
@@ -530,14 +388,14 @@ def api_start():
         "crf": (int(data.get("crf")) if str(data.get("crf", "")).strip() else None),
     }
 
-    _stop_event = threading.Event()
-    _pipeline_thread = threading.Thread(
+    _pipeline_runner._stop_event = threading.Event()
+    _pipeline_runner._pipeline_thread = threading.Thread(
         target=_run_pipeline_thread,
-        args=(config, _stop_event),
+        args=(config, _pipeline_runner._stop_event),
         daemon=True,
         name="pipeline-worker",
     )
-    _pipeline_thread.start()
+    _pipeline_runner._pipeline_thread.start()
 
     with _state_lock:
         _status["last_config"] = config
@@ -555,18 +413,19 @@ def _segment_absolute_path(file_path: str, output_dir: str) -> Path:
 
 @app.route("/api/stop", methods=["POST"])
 def api_stop():
-    global _stop_event, _active_encoder
+    # _stop_event / _active_encoder are owned by gui.services.pipeline_runner;
+    # read them through the module so the forwarder stays consistent.
     with _state_lock:
         if not _status["running"]:
             return jsonify({"error": "Pipeline not running"}), 409
 
-    if _stop_event:
-        _stop_event.set()
+    if _pipeline_runner._stop_event:
+        _pipeline_runner._stop_event.set()
         log.info("Stop signal sent to pipeline.")
 
     # If the pipeline thread is blocked inside finish_segment() waiting for
     # FFmpeg to flush, abort the pipe immediately so the thread can exit.
-    enc = _active_encoder
+    enc = _pipeline_runner._active_encoder
     if enc is not None:
         try:
             enc.abort_segment()
@@ -2791,18 +2650,22 @@ def api_encrypt():
 # does `state._log_id += 1`. A plain re-import would bind a stale copy here, and
 # the gui.app.* test contract reaches into these names for both reads AND
 # writes. We swap this module's class so those specific names are forwarded to
-# their owning module in both directions. As later tasks move _pipeline_thread /
-# _stop_event / _active_encoder into a service module, add them to the map below.
+# their owning module in both directions. The map below covers every rebound
+# name now owned by an extracted submodule (gui.state / hls_runner /
+# pipeline_runner); add to it whenever a future move relocates a rebound global.
 # Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor — rebound forwarding).
 import types as _types
 
 # name -> owning module object. Forwarded names must NOT be bound in this
 # module's __dict__, or normal attribute lookup would shadow __getattr__.
 _FORWARDED_GLOBALS: dict = {
-    "_log_id": _state,                  # gui.state; rebound by the SSE log handler
-    "_hls_process": _hls_runner,        # gui.services.hls_runner; rebound by start/stop + annotator
+    "_log_id": _state,                       # gui.state; rebound by the SSE log handler
+    "_hls_process": _hls_runner,             # gui.services.hls_runner; rebound by start/stop + annotator
     "_hls_thread": _hls_runner,
     "_hls_stop_event": _hls_runner,
+    "_pipeline_thread": _pipeline_runner,    # gui.services.pipeline_runner; rebound by /api/start + tests
+    "_stop_event": _pipeline_runner,
+    "_active_encoder": _pipeline_runner,
 }
 
 

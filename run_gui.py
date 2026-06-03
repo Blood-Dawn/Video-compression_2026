@@ -227,6 +227,15 @@ def main():
     parser.add_argument("--no-sync", action="store_true",
                         help="Skip the auto `uv sync --extra enhance --extra plates` "
                              "check that runs when pyproject.toml has changed.")
+    parser.add_argument("--username", default=None,
+                        help="Dashboard Basic-Auth username (or set "
+                             "SVCS_DASHBOARD_USER). Required for non-localhost binds.")
+    parser.add_argument("--password", default=None,
+                        help="Dashboard Basic-Auth password (or set "
+                             "SVCS_DASHBOARD_PASSWORD).")
+    parser.add_argument("--no-auth", action="store_true",
+                        help="Allow a non-localhost bind WITHOUT authentication "
+                             "(not recommended on an untrusted network).")
     args = parser.parse_args()
 
     # ── Crash reporting (opt-in) ────────────────────────────────────────
@@ -290,6 +299,23 @@ def main():
         print(f"\n  [fatal] Could not import gui.app — {type(exc).__name__}: {exc}")
         print( "          Run with PYTHONFAULTHANDLER=1 or python -X dev for more detail.")
         raise
+
+    # ── Dashboard auth policy (TASK 4.4) ────────────────────────────────
+    # A non-localhost bind exposes the dashboard on the network; require auth
+    # (or an explicit --no-auth) before we ever call app.run().
+    try:
+        from gui.auth import decide_auth, install_basic_auth, AuthConfigError
+        decision = decide_auth(args.host, no_auth=args.no_auth,
+                               username=args.username, password=args.password)
+    except AuthConfigError as exc:
+        print(f"\n  [fatal] {exc}")
+        sys.exit(2)
+    if decision.auth_enabled:
+        install_basic_auth(app, decision.username, decision.password)
+        print(f"  Dashboard auth:  ENABLED (user {decision.username!r})")
+    elif decision.auth_required:
+        print("  Dashboard auth:  DISABLED via --no-auth — exposed on the "
+              f"network at {args.host} with NO login.")
 
     if not args.no_browser:
         Timer(1.2, _open_browser, args=[args.host, args.port]).start()

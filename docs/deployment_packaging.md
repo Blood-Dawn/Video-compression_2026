@@ -17,6 +17,41 @@ No network available. The operator plugs a laptop directly into the camera. Ever
 
 ---
 
+## Dashboard authentication (Scenario A — required before LAN exposure)
+
+Scenario A serves the dashboard on the network (`--host 0.0.0.0`), so it must
+not be open to everyone on that network. As of TASK 4.4 the server enforces a
+bind-aware policy (`src/gui/auth.py`):
+
+- **Localhost bind (`127.0.0.1`)** — no authentication required (the
+  single-machine / field-laptop case, Scenario B). Auth is still enabled if you
+  supply credentials.
+- **Any other bind (`0.0.0.0`, a LAN IP, …)** — HTTP Basic Auth is **required**.
+  The server **refuses to start** unless you either configure credentials or
+  explicitly opt out.
+
+Configure credentials with environment variables (preferred — keeps them out of
+the process list) or CLI flags:
+
+```bash
+# Recommended: env vars
+export SVCS_DASHBOARD_USER=operator
+export SVCS_DASHBOARD_PASSWORD='a-long-random-passphrase'
+python run_gui.py --host 0.0.0.0
+
+# Or via flags
+python run_gui.py --host 0.0.0.0 --username operator --password '…'
+
+# Explicit, deliberate opt-out (NOT recommended on an untrusted network):
+python run_gui.py --host 0.0.0.0 --no-auth
+```
+
+If you bind beyond localhost without credentials and without `--no-auth`, the
+server prints a fatal message and exits (`exit 2`) rather than coming up
+unprotected. Basic Auth is transport-plaintext, so terminate TLS at a reverse
+proxy (nginx/Caddy) or the container ingress for anything beyond a trusted LAN.
+The Docker image (below) should pass these env vars through.
+
 ## Option 1: Docker container (recommended for Scenario A)
 
 Package the Flask app, uv environment, and FFmpeg into a Docker image. Run with:

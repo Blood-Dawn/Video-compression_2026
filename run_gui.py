@@ -204,6 +204,19 @@ def main():
     Behavior is unchanged for source-mode runs.
     Author: Bloodawn (KheivenD), 2026-05-14 (installer prep).
     """
+    # Frozen Windows builds run with a hidden console whose default code page is
+    # cp1252. Our banners and pipeline logs use box-drawing glyphs (━), which
+    # raise UnicodeEncodeError on cp1252 and crash the app on launch (caught by
+    # the installer smoke test). Force UTF-8 (best effort) before anything
+    # prints — this also reconfigures the same sys.stderr object the logging
+    # console handler binds to. Author: Bloodawn (KheivenD), 2026-06-02
+    # (frozen-console encoding fix, surfaced by the M1 TASK 1.4 smoke test).
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:  # noqa: BLE001 - older/odd streams may lack reconfigure
+            pass
+
     parser = argparse.ArgumentParser(description="SVCS Web Dashboard")
     parser.add_argument("--host", default="0.0.0.0",
                         help="Bind address (default: 0.0.0.0, accessible on LAN). "

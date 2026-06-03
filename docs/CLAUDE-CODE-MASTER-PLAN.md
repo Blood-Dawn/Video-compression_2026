@@ -72,7 +72,7 @@ Design authority: `docs/REFACTOR-PLAN-gui-app.md`. Hard constraints recap: keep 
   **Acceptance:** add `tests/test_gui_blueprint_registration.py` (asserts the route count and that each expected endpoint exists) and `tests/test_gui_routes_resolve.py` (every URL pattern resolves via `app.url_map`). Suite green.
   **Risks:** a renamed/dropped route silently breaks the frontend. **Before carving, diff blueprint endpoint names against every `fetch(...)` in `index.html`** — that's the only contract. The `plates_bp` routes stay (plate reader is a free optional feature; just don't require easyocr at import).
 
-- [ ] **TASK 1.4 — update PyInstaller spec.** Depends: 1.3.
+- [x] **TASK 1.4 — update PyInstaller spec.** Depends: 1.3.
   **Files:** `installer/svcs.spec`.
   **Do:** add every new `gui.state`/`gui.logging_setup`/`gui.services.*`/`gui.routes.*` submodule to `hiddenimports`. Run `installer/build.ps1`; its smoke test (probe `http://127.0.0.1:5000/`) must pass against the refactored app.
   **Risks:** PyInstaller silently drops a dynamically-imported blueprint → runtime ImportError only in the frozen build. The smoke test is the guard.

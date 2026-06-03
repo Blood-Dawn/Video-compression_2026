@@ -36,16 +36,53 @@ import os
 import sys
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_submodules
+
 # PyInstaller exposes SPECPATH; resolve repo root relative to it.
 REPO_ROOT = Path(SPECPATH).parent  # noqa: F821  (SPECPATH injected by PyInstaller)
 SRC = REPO_ROOT / "src"
+
+# Make our first-party packages importable while this spec executes so
+# collect_submodules() below can walk them.
+for _p in (str(SRC), str(REPO_ROOT)):
+    if _p not in sys.path:
+        sys.path.insert(0, _p)
+
+# ── First-party submodule collection ──────────────────────────────────────
+# Our package layout (src/ on sys.path) plus the dual-import fallbacks
+# (`try: from gui... except ModuleNotFoundError: from src.gui...`) make the
+# frozen importer resolve some submodules under the canonical name (gui.app)
+# and others under a `src.`-prefixed name (src.gui.app). PyInstaller's static
+# analysis only collects whichever branch it happened to follow, so a module
+# like src.gui.app (imported by nothing) went missing and the frozen app died
+# at launch with "ModuleNotFoundError: No module named 'gui.app'". Rather than
+# whack-a-mole each missing submodule, collect EVERY submodule of each
+# first-party package under BOTH the canonical name and the full `src.*`
+# mirror, so the import resolves no matter which name the importer derives.
+# Author: Bloodawn (KheivenD), 2026-06-02 (frozen-import fix, M1 TASK 1.4).
+_FIRST_PARTY_PKGS = (
+    "gui", "utils", "pipeline", "detection", "enhancement",
+    "background_subtraction", "compression", "demo",
+)
+_firstparty_hidden = ["config", "src.config"]
+for _pkg in _FIRST_PARTY_PKGS:
+    _firstparty_hidden += collect_submodules(_pkg)
+# Full src.* mirror (src.gui.*, src.utils.*, …) for the prefixed resolutions.
+_firstparty_hidden += collect_submodules("src")
+_firstparty_hidden = sorted(set(_firstparty_hidden))
 
 
 # ── datas: non-Python files to bundle ─────────────────────────────────────
 # Each tuple is (src_on_disk, dest_in_bundle).
 datas = [
     # Flask templates — required for the dashboard to render index.html.
+    # Bundled under BOTH gui/templates and src/gui/templates: the frozen app
+    # module resolves as `src.gui.app` (see the collect_submodules note above),
+    # so Flask derives its template root_path as <bundle>/src/gui and looks for
+    # templates there. Shipping both keeps it working whichever name wins.
+    # Author: Bloodawn (KheivenD), 2026-06-02 (frozen template-path fix).
     (str(SRC / "gui" / "templates"), "gui/templates"),
+    (str(SRC / "gui" / "templates"), "src/gui/templates"),
 ]
 
 # YOLOv8-nano: 6 MB, optional. Ships with the bundle so first-run
@@ -71,27 +108,13 @@ hiddenimports = [
     "werkzeug.middleware",
     "werkzeug.middleware.proxy_fix",
 
-    # Our own subpackages. Belt-and-suspenders — PyInstaller usually
-    # walks these from the entry point, but explicit listings make
-    # build failures more obvious.
-    "gui",
-    "gui.app",
-    "pipeline",
-    "pipeline.pipeline",
-    "background_subtraction",
-    "background_subtraction.background_subtraction",
-    "detection",
-    "detection.object_filter",
-    "enhancement",
-    "enhancement.enhancer",
-    "utils",
-    "utils.paths",
-    "utils.logging_config",
-    "utils.encryption",
-    "utils.db",
-    "demo",
-    "demo.split_screen",
-    "config",
+    # Our own first-party packages — collected programmatically above via
+    # collect_submodules() under both the canonical (gui.app, utils.db.schema)
+    # and the full src.* mirror, because the frozen importer resolves some
+    # submodules under each name (see the comment at the top of this spec).
+    # This replaced an explicit hand-maintained list that kept missing one
+    # module at a time (gui.app, then utils.db.schema, …).
+    *_firstparty_hidden,
 
     # Ultralytics ships hundreds of submodules; PyInstaller misses a
     # few because they're imported via string lookup.

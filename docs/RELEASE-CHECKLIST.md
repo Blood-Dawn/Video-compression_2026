@@ -53,6 +53,22 @@ drop is the **unsigned beta** `v2.0.0-beta`.
 - [ ] **Owner action:** create the tag (`v2.0.0-beta`) and click *Publish*.
       The agent does not tag or publish (gated — `docs/BLOCKERS.md`).
 
+## 6b. Code signing (GA — TASK 5b.1)  🚦 *needs a cert*
+
+The signing step is wired into `installer/build.ps1` (`-Sign`); it signs the
+bundle exe *and* the installer with `signtool`. It needs a Windows code-signing
+certificate, which is the **owner's to obtain** — investigate
+[SignPath.io's free OSS program](https://signpath.io/) before buying an EV cert.
+The unsigned **beta** ships without this; a **GA** build should be signed.
+
+- [ ] Provide the cert via env (never commit it):
+      `SVCS_SIGN_CERT` (path to `.pfx`) + `SVCS_SIGN_PASSWORD`, **or**
+      `SVCS_SIGN_THUMBPRINT` (cert already in the store).
+- [ ] Build signed: `pwsh installer/build.ps1 -Installer -Sign`.
+- [ ] Verify both binaries: `signtool verify /pa /v dist\SVCS-Setup-<version>.exe`
+      (and `dist\SVCS\SVCS.exe`).
+- [ ] Confirm SmartScreen no longer warns on a clean machine after some reputation builds.
+
 ## 7. Post-publish
 
 - [ ] Confirm the download page link (`docs/site/index.html` → Releases/latest) resolves to the new asset.

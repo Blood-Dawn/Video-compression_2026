@@ -222,7 +222,7 @@ Honest split (PLAN-V2 §2/§6 Pushback 4): RTSP/ONVIF cameras ingest directly; c
 
 ## M5b — Signing + macOS/Linux  (🚦 cert-gated where noted)
 
-- [ ] 🚦 **TASK 5b.1 — Windows code signing.** Depends: 5.4 + an EV cert (owner obtains; investigate SignPath.io's free OSS program first).
+- [~] 🚦 **TASK 5b.1 — Windows code signing.** Depends: 5.4 + an EV cert (owner obtains; investigate SignPath.io's free OSS program first). *(STEP WIRED; cert gated. installer/build.ps1 gained -Sign: Resolve-SignTool finds signtool (PATH or Windows SDK), Invoke-CodeSign Authenticode-signs with SHA-256 + an RFC3161 timestamp; it signs BOTH the bundle exe (before Inno packages it, so the installed app is signed) AND the installer exe (after iscc). Cert comes from env (SVCS_SIGN_CERT+SVCS_SIGN_PASSWORD or SVCS_SIGN_THUMBPRINT) so no secret is in the repo; with -Sign but no cert it warns + skips so the unsigned beta still builds. build.ps1 parses clean. RELEASE-CHECKLIST.md got a signing section; BLOCKERS records the cert as the owner's action (SignPath.io OSS lead). tests/test_signing_step.py (5). The run could NOT sign (no cert) — gated.)*
   Wire the signing step into `installer/build.ps1` + `docs/RELEASE-CHECKLIST.md`; publish a signed GA build. Don't block on buying the cert — implement the step, leave the cert as the owner's action.
 
 - [ ] **TASK 5b.2 — Linux AppImage.** Depends: 5.4.

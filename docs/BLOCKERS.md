@@ -87,6 +87,14 @@ as the run reaches them:
   Apple Developer cert ($99/yr). The signing *step* will be wired into the build;
   the owner must obtain the certs. Investigate SignPath.io's free OSS program for
   Windows first.
+  **STATUS — Windows signing step WIRED (TASK 5b.1), awaiting cert:**
+  `installer/build.ps1 -Sign` now Authenticode-signs both the bundle exe and the
+  installer via `signtool` (SHA-256 + RFC3161 timestamp). Cert comes from env
+  (`SVCS_SIGN_CERT`+`SVCS_SIGN_PASSWORD`, or `SVCS_SIGN_THUMBPRINT`) so no secret
+  is in the repo; with `-Sign` but no cert it warns and skips (unsigned beta still
+  builds). The autonomous run could NOT execute signing (no cert). **Owner action:**
+  obtain a cert (try SignPath.io's free OSS program first), set the env vars, and
+  run `pwsh installer/build.ps1 -Installer -Sign` for the GA build.
 - **🚦 Publishing a public release / tagging a beta (TASK 5.4, 5b.*)** — the agent
   prepares the installer, checksums, release checklist, and draft notes; the
   **owner** tags and publishes the GitHub Release.

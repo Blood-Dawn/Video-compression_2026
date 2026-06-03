@@ -26,6 +26,7 @@ param(
     [switch]$SkipSmoke,
     [switch]$Quick,
     [switch]$Installer,          # also package dist\SVCS into SVCS-Setup-*.exe via Inno Setup
+    [switch]$Sign,               # Authenticode-sign the bundle exe + installer (TASK 5b.1)
     [int]$SmokePort = 5000,
     [int]$SmokeTimeoutSec = 60
 )
@@ -38,6 +39,60 @@ $SpecFile = Join-Path $RepoRoot "installer\svcs.spec"
 $DistDir  = Join-Path $RepoRoot "dist"
 $BuildDir = Join-Path $RepoRoot "build"
 $BundleExe = Join-Path $DistDir "SVCS\SVCS.exe"
+
+# ── Code signing (TASK 5b.1) ──────────────────────────────────────────
+# The signing STEP is wired here; the cert is the owner's to provide (gated —
+# see docs/BLOCKERS.md). Credentials come from the environment so no secret
+# ever lives in the repo:
+#   SVCS_SIGN_CERT        path to a .pfx               (or)
+#   SVCS_SIGN_THUMBPRINT  thumbprint of a cert in the cert store
+#   SVCS_SIGN_PASSWORD    .pfx password (when using SVCS_SIGN_CERT)
+#   SVCS_SIGN_TIMESTAMP   RFC3161 timestamp URL (default: DigiCert)
+# With -Sign but no cert configured, signing is SKIPPED with a warning (so an
+# unsigned beta still builds). Investigate SignPath.io's free OSS program for a
+# cert before buying an EV cert.
+function Resolve-SignTool {
+    $cmd = (Get-Command signtool.exe -ErrorAction SilentlyContinue).Source
+    if ($cmd) { return $cmd }
+    $kit = "${env:ProgramFiles(x86)}\Windows Kits\10\bin"
+    if (Test-Path $kit) {
+        $cand = Get-ChildItem $kit -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\' } |
+            Sort-Object FullName -Descending | Select-Object -First 1
+        if ($cand) { return $cand.FullName }
+    }
+    return $null
+}
+
+function Invoke-CodeSign {
+    param([Parameter(Mandatory)][string]$FilePath)
+    $pfx   = $env:SVCS_SIGN_CERT
+    $thumb = $env:SVCS_SIGN_THUMBPRINT
+    if (-not $pfx -and -not $thumb) {
+        Write-Warning ("Signing requested but no cert configured " +
+            "(set SVCS_SIGN_CERT or SVCS_SIGN_THUMBPRINT). Skipping $(Split-Path $FilePath -Leaf). " +
+            "See docs/BLOCKERS.md.")
+        return $false
+    }
+    $signtool = Resolve-SignTool
+    if (-not $signtool) {
+        Write-Warning "signtool.exe not found (install the Windows SDK). Skipping signing."
+        return $false
+    }
+    $ts = if ($env:SVCS_SIGN_TIMESTAMP) { $env:SVCS_SIGN_TIMESTAMP } else { "http://timestamp.digicert.com" }
+    $signArgs = @("sign", "/fd", "SHA256", "/tr", $ts, "/td", "SHA256")
+    if ($pfx) {
+        $signArgs += @("/f", $pfx)
+        if ($env:SVCS_SIGN_PASSWORD) { $signArgs += @("/p", $env:SVCS_SIGN_PASSWORD) }
+    } else {
+        $signArgs += @("/sha1", $thumb)
+    }
+    $signArgs += $FilePath
+    & $signtool @signArgs
+    if ($LASTEXITCODE -ne 0) { throw "signtool failed ($LASTEXITCODE) for $FilePath" }
+    Write-Host "      Signed: $(Split-Path $FilePath -Leaf)" -ForegroundColor Green
+    return $true
+}
 
 Write-Host ""
 Write-Host "─────────────────────────────────────────────────────────"
@@ -163,6 +218,12 @@ Write-Host "      Exe:  $BundleExe"
 Write-Host "      Size: $bundleSizeMB MB (dist\SVCS\ total)"
 
 # ── Step 3.5: package the Inno Setup installer (M2 TASK 2.4, opt-in) ───
+# Sign the bundle exe BEFORE Inno packages it, so the installed app is signed too.
+if ($Sign) {
+    Write-Host "[3b/4] Signing bundle exe..." -ForegroundColor Cyan
+    [void](Invoke-CodeSign -FilePath $BundleExe)
+}
+
 if ($Installer) {
     Write-Host "[3.5] Packaging Inno Setup installer..." -ForegroundColor Cyan
     $issFile = Join-Path $RepoRoot "installer\svcs.iss"
@@ -186,6 +247,8 @@ if ($Installer) {
         if ($setupExe) {
             $setupMB = [math]::Round($setupExe.Length / 1MB, 1)
             Write-Host "      Installer: $($setupExe.FullName) ($setupMB MB)" -ForegroundColor Green
+            # Sign the installer itself (TASK 5b.1). Skips gracefully if no cert.
+            if ($Sign) { [void](Invoke-CodeSign -FilePath $setupExe.FullName) }
         }
     }
 }

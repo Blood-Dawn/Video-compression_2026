@@ -136,8 +136,10 @@ def fake_ffmpeg(tmp_path):
     mock_cap.read.side_effect = _blocking_read
     mock_cap.release.return_value = None
 
-    with patch("src.gui.app.subprocess.Popen", return_value=mock_proc), \
-         patch("src.gui.app.cv2.VideoCapture", return_value=mock_cap):
+    # TASK 1.2: the HLS annotator (which calls subprocess.Popen / cv2.VideoCapture)
+    # moved from gui.app into gui.services.hls_runner, so patch it there.
+    with patch("src.gui.services.hls_runner.subprocess.Popen", return_value=mock_proc), \
+         patch("src.gui.services.hls_runner.cv2.VideoCapture", return_value=mock_cap):
         yield mock_proc, tmp_path
         # Unblock the blocking read() so the thread can exit during teardown
         _read_block.set()

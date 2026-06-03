@@ -151,22 +151,19 @@ _stop_event: threading.Event | None = None
 _active_encoder = None   # set by _patched_re_init so stop can abort a hung FFmpeg pipe
 
 # ── Security helpers ──────────────────────────────────────────────────────────
+# _safe_output_dir / _assert_within_output / _safe_filename now live in
+# gui.services.path_safety (imported below). `import re as _re` stays — the
+# route handlers still use it for camera_id / stream_name validation.
 import re as _re
 
-def _safe_output_dir(raw: str) -> Path:
-    """Resolve output_dir and verify it stays within the project root or is absolute
-    and already trusted (e.g. a cloud sync folder outside the repo).
-
-    We don't restrict to project root because legitimate use cases include pointing
-    at OneDrive/Google Drive mounts. Instead we block path traversal tricks and
-    require the directory to be absolute or resolvable.
-    """
-    p = Path(raw).resolve()
-    # Block traversal sequences that survived resolution (should never happen after
-    # resolve(), but guard explicitly)
-    if ".." in p.parts:
-        raise ValueError(f"output_dir contains traversal: {raw!r}")
-    return p
+try:
+    from gui.services.path_safety import (
+        _safe_output_dir, _assert_within_output, _safe_filename,
+    )
+except ModuleNotFoundError:  # pragma: no cover - import path shim
+    from src.gui.services.path_safety import (
+        _safe_output_dir, _assert_within_output, _safe_filename,
+    )
 
 
 def _default_output_dir() -> str:
@@ -222,28 +219,6 @@ def _default_output_dir() -> str:
     # (4) Last-resort dev fallback.
     return str(_ROOT / "outputs")
 
-
-def _assert_within_output(file_path: str, output_dir: str) -> Path:
-    """Resolve file_path and verify it lives inside output_dir.
-
-    Raises ValueError if path traversal is detected.
-    """
-    out = Path(output_dir).resolve()
-    fp  = Path(file_path).resolve()
-    if out != fp and out not in fp.parents:
-        raise ValueError(
-            f"Path {fp} is outside the output directory {out}. "
-            "Access denied."
-        )
-    return fp
-
-
-def _safe_filename(name: str) -> str:
-    """Strip directory components and validate the filename is safe."""
-    name = Path(name).name   # strip any directory component
-    if not _SAFE_FILENAME_RE.match(name):
-        raise ValueError(f"Unsafe filename: {name!r}")
-    return name
 
 # ── Power / hardware metrics ───────────────────────────────────────────────────
 # _power_lock / _power_state now live in gui.state (imported above). Sampled by

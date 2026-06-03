@@ -210,7 +210,7 @@ Honest split (PLAN-V2 §2/§6 Pushback 4): RTSP/ONVIF cameras ingest directly; c
   **Files:** new `docs/site/` (GitHub Pages), `README.md`.
   **Do:** static page linking the latest installer from GitHub Releases, SHA-256 checksums, system requirements. Copy leads with the surveillance/self-hosted/open-source wedge; no competitor comparisons. Plain HTML/CSS, no CDN.
 
-- [ ] **TASK 5.3 — getting-started + camera-setup docs.** Depends: M-CAM.3.
+- [x] **TASK 5.3 — getting-started + camera-setup docs.** Depends: M-CAM.3. *(new docs/getting-started.md: install (Windows installer / Docker / source, honest about the unsigned-beta SmartScreen warning) → point at a folder/camera/file → choose a preset (or content auto-detect) and compress → next steps. docs/camera-ingestion.md finalized with a camera compatibility table (Direct RTSP/ONVIF vs Bridge vs Export-folder, recommended path per family incl. Reolink/Amcrest/Dahua/Hikvision/Axis/Wyze/Tapo/UniFi/body-cams/dashcams/Ring/Nest/Arlo), marked "community-maintained — last updated 2026-06-03", and explicit about the cloud-locked limit (no vendor-cloud scraping). tests/test_docs_getting_started.py (6): install/point/compress coverage, unsigned-beta honesty, the compatibility table, the community-maintained+date stamp, and the cloud-locked honesty.)*
   **Files:** `docs/getting-started.md`, `docs/camera-ingestion.md` (finalize).
   **Do:** install → point at a folder or camera → compress; a camera compatibility table (works directly via RTSP/ONVIF / needs a bridge / needs export-folder). Honest about the cloud-locked limit; mark the table "community-maintained, last updated X".
 

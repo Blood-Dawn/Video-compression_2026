@@ -12,6 +12,38 @@ supports — there is no vendor-cloud scraping, ever.
 If your camera supports more than one, prefer **1 (direct RTSP)** for live
 recording and **2 (export-folder)** for bulk/after-the-fact compression.
 
+### Camera compatibility table
+
+How each camera family connects. **Direct** = native RTSP/ONVIF (Path 1);
+**Bridge** = cloud-locked, needs a local bridge to RTSP (Path 3); **Export** =
+use the camera's clip export into a watch-folder (Path 2). Most cameras support
+more than one — the recommended path is listed first.
+
+> ⚠️ *Community-maintained — last updated 2026-06-03.* Vendors change firmware and
+> APIs often; treat this as a starting point and verify for your exact model.
+> Corrections welcome via pull request.
+
+| Camera family | Direct (RTSP/ONVIF) | Bridge | Export-folder | Recommended |
+|---------------|:---:|:---:|:---:|-------------|
+| Reolink | ✅ | — | ✅ (microSD/NVR) | Direct |
+| Amcrest / Dahua | ✅ | — | ✅ | Direct |
+| Hikvision / HiLook | ✅ | — | ✅ | Direct |
+| Axis | ✅ | — | ✅ | Direct |
+| Wyze (RTSP firmware) | ✅ | ✅ | ✅ (microSD) | Direct if RTSP fw, else Bridge |
+| TP-Link / Tapo | ✅ (most) | ✅ | ✅ | Direct |
+| Ubiquiti UniFi Protect | ✅ (RTSP export) | — | ✅ | Direct |
+| Generic ONVIF/NVR | ✅ | — | ✅ | Direct |
+| Body cameras (Axon, etc.) | — | — | ✅ (dock dump) | Export |
+| Dashcams | — | — | ✅ (microSD loop) | Export |
+| **Ring** | ❌ | ✅ (Scrypted/HA) | ✅ (app export) | Export or Bridge |
+| **Nest** | ❌ | ✅ (Scrypted/HA) | ✅ (app export) | Export or Bridge |
+| **Arlo** | ❌ | ✅ (Scrypted/HA) | ✅ (app export) | Export or Bridge |
+
+**The honest limit:** Ring, Nest, and Arlo are cloud-locked — they expose no RTSP
+stream, and SVCS will never scrape a vendor cloud. Your two supported options are
+exporting their clips to a folder, or running a local bridge that re-exposes them
+as RTSP (see *Bridge ingestion* below).
+
 ---
 
 ## 1. Direct RTSP / ONVIF

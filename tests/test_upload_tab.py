@@ -45,7 +45,8 @@ def test_upload_is_second_after_home_before_metrics(html):
 
 
 def test_full_nav_order(html):
-    assert _nav_order(html) == ["home", "upload", "metrics", "search", "encrypt"]
+    # TOOLS was inserted between SEARCH and ENCRYPT in FIX 4.
+    assert _nav_order(html) == ["home", "upload", "metrics", "search", "tools", "encrypt"]
 
 
 def test_upload_tab_page_exists(html):

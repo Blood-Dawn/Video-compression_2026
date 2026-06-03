@@ -935,6 +935,7 @@
     .tab-btn[data-tab="upload"].active  { color: var(--purple); border-bottom-color: var(--purple); }
     .tab-btn[data-tab="metrics"].active { color: var(--green);  border-bottom-color: var(--green); }
     .tab-btn[data-tab="search"].active  { color: var(--teal);   border-bottom-color: var(--teal); }
+    .tab-btn[data-tab="tools"].active   { color: #5aa9ff;       border-bottom-color: #5aa9ff; }
     .tab-btn[data-tab="encrypt"].active { color: var(--yellow); border-bottom-color: var(--yellow); }
     .tab-btn[data-tab="demo"].active    { color: var(--amber);  border-bottom-color: var(--amber); }
     .tab-nav-right {
@@ -2640,6 +2641,7 @@
         <button class="tab-btn"        data-tab="upload"  onclick="switchTab('upload')">UPLOAD</button>
         <button class="tab-btn"        data-tab="metrics" onclick="switchTab('metrics')">METRICS</button>
         <button class="tab-btn"        data-tab="search"  onclick="switchTab('search')">SEARCH</button>
+        <button class="tab-btn"        data-tab="tools"   onclick="switchTab('tools')">TOOLS</button>
         <button class="tab-btn"        data-tab="encrypt" onclick="switchTab('encrypt')">ENCRYPT</button>
         <div class="tab-nav-right">
           <button class="btn btn-ghost" style="font-size:0.6rem;padding:0.2rem 0.6rem;" onclick="loadSegments()" title="Refresh segments">↻</button>
@@ -2668,6 +2670,21 @@
             in the sidebar. For a live camera or a server-side file, use
             <em>Server file path (advanced)</em> in the sidebar.
           </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════ TOOLS TAB (FIX 4) ══════════════════ -->
+      <!-- The RTSP server + HLS live-stream controls and player are RELOCATED
+           here from the sidebar at load time by tools.js (their DOM nodes are
+           moved, preserving every id and handler). -->
+      <div id="tab-tools" class="tab-page">
+        <div class="tab-page-header">
+          <span class="tab-page-title">Tools</span>
+        </div>
+        <div id="tab-tools-body" style="overflow-y:auto;padding-right:4px;">
+          <p style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);line-height:1.5;margin-bottom:0.75rem;">
+            Advanced streaming tools: run a local RTSP server (MediaMTX) and view a live HLS stream in the browser.
+          </p>
         </div>
       </div>
 
@@ -3641,6 +3658,7 @@
   <script src="{{ url_for('static', filename='js/ui.js') }}"></script>
   <script src="{{ url_for('static', filename='js/hls.js') }}"></script>
   <script src="{{ url_for('static', filename='js/rtsp.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/tools.js') }}"></script>
   <script src="{{ url_for('static', filename='js/metrics.js') }}"></script>
   <script src="{{ url_for('static', filename='js/plates.js') }}"></script>
   <script src="{{ url_for('static', filename='js/presets.js') }}"></script>

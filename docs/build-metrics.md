@@ -21,6 +21,13 @@ bundled, torch/CUDA gone) and the dashboard smoke test passing. The Inno Setup
 *download* (TASK 2.4) will be smaller still once compressed and once the ONNX
 weights become an optional first-run component.
 
+**Installer download (TASK 2.4):** `iscc installer/svcs.iss` packs the ~582 MB
+unpacked `dist/SVCS` into **SVCS-Setup-2.0.0.dev0.exe = 210.6 MB** (lzma2/max,
+solid). That's the actual user *download*, comfortably under the 400–600 MB
+target — a ~22× drop from the M1-era 4.6 GB unpacked bundle. The bundled FFmpeg
+is a separate optional Inno component, so a "compact" install (system FFmpeg on
+PATH) downloads/installs even less.
+
 **FFmpeg bundle (TASK 2.3):** the vendored GPL win64 *shared* FFmpeg adds
 ~243 MB (small exes + the shared `av*.dll` codec set), bringing the unpacked
 bundle to **~582 MB** — still under the 600 MB ceiling. The *shared* build is

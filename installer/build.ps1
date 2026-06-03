@@ -25,6 +25,7 @@
 param(
     [switch]$SkipSmoke,
     [switch]$Quick,
+    [switch]$Installer,          # also package dist\SVCS into SVCS-Setup-*.exe via Inno Setup
     [int]$SmokePort = 5000,
     [int]$SmokeTimeoutSec = 60
 )
@@ -160,6 +161,34 @@ Write-Host ""
 Write-Host "      Build OK in $([math]::Round($buildElapsed.TotalSeconds,1)) sec" -ForegroundColor Green
 Write-Host "      Exe:  $BundleExe"
 Write-Host "      Size: $bundleSizeMB MB (dist\SVCS\ total)"
+
+# ── Step 3.5: package the Inno Setup installer (M2 TASK 2.4, opt-in) ───
+if ($Installer) {
+    Write-Host "[3.5] Packaging Inno Setup installer..." -ForegroundColor Cyan
+    $issFile = Join-Path $RepoRoot "installer\svcs.iss"
+    if (-not (Test-Path $issFile)) { throw "Inno Setup script not found: $issFile" }
+    $iscc = (Get-Command iscc -ErrorAction SilentlyContinue).Source
+    if (-not $iscc) {
+        $isccCands = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "${env:ProgramFiles}\Inno Setup 6\ISCC.exe",
+            "${env:LOCALAPPDATA}\Programs\Inno Setup 6\ISCC.exe"
+        )
+        $iscc = $isccCands | Where-Object { Test-Path $_ } | Select-Object -First 1
+    }
+    if (-not $iscc) {
+        Write-Warning "Inno Setup (ISCC.exe) not found. Install it (winget install JRSoftware.InnoSetup) to build the installer. Skipping."
+    } else {
+        & $iscc $issFile
+        if ($LASTEXITCODE -ne 0) { throw "ISCC failed with exit code $LASTEXITCODE" }
+        $setupExe = Get-ChildItem (Join-Path $RepoRoot "dist") -Filter "SVCS-Setup-*.exe" |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($setupExe) {
+            $setupMB = [math]::Round($setupExe.Length / 1MB, 1)
+            Write-Host "      Installer: $($setupExe.FullName) ($setupMB MB)" -ForegroundColor Green
+        }
+    }
+}
 
 # ── Step 4: smoke test ────────────────────────────────────────────────
 if ($SkipSmoke) {

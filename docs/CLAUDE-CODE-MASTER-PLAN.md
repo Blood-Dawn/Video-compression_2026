@@ -125,7 +125,7 @@ Goal: installer download 2.5–4.7 GB → ~400–600 MB **without a rewrite** (P
   **Do:** vendor a pinned LGPL FFmpeg; resolve ffmpeg from the bundle first, PATH second (no longer *require* PATH). Document the LGPL/GPL/x264/x265/HEVC matrix (for an AGPL project GPL-FFmpeg-with-x265 is fine; the doc is readiness for a possible future fork).
   **Acceptance:** a test asserts the app finds the bundled ffmpeg when PATH lacks it. Record the pinned version.
 
-- [ ] **TASK 2.4 — Inno Setup installer.** Depends: 2.2, 2.3, 1.6 (codec decided).
+- [x] **TASK 2.4 — Inno Setup installer.** Depends: 2.2, 2.3, 1.6 (codec decided). *(installer/svcs.iss + build.ps1 -Installer; `iscc` produces **SVCS-Setup-2.0.0.dev0.exe = 210.6 MB**; optional bundled-FFmpeg component; installs to Program Files + Start Menu; uninstall preserves %APPDATA%\\SVCS. Built/verified locally — Inno is Windows-only, not in CI.)*
   **Files:** new `installer/svcs.iss`, `installer/build.ps1`.
   **Do:** `iscc installer/svcs.iss` → `SVCS-Setup-x.y.z.exe`, with an optional "AI model weights" component (~70 MB ONNX) so the base download stays small; first run fetches them if skipped. Installs to Program Files + Start Menu shortcut; launches and serves the dashboard via the frozen entry point (`installer/launcher.py` sets `SVCS_FROZEN=1`, splices `--no-sync`). Uninstall leaves `%APPDATA%\SVCS` data unless asked.
   **Acceptance:** installer builds on Windows; recorded download size ~400–600 MB. **Build/test on a Windows runner/machine** (Inno is Windows-only, not in CI yet).

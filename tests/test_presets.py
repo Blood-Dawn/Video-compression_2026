@@ -42,6 +42,23 @@ def test_registry_nonempty_and_includes_surveillance_family():
     assert len(surveillance) >= 5
 
 
+def test_consumer_camera_family_present_and_conservative():
+    """M-CAM TASK 4: the consumer-camera family exists and is tuned
+    conservatively (consumer sensors are noisy — don't smear detail)."""
+    consumer = ("doorbell", "indoor_cam", "outdoor_yard", "baby_monitor")
+    for k in consumer:
+        assert k in P.PRESETS, f"missing consumer preset {k}"
+        p = P.get_preset(k)
+        assert p.surveillance  # shown in the security-camera family
+        # Conservative foreground: not pushed past the mode3 doorbell value.
+        assert p.foreground_crf <= 38
+    # Indoor / baby keep every frame (dual-CRF), not object-only clips.
+    assert P.get_preset("indoor_cam").mode == "mode1"
+    assert P.get_preset("baby_monitor").mode == "mode1"
+    # A baby/pet can hold still — must not be gated out by object detection.
+    assert P.get_preset("baby_monitor").object_filter is False
+
+
 @pytest.mark.parametrize("key", list(P.PRESETS))
 def test_each_preset_resolves_to_valid_config(key):
     cfg = P.resolve_preset(key)

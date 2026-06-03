@@ -113,6 +113,35 @@ _PRESET_LIST: List[Preset] = [
                     "Every frame at high quality, single-pass.",
         mode="mode0", foreground_crf=16, background_crf=22, codec="auto",
     ),
+    # ── Consumer cameras (M-CAM TASK 4) ─────────────────────────────────────
+    # Tuned for consumer footage: lower-res, noisier sensors, mostly-static
+    # scenes with sparse events. CRFs are deliberately CONSERVATIVE — consumer
+    # cameras already soften detail, so we don't compress the foreground hard.
+    Preset(
+        key="indoor_cam",
+        label="Indoor cam (pets / home)",
+        description="An indoor room camera — pets, kids, general home monitoring. "
+                    "Keeps every frame (dual-CRF) with a conservative foreground so "
+                    "faces and pets stay legible on a noisy indoor sensor.",
+        mode="mode1", foreground_crf=20, background_crf=44, codec="auto",
+    ),
+    Preset(
+        key="outdoor_yard",
+        label="Outdoor yard cam",
+        description="A yard / driveway camera with sparse events (a person, a car, "
+                    "a delivery). Event-recording for big idle savings, conservative "
+                    "foreground so plates and faces survive at distance.",
+        mode="mode2", foreground_crf=23, background_crf=48, codec="auto",
+    ),
+    Preset(
+        key="baby_monitor",
+        label="Baby / pet monitor (long idle)",
+        description="Long stretches of stillness with rare movement. Keeps every "
+                    "frame and does NOT gate on object detection, so a still baby or "
+                    "a curled-up pet is never dropped as 'background'.",
+        mode="mode1", foreground_crf=20, background_crf=42, codec="auto",
+        object_filter=False,
+    ),
     # ── General (non-surveillance) ──────────────────────────────────────────
     Preset(
         key="screen_recording",

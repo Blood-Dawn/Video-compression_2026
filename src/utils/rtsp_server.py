@@ -28,6 +28,11 @@ import zipfile
 from pathlib import Path
 from typing import Callable, Optional
 
+try:                                       # bundled-first ffmpeg resolution (TASK 2.3)
+    from utils.ffmpeg import ffmpeg_path
+except ImportError:                        # pragma: no cover - import path shim
+    from src.utils.ffmpeg import ffmpeg_path
+
 # ── MediaMTX release config ───────────────────────────────────────────────────
 
 MEDIAMTX_VERSION = "1.9.3"
@@ -227,7 +232,7 @@ class RtspServerManager:
 
         rtsp_dest = f"rtsp://localhost:{RTSP_PORT}/{stream_name}"
         cmd = [
-            "ffmpeg", "-y",
+            ffmpeg_path(), "-y",
             "-re",               # real-time pacing (simulate live camera)
             "-stream_loop", "-1",  # loop indefinitely
             "-i", video_path,

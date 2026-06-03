@@ -103,6 +103,15 @@ _yolo_onnx = REPO_ROOT / "yolov8n.onnx"
 if _yolo_onnx.exists():
     datas.append((str(_yolo_onnx), "."))
 
+# Vendored FFmpeg (M2 TASK 2.3). build.ps1 fetches a pinned GPL win64 FFmpeg
+# into tools/ffmpeg/; bundle it to <app>/ffmpeg/ so src/utils/ffmpeg.py finds
+# <_MEIPASS>/ffmpeg/bin/ffmpeg.exe at runtime and the installed app never needs
+# a system FFmpeg on PATH. If tools/ffmpeg isn't present (no fetch yet), the
+# build still succeeds and the app falls back to PATH.
+_ffmpeg_dir = REPO_ROOT / "tools" / "ffmpeg"
+if _ffmpeg_dir.exists():
+    datas.append((str(_ffmpeg_dir), "ffmpeg"))
+
 # Make sure the LICENSE text travels with the binary — required by AGPL.
 _license = REPO_ROOT / "LICENSE"
 if _license.exists():

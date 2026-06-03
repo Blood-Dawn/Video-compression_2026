@@ -91,6 +91,51 @@ if (-not $Quick) {
     Write-Host "[2/4] Skipping clean (-Quick passed)" -ForegroundColor DarkGray
 }
 
+# ── Step 2.5: vendor FFmpeg (M2 TASK 2.3) ─────────────────────────────
+# Download a pinned FFmpeg once into tools/ffmpeg/bin so the installer is
+# self-contained (the app resolves the bundled binary first; see
+# src/utils/ffmpeg.py and docs/ffmpeg-licensing.md). tools/ is gitignored.
+# We ship a GPL win64 build because the per-mode codec policy uses libx264
+# (GPL) for Mode 0/1; that is licence-compatible with our AGPL app. A future
+# non-GPL fork would swap this for an LGPL build + libopenh264 (see the doc).
+# We use the SHARED win64 GPL build, not the static one: the static ffmpeg.exe
+# is ~200 MB (and ~400 MB with ffprobe), which would blow the installer budget;
+# the shared build is small exes + shared av*.dll, ~120 MB total for everything,
+# and ffmpeg.exe loads its sibling DLLs from the same bin/ dir.
+$FFmpegVersion = "latest"   # BtbN tag; pin to a dated autobuild-* tag per release
+$FFmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/$FFmpegVersion/ffmpeg-master-latest-win64-gpl-shared.zip"
+$FFmpegDir = Join-Path $RepoRoot "tools\ffmpeg"
+$FFmpegBin = Join-Path $FFmpegDir "bin\ffmpeg.exe"
+Write-Host "[2.5] Vendoring FFmpeg (GPL win64 shared, $FFmpegVersion)..." -ForegroundColor Cyan
+if (Test-Path $FFmpegBin) {
+    Write-Host "      already present: $FFmpegBin" -ForegroundColor Green
+} else {
+    try {
+        $tmpZip = Join-Path $env:TEMP "svcs-ffmpeg.zip"
+        $tmpExtract = Join-Path $env:TEMP "svcs-ffmpeg-extract"
+        Write-Host "      downloading $FFmpegUrl"
+        Invoke-WebRequest -Uri $FFmpegUrl -OutFile $tmpZip -UseBasicParsing
+        if (Test-Path $tmpExtract) { Remove-Item $tmpExtract -Recurse -Force }
+        Expand-Archive -Path $tmpZip -DestinationPath $tmpExtract -Force
+        # Archive: ffmpeg-*-win64-gpl-shared/{bin/*.exe+*.dll, LICENSE, ...}
+        $srcExe = Get-ChildItem -Path $tmpExtract -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
+        if (-not $srcExe) { throw "ffmpeg.exe not found in the downloaded archive" }
+        $root = $srcExe.Directory.Parent.FullName     # the ffmpeg-*-win64-gpl-shared dir
+        if (Test-Path $FFmpegDir) { Remove-Item $FFmpegDir -Recurse -Force }
+        New-Item -ItemType Directory -Force $FFmpegDir | Out-Null
+        # Copy the whole bin/ (exes + shared DLLs) and the license text.
+        Copy-Item (Join-Path $root "bin") (Join-Path $FFmpegDir "bin") -Recurse -Force
+        Get-ChildItem -Path $root -Filter "LICENSE*" -ErrorAction SilentlyContinue |
+            ForEach-Object { Copy-Item $_.FullName (Join-Path $FFmpegDir $_.Name) -Force }
+        Remove-Item $tmpZip -Force -ErrorAction SilentlyContinue
+        Remove-Item $tmpExtract -Recurse -Force -ErrorAction SilentlyContinue
+        $sz = [math]::Round(((Get-ChildItem $FFmpegDir -Recurse | Measure-Object Length -Sum).Sum/1MB),1)
+        Write-Host "      vendored to $FFmpegBin ($sz MB)" -ForegroundColor Green
+    } catch {
+        Write-Warning "FFmpeg vendoring failed ($($_.Exception.Message)). The build will continue, but the bundle will rely on a system FFmpeg on PATH."
+    }
+}
+
 # ── Step 3: run PyInstaller ───────────────────────────────────────────
 Write-Host "[3/4] Building bundle (this can take 5-15 min on a cold run)..." -ForegroundColor Cyan
 $pyinstallerArgs = @("--noconfirm", $SpecFile)

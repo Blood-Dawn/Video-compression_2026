@@ -21,6 +21,14 @@ bundled, torch/CUDA gone) and the dashboard smoke test passing. The Inno Setup
 *download* (TASK 2.4) will be smaller still once compressed and once the ONNX
 weights become an optional first-run component.
 
+**FFmpeg bundle (TASK 2.3):** the vendored GPL win64 *shared* FFmpeg adds
+~243 MB (small exes + the shared `av*.dll` codec set), bringing the unpacked
+bundle to **~582 MB** — still under the 600 MB ceiling. The *shared* build is
+used deliberately: the *static* `ffmpeg.exe` alone is ~200 MB (~400 MB with
+ffprobe), which would blow the budget. Further FFmpeg trimming (dropping unused
+codecs via a custom build) is a possible later optimization; the Inno installer
+download is compressed on top of this.
+
 > Gotcha when re-measuring locally: a clean `uv sync` provisions onnxruntime
 > (it's a core dep). If you kill python/uv processes mid-sync, uv can leave the
 > `onnxruntime-*.dist-info` without the package dir, after which `uv sync`

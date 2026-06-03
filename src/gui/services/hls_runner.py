@@ -40,8 +40,10 @@ except ModuleNotFoundError:                # pragma: no cover - import path shim
 
 try:
     from compression.roi_encoder import draw_corner_overlay
+    from utils.ffmpeg import ffmpeg_path
 except ModuleNotFoundError:                # pragma: no cover - import path shim
     from src.compression.roi_encoder import draw_corner_overlay
+    from src.utils.ffmpeg import ffmpeg_path
 
 # Rebindable FFmpeg process / annotator thread / stop-event handles. Forwarded
 # from gui.app so the routes and tests share one live value.
@@ -176,7 +178,7 @@ def _hls_annotator_thread(
     # ── start FFmpeg receiving rawvideo from stdin ────────────────────────────
     playlist = hls_dir / "playlist.m3u8"
     cmd = [
-        "ffmpeg", "-y",
+        ffmpeg_path(), "-y",
         "-f", "rawvideo",
         "-pix_fmt", "bgr24",
         "-s", f"{w}x{h}",

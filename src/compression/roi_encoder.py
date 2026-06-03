@@ -52,6 +52,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from background_subtraction.background_subtraction import ForegroundRegion
 from utils.db import initialize_database, insert_segment, get_connection
+from utils.ffmpeg import ffmpeg_path   # bundled-first ffmpeg resolution (TASK 2.3)
 
 
 # ── Corner overlay ────────────────────────────────────────────────────────────
@@ -127,7 +128,7 @@ def _ffmpeg_has_encoder(name: str) -> bool:
     import subprocess
     try:
         out = subprocess.check_output(
-            ["ffmpeg", "-hide_banner", "-encoders"],
+            [ffmpeg_path(), "-hide_banner", "-encoders"],
             stderr=subprocess.DEVNULL, timeout=5,
         ).decode(errors="replace")
         # Each encoder line looks like " V..... libsvtav1            SVT-AV1 ..."
@@ -981,7 +982,7 @@ class ROIEncoder:
         temp_path = video_path.with_suffix(".audio_tmp.mp4")
         try:
             mux_args = [
-                "ffmpeg",
+                ffmpeg_path(),
                 "-y",                         # overwrite temp
                 "-i", str(video_path),        # input 0 (video only)
                 "-i", str(source_path),       # input 1 (source with audio)

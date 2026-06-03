@@ -120,7 +120,7 @@ Goal: installer download 2.5–4.7 GB → ~400–600 MB **without a rewrite** (P
   **Acceptance:** default build ships no torch; smoke test passes; recorded size drops sharply from the 4.7 GB first build.
   **Risks:** a transitive torch dep (skimage/basicsr) sneaks it back in — audit the PyInstaller dependency graph.
 
-- [ ] **TASK 2.3 — bundle LGPL FFmpeg.** Depends: none (can parallel 2.1).
+- [x] **TASK 2.3 — bundle LGPL FFmpeg.** Depends: none (can parallel 2.1). *(Bundle-first `src/utils/ffmpeg.py` resolver + routed callsites + test; build.ps1 vendors a pinned GPL win64-shared FFmpeg into tools/ffmpeg; svcs.spec bundles it; docs/ffmpeg-licensing.md. NB: we ship **GPL** FFmpeg, not LGPL, because the libx264 (Mode 0/1) codec policy needs it — license-compatible with the AGPL app; LGPL is the documented future-fork seam.)*
   **Files:** `installer/build.ps1`, `installer/svcs.spec`, `src/utils/` (ffmpeg path resolution), new `docs/ffmpeg-licensing.md`.
   **Do:** vendor a pinned LGPL FFmpeg; resolve ffmpeg from the bundle first, PATH second (no longer *require* PATH). Document the LGPL/GPL/x264/x265/HEVC matrix (for an AGPL project GPL-FFmpeg-with-x265 is fine; the doc is readiness for a possible future fork).
   **Acceptance:** a test asserts the app finds the bundled ffmpeg when PATH lacks it. Record the pinned version.

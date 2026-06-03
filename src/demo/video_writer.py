@@ -25,6 +25,11 @@ import shutil
 import subprocess
 from pathlib import Path
 
+try:                                       # bundled-first ffmpeg resolution (TASK 2.3)
+    from utils.ffmpeg import ffmpeg_path
+except ImportError:                        # pragma: no cover - import path shim
+    from src.utils.ffmpeg import ffmpeg_path
+
 
 class H264Writer:
     """Write BGR frames to an H.264 MP4 via an FFmpeg stdin pipe."""
@@ -37,7 +42,7 @@ class H264Writer:
         self._proc: subprocess.Popen | None = None
         self._opened = False
 
-        ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
+        ffmpeg = ffmpeg_path()
 
         cmd = [
             ffmpeg, "-y",

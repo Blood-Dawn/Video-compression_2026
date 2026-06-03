@@ -116,6 +116,44 @@ def state_file(name: str) -> Path:
     return data_dir() / name
 
 
+# Names of the per-install state files SVCS writes under data_dir(). Used by the
+# factory-reset action (FIX 2) so a machine with prior state can be returned to
+# a genuine first-run condition. These are the platform-location names (no
+# leading dot), matching what state_file() / the services actually write.
+STATE_FILE_NAMES = [
+    "flask_secret",
+    "mode_cpu_avgs.json",
+    "gui_state.json",
+    "usage_consent.json",
+    "usage_events.jsonl",
+]
+
+
+def reset_state() -> list:
+    """Delete the per-install state files, returning the names removed.
+
+    Factory reset (FIX 2): removes the persisted CPU averages, saved
+    destination prefs, usage-consent record, and Flask secret from data_dir()
+    so the next launch behaves like a fresh install (Setup re-triggers, the CPU
+    panel starts empty). Best effort and never raises; missing files are
+    skipped. The output folders the user created are NOT touched.
+    """
+    removed = []
+    try:
+        d = data_dir()
+    except Exception:  # noqa: BLE001
+        return removed
+    for name in STATE_FILE_NAMES:
+        p = d / name
+        try:
+            if p.exists():
+                p.unlink()
+                removed.append(name)
+        except OSError:
+            continue
+    return removed
+
+
 def default_videos_dir() -> Path:
     """Best-effort guess at the user's "videos" folder.
 

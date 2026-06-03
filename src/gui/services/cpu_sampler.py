@@ -55,6 +55,12 @@ _bg_hw_thread: threading.Thread | None = None
 # installer because Program Files / /Applications are read-only.
 # Author: Bloodawn (KheivenD), 2026-05-14 (installer prep, was 2026-05-03).
 _MODE_AVG_FILE = _paths.state_file("mode_cpu_avgs.json")
+
+# FIX 2: modes that received samples in THIS process run. Persisted averages
+# loaded from disk are flagged ``historical`` so the Metrics panel can show
+# "previous runs" and a fresh install starts with nothing live.
+_session_mode_keys: set = set()
+
 try:
     if _MODE_AVG_FILE.exists():
         _saved_avgs = json.loads(_MODE_AVG_FILE.read_text())
@@ -66,10 +72,29 @@ try:
                     if (isinstance(v, dict)
                         and "cpu_sum" in v and "n" in v and "avg" in v
                         and isinstance(v["n"], int) and v["n"] > 0):
-                        _power_state["mode_avgs"][k] = v
+                        # Mark as historical until this run samples the mode.
+                        entry = dict(v)
+                        entry["historical"] = True
+                        _power_state["mode_avgs"][k] = entry
 except Exception as _exc:  # noqa: BLE001
     # Corrupt file — ignore, will be overwritten on next sampler stop
     pass
+
+
+def reset_mode_avgs() -> None:
+    """Clear in-memory CPU-per-mode averages and delete the persisted file.
+
+    Part of the factory reset (FIX 2): after this the Metrics CPU panel is empty
+    until this install gathers new samples.
+    """
+    with _power_lock:
+        _power_state["mode_avgs"].clear()
+    _session_mode_keys.clear()
+    try:
+        if _MODE_AVG_FILE.exists():
+            _MODE_AVG_FILE.unlink()
+    except OSError:
+        pass
 
 
 def _cpu_sampler_loop(mode_key: str, output_dir: str | None = None) -> None:
@@ -132,9 +157,13 @@ def _cpu_sampler_loop(mode_key: str, output_dir: str | None = None) -> None:
                 "cpu_sum": new_sum,
                 "n":       new_n,
                 "avg":     round(new_sum / new_n, 1),
+                # This run sampled the mode, so it is live, not historical.
+                "historical": False,
             }
-            # Snapshot for write-out below
-            snapshot = {k: dict(v) for k, v in avgs.items()}
+            _session_mode_keys.add(mode_key)
+            # Snapshot for write-out below (drop the transient flag on disk).
+            snapshot = {k: {kk: vv for kk, vv in v.items() if kk != "historical"}
+                        for k, v in avgs.items()}
         # Persist global running avg outside the lock
         try:
             _MODE_AVG_FILE.parent.mkdir(parents=True, exist_ok=True)

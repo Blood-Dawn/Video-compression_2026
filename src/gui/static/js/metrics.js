@@ -147,10 +147,14 @@ function _applyHardwareMetrics(d) {
         if (!a) return `<div class="metrics-library-row" style="opacity:0.4"><span>${modeLabels[k]}</span><span style="font-size:0.65rem;color:var(--text-dim);">no data yet</span></div>`;
         const pct = (a.avg / Math.max(maxAvg, 100)) * 100;
         const color = a.avg > 70 ? 'var(--red)' : a.avg > 40 ? 'var(--amber)' : 'var(--green)';
+        // FIX 2: samples loaded from a prior install are flagged historical so
+        // they are not mistaken for this install's measurements.
+        const histTag = a.historical
+          ? ` <span style="color:var(--text-dim);font-style:italic;">(previous runs)</span>` : '';
         return `<div style="margin:0.25rem 0;">
           <div style="display:flex;justify-content:space-between;font-size:0.68rem;margin-bottom:2px;">
             <span style="color:var(--text-dim);">${modeLabels[k]}</span>
-            <span style="font-family:var(--mono);color:${color};">${a.avg}% avg · ${a.n} samples</span>
+            <span style="font-family:var(--mono);color:${color};">${a.avg}% avg · ${a.n} samples${histTag}</span>
           </div>
           <div style="height:5px;background:var(--surface3);border-radius:2px;overflow:hidden;">
             <div style="height:100%;width:${pct.toFixed(1)}%;background:${color};border-radius:2px;transition:width 0.6s;"></div>

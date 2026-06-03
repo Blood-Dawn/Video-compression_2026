@@ -135,6 +135,28 @@ async function openSetup() {
 }
 window.openSetup = openSetup;
 
+// Factory reset (FIX 2): clear per-install state and return to first-run.
+async function resetAppData() {
+  const ok = window.confirm(
+    "Reset app data?\n\nThis clears saved settings, the destination choice, and "
+    + "the CPU benchmarks, and returns SVCS to first-run setup. Your compressed "
+    + "videos are NOT deleted.");
+  if (!ok) return;
+  try {
+    const res = await fetch("/api/setup/reset", { method: "POST" });
+    const data = await res.json();
+    if (data.ok) {
+      // Reload so the first-run Setup overlay shows again with clean state.
+      window.location.reload();
+    }
+  } catch (e) {
+    if (typeof pushNotif === "function") {
+      pushNotif("Reset failed", "Could not reset app data.", "error", null, 4000);
+    }
+  }
+}
+window.resetAppData = resetAppData;
+
 async function initSetup() {
   let st;
   try {

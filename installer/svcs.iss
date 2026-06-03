@@ -81,7 +81,29 @@ Name: "{autodesktop}\SVCS Dashboard"; Filename: "{app}\{#MyAppExeName}"; Tasks: 
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,SVCS Dashboard}"; \
     Flags: nowait postinstall skipifsilent
 
-; NOTE: no [UninstallDelete] for %APPDATA%\SVCS — the user's Flask secret,
-; encryption keys, CPU benchmarks, persisted output dir, and any outputs are
-; deliberately preserved across uninstall/reinstall (PLAN-V2). Removing them
-; would silently destroy user data and recorded footage.
+; App data under %LOCALAPPDATA%\SVCS (Flask secret, CPU benchmarks, saved
+; destination prefs) is preserved by default across uninstall/reinstall. As of
+; FIX 2 the uninstaller OFFERS to remove it (opt-in prompt) so a user can clear
+; it deliberately. Compressed videos live in the user-chosen output folder and
+; are never touched by the uninstaller.
+
+[Code]
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  AppDataDir: String;
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    AppDataDir := ExpandConstant('{localappdata}\SVCS');
+    if DirExists(AppDataDir) then
+    begin
+      if MsgBox('Also remove SVCS app data (settings, CPU benchmarks, encryption' + #13#10 +
+                'key, and the saved output destination) from:' + #13#10 + AppDataDir + #13#10 + #13#10 +
+                'Your compressed video files are stored separately and will NOT be' + #13#10 +
+                'deleted. Remove app data?', mbConfirmation, MB_YESNO) = IDYES then
+      begin
+        DelTree(AppDataDir, True, True, True);
+      end;
+    end;
+  end;
+end;

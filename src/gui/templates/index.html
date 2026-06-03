@@ -3286,6 +3286,27 @@
     </div>
     <div class="help-body">
 
+      <!-- Maintenance / reset (FIX 2) -->
+      <div class="help-section">
+        <div class="help-section-title">Setup &amp; Maintenance</div>
+        <div class="help-rows">
+          <div class="help-row">
+            <span class="help-term">Output destination</span>
+            <span class="help-def">Choose where compressed and encrypted videos are saved.
+              <button class="btn btn-ghost" style="margin-left:6px;" onclick="closeHelp(); openSetup();">Open Setup</button>
+            </span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Reset app data (factory reset)</span>
+            <span class="help-def">Clears saved settings, the destination choice, and the CPU
+              benchmarks, then returns SVCS to first-run setup. Your compressed videos are NOT
+              deleted. Use this to test a clean install.
+              <button class="btn btn-ghost" style="margin-left:6px;color:var(--red);border-color:var(--red);" onclick="resetAppData()">Reset app data</button>
+            </span>
+          </div>
+        </div>
+      </div>
+
       <!-- Compression Presets -->
       <div class="help-section">
         <div class="help-section-title">Compression Presets</div>

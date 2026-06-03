@@ -25,14 +25,18 @@ try:
     from gui.logging_setup import log
     from gui.services.cloud_detection import list_destinations, _default_output_dir
     from gui.services.gui_state_persist import save_setup_choice, is_setup_complete
+    from gui.services.cpu_sampler import reset_mode_avgs
     from gui.services.path_safety import _safe_output_dir
     from gui.state import _state_lock, _status
+    from utils.paths import reset_state
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.logging_setup import log
     from src.gui.services.cloud_detection import list_destinations, _default_output_dir
     from src.gui.services.gui_state_persist import save_setup_choice, is_setup_complete
+    from src.gui.services.cpu_sampler import reset_mode_avgs
     from src.gui.services.path_safety import _safe_output_dir
     from src.gui.state import _state_lock, _status
+    from src.utils.paths import reset_state
 
 setup_bp = Blueprint("setup", __name__)
 
@@ -120,3 +124,23 @@ def api_setup_choose():
         "output_dir": str(out_path),
         "encrypted_dir": str(enc_path),
     })
+
+
+@setup_bp.route("/api/setup/reset", methods=["POST"])
+def api_setup_reset():
+    """Factory reset (FIX 2): clear per-install state and return to first-run.
+
+    Deletes the persisted state files (CPU averages, saved prefs, usage consent,
+    Flask secret), clears the in-memory CPU-per-mode panel, and forgets the
+    destination choice so the Setup page shows again on reload. The user's
+    compressed output folders are NOT deleted.
+    """
+    removed = reset_state()
+    reset_mode_avgs()
+    with _state_lock:
+        cfg = _status.setdefault("config", {})
+        cfg["output_dir"] = ""
+        cfg["encrypted_dir"] = ""
+        _status["setup_complete"] = False
+    log.info("Factory reset: removed %s; returning to first-run.", removed or "nothing")
+    return jsonify({"ok": True, "removed": removed, "setup_complete": False})

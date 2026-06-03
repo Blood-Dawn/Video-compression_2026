@@ -2128,6 +2128,26 @@
               Browse opens a dialog on the <em>server PC</em>, not your device.<br>
               Use Upload above if you're on a different machine.
             </div>
+
+            <!-- ONVIF camera discovery (M-CAM TASK 1) -->
+            <div style="margin-top:0.6rem;border-top:1px solid var(--border);padding-top:0.5rem;">
+              <div class="input-with-btn" style="gap:6px;">
+                <input type="text" id="camera-username" placeholder="camera username (optional)"
+                       autocomplete="off" style="flex:1;" />
+                <input type="password" id="camera-password" placeholder="password (optional)"
+                       autocomplete="off" style="flex:1;" />
+              </div>
+              <button class="btn btn-ghost" style="margin-top:5px;width:100%;"
+                      onclick="discoverCameras()" title="Scan the LAN for ONVIF cameras">
+                ⟳ Discover ONVIF cameras
+              </button>
+              <div id="camera-discover-status"
+                   style="font-size:0.6rem;color:var(--text-dim);margin-top:4px;line-height:1.4;"></div>
+              <div id="camera-list" style="margin-top:4px;"></div>
+              <div style="font-size:0.58rem;color:var(--text-dim);margin-top:3px;line-height:1.4;">
+                Credentials are sent only to your local SVCS server to build the RTSP URL and are never logged.
+              </div>
+            </div>
           </div>
         </details>
 
@@ -3550,6 +3570,7 @@
   <script src="{{ url_for('static', filename='js/metrics.js') }}"></script>
   <script src="{{ url_for('static', filename='js/plates.js') }}"></script>
   <script src="{{ url_for('static', filename='js/presets.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/cameras.js') }}"></script>
 
 <!-- AI Plate Reader modal — Bloodawn (KheivenD), 2026-05-02 -->
 <div id="plate-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center;">

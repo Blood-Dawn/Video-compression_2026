@@ -78,11 +78,13 @@ EXPECTED = {
     "/api/keygen": "encryption",
     "/api/decrypt": "encryption",
     "/api/encrypt": "encryption",
+    "/api/cameras/discover": "cameras",
+    "/api/cameras/rtsp_url": "cameras",
 }
 
 EXPECTED_BLUEPRINTS = {
     "ui", "sse", "metrics", "presets", "encryption", "plates",
-    "queries", "rtsp", "demo", "hls", "files", "pipeline",
+    "queries", "rtsp", "demo", "hls", "files", "pipeline", "cameras",
 }
 
 
@@ -92,7 +94,7 @@ def _rules():
 
 def test_route_count():
     rules = _rules()
-    assert len(rules) == 50, f"expected 50 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 52, f"expected 52 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_twelve_blueprints_registered():

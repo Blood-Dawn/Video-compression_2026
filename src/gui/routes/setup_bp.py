@@ -56,10 +56,13 @@ def api_setup_state():
         cfg = _status.get("config", {})
         out_dir = (cfg.get("output_dir") or "").strip()
         enc_dir = (cfg.get("encrypted_dir") or "").strip()
+        lib_dir = (cfg.get("library_folder") or "").strip()
     return jsonify({
         "setup_complete": is_setup_complete(),
         "output_dir": out_dir,
         "encrypted_dir": enc_dir,
+        # Last folder the Library browsed (R2.3), so it reopens there.
+        "library_folder": lib_dir,
         # Neutral local fallback the UI shows when nothing is chosen yet.
         "default_output_dir": _default_output_dir(),
     })

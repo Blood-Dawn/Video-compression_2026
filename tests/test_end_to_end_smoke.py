@@ -86,8 +86,9 @@ def test_no_param_free_get_route_5xxs(client):
     not SSE/static returns a non-5xx status, so a newly added route is covered
     automatically."""
     app = client.application
-    # SSE streams forever; /api/browse opens a native blocking dialog.
-    skip = {"static", "sse.api_logs", "files.api_browse"}
+    # SSE streams forever; these open native blocking file/folder dialogs.
+    skip = {"static", "sse.api_logs", "files.api_browse",
+            "library.api_library_browse_folder"}
     checked = 0
     for rule in app.url_map.iter_rules():
         if rule.endpoint in skip:

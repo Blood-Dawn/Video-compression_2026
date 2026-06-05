@@ -2704,15 +2704,42 @@
           <span id="library-count" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-left:0.75rem;"></span>
         </div>
 
-        <!-- Folder picker + view toggle -->
-        <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;">
+        <!-- Folder picker (Browse opens a native folder dialog) + Load -->
+        <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap;">
           <input type="text" id="library-folder" placeholder="folder to browse (defaults to your output folder)"
-                 style="flex:1;min-width:200px;" />
+                 style="flex:1;min-width:180px;" onkeydown="if(event.key==='Enter')loadLibrary()" />
+          <button class="btn btn-ghost" id="library-browse-btn" onclick="browseLibraryFolder()">Browse...</button>
           <button class="btn btn-ghost" onclick="loadLibrary()">Load</button>
+        </div>
+
+        <!-- Search + filters + sort + view toggle -->
+        <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;">
+          <input type="text" id="library-search" placeholder="search by name..."
+                 style="flex:1;min-width:140px;" oninput="filterLibrary()" />
+          <select id="library-ext" onchange="filterLibrary()" title="File type"
+                  style="font-family:var(--mono);font-size:0.65rem;">
+            <option value="">All types</option>
+          </select>
+          <select id="library-sort" onchange="filterLibrary()" title="Sort"
+                  style="font-family:var(--mono);font-size:0.65rem;">
+            <option value="date-desc">Newest</option>
+            <option value="date-asc">Oldest</option>
+            <option value="name-asc">Name (A-Z)</option>
+            <option value="name-desc">Name (Z-A)</option>
+            <option value="size-desc">Largest</option>
+            <option value="size-asc">Smallest</option>
+          </select>
           <button class="btn btn-ghost" id="library-view-grid" onclick="setLibraryView('grid')">Grid</button>
           <button class="btn btn-ghost" id="library-view-list" onclick="setLibraryView('list')">List</button>
         </div>
         <div id="library-status" style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);margin-bottom:0.5rem;"></div>
+
+        <!-- Empty state (shown when a folder has no videos) -->
+        <div id="library-empty" style="display:none;text-align:center;color:var(--text-dim);padding:2rem 1rem;">
+          <div style="font-size:0.85rem;margin-bottom:0.5rem;">No videos in this folder.</div>
+          <div style="font-size:0.7rem;margin-bottom:0.9rem;">Pick a folder that contains your compressed clips or source videos.</div>
+          <button class="btn btn-primary" onclick="browseLibraryFolder()">Browse for a folder...</button>
+        </div>
 
         <!-- Grid / list of videos -->
         <div id="library-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:0.6rem;overflow-y:auto;align-content:start;"></div>

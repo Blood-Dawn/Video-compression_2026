@@ -49,6 +49,7 @@ def _load_gui_state() -> None:
             return
         out_dir = data.get("output_dir") or ""
         enc_dir = data.get("encrypted_dir") or ""
+        lib_dir = data.get("library_folder") or ""
         setup_done = bool(data.get("setup_complete", False))
         demo_root = data.get("last_demo_output_root") or ""
         with _state_lock:
@@ -58,6 +59,8 @@ def _load_gui_state() -> None:
                 cfg.setdefault("output_dir", str(out_dir))
             if enc_dir:
                 cfg.setdefault("encrypted_dir", str(enc_dir))
+            if lib_dir:
+                cfg.setdefault("library_folder", str(lib_dir))
             _status.setdefault("setup_complete", setup_done)
         if demo_root:
             with _demo_lock:
@@ -73,12 +76,14 @@ def _save_gui_state() -> None:
             cfg = _status.get("config", {})
             out_dir = cfg.get("output_dir", "")
             enc_dir = cfg.get("encrypted_dir", "")
+            lib_dir = cfg.get("library_folder", "")
             setup_done = bool(_status.get("setup_complete", False))
         with _demo_lock:
             demo_root = _demo_state.get("last_output_root", "")
         payload = {
             "output_dir": str(out_dir or ""),
             "encrypted_dir": str(enc_dir or ""),
+            "library_folder": str(lib_dir or ""),
             "setup_complete": setup_done,
             "last_demo_output_root": str(demo_root or ""),
             "saved_at": time.time(),
@@ -111,3 +116,21 @@ def is_setup_complete() -> bool:
     """True once the user has made an explicit destination choice."""
     with _state_lock:
         return bool(_status.get("setup_complete", False))
+
+
+def set_library_folder(folder: str) -> None:
+    """Remember the last folder the Library browsed (R2.3) and persist it."""
+    folder = (folder or "").strip()
+    if not folder:
+        return
+    with _state_lock:
+        prev = _status.get("config", {}).get("library_folder")
+        _status.setdefault("config", {})["library_folder"] = folder
+    if prev != folder:
+        _save_gui_state()
+
+
+def get_library_folder() -> str:
+    """Return the last-browsed Library folder, or "" if none."""
+    with _state_lock:
+        return str(_status.get("config", {}).get("library_folder", "") or "")

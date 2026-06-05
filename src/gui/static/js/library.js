@@ -1,18 +1,20 @@
 /*
  * src/gui/static/js/library.js
  *
- * Library / gallery tab (FIX 6).
+ * Library / gallery tab (FIX 6 + R2.3 overhaul).
  *
- * Browse videos in a folder (defaults to the chosen output folder) as a
- * thumbnail grid or list, open a detail view with an inline player and
- * metadata, and send a clip into the existing compress flow. Thumbnails come
- * from /api/library/thumb (generated lazily and cached server-side). Loads
- * lazily the first time the LIBRARY tab is opened. Degrades to no-ops if the
- * DOM hooks are absent. Author: Bloodawn (KheivenD), 2026-06-03 (FIX 6).
+ * Browse a folder of videos as a thumbnail grid or list, search and filter and
+ * sort them, open a detail view with an inline player and metadata, and send a
+ * clip into the compress flow. A "Browse..." button opens a native folder
+ * dialog (or type a path). The chosen folder is remembered. Thumbnails come from
+ * /api/library/thumb (generated lazily, cached) and fall back to a placeholder
+ * when one cannot be made. Loads lazily the first time the tab is opened.
+ *
+ * Author: Bloodawn (KheivenD), 2026-06-03 (FIX 6), 2026-06-05 (R2.3).
  */
 "use strict";
 
-window._svcsLibrary = { view: "grid", folder: "", loaded: false, selected: null };
+window._svcsLibrary = { view: "grid", folder: "", loaded: false, selected: null, all: [] };
 
 function _libStatus(msg) {
   const el = document.getElementById("library-status");
@@ -22,7 +24,7 @@ function _libStatus(msg) {
 function _enc(p) { return encodeURIComponent(p); }
 
 function _fmtSize(bytes) {
-  if (!bytes && bytes !== 0) return "";
+  if (bytes == null) return "";
   const mb = bytes / (1024 * 1024);
   return mb >= 1024 ? (mb / 1024).toFixed(2) + " GB" : mb.toFixed(1) + " MB";
 }
@@ -34,27 +36,52 @@ function setLibraryView(mode) {
     grid.style.gridTemplateColumns = window._svcsLibrary.view === "list"
       ? "1fr" : "repeat(auto-fill,minmax(180px,1fr))";
   }
-  if (window._svcsLibrary._last) _renderLibrary(window._svcsLibrary._last);
+  filterLibrary();
 }
 window.setLibraryView = setLibraryView;
 
-function _renderLibrary(data) {
-  window._svcsLibrary._last = data;
+function _placeholderThumb(img, ext) {
+  // Replace a broken/failed thumbnail with a labelled placeholder box.
+  img.onerror = null;
+  img.removeAttribute("src");
+  img.style.display = "flex";
+  img.style.alignItems = "center";
+  img.style.justifyContent = "center";
+  img.style.color = "var(--text-dim)";
+  img.style.fontFamily = "var(--mono)";
+  img.style.fontSize = "0.6rem";
+  img.style.background = "#11151c";
+  // <img> cannot hold text, so swap to a div in place.
+  const box = document.createElement("div");
+  box.style.cssText = img.style.cssText;
+  box.style.width = img.style.width || "100%";
+  box.style.height = img.style.height;
+  box.textContent = (ext || "video").toUpperCase() + " (no preview)";
+  if (img.parentNode) img.parentNode.replaceChild(box, img);
+}
+
+function _renderLibrary(list) {
   const grid = document.getElementById("library-grid");
+  const empty = document.getElementById("library-empty");
   const count = document.getElementById("library-count");
   if (!grid) return;
   grid.innerHTML = "";
-  const vids = data.videos || [];
-  if (count) count.textContent = data.total != null ? data.total + " video(s)" : "";
-  if (!vids.length) {
-    _libStatus(data.exists === false
-      ? "Folder not found. Enter a different path and press Load."
-      : "No videos in this folder.");
+  if (count) {
+    const total = window._svcsLibrary.all.length;
+    count.textContent = list.length === total
+      ? total + " video(s)" : list.length + " of " + total;
+  }
+  if (!list.length) {
+    if (empty) empty.style.display = window._svcsLibrary.all.length ? "none" : "block";
+    if (!window._svcsLibrary.all.length) _libStatus("");
+    else _libStatus("No videos match the current search/filter.");
     return;
   }
+  if (empty) empty.style.display = "none";
   _libStatus("");
   const isList = window._svcsLibrary.view === "list";
-  vids.forEach((v) => {
+  list.forEach((v) => {
+    const ext = (v.name.split(".").pop() || "").toLowerCase();
     const cell = document.createElement("div");
     cell.style.cssText = isList
       ? "display:flex;gap:0.6rem;align-items:center;padding:0.3rem;border:1px solid var(--border);border-radius:4px;cursor:pointer;"
@@ -66,7 +93,7 @@ function _renderLibrary(data) {
     img.style.cssText = isList
       ? "width:96px;height:54px;object-fit:cover;background:#000;border-radius:3px;flex-shrink:0;"
       : "width:100%;height:108px;object-fit:cover;background:#000;display:block;";
-    img.onerror = () => { img.style.background = "#111"; img.removeAttribute("src"); };
+    img.onerror = () => _placeholderThumb(img, ext);
     const label = document.createElement("div");
     label.style.cssText = "font-family:var(--mono);font-size:0.6rem;padding:0.3rem;color:var(--text);word-break:break-all;";
     label.textContent = v.name + (isList ? "   " + _fmtSize(v.size) : "");
@@ -75,6 +102,42 @@ function _renderLibrary(data) {
     cell.onclick = () => openLibraryDetail(v.path, v.name);
     grid.appendChild(cell);
   });
+}
+
+// Client-side search + type filter + sort over the loaded page.
+function filterLibrary() {
+  const all = window._svcsLibrary.all || [];
+  const q = ((document.getElementById("library-search") || {}).value || "").trim().toLowerCase();
+  const ext = ((document.getElementById("library-ext") || {}).value || "").toLowerCase();
+  const sortVal = (document.getElementById("library-sort") || {}).value || "date-desc";
+  let list = all.filter((v) => {
+    if (q && !v.name.toLowerCase().includes(q)) return false;
+    if (ext && !v.name.toLowerCase().endsWith("." + ext)) return false;
+    return true;
+  });
+  const [field, dir] = sortVal.split("-");
+  const cmp = {
+    name: (a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
+    size: (a, b) => a.size - b.size,
+    date: (a, b) => a.mtime - b.mtime,
+  }[field] || ((a, b) => a.mtime - b.mtime);
+  list.sort(cmp);
+  if (dir === "desc") list.reverse();
+  _renderLibrary(list);
+}
+window.filterLibrary = filterLibrary;
+
+function _populateExtFilter(exts) {
+  const sel = document.getElementById("library-ext");
+  if (!sel) return;
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">All types</option>';
+  (exts || []).forEach((e) => {
+    const o = document.createElement("option");
+    o.value = e; o.textContent = e.toUpperCase();
+    sel.appendChild(o);
+  });
+  if (cur && exts && exts.includes(cur)) sel.value = cur;
 }
 
 async function loadLibrary() {
@@ -87,18 +150,48 @@ async function loadLibrary() {
     const data = await (await fetch(url)).json();
     if (folderEl && !folderEl.value && data.folder) folderEl.value = data.folder;
     window._svcsLibrary.loaded = true;
-    _renderLibrary(data);
+    window._svcsLibrary.folder = data.folder || folder;
+    window._svcsLibrary.all = data.videos || [];
+    _populateExtFilter(data.extensions);
+    if (data.exists === false) {
+      const empty = document.getElementById("library-empty");
+      if (empty) empty.style.display = "block";
+      _libStatus("Folder not found. Click Browse to pick one.");
+      const grid = document.getElementById("library-grid");
+      if (grid) grid.innerHTML = "";
+      return;
+    }
+    filterLibrary();
   } catch (e) {
     _libStatus("Could not load the library.");
   }
 }
 window.loadLibrary = loadLibrary;
 
+async function browseLibraryFolder() {
+  _libStatus("Opening folder picker on the server machine...");
+  try {
+    const data = await (await fetch("/api/library/browse_folder")).json();
+    if (data.path) {
+      const folderEl = document.getElementById("library-folder");
+      if (folderEl) folderEl.value = data.path;
+      await loadLibrary();
+    } else {
+      _libStatus("No folder selected.");
+    }
+  } catch (e) {
+    _libStatus("Folder picker is only available on the server machine. Type a path instead.");
+  }
+}
+window.browseLibraryFolder = browseLibraryFolder;
+
 async function openLibraryDetail(path, name) {
   window._svcsLibrary.selected = path;
   const grid = document.getElementById("library-grid");
   const detail = document.getElementById("library-detail");
   if (grid) grid.style.display = "none";
+  const empty = document.getElementById("library-empty");
+  if (empty) empty.style.display = "none";
   if (detail) detail.style.display = "block";
   const player = document.getElementById("library-player");
   if (player) player.src = "/api/library/file?path=" + _enc(path);
@@ -127,7 +220,7 @@ function closeLibraryDetail() {
   const grid = document.getElementById("library-grid");
   const detail = document.getElementById("library-detail");
   const player = document.getElementById("library-player");
-  if (player) { player.pause && player.pause(); player.removeAttribute("src"); player.load && player.load(); }
+  if (player) { if (player.pause) player.pause(); player.removeAttribute("src"); if (player.load) player.load(); }
   if (detail) detail.style.display = "none";
   if (grid) grid.style.display = "grid";
 }
@@ -158,8 +251,13 @@ async function compressLibrarySelection() {
 }
 window.compressLibrarySelection = compressLibrarySelection;
 
-// Lazy-load the first time the LIBRARY tab is opened.
-window.addEventListener("DOMContentLoaded", () => {
+// Prefill the last-used folder, then lazy-load on first LIBRARY tab open.
+window.addEventListener("DOMContentLoaded", async () => {
+  try {
+    const st = await (await fetch("/api/setup/state")).json();
+    const folderEl = document.getElementById("library-folder");
+    if (folderEl && st.library_folder) folderEl.value = st.library_folder;
+  } catch (e) { /* optional */ }
   const btn = document.querySelector('.tab-btn[data-tab="library"]');
   if (btn) {
     btn.addEventListener("click", () => {

@@ -96,7 +96,8 @@ def test_destinations_includes_detected_onedrive(monkeypatch, tmp_path):
 
 def test_route_state_shape(client):
     body = client.get("/api/setup/state").get_json()
-    assert set(body) == {"setup_complete", "output_dir", "encrypted_dir", "default_output_dir"}
+    assert set(body) == {"setup_complete", "output_dir", "encrypted_dir",
+                         "library_folder", "default_output_dir"}
 
 
 def test_route_destinations_shape(client):

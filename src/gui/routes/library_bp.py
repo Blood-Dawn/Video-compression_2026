@@ -74,45 +74,128 @@ def _safe_video(raw: str):
     return None
 
 
+def _int_arg(name: str, default=None):
+    raw = (request.args.get(name, "") or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(float(raw))
+    except (TypeError, ValueError):
+        return default
+
+
 @library_bp.route("/api/library/videos", methods=["GET"])
 def api_library_videos():
-    """List videos in a folder (newest first), paginated. No thumbnails here."""
+    """List videos in a folder, with search / filters / sort, paginated.
+
+    Query params (all optional):
+      folder      - directory to list (defaults to the chosen output folder)
+      q           - case-insensitive filename substring filter (R2.3 search)
+      ext         - comma-separated extensions to keep (e.g. "mp4,mkv")
+      min_size    - minimum size in BYTES
+      max_size    - maximum size in BYTES
+      sort        - name | size | date   (default: date)
+      order       - asc | desc           (default: desc)
+      page, page_size
+
+    Thumbnails are NOT generated here (the grid loads them lazily). The chosen
+    folder is remembered so the Library reopens where the user left off.
+    """
     folder = _resolve_folder(request.args.get("folder", ""))
-    try:
-        page = max(1, int(request.args.get("page", 1)))
-    except (TypeError, ValueError):
-        page = 1
-    try:
-        page_size = min(200, max(1, int(request.args.get("page_size", 60))))
-    except (TypeError, ValueError):
-        page_size = 60
+    q = (request.args.get("q", "") or "").strip().lower()
+    ext_raw = (request.args.get("ext", "") or "").strip().lower()
+    allowed_exts = None
+    if ext_raw:
+        allowed_exts = {("." + e.lstrip(".")) for e in ext_raw.split(",") if e.strip()}
+    min_size = _int_arg("min_size")
+    max_size = _int_arg("max_size")
+    sort = (request.args.get("sort", "date") or "date").strip().lower()
+    order = (request.args.get("order", "desc") or "desc").strip().lower()
+    page = max(1, _int_arg("page", 1))
+    page_size = min(200, max(1, _int_arg("page_size", 60)))
 
     if not folder.is_dir():
         return jsonify({"folder": str(folder), "exists": False,
                         "total": 0, "videos": []})
 
-    items = []
+    # Remember the folder for next time (R2.3 - persist last library folder).
+    try:
+        from gui.services.gui_state_persist import set_library_folder
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.gui.services.gui_state_persist import set_library_folder
+    set_library_folder(str(folder))
+
+    # Gather all video files first (so the type-filter dropdown reflects every
+    # type in the folder, independent of the active q/ext/size filters).
+    all_items = []
     try:
         for f in folder.iterdir():
             if f.is_file() and f.suffix.lower() in VIDEO_EXTS:
                 try:
                     st = f.stat()
-                    items.append({"name": f.name, "path": str(f),
-                                  "size": st.st_size, "mtime": st.st_mtime})
                 except OSError:
                     continue
+                all_items.append({"name": f.name, "path": str(f),
+                                  "size": st.st_size, "mtime": st.st_mtime,
+                                  "_ext": f.suffix.lower()})
     except OSError as exc:
         return jsonify({"folder": str(folder), "exists": True, "error": str(exc),
                         "total": 0, "videos": []}), 200
 
-    items.sort(key=lambda x: x["mtime"], reverse=True)
+    exts = sorted({i["_ext"].lstrip(".") for i in all_items})
+
+    # Apply search / type / size filters.
+    items = []
+    for i in all_items:
+        if allowed_exts is not None and i["_ext"] not in allowed_exts:
+            continue
+        if q and q not in i["name"].lower():
+            continue
+        if min_size is not None and i["size"] < min_size:
+            continue
+        if max_size is not None and i["size"] > max_size:
+            continue
+        items.append({"name": i["name"], "path": i["path"],
+                      "size": i["size"], "mtime": i["mtime"]})
+
+    key = {"name": lambda x: x["name"].lower(),
+           "size": lambda x: x["size"],
+           "date": lambda x: x["mtime"]}.get(sort, lambda x: x["mtime"])
+    items.sort(key=key, reverse=(order != "asc"))
+
     total = len(items)
     start = (page - 1) * page_size
     return jsonify({
         "folder": str(folder), "exists": True, "total": total,
         "page": page, "page_size": page_size,
+        "sort": sort, "order": order, "extensions": exts,
         "videos": items[start:start + page_size],
     })
+
+
+@library_bp.route("/api/library/browse_folder", methods=["GET"])
+def api_library_browse_folder():
+    """Open a native folder-picker dialog on the HOST and return the chosen dir.
+
+    Desktop-only (it shells out to a tkinter askdirectory dialog). Remote/Docker
+    users type a path instead. Returns {"path": "..."} (empty if cancelled).
+    """
+    import subprocess
+    import sys
+    script = (
+        "import tkinter as tk; from tkinter import filedialog; "
+        "root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True); "
+        "path = filedialog.askdirectory(title='Select a folder of videos'); "
+        "root.destroy(); print(path or '', end='')"
+    )
+    try:
+        result = subprocess.run([sys.executable, "-c", script],
+                                capture_output=True, text=True, timeout=180)
+        path = result.stdout.strip()
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Library folder picker failed: %s", exc)
+        path = ""
+    return jsonify({"path": path})
 
 
 @library_bp.route("/api/library/meta", methods=["GET"])

@@ -203,6 +203,51 @@ def test_browse_folder_returns_chosen_path(client, monkeypatch, tmp_path):
     assert body["path"] == str(tmp_path / "picked")
 
 
+def test_videos_recursive_finds_nested(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(lib._paths, "thumbs_dir", lambda: tmp_path / "thumbs")
+    (tmp_path / "thumbs").mkdir()
+    try:
+        from gui.services import gui_state_persist as gsp
+    except ModuleNotFoundError:  # pragma: no cover
+        from src.gui.services import gui_state_persist as gsp
+    monkeypatch.setattr(gsp, "_GUI_STATE_FILE", tmp_path / "gui_state.json")
+    corpus = tmp_path / "corpus"
+    (corpus / "baseline").mkdir(parents=True)
+    (corpus / "night").mkdir(parents=True)
+    _make_clip(corpus / "baseline" / "highway.avi")
+    _make_clip(corpus / "night" / "bridge.avi")
+    # The corpus folder itself has NO direct videos (the regression the owner hit).
+    body = client.get("/api/library/videos", query_string={"folder": str(corpus)}).get_json()
+    assert body["total"] == 2
+    names = {v["name"] for v in body["videos"]}
+    assert names == {"baseline/highway.avi", "night/bridge.avi"}
+    # recursive=0 lists only the (empty) top level
+    flat = client.get("/api/library/videos",
+                      query_string={"folder": str(corpus), "recursive": "0"}).get_json()
+    assert flat["total"] == 0
+
+
+def test_list_dirs_lists_subdirs(client, tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    _flat_files(tmp_path)  # adds some videos directly here
+    body = client.get("/api/library/list_dirs", query_string={"path": str(tmp_path)}).get_json()
+    names = {d["name"] for d in body["dirs"]}
+    assert {"a", "b"} <= names
+    assert body["video_count"] >= 1
+    assert body["parent"]  # has a parent to go Up to
+
+
+def test_list_dirs_root_returns_listing(client):
+    body = client.get("/api/library/list_dirs").get_json()
+    assert "dirs" in body and isinstance(body["dirs"], list)
+
+
+def test_list_dirs_bad_path(client, tmp_path):
+    assert client.get("/api/library/list_dirs",
+                      query_string={"path": str(tmp_path / "nope")}).status_code == 400
+
+
 def test_thumb_falls_back_gracefully_when_ffmpeg_broken(client, lib_folder, monkeypatch):
     # If ffmpeg cannot make a thumbnail, the endpoint returns 404 (not 500) so
     # the UI can show a placeholder.

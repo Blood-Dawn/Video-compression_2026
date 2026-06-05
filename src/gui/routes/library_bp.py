@@ -125,19 +125,35 @@ def api_library_videos():
         from src.gui.services.gui_state_persist import set_library_folder
     set_library_folder(str(folder))
 
+    # Recurse by default so pointing at a parent folder (e.g. a corpus with
+    # per-scene subfolders) finds the clips nested beneath it. Capped so a huge
+    # tree cannot hang the request. ``recursive=0`` lists the top level only.
+    recursive = (request.args.get("recursive", "1") or "1").strip() not in ("0", "false", "no")
+    cap = 5000
     # Gather all video files first (so the type-filter dropdown reflects every
-    # type in the folder, independent of the active q/ext/size filters).
+    # type in the folder, independent of the active q/ext/size filters). For
+    # nested files the display name carries the relative subpath.
     all_items = []
+    truncated = False
     try:
-        for f in folder.iterdir():
-            if f.is_file() and f.suffix.lower() in VIDEO_EXTS:
-                try:
-                    st = f.stat()
-                except OSError:
-                    continue
-                all_items.append({"name": f.name, "path": str(f),
-                                  "size": st.st_size, "mtime": st.st_mtime,
-                                  "_ext": f.suffix.lower()})
+        walker = folder.rglob("*") if recursive else folder.iterdir()
+        for f in walker:
+            if not (f.is_file() and f.suffix.lower() in VIDEO_EXTS):
+                continue
+            try:
+                st = f.stat()
+            except OSError:
+                continue
+            try:
+                rel = f.relative_to(folder).as_posix()
+            except ValueError:
+                rel = f.name
+            all_items.append({"name": rel, "path": str(f),
+                              "size": st.st_size, "mtime": st.st_mtime,
+                              "_ext": f.suffix.lower()})
+            if len(all_items) >= cap:
+                truncated = True
+                break
     except OSError as exc:
         return jsonify({"folder": str(folder), "exists": True, "error": str(exc),
                         "total": 0, "videos": []}), 200
@@ -169,8 +185,69 @@ def api_library_videos():
         "folder": str(folder), "exists": True, "total": total,
         "page": page, "page_size": page_size,
         "sort": sort, "order": order, "extensions": exts,
+        "recursive": recursive, "truncated": truncated,
         "videos": items[start:start + page_size],
     })
+
+
+@library_bp.route("/api/library/list_dirs", methods=["GET"])
+def api_library_list_dirs():
+    """List subdirectories for the in-app folder browser (R2.3 follow-up).
+
+    A native dialog cannot be opened from the frozen app (sys.executable is the
+    bundled exe, not a Python interpreter), and would not work for a remote or
+    Docker browser anyway. This server-side navigator returns the immediate
+    subdirectories of ``path`` plus the parent, so the UI can walk the tree and
+    pick a folder. With no path it returns the drive roots (Windows) or "/".
+
+    Returns: {"path": str, "parent": str|null, "is_root": bool,
+              "dirs": [{"name": str, "path": str}],
+              "video_count": int}   # videos directly in this folder
+    """
+    import os as _os
+    raw = (request.args.get("path", "") or "").strip()
+
+    # No path -> top level: drive letters on Windows, "/" elsewhere.
+    if not raw:
+        if _os.name == "nt":
+            try:
+                from gui.services.cloud_detection import _windows_drive_roots
+            except ModuleNotFoundError:  # pragma: no cover - import path shim
+                from src.gui.services.cloud_detection import _windows_drive_roots
+            roots = _windows_drive_roots()
+            dirs = [{"name": str(r), "path": str(r)} for r in roots]
+            return jsonify({"path": "", "parent": None, "is_root": True,
+                            "dirs": dirs, "video_count": 0})
+        raw = "/"
+
+    try:
+        base = Path(raw).resolve()
+    except (OSError, ValueError):
+        return jsonify({"error": "invalid path"}), 400
+    if not base.is_dir():
+        return jsonify({"error": "not a directory", "path": str(base)}), 400
+
+    dirs = []
+    video_count = 0
+    try:
+        for entry in sorted(base.iterdir(), key=lambda p: p.name.lower()):
+            try:
+                if entry.is_dir():
+                    dirs.append({"name": entry.name, "path": str(entry)})
+                elif entry.is_file() and entry.suffix.lower() in VIDEO_EXTS:
+                    video_count += 1
+            except OSError:
+                continue
+    except OSError as exc:
+        return jsonify({"error": str(exc), "path": str(base)}), 200
+
+    parent = str(base.parent) if base.parent != base else None
+    # On Windows a drive root's parent is itself; expose "" so the UI can go to
+    # the drive list.
+    if _os.name == "nt" and base.parent == base:
+        parent = ""
+    return jsonify({"path": str(base), "parent": parent, "is_root": False,
+                    "dirs": dirs, "video_count": video_count})
 
 
 @library_bp.route("/api/library/browse_folder", methods=["GET"])

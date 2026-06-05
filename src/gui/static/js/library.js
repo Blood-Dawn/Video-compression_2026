@@ -168,22 +168,84 @@ async function loadLibrary() {
 }
 window.loadLibrary = loadLibrary;
 
-async function browseLibraryFolder() {
-  _libStatus("Opening folder picker on the server machine...");
+// ── Folder browser modal (R2.3 follow-up) ───────────────────────────────────
+// A server-side navigator (works in the frozen app + remotely, unlike a native
+// OS dialog). Walks directories via /api/library/list_dirs.
+window._lbPath = "";
+
+function _showBrowseModal(show) {
+  const m = document.getElementById("library-browse-modal");
+  if (m) m.style.display = show ? "flex" : "none";
+}
+
+async function _lbNavigate(path) {
+  const listEl = document.getElementById("lb-dir-list");
+  const pathEl = document.getElementById("lb-current-path");
+  const hintEl = document.getElementById("lb-hint");
+  const useBtn = document.getElementById("lb-use-btn");
+  if (listEl) listEl.innerHTML = "Loading...";
+  let data;
   try {
-    const data = await (await fetch("/api/library/browse_folder")).json();
-    if (data.path) {
-      const folderEl = document.getElementById("library-folder");
-      if (folderEl) folderEl.value = data.path;
-      await loadLibrary();
-    } else {
-      _libStatus("No folder selected.");
-    }
+    data = await (await fetch("/api/library/list_dirs" + (path ? "?path=" + _enc(path) : ""))).json();
   } catch (e) {
-    _libStatus("Folder picker is only available on the server machine. Type a path instead.");
+    if (listEl) listEl.textContent = "Could not read that folder.";
+    return;
+  }
+  if (data.error) { if (hintEl) hintEl.textContent = data.error; return; }
+  window._lbPath = data.path || "";
+  if (pathEl) pathEl.textContent = data.is_root ? "This PC" : (data.path || "/");
+  if (useBtn) useBtn.disabled = !!data.is_root;
+  if (hintEl) {
+    hintEl.textContent = data.is_root ? "Pick a drive, then a folder."
+      : ((data.video_count || 0) + " video(s) directly in this folder; subfolders are included too.");
+  }
+  if (listEl) {
+    listEl.innerHTML = "";
+    (data.dirs || []).forEach((d) => {
+      const row = document.createElement("div");
+      row.style.cssText = "padding:4px 6px;cursor:pointer;border-radius:3px;";
+      row.textContent = (data.is_root ? "" : "[dir] ") + d.name;
+      row.onmouseover = () => row.style.background = "var(--surface3)";
+      row.onmouseout = () => row.style.background = "transparent";
+      row.onclick = () => _lbNavigate(d.path);
+      listEl.appendChild(row);
+    });
+    if (!(data.dirs || []).length) {
+      listEl.innerHTML = '<div style="padding:6px;color:var(--text-dim);">No subfolders here. Use this folder, or go Up.</div>';
+    }
   }
 }
+
+async function browseLibraryFolder() {
+  _showBrowseModal(true);
+  const folderEl = document.getElementById("library-folder");
+  const start = (folderEl && folderEl.value.trim()) || "";
+  await _lbNavigate(start);
+}
 window.browseLibraryFolder = browseLibraryFolder;
+
+async function lbUp() {
+  let data;
+  try {
+    data = await (await fetch("/api/library/list_dirs" + (window._lbPath ? "?path=" + _enc(window._lbPath) : ""))).json();
+  } catch (e) { return; }
+  // parent is "" -> drive list; null -> already at top.
+  if (data.parent === null || data.parent === undefined) { await _lbNavigate(""); return; }
+  await _lbNavigate(data.parent);
+}
+window.lbUp = lbUp;
+
+function lbUseFolder() {
+  if (!window._lbPath) return;
+  const folderEl = document.getElementById("library-folder");
+  if (folderEl) folderEl.value = window._lbPath;
+  closeBrowseModal();
+  loadLibrary();
+}
+window.lbUseFolder = lbUseFolder;
+
+function closeBrowseModal() { _showBrowseModal(false); }
+window.closeBrowseModal = closeBrowseModal;
 
 async function openLibraryDetail(path, name) {
   window._svcsLibrary.selected = path;

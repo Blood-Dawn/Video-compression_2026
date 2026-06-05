@@ -89,6 +89,7 @@ EXPECTED = {
     "/api/setup/dependencies": "setup",
     "/api/library/videos": "library",
     "/api/library/browse_folder": "library",
+    "/api/library/list_dirs": "library",
     "/api/library/meta": "library",
     "/api/library/thumb": "library",
     "/api/library/file": "library",
@@ -108,7 +109,7 @@ def _rules():
 
 def test_route_count():
     rules = _rules()
-    assert len(rules) == 65, f"expected 65 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 66, f"expected 66 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_twelve_blueprints_registered():

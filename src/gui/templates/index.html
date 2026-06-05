@@ -2737,7 +2737,7 @@
         <!-- Empty state (shown when a folder has no videos) -->
         <div id="library-empty" style="display:none;text-align:center;color:var(--text-dim);padding:2rem 1rem;">
           <div style="font-size:0.85rem;margin-bottom:0.5rem;">No videos in this folder.</div>
-          <div style="font-size:0.7rem;margin-bottom:0.9rem;">Pick a folder that contains your compressed clips or source videos.</div>
+          <div style="font-size:0.7rem;margin-bottom:0.9rem;">Pick a folder that contains your clips (subfolders are searched too).</div>
           <button class="btn btn-primary" onclick="browseLibraryFolder()">Browse for a folder...</button>
         </div>
 
@@ -3741,6 +3741,24 @@
       <div style="display:flex;gap:10px;justify-content:flex-end;">
         <button class="btn btn-ghost" onclick="saveSetup(true)">Skip (use local folder)</button>
         <button class="btn btn-primary" onclick="saveSetup(false)">Save and continue</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Library folder browser (R2.3 follow-up): server-side navigator that works
+       in the frozen app and remotely, unlike a native OS dialog. -->
+  <div id="library-browse-modal" style="display:none;position:fixed;inset:0;z-index:10001;background:rgba(8,9,12,0.86);align-items:center;justify-content:center;">
+    <div style="background:var(--panel,#181b22);border:1px solid var(--border,#2a2f3a);border-radius:10px;max-width:600px;width:calc(100% - 40px);padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.5);">
+      <h3 style="margin:0 0 10px;font-size:1.05rem;">Choose a folder</h3>
+      <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.5rem;">
+        <button class="btn btn-ghost" id="lb-up-btn" onclick="lbUp()" title="Up one level">Up</button>
+        <code id="lb-current-path" style="flex:1;font-family:var(--mono);font-size:0.66rem;color:var(--text-dim);word-break:break-all;">This PC</code>
+      </div>
+      <div id="lb-dir-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:4px;font-family:var(--mono);font-size:0.7rem;"></div>
+      <div id="lb-hint" style="font-size:0.6rem;color:var(--text-dim);margin-top:6px;min-height:1em;"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px;">
+        <button class="btn btn-ghost" onclick="closeBrowseModal()">Cancel</button>
+        <button class="btn btn-primary" id="lb-use-btn" onclick="lbUseFolder()">Use this folder</button>
       </div>
     </div>
   </div>

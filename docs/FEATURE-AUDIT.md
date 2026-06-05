@@ -59,3 +59,22 @@ FOLLOW-UP = tracked below / in another task.
 - Real per-mode/per-codec proof on real footage is the job of
   `tests/test_real_videos.py` (R2.2); it runs the CDnet corpus through every mode
   and asserts valid + smaller + correct codec.
+
+## Real-video integration test (R2.2)
+
+`tests/test_real_videos.py` runs the real pipeline on the CDnet clips in
+`data/samples/cdnet_mp4` (or set `SVCS_TEST_VIDEO_DIR` to point at any folder of
+clips). It picks one clip per scene-type subfolder, trims a short window from
+each to keep runtime bounded, and runs every clip through every mode, asserting
+each output is a valid non-empty container (ffprobe), is far smaller than the raw
+uncompressed size, and uses the correct per-mode codec (mode0/1 = H.264,
+mode2/3 = AV1). It SKIPS cleanly when no clips are present (the corpus is
+git-LFS, absent on CI).
+
+Run `uv run --no-sync pytest tests/test_real_videos.py -s` to see real
+compression ratios per clip and mode, and confirm each mode + codec works on
+real footage. A sample run (8 scene types, 3 s window) validated 29 segments in
+~21 s, with ratios versus raw ranging from ~65x (busy PTZ pan, mode1) to
+~32000x (low-framerate port, mode3 object-only). No new media is committed.
+Tune breadth with `SVCS_TEST_VIDEO_MAX` and the window with
+`SVCS_TEST_VIDEO_TRIM`.

@@ -1,4 +1,4 @@
-# SVCS v2.0.0-beta - draft release notes
+# SVCS v2.1.0-beta - draft release notes
 
 > **Draft for the owner to publish.** This is an **unsigned public beta**. Windows
 > SmartScreen will warn on launch - choose *More info → Run anyway*. A signed
@@ -29,7 +29,7 @@ cloud, no telemetry by default.
 
 ## Install
 
-Download `SVCS-Setup-2.0.0-beta.exe` below and run it; the dashboard opens at
+Download `SVCS-Setup-2.1.0-beta.exe` below and run it; the dashboard opens at
 `http://localhost:5000`. **Verify your download** against `SHA256SUMS.txt`
 (see the download page for steps).
 
@@ -47,9 +47,9 @@ System requirements: Windows 10/11 64-bit, any modern CPU (no GPU), 4 GB+ RAM,
 
 ```
 # Windows
-Get-FileHash .\SVCS-Setup-2.0.0-beta.exe -Algorithm SHA256
+Get-FileHash .\SVCS-Setup-2.1.0-beta.exe -Algorithm SHA256
 # Linux/macOS
-sha256sum SVCS-Setup-2.0.0-beta.exe
+sha256sum SVCS-Setup-2.1.0-beta.exe
 ```
 Compare against `SHA256SUMS.txt` attached to this release.
 

@@ -5,7 +5,7 @@ done by whoever prepares the release; **tagging and publishing the GitHub Releas
 is the owner's action** (it's a gated step - see `docs/BLOCKERS.md`).
 
 Versions follow the installer name: `SVCS-Setup-<version>.exe`. The first public
-drop is the **unsigned beta** `v2.0.0-beta`.
+drop is the **unsigned beta** `v2.1.0-beta`.
 
 ---
 
@@ -46,11 +46,11 @@ drop is the **unsigned beta** `v2.0.0-beta`.
 
 ## 6. Draft the GitHub Release  🚦 *owner publishes*
 
-- [ ] Draft a release from the **draft notes** (`docs/release-notes-v2.0.0-beta.md`).
+- [ ] Draft a release from the **draft notes** (`docs/release-notes-v2.1.0-beta.md`).
 - [ ] Attach `SVCS-Setup-<version>.exe` and `SHA256SUMS.txt`.
 - [ ] Mark it a **pre-release**; the title/notes state clearly it is an
       **unsigned beta** and SmartScreen will warn.
-- [ ] **Owner action:** create the tag (`v2.0.0-beta`) and click *Publish*.
+- [ ] **Owner action:** create the tag (`v2.1.0-beta`) and click *Publish*.
       The agent does not tag or publish (gated - `docs/BLOCKERS.md`).
 
 ## 6b. Code signing (GA - TASK 5b.1)  🚦 *needs a cert*

@@ -17,7 +17,7 @@ import pytest
 
 DOCS = Path(__file__).parent.parent / "docs"
 CHECKLIST = DOCS / "RELEASE-CHECKLIST.md"
-NOTES = DOCS / "release-notes-v2.0.0-beta.md"
+NOTES = DOCS / "release-notes-v2.1.0-beta.md"
 BLOCKERS = DOCS / "BLOCKERS.md"
 
 
@@ -47,6 +47,6 @@ def test_release_notes_exist_and_flag_unsigned_beta():
 
 def test_blockers_records_the_publish_gate():
     body = BLOCKERS.read_text(encoding="utf-8").lower()
-    assert "v2.0.0-beta" in body
+    assert "v2.1.0-beta" in body
     assert "owner" in body
     assert "release-checklist" in body

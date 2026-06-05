@@ -24,7 +24,7 @@ Done: **M1** 1.1-1.6 **+ 1.7** (Upload tab); **M2** 2.1-2.4 (installer 210 MB);
 
 | Task | Why gated | What's ready | Owner action |
 |------|-----------|--------------|--------------|
-| **5.4** publish beta | human tags/publishes | RELEASE-CHECKLIST + draft notes | build on a release box, tag `v2.0.0-beta`, publish pre-release |
+| **5.4** publish beta | human tags/publishes | RELEASE-CHECKLIST + draft notes | build on a release box, tag `v2.1.0-beta`, publish pre-release |
 | **5b.1** Windows signing | needs a cert | `build.ps1 -Sign` wired | get a cert (try SignPath OSS), set env vars, build `-Installer -Sign` |
 | **5b.2** AppImage publish | publish is owner's | build.sh + CI build+smoke green | confirm the AppImage CI job, attach artifact to the Release |
 | **5b.3** macOS dmg | needs Apple cert + a Mac | - (deferred per plan) | provide Apple Developer cert; build/notarize on macOS |
@@ -126,7 +126,7 @@ as the run reaches them:
   (repeatable build → verify → checksums → draft) and `docs/release-notes-v2.0.0-beta.md`
   (draft notes) are written. The remaining steps are the owner's and were NOT done
   by the autonomous run (gated): build the installer (`installer/build.ps1 -Installer`)
-  on a release machine, generate `SHA256SUMS.txt`, create the **`v2.0.0-beta`** tag,
+  on a release machine, generate `SHA256SUMS.txt`, create the **`v2.1.0-beta`** tag,
   and publish the **pre-release** with the unsigned-beta warning. Nothing here is
   blocked on code - only on the human publish action.
 - **Linux AppImage (5b.2) - built + smoke-tested in CI, not on the Windows host.**

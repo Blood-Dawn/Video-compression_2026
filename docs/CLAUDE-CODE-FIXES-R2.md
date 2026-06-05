@@ -15,7 +15,7 @@ Branch `app`. Three tasks plus a version bump. Do TASK R2.3 (Library) and TASK R
 
 Goal: confirm EVERY feature actually works in the running app, write down the result, and fix what is broken.
 
-- [ ] **Audit pass (use the Preview MCP, real browser).** Start the server, then exercise every tab and control and record pass/fail in a new `docs/FEATURE-AUDIT.md` (a table: Feature | How tested | Result | Notes). Cover at least:
+- [x] **Audit pass (use the Preview MCP, real browser).** Start the server, then exercise every tab and control and record pass/fail in a new `docs/FEATURE-AUDIT.md` (a table: Feature | How tested | Result | Notes). Cover at least:
   - Each topbar tab loads and switches: HOME, UPLOAD, LIBRARY, METRICS, SEARCH, TOOLS, ENCRYPT.
   - Setup overlay: first-run shows it, destinations list, choosing one persists and enables START.
   - HOME: upload a video (UPLOAD tab dropzone), pick each preset, set CRF, START a real compress, watch the live log, confirm an output segment appears in Recent Recordings and on disk.
@@ -27,8 +27,8 @@ Goal: confirm EVERY feature actually works in the running app, write down the re
   - LIBRARY: folder load, thumbnails, detail player, compress-this (this is TASK R2.3; note current breakage here).
   - Help overlay: all sections render; dependency check; reset button.
   - Verbose log toggle changes console/dashboard detail during a compress.
-- [ ] **Fix what the audit finds.** Small bugs: fix inline in this task with a regression test each. Anything large or risky: list it at the bottom of `docs/FEATURE-AUDIT.md` as a follow-up rather than rushing it. Do not leave a feature marked "broken" without either a fix or a written follow-up.
-- [ ] **Automated end-to-end smoke test.** Add `tests/test_end_to_end_smoke.py` that, against the Flask test client, GETs `/` (200) and hits every read-only API route (status, segments, library/videos, setup/state, setup/destinations, metrics, dependencies, etc.) asserting each returns a sane JSON shape (not 500). This is the cheap guard that no route 500s on a clean install. Keep it env-light (no real video required).
+- [x] **Fix what the audit finds.** Small bugs: fix inline in this task with a regression test each. Anything large or risky: list it at the bottom of `docs/FEATURE-AUDIT.md` as a follow-up rather than rushing it. Do not leave a feature marked "broken" without either a fix or a written follow-up.
+- [x] **Automated end-to-end smoke test.** Add `tests/test_end_to_end_smoke.py` that, against the Flask test client, GETs `/` (200) and hits every read-only API route (status, segments, library/videos, setup/state, setup/destinations, metrics, dependencies, etc.) asserting each returns a sane JSON shape (not 500). This is the cheap guard that no route 500s on a clean install. Keep it env-light (no real video required).
 - **Acceptance:** `docs/FEATURE-AUDIT.md` exists with every feature marked pass or fixed-or-followup; the smoke test passes; full suite green; browser-verified.
 
 ## TASK R2.2 - Real-video integration test (point it at a folder of real clips)

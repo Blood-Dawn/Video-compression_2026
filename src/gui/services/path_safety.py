@@ -10,7 +10,9 @@ filename into a filesystem access (media serving, uploads, encrypt/decrypt).
 Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - path-safety extraction).
 """
 
+import ipaddress
 from pathlib import Path
+from urllib.parse import urlparse
 
 try:
     from gui.state import _SAFE_FILENAME_RE
@@ -180,3 +182,51 @@ def allowed_media_roots() -> list:
             seen.add(s)
             uniq.append(r)
     return uniq
+
+
+# ── Input-source SSRF guard (SEC-013) ─────────────────────────────────────────
+# The pipeline / HLS input_source is opened with cv2.VideoCapture, which honours
+# http(s) and file:// URLs. An operator (or, pre-CSRF-fix, a malicious page) could
+# point it at file:///etc/passwd or a cloud-metadata endpoint. We allow the real
+# media schemes (and local paths + webcam indices) and block file:// and friends
+# plus the link-local / cloud-metadata hosts. Private-LAN hosts stay allowed so
+# real RTSP cameras on the network keep working.
+
+_INPUT_BLOCKED_SCHEMES = {"file", "gopher", "dict", "ftp", "sftp", "smb",
+                          "data", "php", "jar", "netdoc", "ldap"}
+_INPUT_ALLOWED_SCHEMES = {"", "rtsp", "rtsps", "rtp", "rtmp", "rtmps",
+                          "http", "https", "udp", "tcp", "mms", "srt"}
+_INPUT_BLOCKED_HOSTS = {"169.254.169.254", "100.100.100.100",
+                        "metadata.google.internal", "metadata"}
+
+
+def is_safe_input_source(src) -> "tuple[bool, str]":
+    """Validate a pipeline/HLS input_source. Returns (ok, reason).
+
+    Allows: a webcam index, a local file path (incl. Windows drive paths), and
+    real streaming URLs (rtsp/http/...). Blocks: file:// and other
+    local/protocol-smuggling schemes, and the cloud-metadata / link-local hosts.
+    """
+    s = str(src).strip()
+    if not s:
+        return False, "empty input_source"
+    if s.isdigit():                       # webcam index
+        return True, ""
+    parsed = urlparse(s)
+    scheme = (parsed.scheme or "").lower()
+    if len(scheme) <= 1:                   # "" (relative/abs path) or "c:" drive letter
+        return True, ""
+    if scheme in _INPUT_BLOCKED_SCHEMES:
+        return False, f"scheme not allowed: {scheme}"
+    if scheme not in _INPUT_ALLOWED_SCHEMES:
+        return False, f"scheme not allowed: {scheme}"
+    host = (parsed.hostname or "").lower()
+    if host in _INPUT_BLOCKED_HOSTS:
+        return False, "blocked internal host"
+    try:
+        ip = ipaddress.ip_address(host)
+        if ip.is_link_local:               # 169.254.0.0/16, fe80::/10 (metadata)
+            return False, "blocked link-local host"
+    except ValueError:
+        pass                               # a hostname, not a literal IP
+    return True, ""

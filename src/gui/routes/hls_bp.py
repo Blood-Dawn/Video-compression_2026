@@ -19,6 +19,7 @@ try:
     from gui.services.rtsp import _rtsp_mgr
     from gui.services import hls_runner as _hls_runner
     from gui.services.hls_runner import _hls_dir_for, _hls_annotator_thread
+    from gui.services.path_safety import is_safe_input_source
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.state import (_hls_lock, _hls_state, _hls_frame_ts_dq, _hls_segment_latencies)
     from src.gui.logging_setup import log
@@ -26,6 +27,7 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.services.rtsp import _rtsp_mgr
     from src.gui.services import hls_runner as _hls_runner
     from src.gui.services.hls_runner import _hls_dir_for, _hls_annotator_thread
+    from src.gui.services.path_safety import is_safe_input_source
 
 hls_bp = Blueprint("hls", __name__)
 
@@ -50,6 +52,10 @@ def api_hls_start():
 
     data = request.get_json(force=True) or {}
     input_source = str(data.get("input_source", "0")).strip()
+    # SEC-013: reject file:// and cloud-metadata/link-local SSRF targets.
+    _ok, _why = is_safe_input_source(input_source)
+    if not _ok:
+        return jsonify({"error": f"input_source not allowed: {_why}"}), 400
     camera_id = str(data.get("camera_id", "cam_00")).strip()
     # HLS .ts chunks should sync alongside saved segments - OneDrive when
     # available, local fallback otherwise. Was hard-coded to local in the

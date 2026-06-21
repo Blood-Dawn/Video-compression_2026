@@ -163,6 +163,13 @@ function Install-Core {
     $tmp = Join-Path $env:TEMP "SVCS-Setup-$Version.exe"
     Write-Status "  downloading $installerUrl" $Theme.Fg
     Invoke-WebRequest -Uri $installerUrl -OutFile $tmp -UseBasicParsing
+    # SEC-016: the download is over HTTPS from the official repo, but this path
+    # (unlike winget, which pins InstallerSha256) cannot pin a per-release hash.
+    # Surface the SHA256 so the operator can compare it against SHA256SUMS.txt on
+    # the Release page before trusting the binary.
+    $sha = (Get-FileHash -Algorithm SHA256 -Path $tmp).Hash
+    Write-Status "  SHA256: $sha" $Theme.Dim
+    Write-Status "  Verify this against SHA256SUMS.txt on the GitHub Release before trusting it." $Theme.Dim
     Write-Status '  running installer silently...' $Theme.Fg
     Start-Process -FilePath $tmp -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait
     Write-Status '  core install finished.' 'Green'

@@ -64,8 +64,10 @@ dependencies = [
     # and the dashboard would fail with:
     #     "[!] Encryption failed: The 'cryptography' package is required"
     # Pinning >=41 because PBKDF2HMAC-from-bytes lives in the modern API.
+    # SEC-008 (2026-06-21): floor raised to 48.0.1 (the fix for
+    # GHSA-537c-gmf6-5ccf flagged by pip-audit); the lock pins 49.0.0.
     # Author: Bloodawn (KheivenD), 2026-05-03 (encrypt fix).
-    "cryptography>=41.0.0",
+    "cryptography>=48.0.1",
     # Platform-aware app data / config / cache directories. Lets the
     # installed app write its small state files (.flask_secret, the
     # CPU benchmark cache, the persisted output_dir, etc.) to the

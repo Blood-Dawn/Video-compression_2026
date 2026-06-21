@@ -15,14 +15,14 @@ from flask import Blueprint, jsonify, request, abort
 try:
     from gui.state import (_state_lock, _status)
     from gui.logging_setup import log
-    from gui.services.path_safety import _safe_output_dir
+    from gui.services.path_safety import _safe_output_dir, is_safe_input_source
     from gui.services.cloud_detection import _default_output_dir
     from gui.services import pipeline_runner as _pipeline_runner
     from gui.services.pipeline_runner import _run_pipeline_thread
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.state import (_state_lock, _status)
     from src.gui.logging_setup import log
-    from src.gui.services.path_safety import _safe_output_dir
+    from src.gui.services.path_safety import _safe_output_dir, is_safe_input_source
     from src.gui.services.cloud_detection import _default_output_dir
     from src.gui.services import pipeline_runner as _pipeline_runner
     from src.gui.services.pipeline_runner import _run_pipeline_thread
@@ -78,6 +78,12 @@ def api_start():
         resolved_input = int(raw_input)
     except ValueError:
         resolved_input = raw_input
+        # SEC-013: block file:// and cloud-metadata/link-local SSRF targets in the
+        # input URL (cv2.VideoCapture would otherwise open them). Webcam indices
+        # and local paths and real stream URLs pass.
+        _ok, _why = is_safe_input_source(resolved_input)
+        if not _ok:
+            return jsonify({"error": f"input_source not allowed: {_why}"}), 400
 
     # Default output dir: prefer OneDrive/SVCS so segments land in the cloud
     # folder operators expect. Falls back to <project_root>/outputs/ only when

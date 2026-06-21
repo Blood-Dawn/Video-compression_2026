@@ -11,6 +11,21 @@ Author: Bloodawn (KheivenD), 2026-06-02 (autonomous v2 build).
 
 ## Open items
 
+### Security audit - deferred items (2026-06-21)
+
+The security audit (`docs/SECURITY-AUDIT.md`) fixed every Critical/High and the
+cheap Medium/Low findings this session. Genuinely-deferred items:
+
+| Item | Severity | Why deferred | Proposed approach |
+|------|----------|--------------|-------------------|
+| Dev/notebook dependency CVEs | Medium | `pip-audit` flagged jupyter-server, jupyterlab, mistune, notebook, tornado, bleach, basicsr, idna - all DEV/notebook-only deps, not imported by the runtime app or shipped in the installer. The runtime ones (cryptography, urllib3) were bumped (SEC-008). | Bump the notebook stack in a dedicated `uv lock --upgrade-package` pass when the notebooks are next touched; they are not in the frozen app. |
+| External network penetration test | n/a (process) | Requires a live LAN bind + an external tester; not a pytest-coverable, CI-safe activity. | Owner runs a pentest against a real deployment before any public/production rollout. |
+| Fuzzing the video-ingest / ffmpeg path | n/a (process) | A real fuzzing campaign (AFL/boofuzz) needs dedicated tooling + time and is not deterministic in CI. | Owner runs a fuzzing pass on the upload/watch-folder/thumbnail path with malformed media corpora. |
+| Live RTSP/ONVIF camera-path testing | n/a (process) | Needs a real camera or a running MediaMTX server; hardware/timing dependent. | Owner exercises the live camera path manually (see `docs/FEATURE-AUDIT.md`). |
+
+The CI-safe core (path traversal, SQLi, XSS, CSRF, auth, crypto, delete-original
+safety, SSRF input guard, supply-chain pins) is covered by `tests/security/`.
+
 ### R3.2 distribution - owner-gated / owner-verified (2026-06-21)
 
 R3.1 (auto-compress) is fully implemented and tested. R3.2 (terminal/winget

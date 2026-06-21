@@ -31,6 +31,22 @@ Path from the stale "48 failed" claim to green: provision the env (cleared 22 en
 
 The 3 skips are the real-webcam hardware tests (`SVCS_TEST_WEBCAM=1` to run) - intentional.
 
+## GREEN baseline after R3 (2026-06-21)
+
+| Field | Value |
+|---|---|
+| Command | `scripts/run_tests.ps1` |
+| Result | **1025 passed, 4 skipped, 0 failed** (~200 s) |
+| Env | Windows 11, Python 3.11.9, `.venv` |
+
+R3 added the auto-compress feature (R3.1) and terminal/winget distribution
+(R3.2). New tests: `test_compressed_index.py` (7), `test_autocompress.py` (14,
+the live-save test skips without the CDnet corpus), `test_winget_manifest.py`
+(7), `test_install_script.py` (8), plus 5 new `test_library.py` kind-filter
+tests; the route/blueprint guards moved to 70 routes / 17 blueprints and the
+nav-order guard gained the AUTO-COMPRESS tab. The 4 skips are 3 webcam + 1
+opt-in Docker build (the live-save test runs when the corpus is present).
+
 ---
 
 ## (historical) First provisioned run, 2026-05-31 20:02

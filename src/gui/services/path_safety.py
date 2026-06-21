@@ -55,3 +55,128 @@ def _safe_filename(name: str) -> str:
     if not _SAFE_FILENAME_RE.match(name):
         raise ValueError(f"Unsafe filename: {name!r}")
     return name
+
+
+# ── Central confinement (SEC-002/003/004/015 hardening) ───────────────────────
+# A single helper every file-SERVING route funnels through, so a path can never
+# be read/served from outside the set of folders the operator actually uses.
+# This replaces the ad-hoc, inconsistent per-route checks (some of which were
+# dead `'..' in p.parts` tests that resolve() had already collapsed).
+
+def is_within(path, root) -> bool:
+    """True if ``path`` (resolved) equals or is nested under ``root`` (resolved)."""
+    try:
+        p = Path(path).resolve()
+        r = Path(root).resolve()
+    except (OSError, ValueError):
+        return False
+    return p == r or r in p.parents
+
+
+def confine_to_allowed(path, allowed_roots):
+    """Resolve ``path`` and require it to live within one of ``allowed_roots``.
+
+    Returns the resolved Path, or raises ValueError if it escapes every root.
+    Use for any route that reads/serves a user-supplied filesystem path.
+    """
+    p = Path(path).resolve()
+    for root in allowed_roots:
+        if is_within(p, root):
+            return p
+    raise ValueError(f"path is outside the allowed folders: {p}")
+
+
+def is_path_allowed(path, allowed_roots) -> bool:
+    """Non-raising variant of confine_to_allowed."""
+    try:
+        confine_to_allowed(path, allowed_roots)
+        return True
+    except ValueError:
+        return False
+
+
+def allowed_media_roots() -> list:
+    """The folders a media/library path is allowed to be read or served from.
+
+    The user's legitimate areas only: the configured output / library / encrypted
+    folders, the last demo output root, the default cloud output dir and detected
+    cloud SVCS root, the per-user Videos/SVCS and app-data dirs, and the repo's
+    ``data/`` and ``outputs/``. NOT the whole drive and NOT the repo source tree,
+    so a LAN/CSRF client cannot read arbitrary files off the host.
+    """
+    roots = []
+
+    def _add(v):
+        if v:
+            try:
+                roots.append(Path(v).resolve())
+            except (OSError, ValueError):
+                pass
+
+    # Configured + persisted folders.
+    try:
+        from gui.state import _state_lock, _status
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.gui.state import _state_lock, _status
+    try:
+        with _state_lock:
+            cfg = dict(_status.get("config", {}))
+        for k in ("output_dir", "library_folder", "encrypted_dir"):
+            _add(cfg.get(k))
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Last demo output root.
+    try:
+        from gui.state import _demo_lock, _demo_state
+    except ModuleNotFoundError:  # pragma: no cover
+        from src.gui.state import _demo_lock, _demo_state
+    try:
+        with _demo_lock:
+            _add(_demo_state.get("last_output_root"))
+    except Exception:  # noqa: BLE001
+        pass
+
+    # Per-user + app-data dirs.
+    try:
+        from utils import paths as _paths
+    except ModuleNotFoundError:  # pragma: no cover
+        from src.utils import paths as _paths
+    for fn in ("default_videos_dir", "data_dir"):
+        try:
+            _add(getattr(_paths, fn)())
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Cloud default output + detected cloud SVCS root.
+    try:
+        from gui.services.cloud_detection import _default_output_dir, _detect_cloud_root
+    except ModuleNotFoundError:  # pragma: no cover
+        try:
+            from src.gui.services.cloud_detection import _default_output_dir, _detect_cloud_root
+        except Exception:  # noqa: BLE001
+            _default_output_dir = _detect_cloud_root = None
+    if _default_output_dir is not None:
+        try:
+            _add(_default_output_dir())
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            r, _label, _url = _detect_cloud_root()
+            _add(r)
+        except Exception:  # noqa: BLE001
+            pass
+
+    # Repo data/ and outputs/ (covers samples + the default local output).
+    _root = Path(__file__).resolve().parents[3]
+    _add(_root / "data")
+    _add(_root / "outputs")
+
+    # De-dup while preserving order.
+    seen, uniq = set(), []
+    for r in roots:
+        s = str(r)
+        if s and s not in seen:
+            seen.add(s)
+            uniq.append(r)
+    return uniq

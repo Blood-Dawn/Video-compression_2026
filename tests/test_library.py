@@ -55,6 +55,9 @@ def lib_folder(tmp_path, monkeypatch):
     except ModuleNotFoundError:  # pragma: no cover
         from src.gui.services import gui_state_persist as gsp
     monkeypatch.setattr(gsp, "_GUI_STATE_FILE", tmp_path / "gui_state.json")
+    # SEC-003: file/meta/thumb now confine to the operator's media roots; allow
+    # this test's tmp tree so the legitimate clips under it are servable.
+    monkeypatch.setattr(lib._ps, "allowed_media_roots", lambda: [tmp_path])
     vids = tmp_path / "vids"
     vids.mkdir()
     _make_clip(vids / "alpha.avi")
@@ -148,6 +151,9 @@ def flat_folder(tmp_path, monkeypatch):
     except ModuleNotFoundError:  # pragma: no cover
         from src.gui.services import gui_state_persist as gsp
     monkeypatch.setattr(gsp, "_GUI_STATE_FILE", tmp_path / "gui_state.json")
+    # SEC-003: file/meta/thumb now confine to the operator's media roots; allow
+    # this test's tmp tree so the legitimate clips under it are servable.
+    monkeypatch.setattr(lib._ps, "allowed_media_roots", lambda: [tmp_path])
     folder = tmp_path / "flat"
     folder.mkdir()
     _flat_files(folder)
@@ -237,6 +243,9 @@ def test_videos_recursive_finds_nested(client, tmp_path, monkeypatch):
     except ModuleNotFoundError:  # pragma: no cover
         from src.gui.services import gui_state_persist as gsp
     monkeypatch.setattr(gsp, "_GUI_STATE_FILE", tmp_path / "gui_state.json")
+    # SEC-003: file/meta/thumb now confine to the operator's media roots; allow
+    # this test's tmp tree so the legitimate clips under it are servable.
+    monkeypatch.setattr(lib._ps, "allowed_media_roots", lambda: [tmp_path])
     corpus = tmp_path / "corpus"
     (corpus / "baseline").mkdir(parents=True)
     (corpus / "night").mkdir(parents=True)
@@ -298,6 +307,9 @@ def kind_folder(tmp_path, monkeypatch):
     except ModuleNotFoundError:  # pragma: no cover
         from src.gui.services import gui_state_persist as gsp
     monkeypatch.setattr(gsp, "_GUI_STATE_FILE", tmp_path / "gui_state.json")
+    # SEC-003: file/meta/thumb now confine to the operator's media roots; allow
+    # this test's tmp tree so the legitimate clips under it are servable.
+    monkeypatch.setattr(lib._ps, "allowed_media_roots", lambda: [tmp_path])
     # The endpoint reads the DEFAULT index path; redirect it to tmp.
     monkeypatch.setattr(lib._cidx._paths, "state_file", lambda name: tmp_path / name)
 

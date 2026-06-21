@@ -18,13 +18,20 @@ try:
     from gui.logging_setup import log
     from gui.services.cloud_detection import _detect_cloud_root
     from gui.services.db_helpers import _get_db_path, _get_archive_db_path, _rows_to_segment_list
+    from gui.services import path_safety as _ps
     from utils.db import (get_connection)
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.state import (_state_lock, _status, _demo_lock, _demo_state, _CLOUD_SUBFOLDER, _ALLOWED_EXTENSIONS)
     from src.gui.logging_setup import log
     from src.gui.services.cloud_detection import _detect_cloud_root
     from src.gui.services.db_helpers import _get_db_path, _get_archive_db_path, _rows_to_segment_list
+    from src.gui.services import path_safety as _ps
     from src.utils.db import (get_connection)
+
+# Extensions /media/<path> may serve (SEC-004): media + a few preview image
+# types, so it can never hand back source code, the metadata DB, configs, etc.
+_MEDIA_SERVE_EXTS = {".mp4", ".webm", ".mov", ".avi", ".mkv", ".ts", ".m4v",
+                     ".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
 # Repo root (…/src/gui/routes/<bp>_bp.py -> parents[3]).
 _ROOT = Path(__file__).resolve().parents[3]
@@ -289,6 +296,10 @@ def media_file(rel_path: str):
         abort(404)
     if not abs_path.exists() or not abs_path.is_file():
         abort(404)
+    # SEC-004: only serve media/preview files - never source, the metadata DB,
+    # configs, or other repo files that happen to live under the project root.
+    if abs_path.suffix.lower() not in _MEDIA_SERVE_EXTS:
+        abort(404)
     return send_from_directory(str(root), rel_path, as_attachment=False)
 
 
@@ -299,8 +310,14 @@ def api_media_debug():
     if not path:
         return jsonify({"error": "no path param"})
     p = Path(path).resolve()
+    # SEC-015: do not act as a filesystem existence/path oracle for arbitrary
+    # paths. Only report details for paths inside the operator's media folders;
+    # everything else is reported as simply not-servable, with no resolved path.
+    if not _ps.is_path_allowed(p, _ps.allowed_media_roots()):
+        return jsonify({"raw_path": path, "allowed": False, "would_serve": False})
     return jsonify({
         "raw_path": path,
+        "allowed": True,
         "resolved": str(p),
         "is_absolute": p.is_absolute(),
         "exists": p.exists(),
@@ -340,6 +357,11 @@ def api_media():
         abort(404)
     suffix = p.suffix.lower()
     if suffix not in {".mp4", ".webm", ".mov", ".avi", ".mkv"}:
+        abort(403)
+    # SEC-002: confine to the operator's media folders. The dashboard binds
+    # 0.0.0.0, so the old "localhost only, already trusted" assumption is false;
+    # without this a LAN/CSRF client could read ANY video file on the host.
+    if not _ps.is_path_allowed(p, _ps.allowed_media_roots()):
         abort(403)
 
     mime_map = {

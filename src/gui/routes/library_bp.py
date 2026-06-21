@@ -32,12 +32,14 @@ try:
     from utils.ffmpeg import ffmpeg_path, ffprobe_path
     from utils import paths as _paths
     from utils import compressed_index as _cidx
+    from gui.services import path_safety as _ps
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.logging_setup import log
     from src.gui.services.cloud_detection import _default_output_dir
     from src.utils.ffmpeg import ffmpeg_path, ffprobe_path
     from src.utils import paths as _paths
     from src.utils import compressed_index as _cidx
+    from src.gui.services import path_safety as _ps
 
 library_bp = Blueprint("library", __name__)
 
@@ -69,11 +71,15 @@ def _safe_video(raw: str):
         p = Path(raw).resolve()
     except (OSError, ValueError):
         return None
-    if ".." in p.parts:
+    # Must be an existing video file AND confined to one of the operator's media
+    # folders (SEC-003). The old `'..' in p.parts` check was dead code: resolve()
+    # collapses traversal before it runs, and an absolute path bypassed it
+    # entirely, so /api/library/file could stream any video on the host.
+    if not (p.is_file() and p.suffix.lower() in VIDEO_EXTS):
         return None
-    if p.is_file() and p.suffix.lower() in VIDEO_EXTS:
-        return p
-    return None
+    if not _ps.is_path_allowed(p, _ps.allowed_media_roots()):
+        return None
+    return p
 
 
 def _int_arg(name: str, default=None):

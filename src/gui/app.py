@@ -292,6 +292,26 @@ sys.modules[__name__].__class__ = _ForwardingModule
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+def _resolve_serve_auth(flask_app: Flask, host: str, env=None):
+    """Apply the dashboard auth policy for a direct run of this module (SEC-010).
+
+    `python src/gui/app.py` / `python -m gui.app` used to call
+    ``run(host="0.0.0.0")`` with NO authentication (only run_gui.py installed it),
+    exposing the dashboard unauthenticated on the LAN. This mirrors run_gui's
+    policy: decide auth from the bind + env credentials, install Basic-Auth when
+    credentials are present, and let ``AuthConfigError`` propagate when a
+    non-localhost bind has no credentials so the caller refuses to start.
+    """
+    try:
+        from gui.auth import decide_auth, install_basic_auth
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.gui.auth import decide_auth, install_basic_auth
+    decision = decide_auth(host, env=env)
+    if decision.auth_enabled:
+        install_basic_auth(flask_app, decision.username, decision.password)
+    return decision
+
+
 def create_app() -> Flask:
     # Start the always-on hardware sampler here rather than at import time so
     # that merely importing gui.app stays side-effect-free (TASK 1.2). All real
@@ -306,10 +326,32 @@ def create_app() -> Flask:
 
 
 if __name__ == "__main__":
+    import os as _os
+    import sys as _sys
+
     log.info("=" * 60)
     log.info("SVCS SERVER STARTUP: %s", datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC"))
     log.info("Project root:  %s", _ROOT)
-    log.info("Dashboard:     http://localhost:5000")
     log.info("Log file:      %s", _LOG_FILE)
     log.info("=" * 60)
-    create_app().run(host="0.0.0.0", port=5000, debug=False, threaded=True)
+
+    _host = _os.environ.get("SVCS_DASHBOARD_HOST", "0.0.0.0")
+    _port = int(_os.environ.get("SVCS_DASHBOARD_PORT", "5000"))
+    _app = create_app()
+
+    # SEC-010: refuse to expose the dashboard unauthenticated on the network.
+    # A non-localhost bind without SVCS_DASHBOARD_USER/PASSWORD raises here, the
+    # same policy run_gui.py enforces, instead of silently binding 0.0.0.0 open.
+    try:
+        from gui.auth import AuthConfigError
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.gui.auth import AuthConfigError
+    try:
+        _decision = _resolve_serve_auth(_app, _host)
+    except AuthConfigError as exc:
+        print(f"\n  [fatal] {exc}")
+        _sys.exit(2)
+    if _decision.auth_enabled:
+        log.info("Dashboard auth: ENABLED (user %r)", _decision.username)
+    log.info("Dashboard:     http://%s:%d", _host, _port)
+    _app.run(host=_host, port=_port, debug=False, threaded=True)

@@ -28,6 +28,22 @@ These are honest gaps, not fake-tested: the manifest is validated structurally
 tested (`tests/test_install_script.py`), but the live `winget validate`, the WPF
 window, and the public submission are owner-run.
 
+**Frozen build verified (2026-06-21).** The PyInstaller bundle was rebuilt for R3
+(`installer/build.ps1 -SkipSmoke`, `dist/SVCS/SVCS.exe`, 91 s) and smoke-tested:
+the AUTO-COMPRESS tab is in the served HTML, `autocompress.js` is served, the
+`/api/autocompress/status` and `/api/library/videos?kind=compressed` endpoints
+respond, and a real clip was auto-compressed through the FROZEN bundled pipeline
+into `<output>/compressed/` and then listed in the frozen Library compressed
+view. So R3.1 works in the frozen app.
+
+**Inno installer `.exe` rebuild = owner step (Inno not in the dev env).** This
+environment has no `iscc` (Inno Setup 6), so the packaged `SVCS-Setup-*.exe` was
+not rebuilt here; only the frozen bundle was. The winget `InstallerSha256`
+currently reflects the pre-R3 installer and MUST be recomputed against the
+freshly built+published asset: install Inno Setup 6, run
+`. .venv\Scripts\Activate.ps1; installer\build.ps1 -Installer`, then
+`pwsh scripts\winget_validate.ps1 -Recompute`.
+
 ### ✅ AUTONOMOUS RUN COMPLETE - every non-gated task M1 → M5b is done (2026-06-03)
 
 All non-gated tasks are implemented, tested green, committed, and pushed to

@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+#
+# winget default-locale manifest for SVCS (R3.2a).
+PackageIdentifier: Blood-Dawn.SVCS
+PackageVersion: 2.1.0.dev0
+PackageLocale: en-US
+Publisher: SVCS Project
+PublisherUrl: https://github.com/Blood-Dawn/Video-compression_2026
+PublisherSupportUrl: https://github.com/Blood-Dawn/Video-compression_2026/issues
+PackageName: SVCS
+PackageUrl: https://github.com/Blood-Dawn/Video-compression_2026
+License: AGPL-3.0-or-later
+LicenseUrl: https://github.com/Blood-Dawn/Video-compression_2026/blob/main/LICENSE
+Copyright: Copyright (c) SVCS Project
+ShortDescription: Surveillance Video Compression System - motion-aware video compression with a local dashboard.
+Description: >-
+  SVCS (Surveillance Video Compression System) compresses surveillance and
+  body-camera footage by spending bits where motion is and saving the rest at a
+  lower rate. It runs a local web dashboard for compressing files or live feeds,
+  an auto-compress watch-folder that compresses clips as they are saved, a
+  library/gallery, and optional AES-256 encryption. FFmpeg, the ONNX runtime,
+  and the detection model are bundled, so the installed app works with no extra
+  dependencies.
+Moniker: svcs
+Tags:
+  - video
+  - compression
+  - surveillance
+  - cctv
+  - ffmpeg
+  - av1
+  - h264
+  - onnx
+ReleaseNotesUrl: https://github.com/Blood-Dawn/Video-compression_2026/releases
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

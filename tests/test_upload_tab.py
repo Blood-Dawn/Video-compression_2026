@@ -46,9 +46,10 @@ def test_upload_is_second_after_home_before_metrics(html):
 
 def test_full_nav_order(html):
     # FIX 4 inserted TOOLS (between SEARCH and ENCRYPT); FIX 6 inserted LIBRARY
-    # (right after UPLOAD).
+    # (right after UPLOAD); R3.1c inserted AUTO-COMPRESS (right after LIBRARY).
     assert _nav_order(html) == [
-        "home", "upload", "library", "metrics", "search", "tools", "encrypt"]
+        "home", "upload", "library", "autocompress",
+        "metrics", "search", "tools", "encrypt"]
 
 
 def test_upload_tab_page_exists(html):

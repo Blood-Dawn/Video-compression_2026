@@ -200,6 +200,9 @@ function switchTab(name) {
   });
   // When switching to metrics, ensure library summary is current
   if (name === 'metrics') _updateLibrarySummary(_segmentData);
+  // Auto-compress tab: start/stop its status poll + log stream on show/hide.
+  if (name === 'autocompress' && typeof acOnTabShow === 'function') acOnTabShow();
+  if (name !== 'autocompress' && typeof acOnTabHide === 'function') acOnTabHide();
   // Demo is now in the sidebar, not a tab - nothing to lazy-load here
   // Demo comparison videos are in a collapsed <details> - only load on expand
 }

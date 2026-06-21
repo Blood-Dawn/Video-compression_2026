@@ -418,12 +418,25 @@ def stop_autocompress() -> bool:
 
 
 def get_status() -> dict:
-    """Return a snapshot of the current auto-compress status."""
+    """Return a snapshot of the current auto-compress status.
+
+    Includes ``saved`` - the persisted config (folder / mode / preset / profile /
+    delete-original / enabled intent) - so the UI can restore the form on load
+    without a separate endpoint, even when the daemon is not running.
+    """
     with _ac_lock:
         snap = dict(_ac_status)
         snap["recent"] = list(_ac_status["recent"])
         snap["running"] = is_running()
-        return snap
+    try:
+        try:
+            from gui.services.gui_state_persist import get_autocompress_config
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.gui.services.gui_state_persist import get_autocompress_config
+        snap["saved"] = get_autocompress_config()
+    except Exception:  # noqa: BLE001
+        snap["saved"] = {}
+    return snap
 
 
 def _persist_config(config: dict, enabled: bool) -> None:

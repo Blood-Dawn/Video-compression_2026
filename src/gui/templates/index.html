@@ -934,6 +934,7 @@
     .tab-btn[data-tab="home"].active    { color: var(--amber);  border-bottom-color: var(--amber); }
     .tab-btn[data-tab="upload"].active  { color: var(--purple); border-bottom-color: var(--purple); }
     .tab-btn[data-tab="library"].active { color: #ff9e5e;       border-bottom-color: #ff9e5e; }
+    .tab-btn[data-tab="autocompress"].active { color: #ff5fa2;  border-bottom-color: #ff5fa2; }
     .tab-btn[data-tab="metrics"].active { color: var(--green);  border-bottom-color: var(--green); }
     .tab-btn[data-tab="search"].active  { color: var(--teal);   border-bottom-color: var(--teal); }
     .tab-btn[data-tab="tools"].active   { color: #5aa9ff;       border-bottom-color: #5aa9ff; }
@@ -2648,6 +2649,7 @@
         <button class="tab-btn active" data-tab="home"    onclick="switchTab('home')">HOME</button>
         <button class="tab-btn"        data-tab="upload"  onclick="switchTab('upload')">UPLOAD</button>
         <button class="tab-btn"        data-tab="library" onclick="switchTab('library')">LIBRARY</button>
+        <button class="tab-btn"        data-tab="autocompress" onclick="switchTab('autocompress')">AUTO-COMPRESS</button>
         <button class="tab-btn"        data-tab="metrics" onclick="switchTab('metrics')">METRICS</button>
         <button class="tab-btn"        data-tab="search"  onclick="switchTab('search')">SEARCH</button>
         <button class="tab-btn"        data-tab="tools"   onclick="switchTab('tools')">TOOLS</button>
@@ -2758,6 +2760,70 @@
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- ══════════════════ AUTO-COMPRESS TAB ══════════════════ -->
+      <div id="tab-autocompress" class="tab-page">
+        <div class="tab-page-header">
+          <span class="tab-page-title">Auto-Compress</span>
+          <span id="ac-state-badge" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-left:0.75rem;">OFF</span>
+        </div>
+
+        <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:0.7rem;max-width:760px;line-height:1.6;">
+          Watch a folder and automatically compress any video saved into it (the live "save then compress" workflow), or compress everything already in a folder in one pass. Compressed clips are written to a <code>compressed/</code> subfolder of your output folder and show up in the Library "Compressed" view. Nothing starts until you turn it on.
+        </div>
+
+        <!-- Watched folder picker -->
+        <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap;">
+          <input type="text" id="ac-folder" placeholder="folder to watch for new videos"
+                 style="flex:1;min-width:200px;" />
+          <button class="btn btn-ghost" id="ac-browse-btn" onclick="acBrowseFolder()">Browse...</button>
+        </div>
+
+        <!-- Default compression + watch-folder layout -->
+        <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;">
+          <label style="font-size:0.65rem;color:var(--text-dim);">Compression</label>
+          <select id="ac-mode" title="Default compression" style="font-family:var(--mono);font-size:0.65rem;">
+            <option value="mode:mode0">Mode 0 - record every frame (default)</option>
+            <option value="mode:mode1">Mode 1 - motion segments</option>
+            <option value="mode:mode2">Mode 2 - ROI AV1</option>
+            <option value="mode:mode3">Mode 3 - ROI AV1 (max)</option>
+          </select>
+          <label style="font-size:0.65rem;color:var(--text-dim);">Layout</label>
+          <select id="ac-profile" title="Watch-folder layout profile" style="font-family:var(--mono);font-size:0.65rem;">
+            <option value="">Generic drop folder</option>
+            <option value="continuous">Continuous CCTV recordings</option>
+            <option value="motion_events">Per-event motion clips</option>
+            <option value="microsd_dump">microSD / SD-card dump</option>
+            <option value="nas_sync">NAS / cloud-sync folder</option>
+            <option value="nvr_export">NVR export tree</option>
+          </select>
+        </div>
+
+        <!-- Delete-original opt-in (default OFF) -->
+        <div style="display:flex;gap:0.6rem;align-items:center;margin-bottom:0.8rem;flex-wrap:wrap;">
+          <label style="font-size:0.68rem;display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
+            <input type="checkbox" id="ac-delete-original" onchange="acOnDeleteToggle()" />
+            Delete original after a verified compress
+          </label>
+          <span style="font-size:0.6rem;color:#ff5555;" id="ac-delete-warn"></span>
+        </div>
+
+        <!-- Controls -->
+        <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.8rem;flex-wrap:wrap;">
+          <button class="btn btn-primary" id="ac-toggle-btn" onclick="acToggle()">Turn ON</button>
+          <button class="btn btn-ghost" id="ac-scan-btn" onclick="acScanNow()">Compress existing now</button>
+        </div>
+
+        <!-- Status panel -->
+        <div style="background:var(--panel,#11161f);border:1px solid var(--border,#1e2733);border-radius:4px;padding:0.7rem;margin-bottom:0.8rem;">
+          <div style="font-family:var(--mono);font-size:0.66rem;color:var(--text-dim);margin-bottom:0.4rem;" id="ac-status-line">Idle. Not watching.</div>
+          <div style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);" id="ac-recent">No clips compressed yet.</div>
+        </div>
+
+        <!-- Live activity log (reuses the SSE /api/logs stream) -->
+        <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">Activity log</div>
+        <div id="ac-log" style="background:#0a0e14;border:1px solid var(--border,#1e2733);border-radius:4px;padding:0.5rem;height:160px;overflow-y:auto;font-family:var(--mono);font-size:0.6rem;line-height:1.5;white-space:pre-wrap;"></div>
       </div>
 
       <!-- ══════════════════ HOME TAB ══════════════════ -->
@@ -3775,6 +3841,7 @@
   <script src="{{ url_for('static', filename='js/rtsp.js') }}"></script>
   <script src="{{ url_for('static', filename='js/tools.js') }}"></script>
   <script src="{{ url_for('static', filename='js/library.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/autocompress.js') }}"></script>
   <script src="{{ url_for('static', filename='js/metrics.js') }}"></script>
   <script src="{{ url_for('static', filename='js/plates.js') }}"></script>
   <script src="{{ url_for('static', filename='js/presets.js') }}"></script>

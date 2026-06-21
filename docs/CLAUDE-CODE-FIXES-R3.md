@@ -1,0 +1,86 @@
+# Claude Code Round 3 - Auto-compress + terminal/winget distribution
+
+For: Claude Code (auto mode). Same operating rules as `docs/CLAUDE-CODE-MASTER-PLAN.md`: one task at a time, run `pwsh scripts/run_tests.ps1` to green (current baseline ~928 passed, 0 failed; 721 test functions across 62 files), browser-verify UI with the Preview MCP, tick the box, commit (`<type>(<scope>): <subject>` + why-body + final line `Bloodawn(KheivenD)`, NO emojis), `git push origin app`, next. Honor the M0 gotchas (.venv not venv, never `[plates]`, opencv-contrib, LF endings, ffprobe not cv2 for AV1). NO em-dashes or en-dashes anywhere (the guard test enforces `src/`).
+
+Branch `app`. Two big tasks. R3.1 is the priority (the product feature). R3.2 is distribution and is partly NOT pytest-coverable - read its honesty note.
+
+Current topbar tabs: HOME, UPLOAD, LIBRARY, METRICS, SEARCH, TOOLS, ENCRYPT. Route-count + blueprint-count guards live in `tests/test_gui_blueprint_registration.py` and `tests/test_gui_routes_resolve.py` - update the asserted numbers whenever you add routes/blueprints.
+
+---
+
+## Context: what already exists (reuse it, do not rebuild)
+
+- **`src/utils/watchfolder.py` IS the auto-compress-on-save engine.** It has `WatchProfile` + predefined profiles (continuous_cctv, event, sdcard, slow-NVR, generic), in-progress markers for crash-resume, partial-write stability checks (size stable for N polls), `scan_and_ingest`, and `run_watchfolder`. It auto-detects a preset per clip or uses a fixed one. What it LACKS: a Flask route/blueprint, any UI, and a "this file is already compressed, skip it" check. Tests are in `tests/test_watchfolder.py`.
+- **`src/gui/routes/library_bp.py`** lists/thumbnails/serves/compresses videos in any folder (`/api/library/videos|meta|thumb|file|compress|list_dirs|browse_folder`). It does NOT distinguish compressed outputs from original source videos.
+- **Metadata DB** (`src/utils/db/queries.py::insert_segment`) records each compressed output's `file_path` but has NO link back to the source video, so "is X already compressed" cannot be answered from the DB today.
+- **Pipeline entry:** `src/pipeline/pipeline.py::run_pipeline`; preset->(mode,crf,codec) in `src/pipeline/presets.py`; the GUI runs it in a background thread via `src/gui/services/pipeline_runner.py`.
+
+---
+
+## TASK R3.1 - Auto-compress (the feature)
+
+Goal: an AUTO-COMPRESS topbar tab the user opts into (never auto-starts on app open). It auto-compresses videos that land in a watched folder (the MAIN use: live surveillance saved by a recorder gets compressed immediately), and offers a batch "compress existing uncompressed videos" action over the library folder. Compressed outputs appear in the Library under a "Compressed" view alongside the originals. Default compression is mode 0.
+
+Do it in these sub-steps, each green-and-commit:
+
+### R3.1a - "Already compressed" index + compressed-output location
+- [ ] New `src/utils/compressed_index.py`: a small persistent index (JSON under the app-data dir via `paths`, or a new metadata-DB table) keyed by a source SIGNATURE (absolute path + size + mtime; optionally a sha1 of the first 1 MB for rename-robustness) mapping source -> compressed output path + when + preset/mode used. Public functions: `is_compressed(source) -> bool`, `record(source, output, preset)`, `lookup(source) -> entry|None`, `classify(path) -> "original"|"compressed"`.
+- [ ] Compressed outputs from auto-compress go into a dedicated subfolder `<output_dir>/compressed/` (create it). This keeps them out of the watched-source set (so the daemon never recompresses its own outputs) and makes the Library "Compressed" view a simple folder listing.
+- [ ] `tests/test_compressed_index.py`: record + is_compressed round-trip; classify originals vs outputs; signature changes when the file is replaced.
+
+### R3.1b - autocompress service + blueprint (reuse watchfolder)
+- [x] New `src/gui/services/autocompress_runner.py`: starts/stops the watch-folder daemon in a background thread (mirror `pipeline_runner.py` threading + stop-event pattern). On a new stable file, it: (1) skips if `compressed_index.is_compressed` or `classify == "compressed"`; (2) else compresses it with the chosen default mode/preset into `<output_dir>/compressed/`, then `compressed_index.record(...)`. Reuse `watchfolder.run_watchfolder` / `scan_and_ingest` for detection + stability + profiles; do not reimplement file watching. (Reuses `wf._is_fully_written` / `SUPPORTED_EXTENSIONS` / sentinels / profiles / camera-id / preset-resolve; adds the index skip, `compressed/` output, ffprobe verify, index record and safe delete that the CLI lacks.)
+- [x] **Original-file retention (owner decision): KEEP the original by default.** Add an opt-in `delete_original_after_compress` flag (default OFF) to the auto-compress config. When OFF, the source file is never touched. When ON, the original is deleted ONLY AFTER the compressed output exists, is a valid container (verify with ffprobe), and is recorded in the index - never before, and never if the compress failed or was skipped. Make the delete safe: only delete files under the watched source folder, never anything inside `<output_dir>/compressed/`, and never the original if the output is somehow zero-bytes or unreadable. Surface a clear one-time confirmation/warning in the UI when the user first enables it ("Originals will be permanently deleted after a verified compress"). (Backend done: `_safe_delete_original` enforces every gate; the one-time UI warning lands in R3.1c.)
+- [x] New `src/gui/routes/autocompress_bp.py` (a new blueprint): `POST /api/autocompress/start` {folder, mode|preset (default "mode0"), profile?}, `POST /api/autocompress/stop`, `GET /api/autocompress/status` (running?, watched folder, queue length, last N compressed with source->output), `POST /api/autocompress/scan_now` (one-time batch: compress every uncompressed video currently in the folder). Register it; bump the route/blueprint guard asserts. (Registered as the 17th blueprint; guards bumped 66->70 routes, 16->17 blueprints.)
+- [x] It must NOT start on app launch. Persist the user's auto-compress config (folder + default mode + on/off intent) in `gui_state_persist`, but only actually start the daemon when the user toggles it on in the UI. (Config persisted via `set_autocompress_config`/`get_autocompress_config`; daemon starts only in `start_autocompress`, never at import; browser-verified `/status` reports `running:false` on a fresh server.)
+- [x] `tests/test_autocompress.py`: runner unit tests landed here (skip/dedup, output-to-`compressed/` + index record, delete-original safety gates, HTTP surface); the real-clip live-save + partial-write tests are added in R3.1e.
+
+### R3.1c - AUTO-COMPRESS topbar tab
+- [ ] Add a `tab-btn data-tab="autocompress"` (label "AUTO-COMPRESS") to the nav in `index.html`, placed after LIBRARY, with its own accent color rule; a `#tab-autocompress` page; and `src/gui/static/js/autocompress.js`. Reuse the Library folder picker for choosing the watched folder.
+- [ ] The tab shows: an ON/OFF toggle (off by default), the watched-folder picker, a default-mode/preset selector (default mode 0), an optional watch-profile dropdown (the existing WatchProfiles), a **"Delete original after compress" opt-in toggle (default OFF)** with the warning copy on first enable, a live status panel (watching X, queue, recently compressed source -> output), and the verbose log stream (reuse the SSE log). Turning it ON calls `/api/autocompress/start`; OFF calls stop. A "Compress existing now" button calls `/api/autocompress/scan_now`.
+- [ ] Browser-verify: toggle on, drop a file into the folder, watch it compress and appear in the status panel; toggle off stops it.
+
+### R3.1d - Library "Originals | Compressed | All" view
+- [ ] In the LIBRARY tab, add a segmented control "All | Originals | Compressed" (this is the "compressed videos page" the owner asked for, inside the same Library section). Extend `GET /api/library/videos` with a `kind=all|original|compressed` param that classifies via `compressed_index` (and the `<output_dir>/compressed/` location). Compressed items show a "COMPRESSED" badge and, when known, a link/back-reference to their source; originals that already have a compressed version show a small "compressed" check so the user can see what is done.
+- [ ] `tests/test_library.py` (extend): the `kind` filter returns the right set; classification matches the index.
+
+### R3.1e - Tests for the live-save behavior (the "how do we test live vids" answer)
+You cannot attach a real camera in CI, so simulate "a recorder saving a file into the watched folder", which is exactly the trigger:
+- [ ] **Live-save integration:** start the auto-compress daemon on a temp folder, copy a real CDnet clip (from `data/samples/cdnet_mp4`, skip if absent like the other real-video tests) into it, wait, and assert a compressed output appears under `<temp>/compressed/`, is a valid container (ffprobe), and the index recorded source->output.
+- [ ] **Already-compressed dedup:** run the scan twice over the same folder; assert the second pass SKIPS (no second output, no duplicate index entry), and that a file already inside `compressed/` is never recompressed.
+- [ ] **Simulated live recorder (partial write):** write a clip into the watched folder in chunks with a pause (mimicking a recorder still writing), assert the daemon waits for size-stability before compressing (reuses the existing stability logic) - this proves it will not grab a half-written live segment.
+- [ ] **Delete-original safety:** with `delete_original_after_compress` OFF, assert the source still exists after compress. With it ON, assert the original is deleted ONLY after a valid output exists (compress success), and assert it is NOT deleted when the compress fails / output is missing or zero-bytes, and that nothing under `<output>/compressed/` is ever deleted.
+- [ ] Mark the truly-live RTSP path (a camera/MediaMTX feed) as an ADVANCED manual test in `docs/FEATURE-AUDIT.md`, not a pytest test: the deterministic, CI-safe core is the watched-folder simulation above.
+- **Acceptance for R3.1:** suite green; browser-verified auto-compress tab + Library compressed view; the live-save + dedup + partial-write tests pass; default mode is 0; nothing auto-starts on app open.
+
+---
+
+## TASK R3.2 - Download from the terminal (winget) + WinUtil-style install menu
+
+HONESTY NOTE (read first): PowerShell GUIs and the winget public submission are NOT coverable by the pytest suite. This task is verified by (a) the OWNER running it on Windows, (b) PSScriptAnalyzer lint, (c) a `-DryRun` mode that prints what it WOULD install without doing it, and (d) small structural tests (the manifest YAML loads with required keys; the script file exists, parses, and is dash-free). Do not claim a WPF GUI is unit-tested. Submitting to Microsoft's winget repo is OWNER-GATED (record in `docs/BLOCKERS.md`).
+
+### R3.2a - winget package manifest
+- [ ] Create a winget manifest under `installer/winget/` (the 3 files: `Blood-Dawn.SVCS.installer.yaml`, `Blood-Dawn.SVCS.locale.en-US.yaml`, `Blood-Dawn.SVCS.yaml` version manifest), targeting the GitHub Release asset (`SVCS-Setup-2.1.0.dev0.exe`), with the SHA256 of the built installer, `InstallerType: inno`, and silent switches (Inno supports `/VERYSILENT /SUPPRESSMSGBOXES /NORESTART`). The app bundles ffmpeg + onnx + model, so `winget install` gives a working app with no extra deps.
+- [ ] A `scripts/winget_validate.ps1` that runs `winget validate installer/winget` (or `wingetcreate validate`). A `docs/winget-submission.md` with the exact `wingetcreate submit` / fork-PR steps to `microsoft/winget-pkgs`. NOTE in BLOCKERS: the public submission is the owner's action and Microsoft generally prefers a code-signed installer (ties to the existing gated signing cert).
+- [ ] Structural test (`tests/test_winget_manifest.py`): the YAML files load, have the required keys (PackageIdentifier, PackageVersion, Installers[].InstallerUrl/InstallerSha256/InstallerType), and the version matches `pyproject.toml`.
+
+### R3.2b - Install-SVCS.ps1 bootstrap (the WinUtil-style menu)
+- [ ] Create `installer/Install-SVCS.ps1`, designed to be run from a fresh terminal via `irm https://raw.githubusercontent.com/Blood-Dawn/Video-compression_2026/app/installer/Install-SVCS.ps1 | iex` (the same pattern as Chris Titus Tech's WinUtil `irm christitus.com/win | iex`).
+- [ ] It presents a **component-selection menu** themed in the SVCS look (dark `#0a0e14` background, amber `#ffb900` accent, the SVCS fonts where a GUI allows). Primary form: a WinUtil-style WPF GUI window with checkboxes and an "Install selected" button. Components to offer:
+  - **SVCS core app** (required) - install via `winget install Blood-Dawn.SVCS` once the manifest is public, else download the latest GitHub Release `.exe` and run it silently.
+  - **AI plate reader (optional)** - note it installs into a separate environment (the easyocr/opencv conflict); for the packaged app this may just be a flag/marker, so keep it honest about what it does.
+  - **Local RTSP server (MediaMTX, optional)** - download the MediaMTX binary into the app-data tools dir (reuse the FIX 5 logic/paths).
+  - **Sample clips (optional)** - fetch a few CDnet sample clips for testing.
+- [ ] Provide a `-NoGui` terminal fallback (numbered/checkbox console selection) for headless/SSH use, and a `-DryRun` (alias `-WhatIf`) that prints the exact actions for each selected component without performing them. Detect winget; if absent, point the user to `App Installer` in the Microsoft Store or fall back to direct download. Require elevation only for the steps that need it, and say so.
+- [ ] PSScriptAnalyzer-clean, no em-dashes, LF-friendly. A small `tests/test_install_script.py`: the file exists, has a `-DryRun` path, contains the SVCS palette hex, and is dash-free (extend the dash guard to cover `installer/Install-SVCS.ps1`).
+
+### R3.2c - Docs
+- [ ] `docs/INSTALL.md`: "Install from the terminal" - the one-liner `irm ... | iex` for the menu, plus `winget install Blood-Dawn.SVCS` once published, plus the manual `.exe` download. Update the download page (`docs/site/`) and README with the terminal-install option.
+
+**Acceptance for R3.2:** the winget manifest validates and its structural test passes; `Install-SVCS.ps1` parses, runs `-DryRun` cleanly, and is dash-free; `docs/INSTALL.md` written; the GUI + real winget submission are recorded as owner-verified/owner-gated in BLOCKERS (do not fake-test them).
+
+---
+
+## Order and wrap-up
+
+Recommended: R3.1a -> R3.1b -> R3.1c -> R3.1d -> R3.1e (auto-compress, fully testable), then R3.2 (distribution). After both: rebuild the installer (`pwsh installer\build.ps1 -Installer`), recompute the winget SHA256 against the rebuilt asset, smoke-test the frozen app (the AUTO-COMPRESS tab + Library compressed view must work in the frozen build), update `docs/BLOCKERS.md`, and report new route/blueprint counts, new test total, and which parts are owner-verified (the GUI + winget submission).

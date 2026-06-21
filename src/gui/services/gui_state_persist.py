@@ -52,6 +52,7 @@ def _load_gui_state() -> None:
         lib_dir = data.get("library_folder") or ""
         setup_done = bool(data.get("setup_complete", False))
         demo_root = data.get("last_demo_output_root") or ""
+        autoc = data.get("autocompress") if isinstance(data.get("autocompress"), dict) else None
         with _state_lock:
             cfg = _status.setdefault("config", {})
             if out_dir:
@@ -61,6 +62,11 @@ def _load_gui_state() -> None:
                 cfg.setdefault("encrypted_dir", str(enc_dir))
             if lib_dir:
                 cfg.setdefault("library_folder", str(lib_dir))
+            if autoc is not None:
+                # The saved auto-compress config (folder/mode/delete flag and the
+                # user's on/off INTENT). The daemon is NOT started here - only the
+                # config is restored; it starts only on an explicit user toggle.
+                cfg.setdefault("autocompress", autoc)
             _status.setdefault("setup_complete", setup_done)
         if demo_root:
             with _demo_lock:
@@ -77,6 +83,7 @@ def _save_gui_state() -> None:
             out_dir = cfg.get("output_dir", "")
             enc_dir = cfg.get("encrypted_dir", "")
             lib_dir = cfg.get("library_folder", "")
+            autoc = cfg.get("autocompress", {})
             setup_done = bool(_status.get("setup_complete", False))
         with _demo_lock:
             demo_root = _demo_state.get("last_output_root", "")
@@ -84,6 +91,7 @@ def _save_gui_state() -> None:
             "output_dir": str(out_dir or ""),
             "encrypted_dir": str(enc_dir or ""),
             "library_folder": str(lib_dir or ""),
+            "autocompress": autoc if isinstance(autoc, dict) else {},
             "setup_complete": setup_done,
             "last_demo_output_root": str(demo_root or ""),
             "saved_at": time.time(),
@@ -134,3 +142,25 @@ def get_library_folder() -> str:
     """Return the last-browsed Library folder, or "" if none."""
     with _state_lock:
         return str(_status.get("config", {}).get("library_folder", "") or "")
+
+
+def set_autocompress_config(cfg: dict) -> None:
+    """Persist the auto-compress config (R3.1b) and the user's on/off intent.
+
+    Stores the watched folder, output dir, default mode/preset/profile, the
+    delete-original flag, and whether the user has it enabled. This only records
+    the config - it never starts the daemon (the daemon is started solely by the
+    autocompress_runner on an explicit user toggle).
+    """
+    if not isinstance(cfg, dict):
+        return
+    with _state_lock:
+        _status.setdefault("config", {})["autocompress"] = dict(cfg)
+    _save_gui_state()
+
+
+def get_autocompress_config() -> dict:
+    """Return the saved auto-compress config, or {} if none."""
+    with _state_lock:
+        ac = _status.get("config", {}).get("autocompress", {})
+        return dict(ac) if isinstance(ac, dict) else {}

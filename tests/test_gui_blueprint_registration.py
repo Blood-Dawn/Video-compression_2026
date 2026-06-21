@@ -94,12 +94,16 @@ EXPECTED = {
     "/api/library/thumb": "library",
     "/api/library/file": "library",
     "/api/library/compress": "library",
+    "/api/autocompress/start": "autocompress",
+    "/api/autocompress/stop": "autocompress",
+    "/api/autocompress/status": "autocompress",
+    "/api/autocompress/scan_now": "autocompress",
 }
 
 EXPECTED_BLUEPRINTS = {
     "ui", "sse", "metrics", "presets", "encryption", "plates",
     "queries", "rtsp", "demo", "hls", "files", "pipeline", "cameras", "usage",
-    "setup", "library",
+    "setup", "library", "autocompress",
 }
 
 
@@ -109,10 +113,10 @@ def _rules():
 
 def test_route_count():
     rules = _rules()
-    assert len(rules) == 66, f"expected 66 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 70, f"expected 70 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
-def test_all_twelve_blueprints_registered():
+def test_all_blueprints_registered():
     assert set(flask_app.blueprints) == EXPECTED_BLUEPRINTS
 
 

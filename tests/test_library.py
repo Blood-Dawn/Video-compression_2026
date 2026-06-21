@@ -255,3 +255,84 @@ def test_thumb_falls_back_gracefully_when_ffmpeg_broken(client, lib_folder, monk
     clip = lib_folder / "alpha.avi"
     resp = client.get("/api/library/thumb", query_string={"path": str(clip)})
     assert resp.status_code == 404
+
+
+# ── R3.1d: Originals | Compressed | All classification ───────────────────────
+
+@pytest.fixture()
+def kind_folder(tmp_path, monkeypatch):
+    """A folder with an original, a compressed/ output, and an index entry.
+
+    Isolates the compressed index to tmp so classification is deterministic.
+    """
+    monkeypatch.setattr(lib._paths, "thumbs_dir", lambda: tmp_path / "thumbs")
+    (tmp_path / "thumbs").mkdir()
+    try:
+        from gui.services import gui_state_persist as gsp
+    except ModuleNotFoundError:  # pragma: no cover
+        from src.gui.services import gui_state_persist as gsp
+    monkeypatch.setattr(gsp, "_GUI_STATE_FILE", tmp_path / "gui_state.json")
+    # The endpoint reads the DEFAULT index path; redirect it to tmp.
+    monkeypatch.setattr(lib._cidx._paths, "state_file", lambda name: tmp_path / name)
+
+    folder = tmp_path / "lib"
+    (folder / "compressed").mkdir(parents=True)
+    orig = folder / "orig.mp4"
+    orig.write_bytes(b"o" * 2000)
+    out = folder / "compressed" / "orig_out.mp4"
+    out.write_bytes(b"c" * 800)
+    lib._cidx.record(orig, out)  # orig -> out
+    return folder, orig, out
+
+
+def test_kind_all_lists_both(client, kind_folder):
+    folder, orig, out = kind_folder
+    body = client.get("/api/library/videos",
+                      query_string={"folder": str(folder), "kind": "all"}).get_json()
+    assert body["kind"] == "all"
+    assert {v["name"] for v in body["videos"]} == {"orig.mp4", "compressed/orig_out.mp4"}
+
+
+def test_kind_compressed_only_with_source_backref(client, kind_folder):
+    folder, orig, out = kind_folder
+    body = client.get("/api/library/videos",
+                      query_string={"folder": str(folder), "kind": "compressed"}).get_json()
+    vids = body["videos"]
+    assert {v["name"] for v in vids} == {"compressed/orig_out.mp4"}
+    assert vids[0]["kind"] == "compressed"
+    assert vids[0]["source"] == str(orig.resolve())
+
+
+def test_kind_original_only_marks_has_compressed(client, kind_folder):
+    folder, orig, out = kind_folder
+    body = client.get("/api/library/videos",
+                      query_string={"folder": str(folder), "kind": "original"}).get_json()
+    vids = body["videos"]
+    assert {v["name"] for v in vids} == {"orig.mp4"}
+    assert vids[0]["kind"] == "original"
+    assert vids[0]["compressed"] is True  # a verified compressed version exists
+
+
+def test_classify_recorded_output_outside_compressed_dir(client, kind_folder):
+    # An output recorded in the index but NOT under a compressed/ folder is still
+    # classified "compressed".
+    folder, orig, out = kind_folder
+    src2 = folder / "src2.mp4"
+    src2.write_bytes(b"s" * 1500)
+    elsewhere = folder / "elsewhere" / "recorded.mp4"
+    elsewhere.parent.mkdir(parents=True)
+    elsewhere.write_bytes(b"r" * 700)
+    lib._cidx.record(src2, elsewhere)
+    body = client.get("/api/library/videos",
+                      query_string={"folder": str(folder), "kind": "compressed"}).get_json()
+    names = {v["name"] for v in body["videos"]}
+    assert names == {"compressed/orig_out.mp4", "elsewhere/recorded.mp4"}
+
+
+def test_kind_default_is_all_and_field_present(client, kind_folder):
+    folder, orig, out = kind_folder
+    body = client.get("/api/library/videos",
+                      query_string={"folder": str(folder)}).get_json()
+    assert body["kind"] == "all"
+    for v in body["videos"]:
+        assert v["kind"] in ("original", "compressed")

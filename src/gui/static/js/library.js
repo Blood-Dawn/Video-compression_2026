@@ -14,7 +14,7 @@
  */
 "use strict";
 
-window._svcsLibrary = { view: "grid", folder: "", loaded: false, selected: null, all: [] };
+window._svcsLibrary = { view: "grid", folder: "", loaded: false, selected: null, all: [], kind: "all" };
 
 function _libStatus(msg) {
   const el = document.getElementById("library-status");
@@ -22,6 +22,11 @@ function _libStatus(msg) {
 }
 
 function _enc(p) { return encodeURIComponent(p); }
+
+function _esc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 
 function _fmtSize(bytes) {
   if (bytes == null) return "";
@@ -39,6 +44,20 @@ function setLibraryView(mode) {
   filterLibrary();
 }
 window.setLibraryView = setLibraryView;
+
+// R3.1d: switch the All | Originals | Compressed segmented control.
+function setLibraryKind(kind) {
+  window._svcsLibrary.kind = (["all", "original", "compressed"].includes(kind)) ? kind : "all";
+  ["all", "original", "compressed"].forEach((k) => {
+    const btn = document.getElementById("library-kind-" + k);
+    if (!btn) return;
+    const on = k === window._svcsLibrary.kind;
+    btn.style.color = on ? "#ff9e5e" : "";
+    btn.style.borderColor = on ? "#ff9e5e" : "";
+  });
+  filterLibrary();
+}
+window.setLibraryKind = setLibraryKind;
 
 function _placeholderThumb(img, ext) {
   // Replace a broken/failed thumbnail with a labelled placeholder box.
@@ -96,7 +115,14 @@ function _renderLibrary(list) {
     img.onerror = () => _placeholderThumb(img, ext);
     const label = document.createElement("div");
     label.style.cssText = "font-family:var(--mono);font-size:0.6rem;padding:0.3rem;color:var(--text);word-break:break-all;";
-    label.textContent = v.name + (isList ? "   " + _fmtSize(v.size) : "");
+    // R3.1d: tag compressed outputs, and mark originals that already have one.
+    let tag = "";
+    if (v.kind === "compressed") {
+      tag = '<span style="display:inline-block;font-size:0.5rem;font-weight:700;color:#ff5fa2;border:1px solid #ff5fa2;border-radius:3px;padding:0 0.25rem;margin-right:0.3rem;">COMPRESSED</span>';
+    } else if (v.compressed) {
+      tag = '<span title="A compressed version exists" style="color:var(--green,#39d353);margin-right:0.3rem;">&#10003;</span>';
+    }
+    label.innerHTML = tag + _esc(v.name) + (isList ? "   " + _fmtSize(v.size) : "");
     cell.appendChild(img);
     cell.appendChild(label);
     cell.onclick = () => openLibraryDetail(v.path, v.name);
@@ -110,9 +136,12 @@ function filterLibrary() {
   const q = ((document.getElementById("library-search") || {}).value || "").trim().toLowerCase();
   const ext = ((document.getElementById("library-ext") || {}).value || "").toLowerCase();
   const sortVal = (document.getElementById("library-sort") || {}).value || "date-desc";
+  const kind = window._svcsLibrary.kind || "all";
   let list = all.filter((v) => {
     if (q && !v.name.toLowerCase().includes(q)) return false;
     if (ext && !v.name.toLowerCase().endsWith("." + ext)) return false;
+    if (kind === "compressed" && v.kind !== "compressed") return false;
+    if (kind === "original" && v.kind === "compressed") return false;
     return true;
   });
   const [field, dir] = sortVal.split("-");

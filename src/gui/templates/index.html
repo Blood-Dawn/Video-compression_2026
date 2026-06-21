@@ -2734,6 +2734,13 @@
           <button class="btn btn-ghost" id="library-view-grid" onclick="setLibraryView('grid')">Grid</button>
           <button class="btn btn-ghost" id="library-view-list" onclick="setLibraryView('list')">List</button>
         </div>
+
+        <!-- R3.1d: originals vs compressed-outputs segmented control -->
+        <div style="display:flex;gap:0.3rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap;">
+          <button class="btn btn-ghost" id="library-kind-all" onclick="setLibraryKind('all')">All</button>
+          <button class="btn btn-ghost" id="library-kind-original" onclick="setLibraryKind('original')">Originals</button>
+          <button class="btn btn-ghost" id="library-kind-compressed" onclick="setLibraryKind('compressed')">Compressed</button>
+        </div>
         <div id="library-status" style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);margin-bottom:0.5rem;"></div>
 
         <!-- Empty state (shown when a folder has no videos) -->

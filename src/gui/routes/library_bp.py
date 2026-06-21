@@ -31,11 +31,13 @@ try:
     from gui.services.cloud_detection import _default_output_dir
     from utils.ffmpeg import ffmpeg_path, ffprobe_path
     from utils import paths as _paths
+    from utils import compressed_index as _cidx
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.logging_setup import log
     from src.gui.services.cloud_detection import _default_output_dir
     from src.utils.ffmpeg import ffmpeg_path, ffprobe_path
     from src.utils import paths as _paths
+    from src.utils import compressed_index as _cidx
 
 library_bp = Blueprint("library", __name__)
 
@@ -111,6 +113,10 @@ def api_library_videos():
     max_size = _int_arg("max_size")
     sort = (request.args.get("sort", "date") or "date").strip().lower()
     order = (request.args.get("order", "desc") or "desc").strip().lower()
+    # R3.1d: filter by whether a clip is an original or a compressed output.
+    kind = (request.args.get("kind", "all") or "all").strip().lower()
+    if kind not in ("all", "original", "compressed"):
+        kind = "all"
     page = max(1, _int_arg("page", 1))
     page_size = min(200, max(1, _int_arg("page_size", 60)))
 
@@ -160,7 +166,35 @@ def api_library_videos():
 
     exts = sorted({i["_ext"].lstrip(".") for i in all_items})
 
-    # Apply search / type / size filters.
+    # R3.1d: load the compressed index ONCE and build lookups so we can classify
+    # every listed file (original vs compressed output) without re-reading the
+    # index per item. ``out_to_src`` maps a recorded output back to its source so
+    # a compressed clip can show where it came from.
+    _idx = _cidx._load()
+    _entries = _idx.get("entries", {})
+    out_to_src = {e.get("output", ""): e.get("source", "") for e in _entries.values()}
+    _comp_dirname = _cidx.COMPRESSED_DIRNAME
+
+    def _classify(path_str):
+        """Return (kind, source_or_None, has_compressed_bool) for one file.
+
+        Mirrors compressed_index.classify / is_compressed but uses the preloaded
+        index. ``has_compressed`` is only meaningful for originals (True when a
+        verified compressed output for this exact file still exists on disk).
+        """
+        try:
+            rp = str(Path(path_str).resolve())
+        except (OSError, ValueError):
+            rp = path_str
+        in_comp_loc = _comp_dirname in {p.lower() for p in Path(rp).parts}
+        if in_comp_loc or rp in out_to_src:
+            return "compressed", out_to_src.get(rp), False
+        # An original: does a current, on-disk compressed version exist?
+        entry = _entries.get(_cidx.signature(path_str))
+        has = bool(entry and entry.get("output") and Path(entry["output"]).is_file())
+        return "original", None, has
+
+    # Apply search / type / size / kind filters.
     items = []
     for i in all_items:
         if allowed_exts is not None and i["_ext"] not in allowed_exts:
@@ -171,8 +205,18 @@ def api_library_videos():
             continue
         if max_size is not None and i["size"] > max_size:
             continue
-        items.append({"name": i["name"], "path": i["path"],
-                      "size": i["size"], "mtime": i["mtime"]})
+        ikind, isource, ihas = _classify(i["path"])
+        if kind == "compressed" and ikind != "compressed":
+            continue
+        if kind == "original" and ikind != "original":
+            continue
+        item = {"name": i["name"], "path": i["path"],
+                "size": i["size"], "mtime": i["mtime"], "kind": ikind}
+        if ikind == "compressed":
+            item["source"] = isource
+        else:
+            item["compressed"] = ihas
+        items.append(item)
 
     key = {"name": lambda x: x["name"].lower(),
            "size": lambda x: x["size"],
@@ -184,7 +228,7 @@ def api_library_videos():
     return jsonify({
         "folder": str(folder), "exists": True, "total": total,
         "page": page, "page_size": page_size,
-        "sort": sort, "order": order, "extensions": exts,
+        "sort": sort, "order": order, "extensions": exts, "kind": kind,
         "recursive": recursive, "truncated": truncated,
         "videos": items[start:start + page_size],
     })

@@ -232,6 +232,16 @@ def register_blueprints(flask_app: Flask) -> None:
 
 register_blueprints(app)
 
+# ── CSRF guard (SEC-001) ──────────────────────────────────────────────────────
+# Same-origin check on all state-changing requests. Installed on the module app
+# (not just create_app) so the test client and every entry point are protected.
+# Safe to always enable: non-browser clients (no Origin/Referer) are allowed.
+try:
+    from gui.csrf import install_csrf_protection
+except ModuleNotFoundError:  # pragma: no cover - import path shim
+    from src.gui.csrf import install_csrf_protection
+install_csrf_protection(app)
+
 
 # ── Rebound-global forwarding (REFACTOR-PLAN §5) ─────────────────────────────
 # Most state names are mutable containers re-exported from gui.state as the

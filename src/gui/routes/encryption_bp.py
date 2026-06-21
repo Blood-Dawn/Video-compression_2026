@@ -349,6 +349,12 @@ def api_encrypt():
     raw_key = None
     if key_file:
         kf_path = Path(key_file).resolve()
+        # SEC-005: confine the key file to the trusted roots, exactly as the
+        # decrypt route does. Without this, encrypt would read an arbitrary file
+        # off disk as key material (inconsistent with decrypt).
+        if not _path_under_any(kf_path, safe_roots):
+            log.warning("api_encrypt: rejected key_file outside trusted roots: %s", kf_path)
+            return jsonify({"error": "key_file is outside the trusted folders"}), 403
         try:
             raw_key = kf_path.read_bytes()
         except OSError as e:
@@ -364,6 +370,14 @@ def api_encrypt():
     if chosen_enc:
         enc_subdir = Path(chosen_enc)
     else:
+        enc_subdir = src_path.parent / "Encrypted"
+
+    # SEC-006: never write the .enc to an arbitrary path. If the configured
+    # encrypted_dir escapes the trusted roots, fall back to a sibling Encrypted/
+    # next to the (already-confined) source.
+    if not _path_under_any(enc_subdir.resolve(), safe_roots):
+        log.warning("api_encrypt: encrypted_dir %s is outside the trusted roots; "
+                    "writing to a sibling Encrypted/ instead", enc_subdir)
         enc_subdir = src_path.parent / "Encrypted"
 
     try:

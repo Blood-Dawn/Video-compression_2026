@@ -180,7 +180,7 @@ async function scanVideos() {
     }
     listEl.innerHTML = data.videos.map(v => {
       const name = v.split('/').pop();
-      return `<div onclick="document.getElementById('input-source').value='${escHtml(v)}';_onInputSourceChange('${escHtml(v)}')"
+      return `<div onclick="document.getElementById('input-source').value='${jsAttr(v)}';_onInputSourceChange('${jsAttr(v)}')"
                    style="font-family:var(--mono);font-size:0.62rem;color:var(--amber);
                           cursor:pointer;padding:0.2rem 0;border-bottom:1px solid var(--border);"
                    title="${escHtml(v)}">▸ ${escHtml(name)}</div>`;

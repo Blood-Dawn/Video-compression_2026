@@ -998,6 +998,10 @@ class ROIEncoder:
                 mux_args,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
+                # SEC-007: bound the mux so a crafted/corrupt input cannot hang
+                # the encode worker forever. On timeout this raises
+                # TimeoutExpired, caught below -> keep the video-only output.
+                timeout=300,
             )
             if proc.returncode != 0:
                 log.warning(

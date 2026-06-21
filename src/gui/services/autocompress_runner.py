@@ -200,9 +200,24 @@ def _process_one(
             _ac_status["last_error"] = f"{src.name}: {exc}"
         return None
 
-    # Identify the produced output(s); pick the newest video file as primary.
+    # SEC-011: if the run was interrupted (daemon stop / shutdown), the output
+    # may be a partial-but-still-decodable clip. NEVER record it or delete the
+    # original on an interrupted run - leave the .processing marker so a later
+    # scan re-encodes the full clip. This is the footage-loss guard.
+    if stop_event is not None and stop_event.is_set():
+        log.info("Auto-compress interrupted mid-encode for %s; not recording or "
+                 "deleting (will retry).", src.name)
+        return None
+
+    # Identify the produced output. SEC-012: only count NEW files this run wrote
+    # whose name carries THIS source's camera_id, so a concurrent/leftover file
+    # in compressed/ can never be mis-attributed as this source's output (and
+    # then gate its deletion).
     after = {p.resolve() for p in comp_dir.glob("*") if p.is_file()}
-    new_files = [p for p in (after - before) if p.suffix.lower() in wf.SUPPORTED_EXTENSIONS]
+    new_files = [
+        p for p in (after - before)
+        if p.suffix.lower() in wf.SUPPORTED_EXTENSIONS and p.name.startswith(camera_id)
+    ]
     new_files.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
 
     # This file has now been attempted; mark it ingested so it is not retried in

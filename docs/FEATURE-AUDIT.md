@@ -78,3 +78,45 @@ real footage. A sample run (8 scene types, 3 s window) validated 29 segments in
 ~32000x (low-framerate port, mode3 object-only). No new media is committed.
 Tune breadth with `SVCS_TEST_VIDEO_MAX` and the window with
 `SVCS_TEST_VIDEO_TRIM`.
+
+## Auto-compress live-save tests (R3.1e)
+
+`tests/test_autocompress.py` covers the auto-compress engine. The CI-safe,
+deterministic core is the watched-folder simulation: a recorder "saving" a file
+into the watched folder is exactly the trigger, so the tests copy/write a clip
+into a temp folder and assert the daemon compresses it.
+
+- Live-save integration (`test_live_save_daemon_compresses_and_dedups`, SKIPS
+  without the CDnet corpus): starts the daemon on a temp folder, saves a trimmed
+  real clip into it, and asserts a compressed output appears under
+  `<temp>/compressed/`, is a valid container (ffprobe), and the index recorded
+  source -> output. The same test then proves dedup (a second pass compresses
+  nothing and adds no duplicate index entry) and that a file already inside
+  `compressed/` is never recompressed.
+- Partial write (`test_partial_write_waits_for_stability`): a background thread
+  keeps appending to the file; a scan whose stability window spans the writing
+  skips it, and only the next scan (after writing stops) compresses it. This
+  proves a half-written live segment is never grabbed.
+- Delete-original safety: OFF keeps the source; ON deletes only after a verified,
+  recorded, non-empty output; the source is never deleted on a failed compress
+  (`test_compress_failure_keeps_original_and_leaves_retry_marker`), never when
+  the output is outside the watch root or inside `compressed/`, and never when
+  the output is zero-bytes.
+
+### ADVANCED (manual) - truly-live RTSP / MediaMTX path
+
+The fully-live path (an actual IP camera or a MediaMTX RTSP feed driving
+continuous capture) is NOT a pytest test: it needs a camera or a running media
+server and is timing/hardware dependent. Verify it manually:
+
+1. Start a feed: a real camera, or `mediamtx` publishing a test pattern
+   (`ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=15 -c:v libx264 -f rtsp
+   rtsp://127.0.0.1:8554/cam`).
+2. In the dashboard, use TOOLS to confirm the RTSP relay
+   (`/api/rtsp/status` -> `binary_present: true`), then point the pipeline at the
+   `rtsp://` URL and Start.
+3. Confirm segments accumulate in the output folder and appear in the Library.
+
+The deterministic, CI-safe equivalent of that trigger is the watched-folder
+simulation above (a recorder saving finished segments), which is what the
+auto-compress feature is built around.

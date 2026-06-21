@@ -13,7 +13,11 @@ clip (real run_pipeline + ffprobe) is added in R3.1e.
 Author: Bloodawn (KheivenD), 2026-06-06 (R3.1b - auto-compress).
 """
 
+import os
+import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -24,6 +28,9 @@ if str(SRC) not in sys.path:
 
 from gui.services import autocompress_runner as ac  # noqa: E402
 from utils import compressed_index as cidx  # noqa: E402
+from utils.ffmpeg import ffmpeg_path, ffprobe_path  # noqa: E402
+
+ROOT = Path(__file__).parent.parent
 
 
 def _mkvid(p: Path, data: bytes = b"v" * 500) -> Path:
@@ -190,3 +197,181 @@ def test_scan_now_compresses_existing(client, iso):
     body = resp.get_json()
     assert resp.status_code == 200 and body["ok"] is True
     assert body["compressed"] == 2
+
+
+# ── R3.1e: simulated live recorder + partial write + failure safety ───────────
+
+def test_partial_write_waits_for_stability(iso):
+    """A clip still being written (size growing) must NOT be grabbed mid-write.
+
+    Mimics a recorder saving a live segment: a background thread keeps appending
+    to the file. A scan whose stability window spans that writing must skip it;
+    once writing stops, the next scan compresses it exactly once.
+    """
+    watch = iso / "watch"
+    watch.mkdir(parents=True, exist_ok=True)
+    p = watch / "growing.mp4"
+    p.write_bytes(b"x" * 1000)
+
+    stop = threading.Event()
+
+    def _writer():
+        for _ in range(14):
+            if stop.is_set():
+                break
+            with open(p, "ab") as fh:
+                fh.write(b"y" * 4096)
+            time.sleep(0.3)
+
+    t = threading.Thread(target=_writer)
+    t.start()
+    try:
+        # While the file is still growing, a stability check spanning ~0.9s sees
+        # the size change and skips it.
+        done = ac.scan_once(str(watch), str(iso / "out"),
+                            settle_seconds=0.3, stable_checks=3)
+        assert done == [], "a still-growing file must not be compressed"
+    finally:
+        stop.set()
+        t.join()
+
+    # Now stable -> it compresses on the next pass.
+    done2 = _scan(watch, iso / "out")
+    assert len(done2) == 1
+
+
+def test_compress_failure_keeps_original_and_leaves_retry_marker(iso, monkeypatch):
+    """If the encode raises, the original is never deleted (even with the flag
+    ON) and a .processing marker is left so the next scan retries it."""
+    def _boom(**kwargs):
+        raise RuntimeError("encode failed")
+
+    monkeypatch.setattr(ac, "run_pipeline", _boom)
+    watch = iso / "watch"
+    src = _mkvid(watch / "clip.mp4")
+
+    done = _scan(watch, iso / "out", delete_original=True)
+    assert done == []
+    assert src.exists(), "a failed compress must never delete the original"
+    assert (watch / "clip.mp4.processing").exists(), "retry marker should remain"
+    assert cidx.is_compressed(src) is False  # nothing recorded
+
+
+# ── R3.1e: live-save integration with a real CDnet clip (skips if absent) ─────
+
+def _corpus():
+    env = os.environ.get("SVCS_TEST_VIDEO_DIR", "").strip()
+    if env and Path(env).is_dir():
+        return Path(env)
+    p = ROOT / "data" / "samples" / "cdnet_mp4"
+    return p if p.is_dir() else None
+
+
+def _first_clip():
+    c = _corpus()
+    if not c:
+        return None
+    clips = sorted(c.rglob("*.mp4"))
+    return clips[0] if clips else None
+
+
+_CLIP = _first_clip()
+
+
+def _trim(src: Path, dst: Path, seconds: int = 2) -> bool:
+    r = subprocess.run(
+        [ffmpeg_path(), "-y", "-ss", "0", "-t", str(seconds), "-i", str(src),
+         "-an", "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p",
+         str(dst)],
+        capture_output=True, timeout=120,
+    )
+    return r.returncode == 0 and dst.exists() and dst.stat().st_size > 0
+
+
+def _has_video(path: Path) -> bool:
+    r = subprocess.run(
+        [ffprobe_path(), "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(path)],
+        capture_output=True, text=True, timeout=30,
+    )
+    return r.returncode == 0 and "video" in (r.stdout or "")
+
+
+@pytest.fixture()
+def real_iso(tmp_path, monkeypatch):
+    """Isolate the index + gui-state to tmp WITHOUT stubbing the encode (the
+    live-save tests run the real pipeline)."""
+    monkeypatch.setattr(cidx._paths, "state_file", lambda name: tmp_path / name)
+    try:
+        from gui.services import gui_state_persist as gsp
+    except ModuleNotFoundError:  # pragma: no cover
+        from src.gui.services import gui_state_persist as gsp
+    monkeypatch.setattr(gsp, "_GUI_STATE_FILE", tmp_path / "gui_state.json")
+    return tmp_path
+
+
+@pytest.mark.skipif(_CLIP is None,
+                    reason="No CDnet corpus at data/samples/cdnet_mp4 "
+                           "(set SVCS_TEST_VIDEO_DIR).")
+def test_live_save_daemon_compresses_and_dedups(real_iso, tmp_path):
+    """Start the daemon, simulate a recorder saving a clip into the watched
+    folder, and assert it is compressed into compressed/, is a valid container,
+    and is recorded in the index - then that a second pass dedups."""
+    watch = tmp_path / "watch"
+    watch.mkdir()
+    out = tmp_path / "out"
+    out.mkdir()
+
+    # Prepare the clip OUTSIDE the watch folder, then "save" it in (a move/copy
+    # is what a recorder does when it finalizes a segment).
+    staged = tmp_path / "staged.mp4"
+    if not _trim(_CLIP, staged, seconds=2):
+        pytest.skip("could not trim a sample clip (ffmpeg unavailable?)")
+
+    # _ac_status is module-level; reset the session counters so this test does
+    # not see compressions from earlier tests in the same process.
+    with ac._ac_lock:
+        ac._ac_status.update({"recent": [], "compressed_total": 0,
+                              "queue": 0, "last_error": None, "scans": 0})
+
+    comp_dir = out / "compressed"
+    config = {"folder": str(watch), "output_dir": str(out),
+              "mode": "mode0", "poll_interval": 2, "delete_original": False}
+    assert ac.start_autocompress(config) is True
+    try:
+        # Recorder saves the finished segment into the watched folder.
+        saved = watch / "live_segment.mp4"
+        saved.write_bytes(staged.read_bytes())
+
+        # Wait for the daemon to actually write a compressed output (bounded).
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            if (comp_dir.is_dir() and any(comp_dir.glob("*.mp4"))) \
+                    or cidx.is_compressed(saved):
+                break
+            time.sleep(1)
+    finally:
+        ac.stop_autocompress()
+        # Give the thread a moment to exit cleanly.
+        for _ in range(10):
+            if not ac.is_running():
+                break
+            time.sleep(0.5)
+
+    produced = list(comp_dir.glob("*.mp4")) if comp_dir.is_dir() else []
+    assert produced, "the daemon should have written a compressed output"
+    assert _has_video(produced[0]), "the output must be a valid video container"
+    assert cidx.is_compressed(saved) is True, "the source->output must be recorded"
+
+    # Dedup: a second scan over the same folder compresses nothing more, and the
+    # index keeps a single entry for this source.
+    before = len(cidx._load()["entries"])
+    again = ac.scan_once(str(watch), str(out), mode="mode0",
+                         settle_seconds=0.0, stable_checks=1)
+    assert again == [], "an already-compressed clip must not be redone"
+    assert len(cidx._load()["entries"]) == before, "no duplicate index entry"
+
+    # A file already inside compressed/ is never recompressed.
+    third = ac.scan_once(str(out), str(out), mode="mode0",
+                         settle_seconds=0.0, stable_checks=1)
+    assert third == [], "outputs under compressed/ must never be recompressed"

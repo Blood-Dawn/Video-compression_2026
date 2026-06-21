@@ -203,6 +203,32 @@ def test_browse_folder_returns_chosen_path(client, monkeypatch, tmp_path):
     assert body["path"] == str(tmp_path / "picked")
 
 
+def test_browse_folder_uses_powershell_dialog_on_windows(client, monkeypatch):
+    # On Windows the picker must shell out to a PowerShell FolderBrowserDialog so
+    # it also works in the frozen app (where sys.executable is SVCS.exe, not
+    # Python, and cannot run a "-c" script).
+    import subprocess
+    import sys
+
+    captured = {}
+
+    class _R:
+        stdout = "C:\\Users\\me\\Videos"
+
+    def _fake_run(cmd, *a, **k):
+        captured["cmd"] = cmd
+        return _R()
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+    monkeypatch.setattr(sys, "platform", "win32")
+    body = client.get("/api/library/browse_folder").get_json()
+    assert body["path"] == "C:\\Users\\me\\Videos"
+    assert "powershell" in str(captured["cmd"][0]).lower()
+    assert any("FolderBrowserDialog" in str(x) for x in captured["cmd"])
+    # It must NOT try to run the bundled exe with -c (the frozen-app bug).
+    assert "-c" not in captured["cmd"]
+
+
 def test_videos_recursive_finds_nested(client, tmp_path, monkeypatch):
     monkeypatch.setattr(lib._paths, "thumbs_dir", lambda: tmp_path / "thumbs")
     (tmp_path / "thumbs").mkdir()

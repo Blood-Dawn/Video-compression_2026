@@ -296,23 +296,44 @@ def api_library_list_dirs():
 
 @library_bp.route("/api/library/browse_folder", methods=["GET"])
 def api_library_browse_folder():
-    """Open a native folder-picker dialog on the HOST and return the chosen dir.
+    """Open a NATIVE folder picker on the host and return the chosen directory.
 
-    Desktop-only (it shells out to a tkinter askdirectory dialog). Remote/Docker
-    users type a path instead. Returns {"path": "..."} (empty if cancelled).
+    Windows uses a PowerShell ``FolderBrowserDialog`` so it also works in the
+    FROZEN app, where ``sys.executable`` is the bundled SVCS.exe and cannot run a
+    ``python -c`` script. Other platforms shell out to a tkinter askdirectory
+    dialog (works from source). The dialog runs in a separate process so it never
+    blocks or crashes the Flask worker thread.
+
+    Remote/Docker users (where the dialog would open on the server, not their
+    screen) type a path instead, and the Library falls back to its in-app browser
+    if this returns nothing. Returns {"path": "..."} (empty if cancelled).
     """
     import subprocess
     import sys
-    script = (
-        "import tkinter as tk; from tkinter import filedialog; "
-        "root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True); "
-        "path = filedialog.askdirectory(title='Select a folder of videos'); "
-        "root.destroy(); print(path or '', end='')"
-    )
+    path = ""
     try:
-        result = subprocess.run([sys.executable, "-c", script],
-                                capture_output=True, text=True, timeout=180)
-        path = result.stdout.strip()
+        if sys.platform == "win32":
+            ps = (
+                "Add-Type -AssemblyName System.Windows.Forms | Out-Null; "
+                "$d = New-Object System.Windows.Forms.FolderBrowserDialog; "
+                "$d.Description = 'Select a folder of videos'; "
+                "$d.ShowNewFolderButton = $true; "
+                "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) "
+                "{ [Console]::Out.Write($d.SelectedPath) }"
+            )
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-NonInteractive", "-STA", "-Command", ps],
+                capture_output=True, text=True, timeout=300)
+        else:
+            script = (
+                "import tkinter as tk; from tkinter import filedialog; "
+                "root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True); "
+                "path = filedialog.askdirectory(title='Select a folder of videos'); "
+                "root.destroy(); print(path or '', end='')"
+            )
+            result = subprocess.run([sys.executable, "-c", script],
+                                    capture_output=True, text=True, timeout=300)
+        path = (result.stdout or "").strip()
     except Exception as exc:  # noqa: BLE001
         log.warning("Library folder picker failed: %s", exc)
         path = ""

@@ -246,10 +246,26 @@ async function _lbNavigate(path) {
 }
 
 async function browseLibraryFolder() {
-  _showBrowseModal(true);
-  const folderEl = document.getElementById("library-folder");
-  const start = (folderEl && folderEl.value.trim()) || "";
-  await _lbNavigate(start);
+  // Open the host's NATIVE folder picker (Windows Explorer folder dialog), then
+  // load the chosen folder. Only fall back to the in-app browser if the native
+  // picker is unreachable (e.g. a remote/headless server).
+  try {
+    const data = await (await fetch("/api/library/browse_folder")).json();
+    if (data && data.path) {
+      const el = document.getElementById("library-folder");
+      if (el) el.value = data.path;
+      loadLibrary();
+    }
+    // An empty path means the user cancelled the dialog: do nothing.
+    return;
+  } catch (e) {
+    // Native picker unavailable: fall back to the in-app folder browser so a
+    // remote user is never stuck.
+    _showBrowseModal(true);
+    const folderEl = document.getElementById("library-folder");
+    const start = (folderEl && folderEl.value.trim()) || "";
+    await _lbNavigate(start);
+  }
 }
 window.browseLibraryFolder = browseLibraryFolder;
 

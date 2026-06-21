@@ -6,7 +6,18 @@ Sponsored by the Defense Innovation Unit (DIU) / NIWC Pacific
 
 ## Download
 
-**[⬇ Download the latest Windows installer](https://github.com/Blood-Dawn/Video-compression_2026/releases/latest)** - grab `SVCS-Setup-*.exe` from the Releases page, then verify it against the published `SHA256SUMS.txt` (the [download page](docs/site/index.html) has the steps).
+**Install from the terminal** (Windows PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/Blood-Dawn/Video-compression_2026/app/installer/Install-SVCS.ps1 | iex
+```
+
+This opens an SVCS-themed menu to pick what to install (core app, optional plate
+reader, local RTSP server, sample clips). Once the winget package is public you
+can also `winget install Blood-Dawn.SVCS`. Full options are in
+[docs/INSTALL.md](docs/INSTALL.md).
+
+**Or [⬇ download the latest Windows installer](https://github.com/Blood-Dawn/Video-compression_2026/releases/latest)** - grab `SVCS-Setup-*.exe` from the Releases page, then verify it against the published `SHA256SUMS.txt` (the [download page](docs/site/index.html) has the steps).
 
 Free and open source (AGPL-3.0). No account, no cloud, no telemetry by default. Runs offline on a regular PC - no GPU required. Also available as a [Docker image](docs/deployment_packaging.md) or from source (below).
 

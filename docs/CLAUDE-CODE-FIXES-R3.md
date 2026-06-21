@@ -75,9 +75,9 @@ HONESTY NOTE (read first): PowerShell GUIs and the winget public submission are 
 - [x] PSScriptAnalyzer-clean, no em-dashes, LF-friendly. A small `tests/test_install_script.py`: the file exists, has a `-DryRun` path, contains the SVCS palette hex, and is dash-free (extend the dash guard to cover `installer/Install-SVCS.ps1`). (Write-Host suppressed via SuppressMessageAttribute; PSScriptAnalyzer itself is owner-run per BLOCKERS. `tests/test_install_script.py` = 8 tests incl. a PowerShell parse-check; dash guard already scans `installer/**/*.ps1`.)
 
 ### R3.2c - Docs
-- [ ] `docs/INSTALL.md`: "Install from the terminal" - the one-liner `irm ... | iex` for the menu, plus `winget install Blood-Dawn.SVCS` once published, plus the manual `.exe` download. Update the download page (`docs/site/`) and README with the terminal-install option.
+- [x] `docs/INSTALL.md`: "Install from the terminal" - the one-liner `irm ... | iex` for the menu, plus `winget install Blood-Dawn.SVCS` once published, plus the manual `.exe` download. Update the download page (`docs/site/`) and README with the terminal-install option. (INSTALL.md written; `docs/site/index.html` Download section now leads with the one-liner + winget; README Download section adds the terminal install.)
 
-**Acceptance for R3.2:** the winget manifest validates and its structural test passes; `Install-SVCS.ps1` parses, runs `-DryRun` cleanly, and is dash-free; `docs/INSTALL.md` written; the GUI + real winget submission are recorded as owner-verified/owner-gated in BLOCKERS (do not fake-test them).
+**Acceptance for R3.2:** [x] the winget manifest validates structurally and its test passes (7); [x] `Install-SVCS.ps1` parses, runs `-DryRun` cleanly (all four components), and is dash-free; [x] `docs/INSTALL.md` written; [x] the GUI + real winget submission are recorded as owner-verified/owner-gated in `docs/BLOCKERS.md` (not fake-tested).
 
 ---
 

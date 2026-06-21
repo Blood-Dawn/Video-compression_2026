@@ -11,6 +11,23 @@ Author: Bloodawn (KheivenD), 2026-06-02 (autonomous v2 build).
 
 ## Open items
 
+### R3.2 distribution - owner-gated / owner-verified (2026-06-21)
+
+R3.1 (auto-compress) is fully implemented and tested. R3.2 (terminal/winget
+distribution) is built, but parts are NOT pytest-coverable and need the owner:
+
+| Item | Why gated | What's ready | Owner action |
+|------|-----------|--------------|--------------|
+| **winget public submission** | submission is the owner's GitHub action; Microsoft prefers a code-signed installer | `installer/winget/` manifest (3 files), `scripts/winget_validate.ps1`, `docs/winget-submission.md`, structural test green | publish a Release with the asset, run `winget_validate.ps1 -Recompute` to fix the SHA, then `wingetcreate submit` (steps in winget-submission.md) |
+| **winget InstallerSha256** | must match the EXACT released asset | SHA computed against the current `dist/` installer | rebuild the installer for the R3 app, then `pwsh scripts/winget_validate.ps1 -Recompute` |
+| **Install-SVCS.ps1 GUI** | a WPF window cannot be pytest-tested | script parses, `-DryRun`/`-NoGui` verified, structural test (8) green | run it once on Windows and confirm the window + each component |
+| **PSScriptAnalyzer lint** | analyzer not in the CI env | scripts written clean; Write-Host suppressed via attribute | `Install-Module PSScriptAnalyzer; Invoke-ScriptAnalyzer installer/Install-SVCS.ps1, scripts/winget_validate.ps1` |
+
+These are honest gaps, not fake-tested: the manifest is validated structurally
+(`tests/test_winget_manifest.py`) and the script is parse-checked + structurally
+tested (`tests/test_install_script.py`), but the live `winget validate`, the WPF
+window, and the public submission are owner-run.
+
 ### ✅ AUTONOMOUS RUN COMPLETE - every non-gated task M1 → M5b is done (2026-06-03)
 
 All non-gated tasks are implemented, tested green, committed, and pushed to

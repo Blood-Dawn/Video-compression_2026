@@ -11,6 +11,19 @@ Author: Bloodawn (KheivenD), 2026-06-02 (autonomous v2 build).
 
 ## Open items
 
+### R4 Phase 3 - competitor-gap features deferred (2026-07-04)
+
+Phase 3 (docs/RESEARCH-COMPETITORS.md) implemented the #1 table-stakes gap
+(retention / disk-budget / auto-purge). These verified-but-deferred gaps are
+recorded here rather than silently dropped:
+
+| Item | Why deferred | Proposed approach |
+|------|-------------|-------------------|
+| Outbound webhook / MQTT / email on events | Real gap (Frigate MQTT, On-Guard). A safe outbound webhook needs SSRF guarding (post-to-internal-host risk); MQTT needs a broker dependency the local-first installer avoids. | A single opt-in outbound webhook: JSON POST on job-complete / purge, target URL vetted through the existing `path_safety` host checks (block link-local / metadata). Add after the Phase 4 split so it lands in the SERVER build only. |
+| Timeline review UI | Also deferred in Phase 1 (docs/RESEARCH-UIUX.md finding 5/7). Large front-end effort; the Phase 4 shell change will move the goalposts. | Revisit post-split with Frigate/XProtect two-track timeline patterns. |
+| Multi-user / RBAC + built-in HTTPS/TLS | Single-node local-first tool; the documented production answer is a reverse proxy (nginx/Caddy) which also terminates TLS. Full RBAC would make SVCS a VMS. | Document the reverse-proxy pattern in the SERVER build's getting-started (Phase 4); do not build in-app RBAC. |
+| ONVIF Profile G recording/replay server | Would turn a compressor into a full VMS - out of scope. | Not planned. |
+
 ### Security audit - deferred items (2026-06-21)
 
 The security audit (`docs/SECURITY-AUDIT.md`) fixed every Critical/High and the

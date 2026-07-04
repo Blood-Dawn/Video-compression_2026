@@ -26,10 +26,12 @@ try:
     from gui.logging_setup import log
     from gui.services.cloud_detection import _default_output_dir
     from gui.services import autocompress_runner as ac
+    from gui.services import retention as _retention
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.logging_setup import log
     from src.gui.services.cloud_detection import _default_output_dir
     from src.gui.services import autocompress_runner as ac
+    from src.gui.services import retention as _retention
 
 autocompress_bp = Blueprint("autocompress", __name__)
 
@@ -116,3 +118,35 @@ def api_autocompress_scan_now():
 
     return jsonify({"ok": True, "compressed": len(done), "items": done,
                     "status": ac.get_status()})
+
+
+# ── Retention / disk-budget (R4 Phase 3) ──────────────────────────────────────
+
+@autocompress_bp.route("/api/retention", methods=["GET", "POST"])
+def api_retention():
+    """GET: retention policy + a free-disk/bitrate headroom estimate.
+    POST {enabled, max_age_days, max_total_gb}: update the policy.
+
+    The policy bounds the auto-compressed footage under ``<output_dir>/compressed``
+    (docs/RESEARCH-COMPETITORS.md - the ZoneMinder/Frigate retention gap).
+    """
+    if request.method == "POST":
+        body = request.get_json(silent=True) or {}
+        pol = _retention.set_policy(body)
+        return jsonify({"ok": True, "policy": pol,
+                        "estimate": _retention.estimate(_output_dir(), pol)})
+    pol = _retention.get_policy()
+    return jsonify({"ok": True, "policy": pol,
+                    "estimate": _retention.estimate(_output_dir(), pol)})
+
+
+@autocompress_bp.route("/api/retention/purge_now", methods=["POST"])
+def api_retention_purge_now():
+    """Run one retention purge immediately over the compressed output.
+
+    Requires the policy be enabled with at least one limit set; otherwise it is
+    a no-op (``ran`` False) so a click never deletes footage under no rule.
+    """
+    summary = _retention.purge_once(_output_dir())
+    return jsonify({"ok": True, "summary": summary,
+                    "estimate": _retention.estimate(_output_dir())})

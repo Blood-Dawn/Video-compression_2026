@@ -327,11 +327,14 @@ async function loadRecentJobs() {
     }
     list.innerHTML = jobs.map(j => {
       const c = j.counts || {};
-      const what = j.kind === 'autocompress'
-        ? (c.compressed ?? 0) + ' file(s)'
-        : (c.segments ?? 0) + ' segment(s)';
-      const saved = (j.bytes_in > 0 && j.bytes_out > 0)
-        ? ', saved ' + fmtBytes(Math.max(0, j.bytes_in - j.bytes_out)) : '';
+      const what = j.kind === 'autocompress' ? (c.compressed ?? 0) + ' file(s)'
+                 : j.kind === 'retention'    ? (c.deleted ?? 0) + ' purged'
+                 : (c.segments ?? 0) + ' segment(s)';
+      // For retention, bytes_in is the space freed (no bytes_out).
+      const saved = j.kind === 'retention'
+        ? (j.bytes_in > 0 ? ', freed ' + fmtBytes(j.bytes_in) : '')
+        : ((j.bytes_in > 0 && j.bytes_out > 0)
+            ? ', saved ' + fmtBytes(Math.max(0, j.bytes_in - j.bytes_out)) : '');
       const status = String(j.status || 'completed');
       return '<div class="job-row">' +
         '<span class="job-status ' + escHtml(status) + '">' + escHtml(status.toUpperCase()) + '</span>' +

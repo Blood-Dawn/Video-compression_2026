@@ -99,6 +99,8 @@ EXPECTED = {
     "/api/autocompress/stop": "autocompress",
     "/api/autocompress/status": "autocompress",
     "/api/autocompress/scan_now": "autocompress",
+    "/api/retention": "autocompress",
+    "/api/retention/purge_now": "autocompress",
 }
 
 EXPECTED_BLUEPRINTS = {
@@ -114,7 +116,7 @@ def _rules():
 
 def test_route_count():
     rules = _rules()
-    assert len(rules) == 71, f"expected 71 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 73, f"expected 73 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_blueprints_registered():

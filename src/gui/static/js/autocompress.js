@@ -257,9 +257,101 @@ function _acStopLog() {
   if (_acLogSource) { _acLogSource.close(); _acLogSource = null; }
 }
 
+// ── Retention / disk budget (R4 Phase 3) ──────────────────────────────────────
+let _retLoaded = false;
+
+function _retFmtDays(d) {
+  if (d == null) return "unknown";
+  if (d >= 365) return (d / 365).toFixed(1) + " years";
+  if (d >= 60) return (d / 30).toFixed(1) + " months";
+  return d + " days";
+}
+
+function _retRenderEstimate(est) {
+  const el = document.getElementById("ret-estimate");
+  if (!el || !est) return;
+  if (!est.available) { el.textContent = ""; return; }
+  const lines = [];
+  if (est.used_gb != null) lines.push("Compressed on disk: " + est.used_gb + " GB");
+  if (est.free_gb != null) lines.push("Free disk: " + est.free_gb + " GB");
+  if (est.bytes_per_day != null) {
+    const gbday = (est.bytes_per_day / 1e9).toFixed(2);
+    lines.push("Recent rate: ~" + gbday + " GB/day");
+  }
+  if (est.est_days_headroom != null) {
+    lines.push("Estimated headroom: ~" + _retFmtDays(est.est_days_headroom));
+  } else {
+    lines.push("Headroom: record more footage to estimate");
+  }
+  el.innerHTML = lines.map(_esc).join("<br>");
+}
+
+async function retentionRefresh() {
+  try {
+    const data = await (await fetch("/api/retention")).json();
+    if (!data || !data.policy) return;
+    const p = data.policy;
+    const en = document.getElementById("ret-enabled");
+    const age = document.getElementById("ret-max-age");
+    const gb = document.getElementById("ret-max-gb");
+    if (en) en.checked = !!p.enabled;
+    if (age && !_retLoaded) age.value = p.max_age_days || "";
+    if (gb && !_retLoaded) gb.value = p.max_total_gb || "";
+    _retLoaded = true;
+    _retRenderEstimate(data.estimate);
+  } catch (e) { /* keep last render */ }
+}
+window.retentionRefresh = retentionRefresh;
+
+async function retentionSave() {
+  const body = {
+    enabled: !!document.getElementById("ret-enabled")?.checked,
+    max_age_days: (document.getElementById("ret-max-age")?.value || "0").trim() || "0",
+    max_total_gb: (document.getElementById("ret-max-gb")?.value || "0").trim() || "0",
+  };
+  try {
+    const data = await (await fetch("/api/retention", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })).json();
+    if (data && data.estimate) _retRenderEstimate(data.estimate);
+  } catch (e) { /* transient */ }
+}
+window.retentionSave = retentionSave;
+
+async function retentionPurgeNow() {
+  const btn = document.getElementById("ret-purge-btn");
+  if (!document.getElementById("ret-enabled")?.checked) {
+    if (typeof pushNotif === "function")
+      pushNotif("Retention off", "Enable retention and set a limit before purging.", "info", null, 5000);
+    return;
+  }
+  if (!window.confirm("Delete old compressed clips now that exceed the retention limits? This cannot be undone.")) return;
+  if (btn) { btn.disabled = true; btn.textContent = "Purging..."; }
+  try {
+    const data = await (await fetch("/api/retention/purge_now", { method: "POST" })).json();
+    const s = data.summary || {};
+    if (typeof pushNotif === "function") {
+      pushNotif("Retention purge",
+        s.ran ? ("Deleted " + (s.deleted || 0) + " clip(s), freed " +
+                 ((s.freed_bytes || 0) / 1e6).toFixed(1) + " MB")
+              : "Nothing to purge (no clips over the limit).",
+        "success", null, 5000);
+    }
+    if (data.estimate) _retRenderEstimate(data.estimate);
+    if (typeof loadRecentJobs === "function") loadRecentJobs();
+  } catch (e) {
+    if (typeof pushNotif === "function") pushNotif("Retention purge failed", String(e), "error", null, 5000);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Purge now"; }
+  }
+}
+window.retentionPurgeNow = retentionPurgeNow;
+
 // ── Tab show/hide lifecycle (called from switchTab) ───────────────────────────
 function acOnTabShow() {
   acRefreshStatus();
+  retentionRefresh();
   _acStartLog();
   if (_acPoll) clearInterval(_acPoll);
   _acPoll = setInterval(acRefreshStatus, 2500);

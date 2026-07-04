@@ -53,6 +53,7 @@ def _load_gui_state() -> None:
         setup_done = bool(data.get("setup_complete", False))
         demo_root = data.get("last_demo_output_root") or ""
         autoc = data.get("autocompress") if isinstance(data.get("autocompress"), dict) else None
+        retention = data.get("retention") if isinstance(data.get("retention"), dict) else None
         with _state_lock:
             cfg = _status.setdefault("config", {})
             if out_dir:
@@ -67,6 +68,9 @@ def _load_gui_state() -> None:
                 # user's on/off INTENT). The daemon is NOT started here - only the
                 # config is restored; it starts only on an explicit user toggle.
                 cfg.setdefault("autocompress", autoc)
+            if retention is not None:
+                # Saved retention policy (R4 Phase 3: max age / max size / enabled).
+                cfg.setdefault("retention", retention)
             _status.setdefault("setup_complete", setup_done)
         if demo_root:
             with _demo_lock:
@@ -84,6 +88,7 @@ def _save_gui_state() -> None:
             enc_dir = cfg.get("encrypted_dir", "")
             lib_dir = cfg.get("library_folder", "")
             autoc = cfg.get("autocompress", {})
+            retention = cfg.get("retention", {})
             setup_done = bool(_status.get("setup_complete", False))
         with _demo_lock:
             demo_root = _demo_state.get("last_output_root", "")
@@ -92,6 +97,7 @@ def _save_gui_state() -> None:
             "encrypted_dir": str(enc_dir or ""),
             "library_folder": str(lib_dir or ""),
             "autocompress": autoc if isinstance(autoc, dict) else {},
+            "retention": retention if isinstance(retention, dict) else {},
             "setup_complete": setup_done,
             "last_demo_output_root": str(demo_root or ""),
             "saved_at": time.time(),
@@ -164,3 +170,19 @@ def get_autocompress_config() -> dict:
     with _state_lock:
         ac = _status.get("config", {}).get("autocompress", {})
         return dict(ac) if isinstance(ac, dict) else {}
+
+
+def set_retention_config(cfg: dict) -> None:
+    """Persist the retention policy (R4 Phase 3: enabled/max_age_days/max_total_gb)."""
+    if not isinstance(cfg, dict):
+        return
+    with _state_lock:
+        _status.setdefault("config", {})["retention"] = dict(cfg)
+    _save_gui_state()
+
+
+def get_retention_config() -> dict:
+    """Return the saved retention policy, or {} if none."""
+    with _state_lock:
+        rc = _status.get("config", {}).get("retention", {})
+        return dict(rc) if isinstance(rc, dict) else {}

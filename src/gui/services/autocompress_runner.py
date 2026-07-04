@@ -487,6 +487,10 @@ def _run_autocompress_thread(config: dict, stop_event: threading.Event) -> None:
                 log.error("Auto-compress scan error: %s", exc, exc_info=True)
                 with _ac_lock:
                     _ac_status["last_error"] = str(exc)
+            # R4 Phase 3: after each pass, enforce the retention policy so the
+            # 24/7 compressed footage stays bounded on disk. Best effort - a
+            # retention error never stops the daemon (purge_once never raises).
+            _enforce_retention(output_dir)
             # Sleep in short slices so a stop is honoured promptly.
             for _ in range(poll_interval * 2):
                 if stop_event.is_set():
@@ -497,6 +501,18 @@ def _run_autocompress_thread(config: dict, stop_event: threading.Event) -> None:
             _ac_status["running"] = False
             _ac_status["queue"] = 0
         log.info("Auto-compress stopped.")
+
+
+def _enforce_retention(output_dir: str) -> None:
+    """Run one retention purge over the compressed output (best effort)."""
+    try:
+        try:
+            from gui.services import retention as _retention
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.gui.services import retention as _retention
+        _retention.purge_once(output_dir)
+    except Exception:  # noqa: BLE001 - retention must never stop the daemon
+        pass
 
 
 # ── public start/stop/status ──────────────────────────────────────────────────

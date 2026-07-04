@@ -31,6 +31,22 @@ Path from the stale "48 failed" claim to green: provision the env (cleared 22 en
 
 The 3 skips are the real-webcam hardware tests (`SVCS_TEST_WEBCAM=1` to run) - intentional.
 
+## GREEN baseline after R4 Phase 3 (2026-07-04)
+
+| Field | Value |
+|---|---|
+| Command | `scripts/run_tests.ps1` |
+| Log | `logs/pytest_20260704_171344.log` |
+| Result | **1183 passed, 4 skipped, 0 failed** (211 s) |
+| Env | Windows 11, Python 3.11.9, `.venv` |
+
+R4 Phase 3 (competitor gap analysis, see docs/RESEARCH-COMPETITORS.md) added
+retention / disk-budget / auto-purge (the #1 table-stakes NVR gap):
+`gui/services/retention.py`, two new routes on `autocompress_bp`
+(`/api/retention` GET+POST, `/api/retention/purge_now`; route guard 71 -> 73,
+blueprints stay 17), a daemon hook, and `test_retention.py` (16, mostly
+deletion-safety guards). Skips unchanged (3 webcam + 1 opt-in Docker build).
+
 ## GREEN baseline after R4 Phase 2 (2026-07-04)
 
 | Field | Value |

@@ -2974,6 +2974,38 @@
           <div style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);" id="ac-recent">Nothing compressed yet. Turn ON watching, or use "Compress existing now" to process the clips already in the folder.</div>
         </div>
 
+        <!-- Retention / disk budget (R4 Phase 3). Bounds the 24/7 compressed
+             footage on disk - the ZoneMinder/Frigate "auto-purge" gap. -->
+        <details class="source-advanced" id="retention-panel" style="margin-bottom:0.8rem;" ontoggle="if(this.open)retentionRefresh()">
+          <summary style="cursor:pointer;font-family:var(--display);font-size:0.95rem;letter-spacing:0.08em;color:var(--text-dim);">
+            RETENTION / DISK BUDGET
+          </summary>
+          <div style="padding:0.5rem 0 0;">
+            <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.64rem;cursor:pointer;margin-bottom:0.5rem;">
+              <input type="checkbox" id="ret-enabled" onchange="retentionSave()" />
+              Automatically delete old compressed clips
+            </label>
+            <div class="config-field">
+              <label class="config-label" for="ret-max-age">Keep at most (days)</label>
+              <input type="number" id="ret-max-age" min="0" max="3650" placeholder="0 = no age limit"
+                     style="width:100%;font-family:var(--mono);font-size:0.65rem;" onchange="retentionSave()" />
+            </div>
+            <div class="config-field" style="margin-top:0.4rem;">
+              <label class="config-label" for="ret-max-gb">Cap total size (GB)</label>
+              <input type="number" id="ret-max-gb" min="0" step="0.5" placeholder="0 = no size limit"
+                     style="width:100%;font-family:var(--mono);font-size:0.65rem;" onchange="retentionSave()" />
+            </div>
+            <div id="ret-estimate" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
+            <div style="margin-top:0.5rem;">
+              <button class="btn btn-ghost" id="ret-purge-btn" onclick="retentionPurgeNow()">Purge now</button>
+            </div>
+            <div style="font-size:0.55rem;color:var(--text-dim);margin-top:0.4rem;font-family:var(--mono);">
+              Deletes oldest clips under &lt;output&gt;/compressed only. Originals and just-written
+              clips are never touched. Off by default.
+            </div>
+          </div>
+        </details>
+
         <!-- Live activity log (reuses the SSE /api/logs stream) -->
         <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">Activity log</div>
         <div id="ac-log" style="background:#0a0e14;border:1px solid var(--border,#1e2733);border-radius:4px;padding:0.5rem;height:160px;overflow-y:auto;font-family:var(--mono);font-size:0.6rem;line-height:1.5;white-space:pre-wrap;"></div>

@@ -31,6 +31,24 @@ Path from the stale "48 failed" claim to green: provision the env (cleared 22 en
 
 The 3 skips are the real-webcam hardware tests (`SVCS_TEST_WEBCAM=1` to run) - intentional.
 
+## GREEN baseline after R4 Phase 5 (2026-07-04)
+
+| Field | Value |
+|---|---|
+| Command | `scripts/run_tests.ps1` |
+| Log | `logs/pytest_20260704_182046.log` |
+| Result | **1210 passed, 4 skipped, 0 failed** (196 s) |
+| Env | Windows 11, Python 3.11.9, `.venv` |
+
+R4 Phase 5 (plate-reader solution, see docs/RESEARCH-PLATES.md +
+docs/PLATES-VALIDATION.md) added an in-process ONNX ALPR backend
+(`_FastPlateOcrBackend`: fast-plate-ocr + open-image-models, MIT, torch-free)
+that installs alongside opencv-contrib in ONE env via a `--no-deps` recipe
+(`scripts/install_plates.ps1`) - empirically validated in a throwaway venv. It
+is auto-selected first and degrades gracefully when absent, so CI needs no OCR
+package. `test_plate_backend_order.py` grew ONNX order + adapter tests (a test
+caught a real bbox-parsing bug). Skips unchanged (3 webcam + 1 opt-in Docker).
+
 ## GREEN baseline after R4 Phase 4 (2026-07-04)
 
 | Field | Value |

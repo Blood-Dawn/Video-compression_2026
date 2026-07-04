@@ -11,6 +11,18 @@ Author: Bloodawn (KheivenD), 2026-06-02 (autonomous v2 build).
 
 ## Open items
 
+### R4 Phase 5 - ONNX plate reader: install recipe + maintenance (2026-07-04)
+
+The plate reader now defaults to the ONNX ALPR stack (fast-plate-ocr +
+open-image-models, MIT, torch-free), which installs alongside opencv-contrib in
+ONE env (validated: docs/PLATES-VALIDATION.md). Residual owner/maintenance items:
+
+| Item | Why | Action |
+|------|-----|--------|
+| `--no-deps` is not resolver-enforced | fast-plate-ocr / open-image-models pin `opencv-python-headless`; we install them with `--no-deps` so the contrib cv2 is used instead. A version bump can change their cv2/numpy expectations without the resolver catching it. | Re-run `scripts/install_plates.ps1 -Verify` after any upgrade of those packages; re-audit their `Requires-Dist`. |
+| Bundling models in the exe | The default ONNX weights download from the Hugging Face hub on first use. Bundling them in the installer needs each model's individual license checked (the frameworks are MIT but weights may differ). | Owner verifies model licenses, then adds the model files to the PyInstaller `datas` + `hiddenimports` (fast_plate_ocr, open_image_models, rich) for an offline-capable plate build. |
+| EasyOCR legacy path | Still supported but requires a separate venv (its opencv-python-headless clobbers contrib). | Documented in pyproject `[plates]`; prefer the ONNX recipe. |
+
 ### R4 Phase 3 - competitor-gap features deferred (2026-07-04)
 
 Phase 3 (docs/RESEARCH-COMPETITORS.md) implemented the #1 table-stakes gap

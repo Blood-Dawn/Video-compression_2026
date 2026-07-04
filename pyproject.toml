@@ -120,30 +120,37 @@ enhance = [
     "realesrgan>=0.3.0",
 ]
 
-# AI license-plate reader (post-process). FREE optional extra — split out
-# only because EasyOCR is a heavy dependency, NOT to gate it behind payment
-# (v2 is open-source only; see README/CONTRIBUTING). Omitted from the
-# default install; the GUI auto-hides the plate-reader button when no OCR
-# backend is present, so a base install shows no empty controls.
+# AI license-plate reader (post-process). FREE optional feature (v2 is
+# open-source only; see README/CONTRIBUTING). The GUI auto-hides the plate
+# button when no OCR backend is present, so a base install shows no empty
+# controls.
 #
-# EasyOCR is Apache-2.0 and is the primary backend. PaddleOCR has been
-# removed from the default install set because the paddlepaddle wheel is
-# large (~500 MB) and fragile on non-AVX CPUs. PaddleOCR is still
-# supported at runtime if a customer installs it manually (the backend
-# auto-detects). OpenALPR is intentionally NOT used (AGPL-3.0).
+# RECOMMENDED backend (R4 Phase 5, 2026-07-04): the ONNX ALPR stack
+# fast-plate-ocr + open-image-models (both MIT, torch-free, run on the core
+# onnxruntime). Unlike EasyOCR they install into the SAME environment as
+# opencv-contrib-python, so the plate reader FINALLY ships in one env/exe.
+# The catch: those packages declare opencv-python-headless as a REQUIRED dep,
+# which would clobber the contrib cv2 - so they MUST be installed with
+# --no-deps (the contrib cv2 already satisfies their runtime `import cv2`).
+# A resolver `extra` cannot express --no-deps, so the ONNX reader is installed
+# via a recipe/helper, NOT via `uv sync --extra plates`:
 #
-# WARNING — OpenCV conflict: easyocr depends on opencv-python-headless,
-# which shares the cv2/ package namespace with the core opencv-contrib-python
-# dependency and CLOBBERS it (createBackgroundSubtractorMOG2 disappears).
-# There is no clean way to coexist (they are distinct PyPI packages writing
-# the same cv2/ files). So DO NOT install [plates] into the core/dev/CI
-# environment. Install and validate it in a SEPARATE virtualenv dedicated to
-# the plate reader. The default test runner excludes it; see
-# docs/test-baseline.md ("OpenCV / easyocr conflict") and EXECUTION TASK 0.3b/0.4b.
+#     scripts/install_plates.ps1                 # Windows helper (recommended)
+#   or, by hand (into the SAME env as core):
+#     pip install --no-deps fast-plate-ocr open-image-models
+#     pip install rich                           # only missing runtime dep
 #
-# Install (separate env only):  uv sync --extra plates
-# Author: Bloodawn (KheivenD), 2026-05-14 (premium branch split);
-#         2026-05-31 (M0 TASK 0.4b — documented the opencv-headless conflict).
+# Validated end-to-end in docs/PLATES-VALIDATION.md (contrib cv2 stays intact,
+# real inference runs). Maintenance note: --no-deps is not resolver-enforced,
+# so re-audit the cv2/numpy expectations on every upgrade (docs/BLOCKERS.md).
+#
+# LEGACY backends (still auto-detected if present, kept for existing installs):
+# the [plates] extra below installs EasyOCR (Apache-2.0). EasyOCR depends on
+# opencv-python-headless, which CLOBBERS opencv-contrib-python (MOG2 disappears)
+# - so `uv sync --extra plates` must still go into a SEPARATE virtualenv. Prefer
+# the ONNX recipe above, which does not have this problem. PaddleOCR (Apache-2.0)
+# is likewise auto-detected if installed manually. OpenALPR (AGPL-3.0) is not
+# used. Author: Bloodawn (KheivenD), 2026-05-14; ONNX default 2026-07-04.
 plates = [
     "easyocr>=1.7.0",
 ]

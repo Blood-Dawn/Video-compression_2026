@@ -7,7 +7,7 @@ academic ALPR pipeline (YOLO/RetinaNet detect -> CRNN/Transformer OCR):
 
     Frame  -->  Vehicle ROI crop (MOG2-driven, optional)
            -->  Real-ESRGAN x4 super-resolution         (existing Enhancer)
-           -->  EasyOCR generic OCR backend             (Apache-2.0)
+           -->  OCR backend (ONNX ALPR by default)      (MIT)
            -->  Multi-frame consensus voting            (own code)
            -->  PlateRead{ text, confidence, verdict }
 
@@ -15,16 +15,19 @@ Why this shape:
 
   * Real-ESRGAN is BSD-3 and already loaded in `Enhancer`; reusing it costs
     nothing.
-  * EasyOCR is Apache-2.0 and is the primary OCR backend as of 2026-05-14.
-    PaddleOCR was dropped from the default install set because the
-    paddlepaddle wheel is large (~500 MB), fragile on non-AVX CPUs, and
-    adds a third-party-of-third-party supply chain we don't need for the
-    accuracy delta. PaddleOCR is still supported at runtime if installed
-    manually (the backend auto-detects), but is no longer pulled in by
-    ``uv sync --extra plates``.
+  * The DEFAULT OCR backend is the ONNX ALPR stack (R4 Phase 5, 2026-07-04):
+    fast-plate-ocr + open-image-models, both MIT and torch-free, running on the
+    core ONNX Runtime. Crucially they install into the SAME environment as
+    opencv-contrib-python (via a `--no-deps` recipe), unlike EasyOCR whose
+    opencv-python-headless dependency clobbers the contrib cv2 and forced
+    [plates] into a separate venv. Validated end-to-end in
+    docs/PLATES-VALIDATION.md; the design decision is docs/RESEARCH-PLATES.md.
+  * EasyOCR (Apache-2.0) and PaddleOCR (Apache-2.0) remain supported fallbacks
+    for existing separate-env installs; the backend auto-detects whichever is
+    present. PaddleOCR's paddlepaddle wheel is ~500 MB and fragile on non-AVX
+    CPUs, so it is never pulled in by default.
   * OpenALPR is AGPL-3.0 and intentionally NOT used - it would force the
-    whole repo to AGPL. fast-plate-ocr (MIT) is a worthwhile next addition
-    once we have a baseline.
+    whole repo to AGPL.
   * Multi-frame consensus is the academic-paper-recommended mitigation for
     the fundamental Nyquist limit of sub-100 px crops: even when each frame
     reads imperfectly, agreement across frames pushes accuracy past the
@@ -206,6 +209,143 @@ class _OcrBackend:
         return False
 
 
+class _FastPlateOcrBackend(_OcrBackend):
+    """ONNX ALPR (MIT) - the recommended backend (R4 Phase 5).
+
+    fast-plate-ocr (ONNX OCR) plus, when available, open-image-models (YOLOv9
+    ONNX plate detection). Both are MIT-licensed, torch-free, and run on ONNX
+    Runtime (already a core SVCS dependency). Crucially, unlike EasyOCR they do
+    NOT need to pull opencv-python-headless at RUNTIME - a plain ``import cv2``
+    is satisfied by the core opencv-contrib-python. So this backend installs and
+    runs in the SAME environment as core (validated: docs/PLATES-VALIDATION.md),
+    fixing the separate-venv problem that made [plates] painful to ship.
+
+    Install recipe (into the core env, no headless clobber):
+        pip install --no-deps fast-plate-ocr open-image-models
+        pip install rich          # the only runtime dep beyond SVCS core
+
+    ocr(frame): if the detector is available, it finds plate boxes in the frame,
+    crops each, and OCRs the crop; otherwise it OCRs the whole input (which works
+    when the pipeline already passed a plate/vehicle ROI crop - it always can).
+    """
+
+    name = "onnx-alpr"
+
+    # A small, global CPU OCR model. char_probs is None for the xs model, so we
+    # fall back to a moderate confidence when per-char probabilities are absent.
+    _OCR_MODEL = "cct-xs-v1-global-model"
+    _DET_MODEL = "yolo-v9-t-384-license-plate-end2end"
+    _NO_PROB_CONFIDENCE = 0.80
+
+    def __init__(self, use_gpu: bool = False) -> None:
+        self._recognizer = None
+        self._detector = None
+        try:
+            from fast_plate_ocr import LicensePlateRecognizer  # type: ignore
+        except ImportError:
+            return  # backend simply unavailable; pipeline degrades gracefully
+        try:
+            self._recognizer = LicensePlateRecognizer(self._OCR_MODEL)
+        except Exception as exc:  # noqa: BLE001 - model download / init can throw
+            log.warning("fast-plate-ocr init failed: %s.", exc)
+            self._recognizer = None
+            return
+        # Detection is optional: without it we OCR the ROI/frame we are given.
+        try:
+            from open_image_models import LicensePlateDetector  # type: ignore
+            self._detector = LicensePlateDetector(self._DET_MODEL)
+        except Exception as exc:  # noqa: BLE001
+            log.info("open-image-models detector unavailable (%s); OCR-only mode.", exc)
+            self._detector = None
+
+    @property
+    def available(self) -> bool:
+        return self._recognizer is not None
+
+    def _confidence(self, pred) -> float:
+        """Derive a [0,1] confidence from a PlatePrediction's char_probs."""
+        probs = getattr(pred, "char_probs", None)
+        try:
+            vals = [float(p) for p in (probs or []) if p is not None]
+            if vals:
+                return max(0.0, min(1.0, sum(vals) / len(vals)))
+        except (TypeError, ValueError):
+            pass
+        return self._NO_PROB_CONFIDENCE
+
+    def _detect_boxes(self, frame: np.ndarray) -> List[Tuple[int, int, int, int]]:
+        """Plate boxes (x, y, w, h) from the detector, or [] if unavailable."""
+        if self._detector is None:
+            return []
+        try:
+            dets = self._detector.predict(frame) or []
+        except Exception as exc:  # noqa: BLE001
+            log.debug("plate detector.predict raised %s; skipping detection", exc)
+            return []
+        boxes: List[Tuple[int, int, int, int]] = []
+        h, w = frame.shape[:2]
+        for d in dets:
+            bb = getattr(d, "bounding_box", None)
+            if bb is None:
+                bb = getattr(d, "bbox", None)
+            if bb is None:
+                continue
+            coords = self._bbox_coords(bb)
+            if coords is None:
+                continue
+            x1, y1, x2, y2 = coords
+            x1 = max(0, min(w - 1, x1)); x2 = max(0, min(w, x2))
+            y1 = max(0, min(h - 1, y1)); y2 = max(0, min(h, y2))
+            if x2 > x1 and y2 > y1:
+                boxes.append((x1, y1, x2 - x1, y2 - y1))
+        return boxes
+
+    @staticmethod
+    def _bbox_coords(bb):
+        """(x1, y1, x2, y2) ints from an attribute-style OR sequence-style bbox."""
+        # Attribute style (open-image-models BoundingBox: .x1/.y1/.x2/.y2).
+        if all(hasattr(bb, a) for a in ("x1", "y1", "x2", "y2")):
+            try:
+                return (int(bb.x1), int(bb.y1), int(bb.x2), int(bb.y2))
+            except (TypeError, ValueError):
+                return None
+        # Sequence style ([x1, y1, x2, y2]).
+        try:
+            return (int(bb[0]), int(bb[1]), int(bb[2]), int(bb[3]))
+        except (TypeError, IndexError, ValueError):
+            return None
+
+    def _read_crop(self, crop: np.ndarray):
+        try:
+            return self._recognizer.run(crop) or []
+        except Exception as exc:  # noqa: BLE001
+            log.debug("fast-plate-ocr run raised %s; skipping crop", exc)
+            return []
+
+    def ocr(self, frame: np.ndarray) -> List[Tuple[str, float, Tuple[int, int, int, int]]]:
+        if self._recognizer is None:
+            return []
+        results: List[Tuple[str, float, Tuple[int, int, int, int]]] = []
+        boxes = self._detect_boxes(frame)
+        if boxes:
+            for (x, y, bw, bh) in boxes:
+                crop = frame[y:y + bh, x:x + bw]
+                if crop.size == 0:
+                    continue
+                for pred in self._read_crop(crop):
+                    text = getattr(pred, "plate", None)
+                    if text:
+                        results.append((str(text), self._confidence(pred), (x, y, bw, bh)))
+        else:
+            # No detector (or nothing detected): OCR the whole input as a crop.
+            h, w = frame.shape[:2]
+            for pred in self._read_crop(frame):
+                text = getattr(pred, "plate", None)
+                if text:
+                    results.append((str(text), self._confidence(pred), (0, 0, w, h)))
+        return results
+
+
 class _PaddleOcrBackend(_OcrBackend):
     """PaddleOCR PP-OCRv4 (Apache-2.0) - optional secondary backend.
 
@@ -374,22 +514,27 @@ class _TesseractBackend(_OcrBackend):
 def _select_backend(prefer: str = "auto", use_gpu: bool = False) -> _OcrBackend:
     """Pick the strongest available OCR backend.
 
-    ``prefer`` is one of "auto", "easyocr", "paddleocr", "tesseract". With
-    "auto" we try EasyOCR first (Apache-2.0, smaller install, primary
-    backend as of 2026-05-14), then PaddleOCR if someone installed it
-    manually, then Tesseract as a lightweight fallback. If none is
-    installed we return a no-op backend so the rest of the pipeline can
-    still run without crashing.
+    ``prefer`` is one of "auto", "onnx", "easyocr", "paddleocr", "tesseract".
+    With "auto" we try the ONNX ALPR stack FIRST (R4 Phase 5): fast-plate-ocr +
+    open-image-models are MIT, torch-free, run on the core ONNX Runtime, and -
+    unlike EasyOCR - install into the SAME environment as opencv-contrib-python
+    (no opencv-python-headless clobber; see docs/PLATES-VALIDATION.md). Then
+    EasyOCR (legacy, needs a separate venv), then PaddleOCR if installed
+    manually, then Tesseract. If none is installed we return a no-op backend so
+    the rest of the pipeline still runs.
 
-    Order rationale: PaddleOCR was the primary up through May 2026 because
-    it has a dedicated license-plate model, but the paddlepaddle wheel is
-    ~500 MB and fragile on non-AVX CPUs. For a commercial / consumer ship
-    we'd rather start with a lean EasyOCR install and let power users
-    upgrade to PaddleOCR if they need the plate-specific model.
+    Order rationale: the ONNX stack is the recommended ship for a single CPU
+    exe. EasyOCR/PaddleOCR remain supported for existing separate-env installs.
 
-    Author: Bloodawn (KheivenD)
+    Author: Bloodawn (KheivenD); R4 Phase 5 (2026-07-04) - ONNX ALPR first.
     """
     prefer = (prefer or "auto").lower()
+    if prefer in ("onnx", "onnx-alpr", "fast-plate-ocr", "auto"):
+        b = _FastPlateOcrBackend(use_gpu=use_gpu)
+        if b.available:
+            return b
+        if prefer != "auto":
+            return b
     if prefer in ("easyocr", "auto"):
         b = _EasyOcrBackend(use_gpu=use_gpu)
         if b.available:

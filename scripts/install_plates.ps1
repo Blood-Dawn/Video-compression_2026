@@ -43,9 +43,13 @@ Write-Host "==> Installing ONNX ALPR plate reader (no opencv-python-headless)...
 & $Python -m pip install --no-deps fast-plate-ocr open-image-models
 if ($LASTEXITCODE -ne 0) { throw "pip install --no-deps failed (exit $LASTEXITCODE)" }
 
-# 2) The only runtime dep beyond SVCS core.
-& $Python -m pip install rich
-if ($LASTEXITCODE -ne 0) { throw "pip install rich failed (exit $LASTEXITCODE)" }
+# 2) rich (only missing runtime dep beyond SVCS core) AND onnxruntime >= 1.19.2.
+#    The PLATE DETECTOR (open-image-models) pins onnxruntime>=1.19.2, which is
+#    HIGHER than SVCS core's >=1.16.0. Because step 1 is --no-deps, that floor is
+#    not enforced - so ensure it here, or the detector would silently fail to
+#    load and the reader would run OCR-only with no plate detection (review fix).
+& $Python -m pip install rich "onnxruntime>=1.19.2"
+if ($LASTEXITCODE -ne 0) { throw "pip install rich / onnxruntime>=1.19.2 failed (exit $LASTEXITCODE)" }
 
 # 3) Confirm the core contrib cv2 is still intact (not clobbered).
 $check = @'
@@ -62,17 +66,29 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 if ($Verify) {
-    Write-Host "==> Verifying the ONNX backend loads..."
+    Write-Host "==> Verifying the ONNX backend loads (OCR + detector)..."
     $verify = @'
 import sys
 sys.path.insert(0, "src")
 from enhancement.plate_reader import _select_backend
 b = _select_backend("auto")
-print("selected OCR backend:", b.name, "| available:", b.available)
-sys.exit(0 if b.name == "onnx-alpr" and b.available else 1)
+det = bool(getattr(b, "detector_available", False))
+print("selected OCR backend:", b.name, "| ocr:", b.available, "| detector:", det)
+if not (b.name == "onnx-alpr" and b.available):
+    sys.exit(1)                                  # OCR itself must load
+if not det:
+    # Detector down (usually onnxruntime < 1.19.2): OCR-only mode still works,
+    # but warn loudly rather than pass silently.
+    print("WARNING: plate DETECTOR did not load - running OCR-only (no plate "
+          "detection). Ensure onnxruntime>=1.19.2 in this environment.")
+    sys.exit(2)
+sys.exit(0)
 '@
     & $Python -c $verify
-    if ($LASTEXITCODE -ne 0) { throw "ONNX backend did not load / was not selected." }
+    if ($LASTEXITCODE -eq 1) { throw "ONNX OCR backend did not load / was not selected." }
+    elseif ($LASTEXITCODE -eq 2) {
+        Write-Warning "Plate detector unavailable (OCR-only). Check onnxruntime>=1.19.2."
+    }
 }
 
 Write-Host "==> Done. The dashboard will auto-detect the 'onnx-alpr' plate backend."

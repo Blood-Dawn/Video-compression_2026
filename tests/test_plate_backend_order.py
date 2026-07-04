@@ -265,3 +265,44 @@ class TestOnnxAlprAdapter:
         b = self._backend(recognizer=None)
         assert b.ocr(np.zeros((10, 10, 3), dtype=np.uint8)) == []
         assert b.available is False
+
+    def test_off_frame_detection_is_rejected_not_slivered(self):
+        """Review fix: a box fully outside the frame must be DROPPED, not
+        clamped to a 1px sliver and OCR'd."""
+        import numpy as np
+        rec = self._FakeRec([self._Pred("SHOULDNT", char_probs=[1.0] * 8)])
+
+        class _OffFrameDet:
+            def predict(self, frame):
+                # frame is 100x200; this box is entirely off the right edge.
+                return [TestOnnxAlprAdapter._Det(TestOnnxAlprAdapter._BBox(250, 20, 300, 45))]
+
+        b = self._backend(rec, detector=_OffFrameDet())
+        # No in-frame detection -> falls back to whole-frame OCR (one result),
+        # NOT a sliver crop from the off-frame box.
+        out = b.ocr(np.zeros((100, 200, 3), dtype=np.uint8))
+        assert len(out) == 1
+        _text, _conf, bbox = out[0]
+        assert bbox == (0, 0, 200, 100), "off-frame box must be dropped, whole-frame OCR used"
+
+    def test_detector_available_reflects_state(self):
+        b = self._backend(recognizer=object(), detector=object())
+        assert b.detector_available is True
+        b2 = self._backend(recognizer=object(), detector=None)
+        assert b2.detector_available is False
+
+
+def test_status_surfaces_plate_detector(monkeypatch):
+    """PlateReader.status() reports plate_detector so OCR-only degradation
+    (detector down, e.g. onnxruntime < 1.19.2) is not silent (review fix)."""
+    class _OcrOnly:
+        name = "onnx-alpr"
+        available = True
+        detector_available = False
+        def ocr(self, *_a, **_k):
+            return []
+    monkeypatch.setattr(plate_reader, "_select_backend", lambda *a, **k: _OcrOnly())
+    reader = plate_reader.PlateReader(enhancer=object())
+    st = reader.status()
+    assert st["ocr_available"] is True
+    assert st["plate_detector"] is False   # detector down is visible

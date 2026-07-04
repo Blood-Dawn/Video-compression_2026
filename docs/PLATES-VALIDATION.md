@@ -39,8 +39,18 @@ plates_val/Scripts/python -m pip install rich      # <- the ONLY missing runtime
 
 ## Minimal dependency delta for SVCS
 Beyond the existing core (numpy, pyyaml, tqdm, onnxruntime, opencv-contrib):
-- add `rich` only, and install `fast-plate-ocr` + `open-image-models` with
-  `--no-deps` so `opencv-python-headless` is never pulled.
+- add `rich` (the only missing runtime dep), and install `fast-plate-ocr` +
+  `open-image-models` with `--no-deps` so `opencv-python-headless` is never
+  pulled.
+- ALSO ensure `onnxruntime>=1.19.2`: the plate DETECTOR (open-image-models)
+  pins that floor, which is HIGHER than core's `>=1.16.0`. Because the install
+  is `--no-deps`, this floor is not resolver-enforced. On an env resolved to
+  onnxruntime in [1.16, 1.19.2) the OCR loads but the detector silently fails
+  to load (OCR-only mode, no plate detection). `scripts/install_plates.ps1`
+  installs `onnxruntime>=1.19.2` and its `-Verify` reports the detector state;
+  `PlateReader.status()` exposes `plate_detector` so the GUI can show it. This
+  skew was NOT exercised in the run below (the venv installed a fresh
+  onnxruntime, which pulled a current >=1.19.2 wheel).
 
 ## Conclusion
 The in-process ONNX plate reader is viable in ONE environment/exe. SVCS ships it

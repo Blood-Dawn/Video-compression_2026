@@ -138,7 +138,10 @@ enhance = [
 #     scripts/install_plates.ps1                 # Windows helper (recommended)
 #   or, by hand (into the SAME env as core):
 #     pip install --no-deps fast-plate-ocr open-image-models
-#     pip install rich                           # only missing runtime dep
+#     pip install rich "onnxruntime>=1.19.2"     # rich = only missing dep;
+#         onnxruntime bump: the DETECTOR (open-image-models) pins >=1.19.2,
+#         higher than core's >=1.16.0, and --no-deps does not enforce it - so
+#         without this the plate detector silently fails (OCR-only mode).
 #
 # Validated end-to-end in docs/PLATES-VALIDATION.md (contrib cv2 stays intact,
 # real inference runs). Maintenance note: --no-deps is not resolver-enforced,

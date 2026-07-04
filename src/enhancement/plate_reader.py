@@ -262,6 +262,17 @@ class _FastPlateOcrBackend(_OcrBackend):
     def available(self) -> bool:
         return self._recognizer is not None
 
+    @property
+    def detector_available(self) -> bool:
+        """True when the plate DETECTOR loaded (not just OCR-only mode).
+
+        The detector needs onnxruntime >= 1.19.2 (open-image-models' floor,
+        higher than SVCS core's >= 1.16.0). If it fails to load, OCR still runs
+        on the whole ROI/frame but plate detection is off - surfaced via the
+        GUI status so this degradation is not silent (R4 Phase 5 review fix).
+        """
+        return self._detector is not None
+
     def _confidence(self, pred) -> float:
         """Derive a [0,1] confidence from a PlatePrediction's char_probs."""
         probs = getattr(pred, "char_probs", None)
@@ -294,8 +305,13 @@ class _FastPlateOcrBackend(_OcrBackend):
             if coords is None:
                 continue
             x1, y1, x2, y2 = coords
-            x1 = max(0, min(w - 1, x1)); x2 = max(0, min(w, x2))
-            y1 = max(0, min(h - 1, y1)); y2 = max(0, min(h, y2))
+            # Reject a box that lies fully outside the frame BEFORE clamping,
+            # so an off-frame detection is dropped rather than clamped to a 1px
+            # sliver (review fix). Then clamp the remainder into bounds.
+            if x1 >= w or y1 >= h or x2 <= 0 or y2 <= 0:
+                continue
+            x1 = max(0, min(w, x1)); x2 = max(0, min(w, x2))
+            y1 = max(0, min(h, y1)); y2 = max(0, min(h, y2))
             if x2 > x1 and y2 > y1:
                 boxes.append((x1, y1, x2 - x1, y2 - y1))
         return boxes
@@ -629,9 +645,14 @@ class PlateReader:
     def status(self) -> Dict[str, Any]:
         """Return install/availability info for the GUI's diagnostic panel."""
         sr_backend = self._sr_backend_name()
+        # Surface the ONNX detector state so an operator can see when the plate
+        # reader is running OCR-only (detector failed to load, e.g. onnxruntime
+        # below open-image-models' 1.19.2 floor) rather than silently degraded.
+        detector_available = bool(getattr(self._ocr, "detector_available", True))
         return {
             "ocr_backend":    self._ocr.name,
             "ocr_available":  self._ocr.available,
+            "plate_detector": detector_available,
             "sr_backend":     sr_backend,
             "sr_available":   sr_backend != "bicubic",
             "sr_scale":       self._sr_scale,

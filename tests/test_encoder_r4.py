@@ -174,6 +174,45 @@ def test_grid_ages_on_segment_open(tmp_path):
     assert e._roi_segments_seen == 1
 
 
+def test_stale_motion_becomes_degradable_after_decay(tmp_path):
+    """Phase 2 review fix: a cell that saw ONE box (1.0) and then goes quiet
+    must decay under the threshold within a few segments and rejoin the
+    degraded background - the old `<= 0.0` test never fired (0.5**n only
+    underflows after ~1075 halvings)."""
+    e = _enc(tmp_path, codec="libx264", roi_qp=True,
+             foreground_crf=18, background_crf=40)
+    e._activity_grid[:] = 0.0
+    e._activity_grid[3, 5] = 1.0            # one box seen here once
+    e._roi_segments_seen = 3
+
+    # Freshly active: that cell is protected (no addroi covering x around 500).
+    active_filters = e._build_roi_filters(1600, 900)
+    assert not _cell_is_degraded(active_filters, 3, 5, 1600, 900)
+
+    # Two idle segments of aging: 1.0 -> 0.5 -> 0.25 (< 0.5 threshold).
+    e._on_segment_opened()
+    e._on_segment_opened()
+    assert e._activity_grid[3, 5] < 0.5
+    decayed_filters = e._build_roi_filters(1600, 900)
+    assert _cell_is_degraded(decayed_filters, 3, 5, 1600, 900), \
+        "a decayed cell must become degradable"
+
+
+def _cell_is_degraded(filters, row, col, frame_w, frame_h):
+    """True if any addroi rect covers the center of grid cell (row, col)."""
+    import re
+    cx = (col + 0.5) * frame_w / 16
+    cy = (row + 0.5) * frame_h / 9
+    for f in filters:
+        m = re.match(r"addroi=x=(\d+):y=(\d+):w=(\d+):h=(\d+)", f)
+        if not m:
+            continue
+        x, y, w, h = map(int, m.groups())
+        if x <= cx <= x + w and y <= cy <= y + h:
+            return True
+    return False
+
+
 # ── fallback ──────────────────────────────────────────────────────────────────
 
 def test_unknown_codec_falls_back(tmp_path):

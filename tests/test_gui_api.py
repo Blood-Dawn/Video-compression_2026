@@ -351,6 +351,24 @@ class TestApiStart:
         assert cfg["max_bitrate_kbps"] == 200000  # clamped to max
         assert cfg["gop_seconds"] == 20           # fell back to default
 
+        # Stop before the next start.
+        time.sleep(0.05)
+        client.post("/api/stop")
+        time.sleep(0.05)
+
+        # Phase 2 review fix: inf/nan/1e999 must NOT 500 - int(float("inf"))
+        # raises OverflowError, which used to escape unhandled. They fall back
+        # to the safe defaults instead.
+        resp = client.post("/api/start", json={
+            "input_source": "data/test.mp4",
+            "max_bitrate_kbps": "inf",
+            "gop_seconds": "1e999",
+        })
+        assert resp.status_code == 200
+        cfg = resp.get_json()["config"]
+        assert cfg["max_bitrate_kbps"] == 0       # inf -> default (uncapped)
+        assert cfg["gop_seconds"] == 20           # 1e999 -> default
+
     def test_double_start_returns_409(self, client, fake_pipeline):
         client.post("/api/start", json={"input_source": "data/test.mp4"})
         # Wait briefly for the fake thread to set running=True

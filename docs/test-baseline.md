@@ -36,18 +36,20 @@ The 3 skips are the real-webcam hardware tests (`SVCS_TEST_WEBCAM=1` to run) - i
 | Field | Value |
 |---|---|
 | Command | `scripts/run_tests.ps1` |
-| Log | `logs/pytest_20260704_163200.log` |
-| Result | **1162 passed, 4 skipped, 0 failed** (223 s) |
+| Log | `logs/pytest_20260704_164336.log` |
+| Result | **1163 passed, 4 skipped, 0 failed** (222 s) |
 | Env | Windows 11, Python 3.11.9, `.venv` |
 
 R4 Phase 2 (compression research adoptions, see docs/RESEARCH-COMPRESSION.md)
-added `test_encoder_r4.py` (21: long-GOP/capped-CRF/NVENC arg builders,
+added `test_encoder_r4.py` (22: long-GOP/capped-CRF/NVENC arg builders,
 denoise + addroi filter chains, VMAF; guarded real NVENC + libvmaf smokes)
 and 2 GUI-API knob tests. New encoder knobs (long GOP default, capped CRF,
 NVENC/x265 codecs, denoise, encoder-level ROI, VMAF metric) are plumbed
 through pipeline -> GUI/CLI. The failing-then-fixed regression was a
 diagnostic log line that read encoder attrs the test doubles lack (now
-getattr-guarded). Skips unchanged (3 webcam + 1 opt-in Docker build).
+getattr-guarded). The phase review then fixed two more: _clamp_int OverflowError
+on inf/1e999 (would 500), and inert ROI grid aging (`<= 0` never fired; now a
+`< 0.5` threshold). Skips unchanged (3 webcam + 1 opt-in Docker build).
 
 ## GREEN baseline after R4 Phase 1 (2026-07-04)
 

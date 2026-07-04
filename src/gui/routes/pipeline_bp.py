@@ -42,8 +42,14 @@ def _clamp_int(value, default: int, lo: int, hi: int) -> int:
         s = str(value).strip()
         if s == "" or value is None:
             return default
-        return max(lo, min(hi, int(float(s))))
-    except (TypeError, ValueError):
+        f = float(s)
+        # Reject inf / nan explicitly: int(float("inf")) raises OverflowError
+        # (an ArithmeticError, NOT a ValueError), which would otherwise escape
+        # as an unhandled HTTP 500 instead of falling back to the default.
+        if f != f or f in (float("inf"), float("-inf")):
+            return default
+        return max(lo, min(hi, int(f)))
+    except (TypeError, ValueError, OverflowError):
         return default
 
 

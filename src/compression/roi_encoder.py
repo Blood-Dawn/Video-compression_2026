@@ -132,6 +132,14 @@ _NVENC_PRESETS = {
 # is "which parts of this static scene ever see motion", not per-object masks.
 _ROI_GRID_W = 16
 _ROI_GRID_H = 9
+# A cell counts as "static" (eligible for addroi degradation) once its decayed
+# activity falls BELOW this. A cell that saw one box (1.0) then goes quiet
+# decays 1.0 -> 0.5 -> 0.25 and crosses under 0.5 after ~2 idle segments, so
+# the *= 0.5 aging actually reclassifies stale motion within a few segments
+# (a pure "<= 0.0" test never fires: 0.5**n only underflows to 0 after ~1075
+# halvings, making the decay dead). Fail-safe: a currently/recently active
+# cell (>= threshold) is always protected at full quality.
+_ROI_ACTIVE_THRESH = 0.5
 
 
 def _ffmpeg_has_encoder(name: str) -> bool:
@@ -477,6 +485,9 @@ class ROIEncoder:
             # No motion observed anywhere yet: nothing is PROVEN active, so
             # degrade nothing (fail-safe direction).
             return []
+        # A cell is degradable only once its decayed activity drops below the
+        # threshold; recently-active cells stay full quality (fail-safe).
+        static_mask = grid < _ROI_ACTIVE_THRESH
         # qoffset is a fraction of the codec's full QP range; approximate the
         # configured CRF gap, capped well below addroi's +1.0 extreme.
         qoff = (self.background_crf - self.foreground_crf) / 51.0
@@ -488,7 +499,7 @@ class ROIEncoder:
         for row in range(gh):
             run_start = None
             for col in range(gw + 1):
-                is_static = col < gw and grid[row, col] <= 0.0
+                is_static = col < gw and bool(static_mask[row, col])
                 if is_static and run_start is None:
                     run_start = col
                 elif not is_static and run_start is not None:

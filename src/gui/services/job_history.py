@@ -20,6 +20,7 @@ Author: Bloodawn (KheivenD), 2026-07-04 (R4 Phase 1 - job history).
 from __future__ import annotations
 
 import json
+import re
 import threading
 import time
 from typing import List, Optional
@@ -33,6 +34,18 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 _MAX_JOBS = 100
 
 _jobs_lock = threading.Lock()
+
+
+# Credentials embedded in stream URLs (rtsp://user:pass@host/...) can surface
+# in exception text (cv2/FFmpeg echo the URL) and in labels. Scrub them before
+# anything is persisted to disk: the history file is plaintext app data.
+_CRED_URL_RE = re.compile(r"(\w[\w+.-]*://)([^/@\s]+)@")
+
+
+def _scrub_credentials(text: Optional[str]) -> Optional[str]:
+    if not text:
+        return text
+    return _CRED_URL_RE.sub(r"\1***@", str(text))
 
 
 def _jobs_file():
@@ -78,7 +91,7 @@ def record_job(
         now = time.time()
         entry = {
             "kind": str(kind),
-            "label": str(label or ""),
+            "label": _scrub_credentials(str(label or "")),
             "started_at": float(started_at) if started_at else None,
             "ended_at": float(ended_at) if ended_at else now,
             "elapsed_s": (round(float(ended_at or now) - float(started_at), 1)
@@ -87,7 +100,7 @@ def record_job(
             "counts": dict(counts) if isinstance(counts, dict) else {},
             "bytes_in": int(bytes_in or 0),
             "bytes_out": int(bytes_out or 0),
-            "error": str(error) if error else None,
+            "error": _scrub_credentials(str(error)) if error else None,
         }
         with _jobs_lock:
             jobs = _load()

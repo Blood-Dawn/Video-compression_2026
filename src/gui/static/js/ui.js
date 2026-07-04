@@ -245,11 +245,24 @@ function svcsModalHide() {
 }
 window.svcsModalHide = svcsModalHide;
 
-// Dismiss with Escape (dialog a11y); the OK button handles click dismissal.
+// Dialog a11y: Escape dismisses, and Tab is trapped inside the dialog while
+// it is open (aria-modal promises the background is inert - without the trap,
+// Tab reaches visually-hidden controls behind the overlay).
 document.addEventListener('keydown', (ev) => {
-  if (ev.key === 'Escape') {
-    const overlay = document.getElementById('svcs-modal-overlay');
-    if (overlay && overlay.classList.contains('open')) svcsModalHide();
+  const overlay = document.getElementById('svcs-modal-overlay');
+  if (!overlay || !overlay.classList.contains('open')) return;
+  if (ev.key === 'Escape') { svcsModalHide(); return; }
+  if (ev.key !== 'Tab') return;
+  const focusables = overlay.querySelectorAll(
+    'button, a[href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+  if (!focusables.length) return;
+  const first = focusables[0], last = focusables[focusables.length - 1];
+  if (!overlay.contains(document.activeElement)) {
+    ev.preventDefault(); first.focus();
+  } else if (ev.shiftKey && document.activeElement === first) {
+    ev.preventDefault(); last.focus();
+  } else if (!ev.shiftKey && document.activeElement === last) {
+    ev.preventDefault(); first.focus();
   }
 });
 

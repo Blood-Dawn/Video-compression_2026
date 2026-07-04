@@ -21,7 +21,14 @@ function startPolling() {
   loadRecentJobs();
 }
 
+let _statusPollInFlight = false;
+
 async function pollStatus() {
+  // One poll at a time: a slow response arriving after a newer one would
+  // replay a stale running=true snapshot and re-fire the stopped transition
+  // (reopening the completion modal the user already dismissed).
+  if (_statusPollInFlight) return;
+  _statusPollInFlight = true;
   try {
     const res  = await fetch('/api/status');
     const data = await res.json();
@@ -96,6 +103,7 @@ async function pollStatus() {
     _updateHeroStrip(data);
 
   } catch(e) { /* ignore network errors during poll */ }
+  finally { _statusPollInFlight = false; }
 }
 
 function _updateHeroStrip(data) {

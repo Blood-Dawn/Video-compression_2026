@@ -126,7 +126,10 @@ async function acScanNow() {
       _acRenderStatus(data.status);
       // R4 Phase 1 (NN/g): a batch pass is a long wait - end it with an
       // explicit, user-dismissed summary, and refresh the HOME job record.
-      if (data.compressed > 0 && typeof maybeShowLatestJobSummary === "function") {
+      // No compressed>0 gate: an all-failed pass needs the summary MOST
+      // (it is recorded status="error"); an idle pass records no history
+      // entry, so the kind+freshness check inside makes this a no-op then.
+      if (typeof maybeShowLatestJobSummary === "function") {
         maybeShowLatestJobSummary("autocompress");
       }
       if (typeof loadRecentJobs === "function") loadRecentJobs();

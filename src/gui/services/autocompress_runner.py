@@ -76,6 +76,10 @@ _RECENT_CAP = 25
 _ac_thread: Optional[threading.Thread] = None
 _ac_stop: Optional[threading.Event] = None
 
+# Monotonic pass id: the newest scan_once pass owns the shared batch-progress
+# fields in _ac_status (guarded by _ac_lock).
+_batch_token = 0
+
 # Live status, guarded by its own lock so /status never blocks the scan loop.
 _ac_lock = threading.Lock()
 _ac_status = {
@@ -164,6 +168,7 @@ def _process_one(
     delete_original: bool,
     watch_root: Path,
     stop_event: Optional[threading.Event] = None,
+    errors: Optional[List[str]] = None,
 ) -> Optional[dict]:
     """Compress one already-stable source file. Returns the recorded entry or None.
 
@@ -211,6 +216,11 @@ def _process_one(
         log.error("Auto-compress failed for %s: %s", src.name, exc)
         with _ac_lock:
             _ac_status["last_error"] = f"{src.name}: {exc}"
+        # Per-pass error collection: last_error is a shared display field that a
+        # concurrent pass can also write, so the pass's own job-history entry is
+        # built from THIS list, never from a before/after diff of last_error.
+        if errors is not None:
+            errors.append(f"{src.name}: {exc}")
         return None
 
     # SEC-011: if the run was interrupted (daemon stop / shutdown), the output
@@ -248,6 +258,8 @@ def _process_one(
         log.warning("Auto-compress output failed verification: %s", output.name)
         with _ac_lock:
             _ac_status["last_error"] = f"unverified output for {src.name}"
+        if errors is not None:
+            errors.append(f"unverified output for {src.name}")
         return None
 
     entry = cidx.record(src, output, preset=preset, mode=encode_kwargs.get("mode", mode))
@@ -346,73 +358,99 @@ def scan_once(
             continue
         candidates.append(f)
 
+    # The most recent pass OWNS the shared batch display. The daemon loop and
+    # POST /api/autocompress/scan_now (a Flask request thread) can both run
+    # scan_once concurrently; without ownership their increments interleave and
+    # whichever finishes first zeroes the other's live "file N of M" display.
+    # Per-pass counters stay local; only the owner publishes them.
+    global _batch_token
     with _ac_lock:
-        _ac_status["queue"] = len(candidates)
         _ac_status["scans"] += 1
+        _batch_token += 1
+        my_token = _batch_token
+        _ac_status["queue"] = len(candidates)
         _ac_status["batch_total"] = len(candidates)
         _ac_status["batch_done"] = 0
         _ac_status["current_file"] = ""
-        # Snapshot so only an error raised DURING this pass is attributed to it.
-        _err_before = _ac_status.get("last_error")
+
+    def _publish(**fields):
+        with _ac_lock:
+            if _batch_token == my_token:
+                _ac_status.update(fields)
 
     pass_started = time.time()
     attempted = 0
+    batch_done = 0
+    errors: List[str] = []
     done: List[dict] = []
-    for f in candidates:
-        if stop_event is not None and stop_event.is_set():
-            break
-        if not wf._is_fully_written(f, settle_seconds, stable_checks):
-            log.info("Auto-compress skipping (still writing): %s", f.name)
-            with _ac_lock:
-                _ac_status["batch_done"] += 1
-            continue
-        with _ac_lock:
-            _ac_status["current_file"] = f.name
-        attempted += 1
-        entry = _process_one(f, output_dir, mode, preset, delete_original,
-                             watch_root, stop_event=stop_event)
-        if entry:
-            done.append(entry)
-        with _ac_lock:
-            _ac_status["queue"] = max(0, _ac_status["queue"] - 1)
-            _ac_status["batch_done"] += 1
-    with _ac_lock:
-        _ac_status["queue"] = 0
-        _ac_status["batch_total"] = 0
-        _ac_status["batch_done"] = 0
-        _ac_status["current_file"] = ""
-        _err_after = _ac_status.get("last_error")
-    pass_error = _err_after if _err_after != _err_before else None
-
-    # One job-history entry per pass that actually attempted work (idle polls
-    # of an empty/settled folder do not spam the history). R4 Phase 1.
-    if attempted > 0:
-        _record_batch_job(watch_root, pass_started, attempted, done,
-                          stop_event, pass_error)
+    try:
+        for f in candidates:
+            if stop_event is not None and stop_event.is_set():
+                break
+            if not wf._is_fully_written(f, settle_seconds, stable_checks):
+                log.info("Auto-compress skipping (still writing): %s", f.name)
+                batch_done += 1
+                _publish(batch_done=batch_done)
+                continue
+            _publish(current_file=f.name)
+            attempted += 1
+            entry = _process_one(f, output_dir, mode, preset, delete_original,
+                                 watch_root, stop_event=stop_event, errors=errors)
+            if entry:
+                done.append(entry)
+            batch_done += 1
+            _publish(batch_done=batch_done,
+                     queue=max(0, len(candidates) - batch_done))
+    except Exception as exc:  # noqa: BLE001 - re-raised after cleanup
+        # An unexpected escape (e.g. OSError from a sentinel touch on a
+        # yanked drive) must not strand the "Compressing file N of M" display
+        # or drop the pass from the history; record it, then propagate.
+        errors.append(f"{type(exc).__name__}: {exc}")
+        raise
+    finally:
+        # Reset the display (owner only) and persist the pass even on error.
+        _publish(queue=0, batch_total=0, batch_done=0, current_file="")
+        interrupted = stop_event is not None and stop_event.is_set()
+        # One job-history entry per pass that actually attempted work (idle
+        # polls of an empty/settled folder do not spam the history).
+        if attempted > 0:
+            _record_batch_job(watch_root, pass_started, attempted, done,
+                              interrupted, errors)
     return done
 
 
 def _record_batch_job(watch_root, pass_started, attempted, done,
-                      stop_event, pass_error) -> None:
-    """Persist one batch pass to the job history. Best effort, never raises."""
+                      interrupted, errors) -> None:
+    """Persist one batch pass to the job history. Best effort, never raises.
+
+    ``errors`` is this pass's own collection (never a diff of the shared
+    last_error field), so repeated identical failures across passes and
+    concurrent passes are both attributed correctly. A pass where every
+    attempted file failed is recorded as status="error", not "completed".
+    """
     try:
         try:
             from gui.services import job_history
         except ModuleNotFoundError:  # pragma: no cover - import path shim
             from src.gui.services import job_history
-        stopped = stop_event is not None and stop_event.is_set()
         failed = attempted - len(done)
+        if interrupted:
+            status = "stopped"
+        elif errors and not done:
+            status = "error"
+        else:
+            status = "completed"
         job_history.record_job(
             "autocompress",
             label=str(watch_root),
             started_at=pass_started,
             ended_at=time.time(),
-            status="stopped" if stopped else "completed",
+            status=status,
             counts={"files": attempted, "compressed": len(done),
                     "skipped": failed},
             bytes_in=sum(int(e.get("src_bytes", 0) or 0) for e in done),
             bytes_out=sum(int(e.get("out_bytes", 0) or 0) for e in done),
-            error=pass_error if failed else None,
+            error="; ".join(errors[-3:]) if errors else None,
         )
     except Exception:  # noqa: BLE001 - history must never break the daemon
         pass

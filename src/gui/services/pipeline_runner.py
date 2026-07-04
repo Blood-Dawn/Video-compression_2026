@@ -275,10 +275,14 @@ def _record_job_history(config, stop_event, started, error, frames, segments):
             from src.gui.services import job_history
         src = str(config.get("input_source", "0"))
         label = Path(src).name if ("/" in src or "\\" in src) else f"source {src}"
-        if error:
-            status = "error"
-        elif stop_event is not None and stop_event.is_set():
+        # Stop wins over error: aborting mid-flush often surfaces as a broken
+        # FFmpeg pipe, and a user-requested STOP must never be reported as a
+        # failed job (the exception is still in the log).
+        if stop_event is not None and stop_event.is_set():
             status = "stopped"
+            error = None
+        elif error:
+            status = "error"
         else:
             status = "completed"
         job_history.record_job(

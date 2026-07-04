@@ -150,6 +150,7 @@ STATE_FILE_NAMES = [
     "gui_state.json",
     "usage_consent.json",
     "usage_events.jsonl",
+    "job_history.json",     # R4 Phase 1: recent-jobs log (gui/services/job_history.py)
 ]
 
 

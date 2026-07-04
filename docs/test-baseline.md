@@ -36,15 +36,16 @@ The 3 skips are the real-webcam hardware tests (`SVCS_TEST_WEBCAM=1` to run) - i
 | Field | Value |
 |---|---|
 | Command | `scripts/run_tests.ps1` |
-| Log | `logs/pytest_20260704_011012.log` |
-| Result | **1134 passed, 4 skipped, 0 failed** (229 s) |
+| Log | `logs/pytest_20260704_013219.log` |
+| Result | **1139 passed, 4 skipped, 0 failed** (216 s) |
 | Env | Windows 11, Python 3.11.9, `.venv` |
 
 Between R3 and R4 the security audit added `tests/security/` (94 tests, see
 docs/SECURITY-AUDIT.md). R4 Phase 1 (UI/UX research adoptions, see
-docs/RESEARCH-UIUX.md) added `test_job_history.py` (14) and the new
-`/api/jobs/recent` endpoint; the route guard moved to 71 routes (blueprints
-stay at 17). Skips unchanged (3 webcam + 1 opt-in Docker build).
+docs/RESEARCH-UIUX.md) added `test_job_history.py` (19, incl. 5 regression
+tests from the phase review) and the new `/api/jobs/recent` endpoint; the
+route guard moved to 71 routes (blueprints stay at 17). Skips unchanged
+(3 webcam + 1 opt-in Docker build).
 
 ## GREEN baseline after R3 (2026-06-21)
 

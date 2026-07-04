@@ -632,7 +632,10 @@
       background: rgba(4, 8, 14, 0.72);
       display: none;
       align-items: center; justify-content: center;
-      z-index: 300;
+      /* Above the sticky header (1000), notif dock (9999) and the other
+         overlays (setup 10000 / plate 10001): a completion summary the user
+         must dismiss cannot sit under anything. */
+      z-index: 10500;
     }
     .svcs-modal-overlay.open { display: flex; }
     .svcs-modal {

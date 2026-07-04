@@ -136,6 +136,37 @@ def test_webcam_source_gets_friendly_label(jobs_file, monkeypatch):
     assert jh.recent_jobs()[0]["label"] == "source 0"
 
 
+def test_stop_wins_over_error(jobs_file, monkeypatch):
+    """Review fix: aborting mid-flush surfaces as a pipe error, but a
+    user-requested STOP must be recorded as stopped, never as a failed job."""
+    def _pipe_break(**kw):
+        raise BrokenPipeError("ffmpeg pipe closed")
+    _run_thread(monkeypatch, _pipe_break, stop_set=True)
+    j = jh.recent_jobs()[0]
+    assert j["status"] == "stopped"
+    assert j["error"] is None
+
+
+def test_credentials_scrubbed_from_history(jobs_file):
+    """Review fix: rtsp://user:pass@host in labels or exception text must not
+    be persisted to the plaintext history file."""
+    jh.record_job("pipeline",
+                  label="rtsp://admin:hunter2@10.0.0.5:554/stream",
+                  error="could not open rtsp://admin:hunter2@10.0.0.5:554/stream")
+    j = jh.recent_jobs()[0]
+    assert "hunter2" not in j["label"] and "hunter2" not in j["error"]
+    assert "admin" not in j["label"]
+    assert j["label"].startswith("rtsp://***@")
+    raw = jobs_file.read_text(encoding="utf-8")
+    assert "hunter2" not in raw
+
+
+def test_factory_reset_covers_job_history():
+    """Review fix: job_history.json must be wiped by the factory reset."""
+    from utils import paths as _paths
+    assert "job_history.json" in _paths.STATE_FILE_NAMES
+
+
 # ── autocompress batch pass ───────────────────────────────────────────────────
 
 @pytest.fixture()
@@ -192,6 +223,49 @@ def test_idle_scan_records_no_job(iso):
     assert ac.scan_once(str(watch), str(iso / "out"),
                         settle_seconds=0, stable_checks=1) == []
     assert [j for j in jh.recent_jobs() if j["kind"] == "autocompress"] == []
+
+
+def test_all_failed_pass_recorded_as_error_every_pass(iso, monkeypatch):
+    """Review fix: a pass where every attempted file fails is status='error'
+    (not 'completed'), and the SAME failure on the next pass is recorded again
+    (the old last_error diff missed repeated identical errors)."""
+    def _boom(**kw):
+        raise RuntimeError("codec exploded")
+    monkeypatch.setattr(ac, "run_pipeline", _boom)
+    watch = iso / "watch"
+    _mkvid(watch / "corrupt.mp4")
+
+    ac.scan_once(str(watch), str(iso / "out"), settle_seconds=0, stable_checks=1)
+    ac.scan_once(str(watch), str(iso / "out"), settle_seconds=0, stable_checks=1)
+
+    jobs = [j for j in jh.recent_jobs() if j["kind"] == "autocompress"]
+    assert len(jobs) == 2, "both failing passes must be persisted"
+    for j in jobs:
+        assert j["status"] == "error"
+        assert "corrupt.mp4" in j["error"] and "codec exploded" in j["error"]
+        assert j["counts"] == {"files": 1, "compressed": 0, "skipped": 1}
+
+
+def test_exception_escape_resets_batch_fields_and_records(iso, monkeypatch):
+    """Review fix: an exception escaping the pass (e.g. OSError touching a
+    sentinel on a yanked drive) must still reset the batch-progress fields (no
+    phantom 'Compressing file N of M') and persist the pass as an error."""
+    def _no_touch(path):
+        raise OSError("drive unplugged")
+    monkeypatch.setattr(ac.wf, "_mark_ingested", _no_touch)
+    watch = iso / "watch"
+    _mkvid(watch / "clip.mp4")
+
+    with pytest.raises(OSError):
+        ac.scan_once(str(watch), str(iso / "out"), settle_seconds=0, stable_checks=1)
+
+    st = ac.get_status()
+    assert st["batch_total"] == 0 and st["batch_done"] == 0
+    assert st["current_file"] == ""
+    jobs = [j for j in jh.recent_jobs() if j["kind"] == "autocompress"]
+    assert len(jobs) == 1
+    assert jobs[0]["status"] == "error"
+    assert "OSError" in jobs[0]["error"]
 
 
 def test_batch_progress_fields_advance_and_reset(iso, monkeypatch):

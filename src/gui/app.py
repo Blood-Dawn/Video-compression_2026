@@ -342,6 +342,25 @@ def create_app() -> Flask:
     return app
 
 
+def _field_safe_host(host: str) -> str:
+    """Force loopback in the field (offline) build; pass ``host`` through in the
+    server build.
+
+    The field build's guarantee - "local-only, never binds the network" - has to
+    hold on EVERY entry point (run_gui AND `python -m gui.app`), independent of
+    SVCS_DASHBOARD_HOST or whether credentials are set. R4 Phase 4 review fix.
+    """
+    try:
+        from gui.edition import is_field as _is_field
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.gui.edition import is_field as _is_field
+    if _is_field() and host not in ("127.0.0.1", "localhost", "::1"):
+        log.warning("Field (offline) build: overriding host %s -> 127.0.0.1 "
+                    "(local-only build never binds the network).", host)
+        return "127.0.0.1"
+    return host
+
+
 if __name__ == "__main__":
     import os as _os
     import sys as _sys
@@ -354,6 +373,12 @@ if __name__ == "__main__":
 
     _host = _os.environ.get("SVCS_DASHBOARD_HOST", "0.0.0.0")
     _port = int(_os.environ.get("SVCS_DASHBOARD_PORT", "5000"))
+
+    # R4 Phase 4 (review fix): the field (offline) build must NEVER bind the
+    # network, on ANY entry point (this is a second, documented entry besides
+    # run_gui). Force loopback here too, before the bind.
+    _host = _field_safe_host(_host)
+
     _app = create_app()
 
     # SEC-010: refuse to expose the dashboard unauthenticated on the network.

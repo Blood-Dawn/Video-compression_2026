@@ -168,3 +168,22 @@ def test_field_forces_localhost_and_optout(monkeypatch):
     assert captured["host"] == "127.0.0.1"
     import os
     assert os.environ.get("SVCS_DISABLE_USAGE_STATS") == "1"
+
+
+# ── the python -m gui.app entry must ALSO honor field (review fix) ─────────────
+
+def test_field_safe_host_forces_loopback_field(monkeypatch):
+    """Review fix: the `python -m gui.app` entry reads SVCS_DASHBOARD_HOST and
+    bypasses run_gui, so its host resolution must independently force loopback
+    in the field build - even with a LAN host and credentials set."""
+    monkeypatch.setenv("SVCS_EDITION", "field")
+    assert app_mod._field_safe_host("0.0.0.0") == "127.0.0.1"
+    assert app_mod._field_safe_host("192.168.1.10") == "127.0.0.1"
+    # An already-loopback host is passed through unchanged.
+    assert app_mod._field_safe_host("127.0.0.1") == "127.0.0.1"
+
+
+def test_field_safe_host_passthrough_server(monkeypatch):
+    monkeypatch.setenv("SVCS_EDITION", "server")
+    assert app_mod._field_safe_host("0.0.0.0") == "0.0.0.0"
+    assert app_mod._field_safe_host("192.168.1.10") == "192.168.1.10"

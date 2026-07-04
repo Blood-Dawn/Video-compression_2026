@@ -25,6 +25,7 @@ if str(SRC) not in sys.path:
 
 from gui.services import retention as ret            # noqa: E402
 from utils import compressed_index as cidx           # noqa: E402
+from utils import active_outputs as ao               # noqa: E402
 
 
 @pytest.fixture()
@@ -80,6 +81,29 @@ def test_policy_clamps_garbage(iso):
     pol = ret.get_policy()
     assert pol["max_age_days"] == 0          # negative -> 0
     assert pol["max_total_gb"] == 0.0        # unparseable -> unchanged/default
+
+
+def test_policy_rejects_inf_nan(iso):
+    """Review fix: inf/nan must not crash (int(float('inf')) raises
+    OverflowError); they keep the current value instead of 500ing a route."""
+    ret.set_policy({"enabled": True, "max_age_days": "inf", "max_total_gb": "nan"})
+    pol = ret.get_policy()
+    assert pol["max_age_days"] == 0
+    assert pol["max_total_gb"] == 0.0
+    # And 1e999 (parses to inf) likewise.
+    ret.set_policy({"max_age_days": "1e999"})
+    assert ret.get_policy()["max_age_days"] == 0
+
+
+def test_get_policy_survives_malformed_stored_value(iso, monkeypatch):
+    """Review fix: a hand-edited gui_state.json with a non-numeric
+    max_age_days must not make get_policy() raise (it feeds the routes)."""
+    import gui.services.gui_state_persist as gsp
+    monkeypatch.setattr(gsp, "get_retention_config",
+                        lambda: {"enabled": True, "max_age_days": "abc", "max_total_gb": [1]})
+    pol = ret.get_policy()   # must not raise
+    assert pol["max_age_days"] == 0
+    assert pol["max_total_gb"] == 0.0
 
 
 # ── purge: disabled / unlimited are no-ops ────────────────────────────────────
@@ -153,6 +177,38 @@ def test_never_touches_files_outside_compressed_dir(iso):
     assert original.exists(), "files outside compressed/ must never be purged"
 
 
+def test_active_output_never_purged(iso):
+    """Review fix (HIGH): a clip an encoder is CURRENTLY writing must never be
+    deleted, even when it is over-age - the reliable in-flight guard, not the
+    mtime heuristic."""
+    comp = cidx.compressed_subdir(iso / "out")
+    writing = _mkclip(comp, "cam_live.mp4", age_days=100)   # old mtime on purpose
+    ao.mark_active(writing)
+    try:
+        summary = ret.purge_once(str(iso / "out"),
+                                 policy={"enabled": True, "max_age_days": 1, "max_total_gb": 0})
+        assert writing.exists(), "an actively-written clip must survive age purge"
+        assert summary["by_age"] == 0
+    finally:
+        ao.mark_done(writing)
+    # Once the encode is done it becomes purgeable again.
+    summary = ret.purge_once(str(iso / "out"),
+                             policy={"enabled": True, "max_age_days": 1, "max_total_gb": 0})
+    assert not writing.exists()
+
+
+def test_delete_refuses_path_outside_compressed_dir(iso):
+    """Directly exercise the _delete confinement guard: it must refuse (and
+    NOT delete) a path outside the compressed dir. This fails if the is_within
+    guard is removed."""
+    comp = cidx.compressed_subdir(iso / "out")
+    comp.mkdir(parents=True, exist_ok=True)
+    outsider = _mkclip(iso / "elsewhere", "victim.mp4", age_days=100)
+    freed = ret._delete(outsider.resolve(), comp.resolve())
+    assert freed == 0
+    assert outsider.exists(), "_delete must never unlink outside the compressed dir"
+
+
 def test_only_media_extensions_purged(iso):
     comp = cidx.compressed_subdir(iso / "out")
     _mkclip(comp, "cam_old.mp4", age_days=100)
@@ -194,6 +250,23 @@ def test_purge_prunes_dead_index_entries(iso):
     assert cidx.lookup(src) is None
 
 
+def test_prune_missing_is_locked_and_keeps_live_entries(iso):
+    """Review fix: prune_missing (locked) drops only dead entries and keeps
+    those whose output still exists."""
+    comp = cidx.compressed_subdir(iso / "out")
+    live_src = _mkclip(iso / "watch", "live.mp4")
+    live_out = _mkclip(comp, "live_out.mp4")
+    dead_src = _mkclip(iso / "watch", "dead.mp4")
+    dead_out = _mkclip(comp, "dead_out.mp4")
+    cidx.record(live_src, live_out)
+    cidx.record(dead_src, dead_out)
+    dead_out.unlink()   # its output is gone
+    n = cidx.prune_missing()
+    assert n == 1
+    assert cidx.lookup(live_src) is not None
+    assert cidx.lookup(dead_src) is None
+
+
 # ── estimate ──────────────────────────────────────────────────────────────────
 
 def test_estimate_reports_disk_and_usage(iso):
@@ -225,9 +298,15 @@ def test_retention_endpoints(iso, monkeypatch):
     assert r.status_code == 200
     assert r.get_json()["policy"]["max_age_days"] == 3
 
+    # Review fix: an inf value must NOT 500 the endpoint.
+    r = client.post("/api/retention", json={"max_age_days": "inf"})
+    assert r.status_code == 200
+
     # purge_now runs (no footage yet -> ran True but deleted 0, or ran per dir).
     comp = cidx.compressed_subdir(iso / "out")
     _mkclip(comp, "cam_old.mp4", age_days=100)
+    # Re-enable with an age limit (the inf POST above kept max_age_days unchanged).
+    client.post("/api/retention", json={"enabled": True, "max_age_days": 3})
     r = client.post("/api/retention/purge_now")
     assert r.status_code == 200
     assert r.get_json()["summary"]["deleted"] == 1

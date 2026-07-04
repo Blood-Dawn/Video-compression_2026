@@ -27,6 +27,16 @@ try:
 except ImportError:
     _CRYPTO_AVAILABLE = False
 
+# In-flight output guard (R4 Phase 3 review): register the segment path being
+# written so retention never deletes a clip mid-encode.
+try:
+    from utils import active_outputs as _active_outputs
+except ModuleNotFoundError:  # pragma: no cover - import path shim
+    try:
+        from src.utils import active_outputs as _active_outputs
+    except ModuleNotFoundError:
+        _active_outputs = None
+
 log = logging.getLogger(__name__)
 
 
@@ -633,6 +643,9 @@ class ROIEncoder:
             .compile()
         )
         process = _ffmpeg_pipe_process(_ffmpeg_args)
+        # Guard the buffered output from retention while it is being written too.
+        if _active_outputs is not None:
+            _active_outputs.mark_active(output_path)
 
         should_draw_boxes = self.draw_roi_boxes if draw_roi_boxes is None else draw_roi_boxes
         safe_fps = fps if fps and fps > 0 else 30.0
@@ -692,6 +705,8 @@ class ROIEncoder:
             except Exception:
                 pass
             process.wait()
+            if _active_outputs is not None:
+                _active_outputs.mark_done(output_path)
             raise RuntimeError("FFmpeg pipe closed while encoding segment") from exc
 
         if return_code != 0:
@@ -728,6 +743,8 @@ class ROIEncoder:
             db_path=self.db_path,
         )
 
+        if _active_outputs is not None:
+            _active_outputs.mark_done(output_path)
         return {
             "file_path": str(output_path),
             "avg_sharpness": avg_sharpness,
@@ -801,6 +818,9 @@ class ROIEncoder:
 
         self._stream_process     = process
         self._stream_path        = output_path
+        # Guard this path from retention while it is open (R4 Phase 3 review).
+        if _active_outputs is not None:
+            _active_outputs.mark_active(output_path)
         self._stream_timestamp   = timestamp
         self._stream_camera_id   = camera_id
         self._stream_fps         = fps if fps and fps > 0 else 30.0
@@ -931,6 +951,28 @@ class ROIEncoder:
         if self._stream_process is None:
             raise RuntimeError("finish_segment() called without a matching begin_segment()")
 
+        # Keep the in-flight retention guard on this path until EVERYTHING that
+        # touches it (encode, audio mux, encryption) is done, on every exit
+        # path (R4 Phase 3 review). Cleared in the finally at the end.
+        _guarded_output = self._stream_path
+        try:
+            return self._finish_segment_inner(
+                timeout, object_classes, dominant_color, scene_type,
+                time_of_day, vehicle_count, person_count)
+        finally:
+            if _active_outputs is not None:
+                _active_outputs.mark_done(_guarded_output)
+
+    def _finish_segment_inner(
+        self,
+        timeout: float,
+        object_classes,
+        dominant_color,
+        scene_type,
+        time_of_day,
+        vehicle_count,
+        person_count,
+    ) -> dict:
         proc = self._stream_process
         try:
             proc.stdin.close()

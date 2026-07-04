@@ -42,13 +42,18 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 try:
     from utils import compressed_index as cidx
     from utils import watchfolder as wf
+    from utils import active_outputs as _active_outputs
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.utils import compressed_index as cidx
     from src.utils import watchfolder as wf
+    from src.utils import active_outputs as _active_outputs
 
-# A file modified within this window is considered possibly-open / just-written
-# and is never purged, even if it is over-age. Cheap insurance against deleting
-# a clip a writer still holds.
+# Backstop behind the active-output registry: a file modified within this window
+# is treated as possibly-open and never purged. The primary in-flight guard is
+# utils.active_outputs (the encoder registers the path it holds open); this mtime
+# window only covers the gap where the registry is in-memory and would be empty
+# after a crash+restart while a truly-orphaned partial file lingers (and such a
+# file is incomplete anyway, so losing it is not a loss of finished footage).
 _FRESH_SECONDS = 120
 
 # Extensions the purge is allowed to delete (compressed outputs + their .enc).
@@ -63,6 +68,36 @@ _DEFAULT_POLICY = {
     "max_age_days": 0,      # 0 = no age limit
     "max_total_gb": 0.0,    # 0 = no size limit
 }
+
+
+def _finite_int(value, default: int, lo: int, hi: int) -> int:
+    """Coerce to an int in [lo, hi], rejecting inf/nan/garbage to ``default``.
+
+    int(float("inf")) raises OverflowError (an ArithmeticError, not a
+    ValueError), so a naive int(float(x)) can escape as a 500. This never
+    raises - the retention routes must survive any stored/posted value.
+    """
+    try:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return default
+        f = float(value)
+        if f != f or f in (float("inf"), float("-inf")):
+            return default
+        return max(lo, min(hi, int(f)))
+    except (TypeError, ValueError, OverflowError):
+        return default
+
+
+def _finite_float(value, default: float, lo: float, hi: float) -> float:
+    try:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            return default
+        f = float(value)
+        if f != f or f in (float("inf"), float("-inf")):
+            return default
+        return max(lo, min(hi, f))
+    except (TypeError, ValueError, OverflowError):
+        return default
 
 
 # ── policy persistence (mirrors autocompress config in gui_state.json) ─────────
@@ -80,12 +115,11 @@ def get_policy() -> dict:
             pol.update({k: saved[k] for k in _DEFAULT_POLICY if k in saved})
     except Exception:  # noqa: BLE001
         pass
+    # Coerce EVERY field through the finite guards - a hand-edited or
+    # partially-written gui_state.json can carry any type here.
     pol["enabled"] = bool(pol.get("enabled"))
-    pol["max_age_days"] = max(0, int(pol.get("max_age_days") or 0))
-    try:
-        pol["max_total_gb"] = max(0.0, float(pol.get("max_total_gb") or 0.0))
-    except (TypeError, ValueError):
-        pol["max_total_gb"] = 0.0
+    pol["max_age_days"] = _finite_int(pol.get("max_age_days"), 0, 0, 3650)
+    pol["max_total_gb"] = _finite_float(pol.get("max_total_gb"), 0.0, 0.0, 1_000_000.0)
     return pol
 
 
@@ -96,15 +130,10 @@ def set_policy(cfg: dict) -> dict:
         if "enabled" in cfg:
             pol["enabled"] = bool(cfg["enabled"])
         if "max_age_days" in cfg:
-            try:
-                pol["max_age_days"] = max(0, min(3650, int(float(cfg["max_age_days"]))))
-            except (TypeError, ValueError):
-                pass
+            # A bad/inf value keeps the current setting rather than 500ing.
+            pol["max_age_days"] = _finite_int(cfg["max_age_days"], pol["max_age_days"], 0, 3650)
         if "max_total_gb" in cfg:
-            try:
-                pol["max_total_gb"] = max(0.0, min(1_000_000.0, float(cfg["max_total_gb"])))
-            except (TypeError, ValueError):
-                pass
+            pol["max_total_gb"] = _finite_float(cfg["max_total_gb"], pol["max_total_gb"], 0.0, 1_000_000.0)
     try:
         try:
             from gui.services.gui_state_persist import set_retention_config
@@ -167,6 +196,10 @@ def _delete(path: Path, comp_dir: Path) -> int:
         # Re-assert the file is still inside the compressed dir (TOCTOU guard).
         if not _ps.is_within(path, comp_dir):
             return 0
+        # Final in-flight re-check: an encode may have (re)opened this path
+        # between the snapshot and now. Never unlink a file being written.
+        if _active_outputs is not None and _active_outputs.is_active(path):
+            return 0
         size = path.stat().st_size
         path.unlink()
         return size
@@ -203,9 +236,13 @@ def purge_once(output_dir: str, policy: Optional[dict] = None,
 
         now = time.time() if now is None else now
         files = _purgeable_files(comp_dir)
-        # (path, size, mtime), skipping too-fresh files entirely.
+        active = _active_outputs.snapshot() if _active_outputs is not None else set()
+        # (path, size, mtime), skipping files an encoder is currently writing
+        # (the reliable in-flight guard) and, as a backstop, too-fresh files.
         stats = []
         for p in files:
+            if str(p) in active:
+                continue
             try:
                 st = p.stat()
             except OSError:
@@ -246,7 +283,7 @@ def purge_once(output_dir: str, policy: Optional[dict] = None,
                     total -= size
 
         if deleted_paths:
-            _prune_index()
+            cidx.prune_missing()
             log.info("Retention: purged %d file(s), freed %.1f MB (age=%d, size=%d).",
                      summary["deleted"], summary["freed_bytes"] / 1e6,
                      summary["by_age"], summary["by_size"])
@@ -255,21 +292,6 @@ def purge_once(output_dir: str, policy: Optional[dict] = None,
         summary["errors"].append(str(exc))
         log.error("Retention purge error: %s", exc, exc_info=True)
     return summary
-
-
-def _prune_index() -> None:
-    """Drop compressed-index entries whose output file no longer exists."""
-    try:
-        data = cidx._load()
-        entries = data.get("entries", {})
-        dead = [sig for sig, e in entries.items()
-                if not Path(e.get("output", "")).is_file()]
-        if dead:
-            for sig in dead:
-                entries.pop(sig, None)
-            cidx._save(data)
-    except Exception:  # noqa: BLE001 - best effort
-        pass
 
 
 def _notify_purge(summary: dict, output_dir: str) -> None:

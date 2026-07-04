@@ -43,7 +43,14 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # Supported video file extensions for body cameras and external sources.
-SUPPORTED_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".ts", ".mts", ".m2ts"}
+# R4 Phase 6: the universal ingest set (standard + vendor/DVR/NVR containers),
+# so a watched export folder from any camera company is picked up; FrameSource
+# decodes the vendor containers via its FFmpeg fallback.
+try:
+    from utils.video_formats import ALL_INGEST_EXTS as _ALL_INGEST_EXTS
+except ModuleNotFoundError:  # pragma: no cover - import path shim
+    from src.utils.video_formats import ALL_INGEST_EXTS as _ALL_INGEST_EXTS
+SUPPORTED_EXTENSIONS = set(_ALL_INGEST_EXTS)
 
 # Sentinel file written next to each ingested video so we never process it twice.
 # E.g. "clip.mp4" -> "clip.mp4.ingested"

@@ -19,10 +19,16 @@ You can point FrameSource at any of:
 Author: Bloodawn (KheivenD)
 """
 
+import json
+import logging
+import os
+import subprocess
 import cv2
 import numpy as np
 from pathlib import Path
 from typing import Optional, Tuple
+
+log = logging.getLogger(__name__)
 
 
 class FrameSource:
@@ -68,6 +74,11 @@ class FrameSource:
         self.height = 0
         self.total_frames = 0
         self.temporal_roi: Optional[Tuple[int, int]] = None  # (start, end) frame numbers
+        # R4 Phase 6: FFmpeg-pipe decode mode for vendor/DVR containers OpenCV
+        # cannot demux. None unless the FFmpeg fallback is active.
+        self._ff_proc: Optional[subprocess.Popen] = None
+        self._ff_frame_bytes = 0
+        self.decoder = "opencv"
 
         # Integer device index (e.g. 0 for the built-in webcam)
         if isinstance(input_path, int):
@@ -189,18 +200,127 @@ class FrameSource:
 
     def _init_video(self, path: Path):
         """
-        Sets up reading from a standard video file via cv2.VideoCapture.
-        Queries metadata (fps, resolution, frame count) from the container.
-        """
-        self._cap = cv2.VideoCapture(str(path))
-        if not self._cap.isOpened():
-            raise RuntimeError(f"Cannot open video file: {path}")
+        Sets up reading from a video file.
 
-        self.fps = self._cap.get(cv2.CAP_PROP_FPS) or 30.0
-        self.width = int(self._cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        self.height = int(self._cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        self.total_frames = int(self._cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        Tries cv2.VideoCapture first (fast, the common path). If OpenCV's build
+        cannot open the container - which happens for many vendor / DVR / NVR
+        formats and raw elementary streams - it falls back to decoding via the
+        bundled FFmpeg, which supports far more demuxers (R4 Phase 6). The env
+        var SVCS_FORCE_FFMPEG_DECODE=1 forces the FFmpeg path (used by tests and
+        as an escape hatch).
+        """
+        force_ffmpeg = os.environ.get("SVCS_FORCE_FFMPEG_DECODE") == "1"
+
+        if not force_ffmpeg:
+            cap = cv2.VideoCapture(str(path))
+            if cap.isOpened():
+                # Trust OpenCV only if it can actually produce a frame; some
+                # builds report isOpened() True yet fail on the first read for
+                # an unsupported codec. Probe once, then rewind.
+                ok, _frame = cap.read()
+                if ok:
+                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    self._cap = cap
+                    self.fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+                    self.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    self.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    self.total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                    self.is_sequence = False
+                    self.decoder = "opencv"
+                    return
+                cap.release()
+            else:
+                cap.release()
+
+        # OpenCV could not decode it (or FFmpeg was forced): universal fallback.
+        if self._init_video_ffmpeg(path):
+            return
+        raise RuntimeError(
+            f"Cannot open video file: {path} (OpenCV failed and the FFmpeg "
+            "fallback could not decode it - the format may be encrypted or need "
+            "the vendor's own export tool)."
+        )
+
+    def _init_video_ffmpeg(self, path: Path) -> bool:
+        """Decode ``path`` by piping raw BGR frames from the bundled FFmpeg.
+
+        Returns True on success (self._ff_proc is live and metadata is set),
+        False if FFmpeg is unavailable or the file has no decodable video stream.
+        Universal for any container FFmpeg can demux (R4 Phase 6).
+        """
+        try:
+            from utils.ffmpeg import ffmpeg_path, ffprobe_path, ffmpeg_available
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.utils.ffmpeg import ffmpeg_path, ffprobe_path, ffmpeg_available
+        if not ffmpeg_available():
+            return False
+
+        # 1) Probe stream geometry (width/height/fps/frame count).
+        try:
+            probe = subprocess.run(
+                [ffprobe_path(), "-v", "error", "-select_streams", "v:0",
+                 "-show_entries", "stream=width,height,r_frame_rate,nb_frames",
+                 "-of", "json", str(path)],
+                capture_output=True, text=True, timeout=30,
+            )
+            info = (json.loads(probe.stdout or "{}").get("streams") or [{}])[0]
+            w = int(info.get("width") or 0)
+            h = int(info.get("height") or 0)
+        except (OSError, subprocess.SubprocessError, ValueError, KeyError):
+            return False
+        if w <= 0 or h <= 0:
+            return False
+
+        # r_frame_rate is "num/den"; fall back to 25 fps if unparseable.
+        fps = 25.0
+        try:
+            num, _, den = str(info.get("r_frame_rate", "25/1")).partition("/")
+            fps = (float(num) / float(den)) if float(den) else float(num)
+            if not (0 < fps <= 240):
+                fps = 25.0
+        except (TypeError, ValueError, ZeroDivisionError):
+            fps = 25.0
+        try:
+            total = int(info.get("nb_frames") or 0)
+        except (TypeError, ValueError):
+            total = 0
+
+        # 2) Spawn FFmpeg to emit raw BGR24 frames on stdout.
+        try:
+            proc = subprocess.Popen(
+                [ffmpeg_path(), "-v", "error", "-nostdin", "-i", str(path),
+                 "-f", "rawvideo", "-pix_fmt", "bgr24", "-"],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            )
+        except OSError:
+            return False
+
+        self._ff_proc = proc
+        self._ff_frame_bytes = w * h * 3
+        self.width, self.height = w, h
+        self.fps = fps
+        self.total_frames = total
         self.is_sequence = False
+        self.decoder = "ffmpeg"
+        log.info("FrameSource: OpenCV could not open %s; decoding via FFmpeg "
+                 "(%dx%d @ %.0ffps).", Path(path).name, w, h, fps)
+        return True
+
+    def _read_ffmpeg(self) -> Tuple[bool, Optional[np.ndarray]]:
+        """Read exactly one raw BGR frame from the FFmpeg stdout pipe."""
+        proc = self._ff_proc
+        if proc is None or proc.stdout is None:
+            return False, None
+        need = self._ff_frame_bytes
+        buf = bytearray()
+        # stdout.read may return short chunks; loop until we have a full frame.
+        while len(buf) < need:
+            chunk = proc.stdout.read(need - len(buf))
+            if not chunk:
+                return False, None   # EOF / stream ended
+            buf.extend(chunk)
+        frame = np.frombuffer(bytes(buf), np.uint8).reshape((self.height, self.width, 3))
+        return True, frame
 
     # ------------------------------------------------------------------
     # Public interface
@@ -222,14 +342,33 @@ class FrameSource:
             if frame is None:
                 return False, None
             return True, frame
+        elif self._ff_proc is not None:
+            return self._read_ffmpeg()
         else:
             return self._cap.read()
 
     def release(self):
-        """Release the underlying video capture if open."""
+        """Release the underlying video capture / FFmpeg decode process."""
         if self._cap is not None:
             self._cap.release()
             self._cap = None
+        if self._ff_proc is not None:
+            proc = self._ff_proc
+            self._ff_proc = None
+            try:
+                if proc.stdout is not None:
+                    proc.stdout.close()
+            except OSError:
+                pass
+            try:
+                proc.terminate()
+                proc.wait(timeout=5)
+            except (OSError, subprocess.SubprocessError):
+                try:
+                    proc.kill()
+                    proc.wait(timeout=5)
+                except (OSError, subprocess.SubprocessError):
+                    pass
 
     def get_scene_name(self) -> str:
         """

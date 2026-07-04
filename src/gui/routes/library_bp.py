@@ -43,8 +43,15 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 
 library_bp = Blueprint("library", __name__)
 
-VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".ts", ".m4v",
-              ".webm", ".mpg", ".mpeg", ".wmv", ".flv"}
+# R4 Phase 6: the universal ingest set so vendor/DVR exports show in the Library
+# and can be compressed. Thumbnails use FFmpeg (broad format support); a vendor
+# ORIGINAL will not play in the browser <video> tag, but its compressed OUTPUT
+# is mp4 and does.
+try:
+    from utils.video_formats import ALL_INGEST_EXTS as _ALL_INGEST_EXTS
+except ModuleNotFoundError:  # pragma: no cover - import path shim
+    from src.utils.video_formats import ALL_INGEST_EXTS as _ALL_INGEST_EXTS
+VIDEO_EXTS = set(_ALL_INGEST_EXTS)
 
 _MIME = {
     ".mp4": "video/mp4", ".m4v": "video/mp4", ".mov": "video/quicktime",

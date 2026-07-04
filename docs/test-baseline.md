@@ -31,6 +31,23 @@ Path from the stale "48 failed" claim to green: provision the env (cleared 22 en
 
 The 3 skips are the real-webcam hardware tests (`SVCS_TEST_WEBCAM=1` to run) - intentional.
 
+## GREEN baseline after R4 Phase 6 (2026-07-04)
+
+| Field | Value |
+|---|---|
+| Command | `scripts/run_tests.ps1` |
+| Log | `logs/pytest_20260704_184250.log` |
+| Result | **1223 passed, 4 skipped, 0 failed** (252 s) |
+| Env | Windows 11, Python 3.11.9, `.venv` |
+
+R4 Phase 6 (universal multi-vendor format support, see docs/UNIVERSAL-FORMATS.md)
+added `src/utils/video_formats.py` (central standard/proprietary/all-ingest
+sets), an FFmpeg-pipe decode fallback in `FrameSource` for vendor/DVR containers
+OpenCV cannot demux (forced via `SVCS_FORCE_FFMPEG_DECODE=1`), and widened the
+upload / watch-folder / library / browse gates to the shared set.
+`test_universal_formats.py` (10) covers the sets, gates, both decode paths, and
+clean FFmpeg-process release. Skips unchanged (3 webcam + 1 opt-in Docker).
+
 ## GREEN baseline after R4 Phase 5 (2026-07-04)
 
 | Field | Value |

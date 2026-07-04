@@ -443,7 +443,11 @@ def api_browse():
         "root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True); "
         "path = filedialog.askopenfilename("
         "    title='Select video file',"
-        "    filetypes=[('Video files', '*.mp4 *.avi *.mov *.mkv *.h264'), ('All files', '*.*')]"
+        # R4 Phase 6: offer the common containers plus vendor/DVR exports; the
+        # 'All files' entry still lets the user pick anything FFmpeg can decode.
+        "    filetypes=[('Video files', '*.mp4 *.avi *.mov *.mkv *.ts *.m4v *.wmv "
+        "*.flv *.mpg *.mpeg *.dav *.264 *.h264 *.265 *.hevc *.g64 *.sdv *.mxf'), "
+        "('All files', '*.*')]"
         "); root.destroy(); print(path or '', end='')"
     )
     try:

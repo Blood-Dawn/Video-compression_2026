@@ -124,5 +124,12 @@ _CLOUD_SUBFOLDER = "SVCS"
 # Filenames allowed by `_safe_filename` (path-safety service).
 _SAFE_FILENAME_RE = re.compile(r"^[a-zA-Z0-9_\-\.]+$")
 
-# Upload extensions accepted by the /api/upload route.
-_ALLOWED_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".h264", ".m4v"}
+# Upload extensions accepted by the /api/upload route. R4 Phase 6: widened to
+# the universal ingest set (standard + vendor/DVR containers) so operators can
+# upload whatever their camera exported; FrameSource decodes vendor containers
+# via the FFmpeg fallback.
+try:
+    from utils.video_formats import ALL_INGEST_EXTS as _ALL_INGEST_EXTS
+except ModuleNotFoundError:  # pragma: no cover - import path shim
+    from src.utils.video_formats import ALL_INGEST_EXTS as _ALL_INGEST_EXTS
+_ALLOWED_EXTENSIONS = set(_ALL_INGEST_EXTS)

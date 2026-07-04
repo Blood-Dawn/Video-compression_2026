@@ -31,6 +31,22 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 
 pipeline_bp = Blueprint("pipeline", __name__)
 
+
+def _clamp_int(value, default: int, lo: int, hi: int) -> int:
+    """Coerce ``value`` to an int in [lo, hi], or ``default`` if unparseable.
+
+    Used to sanitise the R4 Phase 2 encoder knobs from the request body so a
+    bad/oversized value can never reach the FFmpeg command line.
+    """
+    try:
+        s = str(value).strip()
+        if s == "" or value is None:
+            return default
+        return max(lo, min(hi, int(float(s))))
+    except (TypeError, ValueError):
+        return default
+
+
 @pipeline_bp.route("/api/status")
 def api_status():
     with _state_lock:
@@ -165,6 +181,18 @@ def api_start():
         "preset": (str(data.get("preset")).strip() or None) if data.get("preset") else None,
         # FIX 7: verbose logging toggle (Normal vs Verbose) for the run.
         "verbose": bool(data.get("verbose", False)),
+        # ── R4 Phase 2 encoder knobs (docs/RESEARCH-COMPRESSION.md) ──
+        # Storage cap (capped CRF), 0 = uncapped. Clamped to a sane range.
+        "max_bitrate_kbps": _clamp_int(data.get("max_bitrate_kbps"), 0, 0, 200000),
+        # Pre-encode denoiser for night/IR footage: "", "hqdn3d", "atadenoise".
+        # Anything else is dropped to "" by the encoder.
+        "denoise": (str(data.get("denoise", "")).strip().lower()
+                    if data.get("denoise") else ""),
+        # Encoder-level ROI (x264/x265 only), opt-in.
+        "roi_qp": bool(data.get("roi_qp", False)),
+        # Keyframe interval in seconds (long GOP for static cameras). Default
+        # 20s; 0 keeps the FFmpeg default. Clamped to a seekable range.
+        "gop_seconds": _clamp_int(data.get("gop_seconds"), 20, 0, 600),
     }
 
     _pipeline_runner._stop_event = threading.Event()

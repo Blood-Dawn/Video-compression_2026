@@ -375,6 +375,12 @@ async function startPipeline() {
     preset:           (window._svcsPreset && window._svcsPreset.key) || '',
     // Verbose logging toggle (FIX 7): adds per-frame / per-segment detail.
     verbose:          (document.getElementById('verbose-toggle') || {}).checked || false,
+    // R4 Phase 2 efficiency knobs (docs/RESEARCH-COMPRESSION.md). Blank/0 keep
+    // the safe defaults; the backend clamps every value.
+    max_bitrate_kbps: ((document.getElementById('maxbitrate-input') || {}).value || '').trim(),
+    gop_seconds:      ((document.getElementById('gop-input') || {}).value || '').trim(),
+    denoise:          (document.getElementById('denoise-select') || {}).value || '',
+    roi_qp:           (document.getElementById('roiqp-toggle') || {}).checked || false,
   };
 
   try {

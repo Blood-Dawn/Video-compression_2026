@@ -57,6 +57,75 @@ def compute_ssim(original: np.ndarray, compressed: np.ndarray) -> float:
     return float(ssim_fn(gray_orig, gray_comp, data_range=255))
 
 
+def compute_vmaf(reference_path: str, distorted_path: str,
+                 model: str = "") -> "float | None":
+    """VMAF (0-100, higher is better) between a reference and a distorted clip.
+
+    R4 Phase 2 (docs/RESEARCH-COMPRESSION.md finding 6): offline A/B validation
+    of encoder-setting changes. NTIA/ITS found VMAF responds only to
+    compression-chain artifacts even when the reference itself is an impaired
+    camera source, so it is valid for surveillance encodes. Shells out to the
+    bundled FFmpeg's libvmaf filter (this is a validation/benchmark tool, not
+    part of the live encode path).
+
+    Returns the pooled VMAF score, or None if libvmaf is unavailable or the
+    measurement fails (never raises - it is optional tooling). The two inputs
+    should have the same resolution and frame count; libvmaf pairs frames in
+    order.
+    """
+    import json
+    import subprocess
+    import tempfile
+
+    try:
+        from utils.ffmpeg import ffmpeg_path
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.utils.ffmpeg import ffmpeg_path
+
+    ref = Path(reference_path).resolve()
+    dist = Path(distorted_path).resolve()
+    if not ref.is_file() or not dist.is_file():
+        return None
+
+    # libvmaf writes a JSON log via its log_path option, but the FFmpeg
+    # filtergraph parser treats ':' as an option separator - so a Windows
+    # absolute path (C:\...) cannot be embedded even when escaped. Run FFmpeg
+    # with cwd set to a temp dir and pass a bare relative log filename, which
+    # sidesteps drive-letter colons and backslashes entirely.
+    tmp_dir = tempfile.mkdtemp(prefix="svcs_vmaf_")
+    log_name = "vmaf.json"
+    try:
+        opts = f"log_path={log_name}:log_fmt=json"
+        if model:
+            opts = f"model=path={model}:" + opts
+        # First input is the DISTORTED stream (libvmaf convention).
+        filtergraph = f"[0:v][1:v]libvmaf={opts}"
+        cmd = [
+            ffmpeg_path(), "-hide_banner", "-nostdin",
+            "-i", str(dist), "-i", str(ref),
+            "-lavfi", filtergraph, "-f", "null", "-",
+        ]
+        proc = subprocess.run(cmd, capture_output=True, text=True,
+                              timeout=600, cwd=tmp_dir)
+        if proc.returncode != 0:
+            return None
+        with open(os.path.join(tmp_dir, log_name), "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        pooled = data.get("pooled_metrics", {}).get("vmaf", {})
+        if "mean" in pooled:
+            return float(pooled["mean"])
+        # Older libvmaf JSON: average the per-frame scores.
+        frames = data.get("frames", [])
+        scores = [f.get("metrics", {}).get("vmaf") for f in frames]
+        scores = [s for s in scores if s is not None]
+        return float(sum(scores) / len(scores)) if scores else None
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError):
+        return None
+    finally:
+        import shutil
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
 def compute_compression_ratio(original_size_bytes: int, compressed_size_bytes: int) -> float:
     """Ratio of original size to compressed size. 6.0 means 6x smaller."""
     if original_size_bytes < 0 or compressed_size_bytes < 0:

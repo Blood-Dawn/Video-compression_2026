@@ -112,6 +112,27 @@ _MODE_LABELS = {
 # Author: Bloodawn (KheivenD), 2026-05-03 (codec-default flip).
 _ENCODER_CACHE: dict = {}
 
+# Codecs ROIEncoder knows how to drive (R4 Phase 2 adds x265 + hardware
+# NVENC encoders; anything else falls back to libx264).
+_KNOWN_CODECS = {
+    "libx264", "libx265", "libsvtav1", "libaom-av1", "av1",
+    "h264_nvenc", "hevc_nvenc", "av1_nvenc",
+}
+
+# NVENC speed presets are p1 (fastest) .. p7 (best); map the x264-style
+# preset names the rest of the app uses onto that scale.
+_NVENC_PRESETS = {
+    "ultrafast": "p1", "superfast": "p2", "veryfast": "p3",
+    "faster": "p4", "fast": "p4", "medium": "p5",
+    "slow": "p6", "slower": "p7", "veryslow": "p7",
+}
+
+# Activity-grid geometry for encoder-level ROI (R4 Phase 2 finding 1).
+# 16x9 cells on a 16:9 frame = square-ish cells; coarse on purpose - the goal
+# is "which parts of this static scene ever see motion", not per-object masks.
+_ROI_GRID_W = 16
+_ROI_GRID_H = 9
+
 
 def _ffmpeg_has_encoder(name: str) -> bool:
     """Return True if `ffmpeg -encoders` lists the given encoder name.
@@ -163,6 +184,10 @@ class ROIEncoder:
         db_path: str = "outputs/metadata.db",
         draw_roi_boxes: bool = False,
         codec: str = "libsvtav1",
+        max_bitrate_kbps: int = 0,
+        denoise: str = "",
+        roi_qp: bool = False,
+        gop_seconds: int = 20,
     ):
         """
         Args:
@@ -183,6 +208,24 @@ class ROIEncoder:
                    AV1, royalty-free), or "libsvtav1" (Intel SVT-AV1, faster
                    AV1 encoder when available). Author: Bloodawn (KheivenD),
                    2026-05-02 - adds ROADMAP 4.2 codec selector.
+                   R4 Phase 2 (docs/RESEARCH-COMPRESSION.md) adds "libx265"
+                   and the hardware encoders "h264_nvenc" / "hevc_nvenc" /
+                   "av1_nvenc" (right default for real-time ingest when a GPU
+                   is present); all fall back to libx264 when missing.
+            max_bitrate_kbps: Optional storage cap (capped CRF). 0 = uncapped.
+                   x264/x265/NVENC get -maxrate/-bufsize (2s buffer); SVT-AV1
+                   gets mbr= (soft cap, CRF-only). R4 Phase 2 finding 3.
+            denoise: Optional pre-encode denoiser: "" (off), "hqdn3d" (cheap
+                   spatial+temporal) or "atadenoise" (temporal, static-camera
+                   friendly). Cuts night/IR bitrate at CPU cost; can soften
+                   plate/face detail, so opt-in. R4 Phase 2 finding 5.
+            roi_qp: Opt-in encoder-level ROI (x264/x265 only): long-static
+                   grid cells are degraded via addroi QP offsets instead of
+                   pixel surgery. Boxes refresh per segment (the CLI filter
+                   is fixed per process). R4 Phase 2 finding 1.
+            gop_seconds: Keyframe interval in seconds (long GOP for static
+                   cameras; x264's default is only 250 frames). 0 keeps the
+                   FFmpeg default. R4 Phase 2 finding 2.
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -194,22 +237,23 @@ class ROIEncoder:
         # install keeps working without the user knowing what to do.
         # Author: Bloodawn (KheivenD).
         wanted = (codec or "libsvtav1").strip().lower()
-        if wanted == "libsvtav1" and not _ffmpeg_has_encoder("libsvtav1"):
-            log.warning(
-                "Requested codec libsvtav1 not found in ffmpeg; "
-                "falling back to libx264. Install a recent ffmpeg "
-                "(Gyan.FFmpeg on Windows, BtbN builds elsewhere) to enable AV1."
-            )
+        if wanted not in _KNOWN_CODECS:
+            log.warning("Unknown codec %r; falling back to libx264.", wanted)
             wanted = "libx264"
-        elif wanted == "libaom-av1" and not _ffmpeg_has_encoder("libaom-av1"):
-            log.warning("Requested codec libaom-av1 not available; falling back to libx264.")
+        if wanted != "libx264" and not _ffmpeg_has_encoder(
+                "libaom-av1" if wanted == "av1" else wanted):
+            log.warning(
+                "Requested codec %s not found in this ffmpeg build; "
+                "falling back to libx264.", wanted
+            )
             wanted = "libx264"
         self.codec = wanted
 
         # CRF scales differ between H.264 (0-51) and AV1 (0-63). Auto-translate
         # the user-supplied "H.264-style" CRFs into the target codec's range
-        # so callers don't have to know the difference.
-        if self.codec in ("libaom-av1", "libsvtav1", "av1"):
+        # so callers don't have to know the difference. av1_nvenc's CQ scale is
+        # also 0-63, so it takes the same translation.
+        if self.codec in ("libaom-av1", "libsvtav1", "av1", "av1_nvenc"):
             # Heuristic mapping: H.264 CRF n -> AV1 CRF n + 5
             self.foreground_crf = min(63, foreground_crf + 5)
             self.background_crf = min(63, background_crf + 5)
@@ -217,6 +261,20 @@ class ROIEncoder:
             self.foreground_crf = foreground_crf
             self.background_crf = background_crf
         self.preset = preset
+        self.max_bitrate_kbps = max(0, int(max_bitrate_kbps or 0))
+        self.denoise = (denoise or "").strip().lower()
+        if self.denoise not in ("", "hqdn3d", "atadenoise"):
+            log.warning("Unknown denoise filter %r; disabling denoise.", denoise)
+            self.denoise = ""
+        self.roi_qp = bool(roi_qp)
+        self.gop_seconds = max(0, int(gop_seconds or 0))
+
+        # Activity grid for encoder-level ROI (R4 Phase 2 finding 1): counts
+        # how often each grid cell saw a foreground box. Long-static cells are
+        # degraded via addroi on the NEXT segment's process; the first segment
+        # of a session gets no ROI (fail-safe: full quality everywhere).
+        self._activity_grid = np.zeros((_ROI_GRID_H, _ROI_GRID_W), dtype=np.float64)
+        self._roi_segments_seen = 0
         self.db_path = db_path
         self.draw_roi_boxes = draw_roi_boxes
         # db.py owns the schema. Delegate initialization so encoder and
@@ -331,6 +389,139 @@ class ROIEncoder:
     # Primary API: encode raw numpy frames (no lossy intermediate file)
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Output-argument builders (R4 Phase 2, docs/RESEARCH-COMPRESSION.md).
+    # Pure functions of encoder state so tests can assert the exact FFmpeg
+    # arguments without running an encode.
+    # ------------------------------------------------------------------
+
+    def build_kwargs_at(self, fps: float) -> dict:
+        """Foreground-quality output kwargs at ``fps`` (test/inspection helper)."""
+        return self._build_output_kwargs(self.foreground_crf, fps)
+
+    def _build_output_kwargs(self, crf: int, fps: float,
+                             codec: Optional[str] = None) -> dict:
+        """FFmpeg output kwargs for one segment: codec, quality, long GOP,
+        optional capped-CRF rate bound."""
+        codec = (codec or self.codec or "libx264").lower()
+        safe_fps = fps if fps and fps > 0 else 30.0
+        gop = int(round(self.gop_seconds * safe_fps)) if self.gop_seconds else 0
+        kbps = self.max_bitrate_kbps
+        kw: dict = {"vcodec": codec, "pix_fmt": "yuv420p"}
+
+        if codec in ("libaom-av1", "av1"):
+            kw["crf"] = crf
+            kw["cpu-used"] = 8     # fastest
+            kw["row-mt"] = 1       # multi-threaded rows
+            if gop:
+                kw["g"] = gop
+        elif codec == "libsvtav1":
+            kw["crf"] = crf
+            kw["preset"] = 10
+            params = []
+            if gop:
+                params.append(f"keyint={gop}")
+            if kbps:
+                # SVT-AV1's capped CRF: soft max bitrate in kbps (CRF-only).
+                params.append(f"mbr={kbps}")
+            if params:
+                kw["svtav1-params"] = ":".join(params)
+        elif codec in ("h264_nvenc", "hevc_nvenc", "av1_nvenc"):
+            # Constant-quality VBR: the NVENC analogue of CRF. b:v 0 lets CQ
+            # drive the rate; av1_nvenc's CQ scale (0-63) got the same +5
+            # translation as the software AV1 encoders in __init__.
+            kw["rc"] = "vbr"
+            kw["cq"] = crf
+            kw["b:v"] = "0"
+            kw["preset"] = _NVENC_PRESETS.get(self.preset, "p4")
+            if gop:
+                kw["g"] = gop
+            if kbps:
+                kw["maxrate"] = f"{kbps}k"
+                kw["bufsize"] = f"{2 * kbps}k"
+        else:  # libx264 / libx265
+            kw["crf"] = crf
+            kw["preset"] = self.preset
+            if gop:
+                kw["g"] = gop
+            if kbps:
+                # Classic capped CRF: CRF quality target bounded by VBV.
+                kw["maxrate"] = f"{kbps}k"
+                kw["bufsize"] = f"{2 * kbps}k"
+        return kw
+
+    def _build_vf(self, frame_w: int, frame_h: int) -> Optional[str]:
+        """The -vf chain for one segment: optional denoise, then ROI rects."""
+        parts: List[str] = []
+        if self.denoise:
+            parts.append(self.denoise)
+        parts.extend(self._build_roi_filters(frame_w, frame_h))
+        return ",".join(parts) if parts else None
+
+    def _build_roi_filters(self, frame_w: int, frame_h: int) -> List[str]:
+        """addroi filter instances degrading long-static grid cells.
+
+        Only for libx264/libx265 (verified: libsvtav1/libaom and the FFmpeg
+        NVENC wrapper do not consume ROI side data). Cells that saw NO
+        foreground activity in the recent segments get a positive qoffset
+        scaled from the foreground/background CRF gap; anything with activity
+        keeps full quality. Requires >= 2 prior segments of observation so a
+        fresh session never degrades unproven areas.
+        """
+        if not self.roi_qp or self.codec not in ("libx264", "libx265"):
+            return []
+        if self._roi_segments_seen < 2:
+            return []
+        grid = self._activity_grid
+        if grid is None or float(grid.sum()) <= 0.0:
+            # No motion observed anywhere yet: nothing is PROVEN active, so
+            # degrade nothing (fail-safe direction).
+            return []
+        # qoffset is a fraction of the codec's full QP range; approximate the
+        # configured CRF gap, capped well below addroi's +1.0 extreme.
+        qoff = (self.background_crf - self.foreground_crf) / 51.0
+        qoff = max(0.05, min(0.6, qoff))
+        gh, gw = grid.shape
+        cell_w = frame_w / gw
+        cell_h = frame_h / gh
+        filters: List[str] = []
+        for row in range(gh):
+            run_start = None
+            for col in range(gw + 1):
+                is_static = col < gw and grid[row, col] <= 0.0
+                if is_static and run_start is None:
+                    run_start = col
+                elif not is_static and run_start is not None:
+                    x = int(run_start * cell_w)
+                    wpx = int((col - run_start) * cell_w)
+                    y = int(row * cell_h)
+                    hpx = int(cell_h)
+                    filters.append(
+                        f"addroi=x={x}:y={y}:w={wpx}:h={hpx}:qoffset={qoff:.3f}")
+                    run_start = None
+        # Hard cap: an absurd number of tiny rects means the scene is mostly
+        # active anyway; drop ROI rather than build a mile-long filter graph.
+        return filters if len(filters) <= 40 else []
+
+    def _on_segment_opened(self) -> None:
+        """Age the activity grid so stale motion decays over a few segments."""
+        self._roi_segments_seen += 1
+        if self._activity_grid is not None:
+            self._activity_grid *= 0.5
+
+    def _note_roi_activity(self, boxes, frame_w: int, frame_h: int) -> None:
+        """Mark grid cells covered by this frame's foreground boxes."""
+        if not boxes or frame_w <= 0 or frame_h <= 0:
+            return
+        grid = self._activity_grid
+        gh, gw = grid.shape
+        for bx, by, bw, bh in boxes:
+            c0 = max(0, min(gw - 1, int(bx * gw / frame_w)))
+            c1 = max(0, min(gw - 1, int((bx + max(1, bw)) * gw / frame_w)))
+            r0 = max(0, min(gh - 1, int(by * gh / frame_h)))
+            r1 = max(0, min(gh - 1, int((by + max(1, bh)) * gh / frame_h)))
+            grid[r0:r1 + 1, c0:c1 + 1] += 1.0
+
     def encode_segment(
         self,
         frames: List[np.ndarray],
@@ -423,10 +614,9 @@ class ROIEncoder:
             )
             .output(
                 str(output_path),
-                vcodec="libx264",
-                crf=crf,
-                preset=self.preset,
-                pix_fmt="yuv420p",
+                # Legacy buffered path stays on libx264 (demo/back-compat) but
+                # picks up the long-GOP + capped-CRF settings (R4 Phase 2).
+                **self._build_output_kwargs(crf, fps, codec="libx264"),
             )
             .overwrite_output()
             .compile()
@@ -572,28 +762,16 @@ class ROIEncoder:
         timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         output_path = self.output_dir / f"{camera_id}_{timestamp}.mp4"
 
-        # Build codec-specific output kwargs. AV1 encoders use different
-        # speed-knob names ("cpu-used" for libaom-av1, "preset" for
-        # libsvtav1) and the AV1 CRF range is 0-63 not 0-51, so the CRFs
-        # were already translated in __init__. We also drop pix_fmt for
-        # AV1 because libaom requires "yuv420p" but accepts no override
-        # without breaking on some builds.
-        # Author: Bloodawn (KheivenD), 2026-05-02 (ROADMAP 4.2 - AV1).
-        codec = (self.codec or "libx264").lower()
-        out_kwargs = {
-            "vcodec":  codec,
-            "crf":     crf,
-            "pix_fmt": "yuv420p",
-        }
-        if codec in ("libaom-av1", "av1"):
-            # libaom-av1 ignores -preset, takes -cpu-used 0..8.
-            out_kwargs["cpu-used"] = 8     # fastest
-            out_kwargs["row-mt"]   = 1     # multi-threaded rows
-        elif codec == "libsvtav1":
-            # SVT-AV1 takes -preset 0..13. 10+ is fast.
-            out_kwargs["preset"] = 10
-        else:
-            out_kwargs["preset"] = self.preset
+        # Build codec-specific output kwargs (extracted to a helper in R4
+        # Phase 2 so the long-GOP / capped-CRF / NVENC handling is shared and
+        # unit-testable). Filters (denoise + activity-grid addroi) ride along
+        # in "vf"; the ROI rectangles were learned from the PREVIOUS segments'
+        # boxes, so the first segment always encodes at full quality.
+        out_kwargs = self._build_output_kwargs(crf, fps)
+        vf = self._build_vf(w, h)
+        if vf:
+            out_kwargs["vf"] = vf
+        self._on_segment_opened()
 
         _ffmpeg_args = (
             ffmpeg
@@ -690,6 +868,11 @@ class ROIEncoder:
                     self._stream_sharpness_scores.append(
                         compute_sharpness(frame[y1:y2, x1:x2])
                     )
+
+        # Step 5: teach the activity grid where motion happens this session, so
+        # the NEXT segment's addroi can degrade only long-static cells (R4 P2).
+        if self.roi_qp:
+            self._note_roi_activity(boxes, w, h)
 
         self._stream_process.stdin.write(frame_out.tobytes())
         self._stream_frame_count += 1

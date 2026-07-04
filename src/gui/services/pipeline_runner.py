@@ -224,6 +224,12 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             crf=config.get("crf"),
             background_crf=config.get("background_crf"),
             verbose=bool(config.get("verbose", False)),
+            # R4 Phase 2 encoder knobs (docs/RESEARCH-COMPRESSION.md).
+            max_bitrate_kbps=int(config.get("max_bitrate_kbps", 0) or 0),
+            denoise=config.get("denoise", "") or "",
+            roi_qp=bool(config.get("roi_qp", False)),
+            gop_seconds=int(config.get("gop_seconds", 20)
+                            if config.get("gop_seconds") is not None else 20),
         )
         _record_encode_stat(config, success=True)
 

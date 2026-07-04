@@ -149,6 +149,10 @@ def run_pipeline(
     crf: int = None,
     background_crf: Optional[int] = None,
     verbose: bool = False,
+    max_bitrate_kbps: int = 0,
+    denoise: str = "",
+    roi_qp: bool = False,
+    gop_seconds: int = 20,
 ):
     """
     Main pipeline loop.
@@ -333,9 +337,24 @@ def run_pipeline(
         codec=codec,
         foreground_crf=resolved_crf,
         background_crf=_bg_crf,
+        # R4 Phase 2 (docs/RESEARCH-COMPRESSION.md): long-GOP default on,
+        # optional capped-CRF / denoise / encoder-level ROI. The GUI and CLI
+        # pass these through; defaults leave behaviour unchanged except the
+        # (safe, seekable) 20s keyframe interval.
+        max_bitrate_kbps=int(max_bitrate_kbps or 0),
+        denoise=denoise or "",
+        roi_qp=bool(roi_qp),
+        gop_seconds=int(gop_seconds if gop_seconds is not None else 20),
     )
-    log.info("Encoder: codec=%s, foreground_crf=%d, background_crf=%d (mode=%s)",
-             codec, resolved_crf, _bg_crf, mode)
+    # getattr fallbacks keep this diagnostic line working against lightweight
+    # encoder doubles in the tests; the real ROIEncoder always has these.
+    log.info("Encoder: codec=%s (resolved %s), fg_crf=%d, bg_crf=%d, gop=%ss, "
+             "cap=%skbps, denoise=%s, roi_qp=%s (mode=%s)",
+             codec, getattr(encoder, "codec", codec), resolved_crf, _bg_crf,
+             getattr(encoder, "gop_seconds", "?"),
+             getattr(encoder, "max_bitrate_kbps", 0) or "off",
+             getattr(encoder, "denoise", "") or "off",
+             getattr(encoder, "roi_qp", False), mode)
     initialize_database(db_path)
 
     obj_filter: Optional[ObjectFilter] = None
@@ -865,6 +884,19 @@ if __name__ == "__main__":
     )
     parser.add_argument("--password", default=None, help="Passphrase for AES-256-GCM encryption (PBKDF2).")
     parser.add_argument("--key-file", default=None, help="Path to raw 32-byte AES-256 key file.")
+    # ── R4 Phase 2 encoder knobs (docs/RESEARCH-COMPRESSION.md) ──
+    parser.add_argument("--codec", default=None,
+                        help="Encoder: libx264/libx265/libsvtav1/libaom-av1 or "
+                             "h264_nvenc/hevc_nvenc/av1_nvenc (GPU). Unknown/missing -> libx264.")
+    parser.add_argument("--crf", type=int, default=None, help="Foreground CRF override (mode default if unset).")
+    parser.add_argument("--max-bitrate-kbps", type=int, default=0,
+                        help="Storage cap in kbps (capped CRF). 0 = uncapped.")
+    parser.add_argument("--gop-seconds", type=int, default=20,
+                        help="Keyframe interval in seconds (long GOP for static cameras). 0 = ffmpeg default.")
+    parser.add_argument("--denoise", default="", choices=["", "hqdn3d", "atadenoise"],
+                        help="Pre-encode denoiser for night/IR footage. Empty = off.")
+    parser.add_argument("--roi-qp", action="store_true",
+                        help="Encoder-level ROI (x264/x265 only): degrade long-static areas via addroi.")
     args = parser.parse_args()
 
     input_src = args.input
@@ -889,4 +921,10 @@ if __name__ == "__main__":
         encrypt_key_file=args.key_file,
         mode2_clean_seconds=args.mode2_clean_seconds,
         mode2_background_lag_seconds=args.mode2_background_lag_seconds,
+        codec=args.codec,
+        crf=args.crf,
+        max_bitrate_kbps=args.max_bitrate_kbps,
+        gop_seconds=args.gop_seconds,
+        denoise=args.denoise,
+        roi_qp=args.roi_qp,
     )

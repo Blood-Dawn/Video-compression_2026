@@ -309,6 +309,48 @@ class TestApiStart:
         cfg = resp.get_json()["config"]
         assert cfg["codec"] == "libsvtav1"
 
+    def test_start_r4_encoder_knobs_passthrough(self, client, fake_pipeline):
+        """R4 Phase 2: the efficiency knobs round-trip into the pipeline config."""
+        resp = client.post("/api/start", json={
+            "input_source": "data/test.mp4",
+            "codec": "h264_nvenc",
+            "max_bitrate_kbps": "6000",
+            "gop_seconds": "30",
+            "denoise": "hqdn3d",
+            "roi_qp": True,
+        })
+        cfg = resp.get_json()["config"]
+        assert cfg["codec"] == "h264_nvenc"
+        assert cfg["max_bitrate_kbps"] == 6000
+        assert cfg["gop_seconds"] == 30
+        assert cfg["denoise"] == "hqdn3d"
+        assert cfg["roi_qp"] is True
+
+    def test_start_r4_knob_defaults_and_clamping(self, client, fake_pipeline):
+        """R4 Phase 2: unset knobs default safely; out-of-range values clamp,
+        and a garbage value falls back to the default rather than reaching
+        the FFmpeg command line."""
+        resp = client.post("/api/start", json={"input_source": "data/test.mp4"})
+        cfg = resp.get_json()["config"]
+        assert cfg["max_bitrate_kbps"] == 0      # uncapped default
+        assert cfg["gop_seconds"] == 20          # long-GOP default
+        assert cfg["denoise"] == ""
+        assert cfg["roi_qp"] is False
+
+        # Stop the fake run before starting the next one (avoid the 409 guard).
+        time.sleep(0.05)
+        client.post("/api/stop")
+        time.sleep(0.05)
+
+        resp = client.post("/api/start", json={
+            "input_source": "data/test.mp4",
+            "max_bitrate_kbps": 999999999,       # over the cap
+            "gop_seconds": "banana",             # unparseable
+        })
+        cfg = resp.get_json()["config"]
+        assert cfg["max_bitrate_kbps"] == 200000  # clamped to max
+        assert cfg["gop_seconds"] == 20           # fell back to default
+
     def test_double_start_returns_409(self, client, fake_pipeline):
         client.post("/api/start", json={"input_source": "data/test.mp4"})
         # Wait briefly for the fake thread to set running=True

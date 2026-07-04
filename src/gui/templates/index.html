@@ -2288,10 +2288,17 @@
             <option value="libsvtav1">libsvtav1 (AV1 / SVT-AV1)</option>
             <option value="libaom-av1">libaom-av1 (AV1 reference - slower)</option>
             <option value="libx264">libx264 (H.264 - universal)</option>
+            <option value="libx265">libx265 (H.265 / HEVC - smaller)</option>
+            <optgroup label="Hardware (NVIDIA GPU - fast, low power)">
+              <option value="h264_nvenc">h264_nvenc (GPU H.264)</option>
+              <option value="hevc_nvenc">hevc_nvenc (GPU H.265)</option>
+              <option value="av1_nvenc">av1_nvenc (GPU AV1 - RTX 40+)</option>
+            </optgroup>
           </select>
           <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
             Auto: H.264 for Mode 0/1 (universal playback), AV1 for Mode 2/3 (max savings).
-            No H.265. Server auto-falls-back to libx264 if your ffmpeg lacks libsvtav1.
+            GPU (NVENC) codecs are best for real-time camera ingest; server auto-falls-back
+            to libx264 if a chosen encoder is missing from your ffmpeg build.
           </div>
         </div>
         <!--
@@ -2309,6 +2316,52 @@
             Lower = sharper / bigger. Higher = blurrier / smaller. Try 38-45 for tiny output.
           </div>
         </div>
+
+        <!-- R4 Phase 2 efficiency knobs (docs/RESEARCH-COMPRESSION.md). Staged
+             disclosure: collapsed by default so non-technical operators are
+             not shown encoder internals. -->
+        <details class="source-advanced" style="margin-top:0.5rem;">
+          <summary style="cursor:pointer;font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);">
+            Storage &amp; quality (advanced)
+          </summary>
+          <div class="config-field" style="margin-top:0.4rem;">
+            <label class="config-label" for="maxbitrate-input">Max bitrate cap (kbps)</label>
+            <input type="number" id="maxbitrate-input" min="0" max="200000" placeholder="0 = uncapped"
+                   style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
+            <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
+              Bounds file size while keeping CRF quality targeting (capped CRF). 0 = no cap.
+            </div>
+          </div>
+          <div class="config-field" style="margin-top:0.4rem;">
+            <label class="config-label" for="gop-input">Keyframe interval (seconds)</label>
+            <input type="number" id="gop-input" min="0" max="600" placeholder="20"
+                   style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
+            <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
+              Longer = smaller for static cameras. 20s is a good default; higher hurts seeking.
+            </div>
+          </div>
+          <div class="config-field" style="margin-top:0.4rem;">
+            <label class="config-label" for="denoise-select">Denoise (night / IR)</label>
+            <select id="denoise-select" style="width:100%;font-family:var(--mono);font-size:0.65rem;">
+              <option value="" selected>Off</option>
+              <option value="hqdn3d">hqdn3d (light, fast)</option>
+              <option value="atadenoise">atadenoise (temporal, static cams)</option>
+            </select>
+            <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
+              Cuts noisy night/IR bitrate. Costs CPU and can soften plates/faces, so keep off by day.
+            </div>
+          </div>
+          <div class="config-field" style="margin-top:0.4rem;">
+            <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.62rem;cursor:pointer;">
+              <input type="checkbox" id="roiqp-toggle" />
+              Encoder-level ROI (x264/x265)
+            </label>
+            <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
+              Degrades long-static areas at the encoder instead of by pixel edit. Adapts after the
+              first couple of segments. No effect on AV1 or GPU codecs.
+            </div>
+          </div>
+        </details>
       </div>
 
       <!-- ── STEP 2: Preset ─────────────────────── -->

@@ -13,7 +13,9 @@ async function loadSegments() {
     const data = await res.json();
     const tbody = document.getElementById('segments-tbody');
     if (!data.segments || !data.segments.length) {
-      tbody.innerHTML = '<tr><td colspan="14" class="empty-state">NO SEGMENTS YET</td></tr>';
+      // Empty state (R4 Phase 1, NN/g): explain what will appear and how to
+      // make it appear, instead of a bare "no data" label.
+      tbody.innerHTML = '<tr><td colspan="16" class="empty-state">No compressed segments yet. Pick a source in the sidebar and press START, or drop a file on the UPLOAD tab - finished segments appear here.</td></tr>';
       _updateLibrarySummary([]);
       _segmentData = [];
       return;

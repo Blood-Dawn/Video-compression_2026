@@ -15,6 +15,7 @@ let logEventSource = null;
 let statusInterval  = null;
 let storageInterval = null;
 let segmentsInterval = null;
+let jobsInterval = null;   // recent-jobs panel refresh (R4 Phase 1)
 
 
 // ── Preset card selection ──────────────────────────────────────

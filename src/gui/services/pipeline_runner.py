@@ -249,8 +249,47 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             pass
 
         with _state_lock:
+            _run_error = _status.get("error")
+            _run_started = _status.get("start_time")
+            _run_frames = _status.get("frame_count", 0)
+            _run_segments = _status.get("segment_count", 0)
+        # Record BEFORE flipping running=False: the UI shows the completion
+        # summary on the running->stopped transition, so the history entry
+        # must already be readable when /api/status first reports stopped.
+        _record_job_history(config, stop_event, _run_started, _run_error,
+                            _run_frames, _run_segments)
+        with _state_lock:
             _status["running"] = False
         global _active_encoder
         _active_encoder = None
         _stop_cpu_sampler()
         log.info("Pipeline stopped.")
+
+
+def _record_job_history(config, stop_event, started, error, frames, segments):
+    """Persist this run to the job history (R4 Phase 1). Never raises."""
+    try:
+        try:
+            from gui.services import job_history
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.gui.services import job_history
+        src = str(config.get("input_source", "0"))
+        label = Path(src).name if ("/" in src or "\\" in src) else f"source {src}"
+        if error:
+            status = "error"
+        elif stop_event is not None and stop_event.is_set():
+            status = "stopped"
+        else:
+            status = "completed"
+        job_history.record_job(
+            "pipeline",
+            label=label,
+            started_at=started,
+            ended_at=time.time(),
+            status=status,
+            counts={"frames": int(frames or 0), "segments": int(segments or 0),
+                    "mode": config.get("mode", "mode0")},
+            error=error,
+        )
+    except Exception:  # noqa: BLE001 - history must never affect the pipeline
+        pass

@@ -11,9 +11,14 @@ function startPolling() {
   if (statusInterval) clearInterval(statusInterval);
   if (storageInterval) clearInterval(storageInterval);
   if (segmentsInterval) clearInterval(segmentsInterval);
+  if (jobsInterval) clearInterval(jobsInterval);
   statusInterval  = setInterval(pollStatus,   1200);
   storageInterval = setInterval(pollStorage,  5000);
   segmentsInterval = setInterval(loadSegments, 8000);
+  // Recent-jobs panel (R4 Phase 1): cheap read of a small JSON; a slow
+  // refresh also picks up auto-compress batches finished by the daemon.
+  jobsInterval = setInterval(loadRecentJobs, 15000);
+  loadRecentJobs();
 }
 
 async function pollStatus() {
@@ -65,9 +70,16 @@ async function pollStatus() {
 
     if (data.running !== lastRunning) {
       setPipelineRunning(data.running);
+      const wasRunning = lastRunning;
       lastRunning = data.running;
       if (!data.running && data.error) {
         showError('Pipeline error: ' + data.error);
+      }
+      if (!data.running && wasRunning) {
+        // R4 Phase 1 (NN/g): a long run just ended - show the explicit,
+        // user-dismissed completion summary and refresh the job record.
+        maybeShowLatestJobSummary('pipeline');
+        loadRecentJobs();
       }
     }
 

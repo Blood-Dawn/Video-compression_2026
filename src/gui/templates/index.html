@@ -615,6 +615,96 @@
       letter-spacing: 0.1em;
     }
 
+    /* ─── R4 Phase 1 (UX research): a11y focus rings ───
+       WCAG 2.4.7/1.4.11: keyboard focus must be visible and contrast >= 3:1.
+       :focus-visible only fires on keyboard nav, so mouse users see nothing new. */
+    button:focus-visible, a:focus-visible, input:focus-visible,
+    select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible {
+      outline: 2px solid var(--amber);
+      outline-offset: 2px;
+    }
+
+    /* ─── R4 Phase 1: shared modal (completion summaries etc.) ───
+       One base component instead of per-feature overlay CSS. Explicit-dismiss
+       by design: NN/g prescribes user-dismissed modals after long waits. */
+    .svcs-modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(4, 8, 14, 0.72);
+      display: none;
+      align-items: center; justify-content: center;
+      z-index: 300;
+    }
+    .svcs-modal-overlay.open { display: flex; }
+    .svcs-modal {
+      background: var(--surface);
+      border: 1px solid var(--border-bright);
+      border-radius: var(--radius);
+      width: min(480px, calc(100vw - 2rem));
+      max-height: 80vh;
+      display: flex; flex-direction: column;
+      box-shadow: 0 18px 60px rgba(0,0,0,0.55);
+    }
+    .svcs-modal-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.7rem 0.9rem;
+      border-bottom: 1px solid var(--border);
+      font-family: var(--display);
+      font-size: 1.05rem;
+      letter-spacing: 0.08em;
+      color: var(--text-bright);
+    }
+    .svcs-modal-body {
+      padding: 0.9rem;
+      overflow-y: auto;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--text);
+      line-height: 1.7;
+    }
+    .svcs-modal-body .job-sum-row { display: flex; justify-content: space-between; gap: 1rem; }
+    .svcs-modal-body .job-sum-row span:first-child { color: var(--text-dim); }
+    .svcs-modal-actions {
+      padding: 0.7rem 0.9rem;
+      border-top: 1px solid var(--border);
+      display: flex; justify-content: flex-end; gap: 0.5rem;
+    }
+
+    /* ─── R4 Phase 1: recent-jobs panel (persistent job record, NN/g) ─── */
+    .jobs-panel {
+      margin-top: 0.9rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+    }
+    .jobs-panel-head {
+      padding: 0.5rem 0.75rem;
+      font-family: var(--display);
+      font-size: 0.95rem;
+      letter-spacing: 0.1em;
+      color: var(--text-dim);
+      border-bottom: 1px solid var(--border);
+    }
+    .job-row {
+      display: flex; align-items: baseline; gap: 0.75rem;
+      padding: 0.45rem 0.75rem;
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .job-row:last-child { border-bottom: none; }
+    .job-row .job-label { flex: 1; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .job-row .job-meta  { color: var(--text-dim); white-space: nowrap; }
+    .job-status { font-weight: 700; letter-spacing: 0.06em; }
+    .job-status.completed { color: var(--green); }
+    .job-status.stopped   { color: var(--yellow); }
+    .job-status.error     { color: var(--red); }
+    .jobs-empty {
+      padding: 0.8rem 0.75rem;
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--text-dim);
+    }
+
     /* ─────────────── PROGRESS BAR ─────────────── */
     .progress-row {
       margin: 0.6rem 0 0;
@@ -2825,7 +2915,7 @@
         <!-- Status panel -->
         <div style="background:var(--panel,#11161f);border:1px solid var(--border,#1e2733);border-radius:4px;padding:0.7rem;margin-bottom:0.8rem;">
           <div style="font-family:var(--mono);font-size:0.66rem;color:var(--text-dim);margin-bottom:0.4rem;" id="ac-status-line">Idle. Not watching.</div>
-          <div style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);" id="ac-recent">No clips compressed yet.</div>
+          <div style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);" id="ac-recent">Nothing compressed yet. Turn ON watching, or use "Compress existing now" to process the clips already in the folder.</div>
         </div>
 
         <!-- Live activity log (reuses the SSE /api/logs stream) -->
@@ -2919,6 +3009,15 @@
           <div class="progress-row" style="margin-top:0.3rem;">
             <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
             <span class="progress-pct" id="progress-pct"></span>
+          </div>
+
+          <!-- Recent jobs (R4 Phase 1): persistent record of finished runs so
+               the operator can audit work after stepping away (NN/g). -->
+          <div class="jobs-panel" id="jobs-panel">
+            <div class="jobs-panel-head">RECENT JOBS</div>
+            <div id="jobs-list">
+              <div class="jobs-empty">No jobs yet. Finished compressions (manual runs and auto-compress batches) will be listed here.</div>
+            </div>
           </div>
 
           <!-- Inline clip player (HOME tab) -->
@@ -3091,7 +3190,7 @@
                   </tr>
                 </thead>
                 <tbody id="segments-tbody">
-                  <tr><td colspan="16" class="empty-state">NO SEGMENTS YET</td></tr>
+                  <tr><td colspan="16" class="empty-state">No compressed segments yet. Pick a source in the sidebar and press START, or drop a file on the UPLOAD tab - finished segments appear here.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -3441,6 +3540,22 @@
 
 <!-- ═══════════════════ NOTIFICATION DOCK ═══════════════════ -->
 <div id="notif-dock"></div>
+
+<!-- ═══════════════════ SHARED MODAL (R4 Phase 1) ═══════════════════
+     Explicit-dismiss dialog used for long-job completion summaries (NN/g:
+     modals, not auto-fading toasts, after long waits). Driven by svcsModal
+     in ui.js. -->
+<div class="svcs-modal-overlay" id="svcs-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="svcs-modal-title">
+  <div class="svcs-modal">
+    <div class="svcs-modal-head">
+      <span id="svcs-modal-title">DONE</span>
+    </div>
+    <div class="svcs-modal-body" id="svcs-modal-body"></div>
+    <div class="svcs-modal-actions">
+      <button class="btn btn-primary" id="svcs-modal-close" onclick="svcsModalHide()">OK</button>
+    </div>
+  </div>
+</div>
 
 <!-- ═══════════════════ HELP MODAL ═══════════════════ -->
 <div class="help-overlay" id="help-overlay" onclick="_helpOverlayClick(event)">

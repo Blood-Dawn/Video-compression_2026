@@ -30,6 +30,7 @@ from gui.app import app as flask_app  # noqa: E402
 EXPECTED = {
     "/": "ui",
     "/api/status": "pipeline",
+    "/api/jobs/recent": "pipeline",
     "/api/start": "pipeline",
     "/api/stop": "pipeline",
     "/api/segments": "files",
@@ -113,7 +114,7 @@ def _rules():
 
 def test_route_count():
     rules = _rules()
-    assert len(rules) == 70, f"expected 70 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 71, f"expected 71 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_blueprints_registered():

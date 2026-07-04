@@ -91,6 +91,12 @@ _ac_status = {
     "last_error": None,
     "scans": 0,
     "compressed_total": 0,
+    # Batch progress for the current scan pass (R4 Phase 1 - "file N of M").
+    # NN/g: waits >= 10s need determinate progress; a batch pass is exactly
+    # that, so the UI shows "file <batch_done+1> of <batch_total>: <name>".
+    "batch_total": 0,
+    "batch_done": 0,
+    "current_file": "",
 }
 
 
@@ -178,6 +184,13 @@ def _process_one(
     encode_kwargs = _encode_kwargs_for(src, mode, preset)
     camera_id = wf._build_camera_id(src, "auto")
 
+    # Source size before anything happens (the original may be deleted later),
+    # so the batch job-history entry can report real space savings.
+    try:
+        src_bytes = src.stat().st_size
+    except OSError:
+        src_bytes = 0
+
     # Snapshot the output folder so we can identify exactly what this run wrote.
     before = {p.resolve() for p in comp_dir.glob("*") if p.is_file()}
 
@@ -243,10 +256,15 @@ def _process_one(
     if delete_original:
         _safe_delete_original(src, output, comp_dir, watch_root)
 
+    try:
+        out_bytes = output.stat().st_size
+    except OSError:
+        out_bytes = 0
     record = {
         "source": str(src), "output": str(output.resolve()),
         "when": entry.get("when"), "preset": preset,
         "mode": encode_kwargs.get("mode", mode),
+        "src_bytes": src_bytes, "out_bytes": out_bytes,
     }
     _record_recent(record)
     return record
@@ -331,23 +349,73 @@ def scan_once(
     with _ac_lock:
         _ac_status["queue"] = len(candidates)
         _ac_status["scans"] += 1
+        _ac_status["batch_total"] = len(candidates)
+        _ac_status["batch_done"] = 0
+        _ac_status["current_file"] = ""
+        # Snapshot so only an error raised DURING this pass is attributed to it.
+        _err_before = _ac_status.get("last_error")
 
+    pass_started = time.time()
+    attempted = 0
     done: List[dict] = []
     for f in candidates:
         if stop_event is not None and stop_event.is_set():
             break
         if not wf._is_fully_written(f, settle_seconds, stable_checks):
             log.info("Auto-compress skipping (still writing): %s", f.name)
+            with _ac_lock:
+                _ac_status["batch_done"] += 1
             continue
+        with _ac_lock:
+            _ac_status["current_file"] = f.name
+        attempted += 1
         entry = _process_one(f, output_dir, mode, preset, delete_original,
                              watch_root, stop_event=stop_event)
         if entry:
             done.append(entry)
         with _ac_lock:
             _ac_status["queue"] = max(0, _ac_status["queue"] - 1)
+            _ac_status["batch_done"] += 1
     with _ac_lock:
         _ac_status["queue"] = 0
+        _ac_status["batch_total"] = 0
+        _ac_status["batch_done"] = 0
+        _ac_status["current_file"] = ""
+        _err_after = _ac_status.get("last_error")
+    pass_error = _err_after if _err_after != _err_before else None
+
+    # One job-history entry per pass that actually attempted work (idle polls
+    # of an empty/settled folder do not spam the history). R4 Phase 1.
+    if attempted > 0:
+        _record_batch_job(watch_root, pass_started, attempted, done,
+                          stop_event, pass_error)
     return done
+
+
+def _record_batch_job(watch_root, pass_started, attempted, done,
+                      stop_event, pass_error) -> None:
+    """Persist one batch pass to the job history. Best effort, never raises."""
+    try:
+        try:
+            from gui.services import job_history
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.gui.services import job_history
+        stopped = stop_event is not None and stop_event.is_set()
+        failed = attempted - len(done)
+        job_history.record_job(
+            "autocompress",
+            label=str(watch_root),
+            started_at=pass_started,
+            ended_at=time.time(),
+            status="stopped" if stopped else "completed",
+            counts={"files": attempted, "compressed": len(done),
+                    "skipped": failed},
+            bytes_in=sum(int(e.get("src_bytes", 0) or 0) for e in done),
+            bytes_out=sum(int(e.get("out_bytes", 0) or 0) for e in done),
+            error=pass_error if failed else None,
+        )
+    except Exception:  # noqa: BLE001 - history must never break the daemon
+        pass
 
 
 # ── daemon thread ─────────────────────────────────────────────────────────────

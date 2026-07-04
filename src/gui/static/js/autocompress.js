@@ -124,6 +124,12 @@ async function acScanNow() {
     if (resp.ok && data.ok) {
       _acStatusLine("Batch pass done: compressed " + data.compressed + " clip(s).");
       _acRenderStatus(data.status);
+      // R4 Phase 1 (NN/g): a batch pass is a long wait - end it with an
+      // explicit, user-dismissed summary, and refresh the HOME job record.
+      if (data.compressed > 0 && typeof maybeShowLatestJobSummary === "function") {
+        maybeShowLatestJobSummary("autocompress");
+      }
+      if (typeof loadRecentJobs === "function") loadRecentJobs();
     } else {
       _acStatusLine("Batch pass failed: " + (data.error || resp.status));
     }
@@ -176,7 +182,14 @@ function _acRenderStatus(st) {
   const btn = document.getElementById("ac-toggle-btn");
   if (btn) btn.textContent = _acRunning ? "Turn OFF" : "Turn ON";
 
-  if (_acRunning) {
+  if (st.batch_total > 0) {
+    // R4 Phase 1 (NN/g): batch waits >= 10s need determinate "file N of M"
+    // progress, not a spinner. Applies to daemon passes AND "Compress
+    // existing now" (which also updates these fields while it runs).
+    const cur = Math.min((st.batch_done || 0) + 1, st.batch_total);
+    _acStatusLine("Compressing file " + cur + " of " + st.batch_total +
+                  (st.current_file ? ": " + st.current_file : ""));
+  } else if (_acRunning) {
     const folder = st.folder || (st.saved && st.saved.folder) || "";
     _acStatusLine("Watching " + folder + "   queue: " + (st.queue || 0) +
                   "   compressed this session: " + (st.compressed_total || 0));
@@ -190,7 +203,11 @@ function _acRenderStatus(st) {
   if (recEl) {
     const recent = st.recent || [];
     if (!recent.length) {
-      recEl.textContent = "No clips compressed yet.";
+      // Empty state (R4 Phase 1, NN/g): say what appears here and why it is
+      // empty, and point at the actions that populate it.
+      recEl.textContent = _acRunning
+        ? "Nothing compressed yet. Clips saved into the watched folder will be compressed and listed here."
+        : "Nothing compressed yet. Turn ON watching, or use \"Compress existing now\" to process the clips already in the folder.";
     } else {
       recEl.innerHTML = recent.slice(0, 8).map(r =>
         _esc(_basename(r.source)) + "  &rarr;  compressed/" + _esc(_basename(r.output))

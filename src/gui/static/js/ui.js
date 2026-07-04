@@ -203,6 +203,133 @@ function jsAttr(s) {
     .replace(/"/g,  '&quot;');
 }
 
+// ── Shared modal + job summaries (R4 Phase 1, docs/RESEARCH-UIUX.md) ─────────
+// NN/g: after a long wait the user has disengaged, so completion feedback must
+// be an explicit user-dismissed dialog with start/stop/elapsed and what
+// happened - not an auto-fading toast. svcsModalShow drives the one static
+// dialog in index.html; every long-job summary goes through it.
+
+function fmtBytes(n) {
+  n = Number(n) || 0;
+  if (n >= 1024 * 1024 * 1024) return (n / (1024 ** 3)).toFixed(2) + ' GB';
+  if (n >= 1024 * 1024) return (n / (1024 ** 2)).toFixed(1) + ' MB';
+  if (n >= 1024) return (n / 1024).toFixed(1) + ' KB';
+  return n + ' B';
+}
+
+function fmtClock(epoch) {
+  if (!epoch) return ' - ';
+  try { return new Date(epoch * 1000).toLocaleTimeString(); } catch { return ' - '; }
+}
+
+let _modalPrevFocus = null;
+
+function svcsModalShow(title, bodyHtml) {
+  const overlay = document.getElementById('svcs-modal-overlay');
+  if (!overlay) return;
+  document.getElementById('svcs-modal-title').textContent = title;
+  document.getElementById('svcs-modal-body').innerHTML = bodyHtml;
+  _modalPrevFocus = document.activeElement;
+  overlay.classList.add('open');
+  const closeBtn = document.getElementById('svcs-modal-close');
+  if (closeBtn) closeBtn.focus();
+}
+
+function svcsModalHide() {
+  const overlay = document.getElementById('svcs-modal-overlay');
+  if (overlay) overlay.classList.remove('open');
+  if (_modalPrevFocus && typeof _modalPrevFocus.focus === 'function') {
+    try { _modalPrevFocus.focus(); } catch (e) {}
+  }
+  _modalPrevFocus = null;
+}
+window.svcsModalHide = svcsModalHide;
+
+// Dismiss with Escape (dialog a11y); the OK button handles click dismissal.
+document.addEventListener('keydown', (ev) => {
+  if (ev.key === 'Escape') {
+    const overlay = document.getElementById('svcs-modal-overlay');
+    if (overlay && overlay.classList.contains('open')) svcsModalHide();
+  }
+});
+
+function _jobSumRow(label, value) {
+  return '<div class="job-sum-row"><span>' + escHtml(label) + '</span><span>' +
+         escHtml(value) + '</span></div>';
+}
+
+/** Build and show the completion summary for one job-history entry. */
+function showJobSummaryModal(job) {
+  if (!job) return;
+  const c = job.counts || {};
+  const rows = [];
+  rows.push(_jobSumRow('Source', job.label || ' - '));
+  rows.push(_jobSumRow('Started', fmtClock(job.started_at)));
+  rows.push(_jobSumRow('Finished', fmtClock(job.ended_at)));
+  if (job.elapsed_s != null) rows.push(_jobSumRow('Elapsed', fmtDuration(job.elapsed_s)));
+  if (job.kind === 'autocompress') {
+    rows.push(_jobSumRow('Files compressed', String(c.compressed ?? 0) + ' of ' + String(c.files ?? 0)));
+    if (c.skipped) rows.push(_jobSumRow('Skipped / failed', String(c.skipped)));
+    if (job.bytes_in > 0 && job.bytes_out > 0) {
+      rows.push(_jobSumRow('Input size', fmtBytes(job.bytes_in)));
+      rows.push(_jobSumRow('Output size', fmtBytes(job.bytes_out)));
+      rows.push(_jobSumRow('Space saved', fmtBytes(Math.max(0, job.bytes_in - job.bytes_out))));
+    }
+  } else {
+    rows.push(_jobSumRow('Frames processed', fmtNum(c.frames || 0)));
+    rows.push(_jobSumRow('Segments written', String(c.segments ?? 0)));
+    if (c.mode) rows.push(_jobSumRow('Mode', String(c.mode)));
+  }
+  if (job.error) rows.push(_jobSumRow('Error', String(job.error)));
+  const title = job.status === 'error' ? 'JOB FAILED'
+              : job.status === 'stopped' ? 'JOB STOPPED'
+              : 'JOB COMPLETE';
+  svcsModalShow(title, rows.join(''));
+}
+
+/** Fetch the newest job and show its summary if it matches kind + is fresh. */
+async function maybeShowLatestJobSummary(kind) {
+  try {
+    const data = await (await fetch('/api/jobs/recent?limit=1')).json();
+    const job = (data.jobs || [])[0];
+    // Only surface a summary for a job of the expected kind that ended in the
+    // last two minutes - never replay an old entry on page load.
+    if (job && job.kind === kind && job.ended_at &&
+        (Date.now() / 1000 - job.ended_at) < 120) {
+      showJobSummaryModal(job);
+    }
+  } catch (e) { /* history unavailable - skip the summary quietly */ }
+}
+
+// ── Recent jobs panel (HOME) ─────────────────────────────────────────────────
+async function loadRecentJobs() {
+  const list = document.getElementById('jobs-list');
+  if (!list) return;
+  try {
+    const data = await (await fetch('/api/jobs/recent?limit=8')).json();
+    const jobs = data.jobs || [];
+    if (!jobs.length) {
+      list.innerHTML = '<div class="jobs-empty">No jobs yet. Finished compressions (manual runs and auto-compress batches) will be listed here.</div>';
+      return;
+    }
+    list.innerHTML = jobs.map(j => {
+      const c = j.counts || {};
+      const what = j.kind === 'autocompress'
+        ? (c.compressed ?? 0) + ' file(s)'
+        : (c.segments ?? 0) + ' segment(s)';
+      const saved = (j.bytes_in > 0 && j.bytes_out > 0)
+        ? ', saved ' + fmtBytes(Math.max(0, j.bytes_in - j.bytes_out)) : '';
+      const status = String(j.status || 'completed');
+      return '<div class="job-row">' +
+        '<span class="job-status ' + escHtml(status) + '">' + escHtml(status.toUpperCase()) + '</span>' +
+        '<span class="job-label" title="' + escHtml(j.label || '') + '">' + escHtml(j.label || ' - ') + '</span>' +
+        '<span class="job-meta">' + escHtml(what + saved +
+          (j.elapsed_s != null ? ', ' + fmtDuration(j.elapsed_s) : '')) + '</span>' +
+        '</div>';
+    }).join('');
+  } catch (e) { /* panel keeps its previous contents */ }
+}
+
 // ── HLS live streaming (task 4.1) ─────────────────────────────
 let _hlsInstance = null;
 let _hlsStatusTimer = null;

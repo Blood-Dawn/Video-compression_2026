@@ -18,6 +18,7 @@ try:
     from gui.services.path_safety import _safe_output_dir, is_safe_input_source
     from gui.services.cloud_detection import _default_output_dir
     from gui.services import pipeline_runner as _pipeline_runner
+    from gui.services import job_history as _job_history
     from gui.services.pipeline_runner import _run_pipeline_thread
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.state import (_state_lock, _status)
@@ -25,6 +26,7 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.services.path_safety import _safe_output_dir, is_safe_input_source
     from src.gui.services.cloud_detection import _default_output_dir
     from src.gui.services import pipeline_runner as _pipeline_runner
+    from src.gui.services import job_history as _job_history
     from src.gui.services.pipeline_runner import _run_pipeline_thread
 
 pipeline_bp = Blueprint("pipeline", __name__)
@@ -55,6 +57,18 @@ def api_status():
         "progress_pct": progress_pct,
         "eta_seconds": int(eta_seconds) if eta_seconds is not None else None,
     })
+
+
+@pipeline_bp.route("/api/jobs/recent")
+def api_jobs_recent():
+    """Recent finished jobs (manual runs + auto-compress batches), newest first.
+
+    R4 Phase 1 (docs/RESEARCH-UIUX.md finding 2): a persistent job record the
+    operator can audit after stepping away; also feeds the completion-summary
+    modal (finding 3). ?limit=N caps the list (default 20).
+    """
+    limit = request.args.get("limit", 20, type=int)
+    return jsonify({"jobs": _job_history.recent_jobs(limit=limit)})
 
 
 @pipeline_bp.route("/api/start", methods=["POST"])

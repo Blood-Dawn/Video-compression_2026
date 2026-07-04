@@ -22,13 +22,21 @@ Author: Bloodawn (KheivenD)
 import json
 import logging
 import os
+import queue
 import subprocess
+import threading
 import cv2
 import numpy as np
 from pathlib import Path
 from typing import Optional, Tuple
 
 log = logging.getLogger(__name__)
+
+# Max seconds to wait for the FFmpeg fallback to produce a frame before giving
+# up. Normal decode is well under a second per frame; a longer stall means
+# FFmpeg wedged on a corrupt stream - we end the read rather than hang forever
+# (R4 Phase 6 review fix - blocking pipe read is offloaded to a reader thread).
+_FF_READ_TIMEOUT = 30.0
 
 
 class FrameSource:
@@ -75,10 +83,19 @@ class FrameSource:
         self.total_frames = 0
         self.temporal_roi: Optional[Tuple[int, int]] = None  # (start, end) frame numbers
         # R4 Phase 6: FFmpeg-pipe decode mode for vendor/DVR containers OpenCV
-        # cannot demux. None unless the FFmpeg fallback is active.
+        # cannot demux. None unless the FFmpeg fallback is active. A reader
+        # thread drains FFmpeg's stdout into _ff_queue so a stalled decode can
+        # never block the pipeline thread indefinitely.
         self._ff_proc: Optional[subprocess.Popen] = None
         self._ff_frame_bytes = 0
+        self._ff_queue: Optional[queue.Queue] = None
+        self._ff_stop: Optional[threading.Event] = None
+        self._ff_reader: Optional[threading.Thread] = None
         self.decoder = "opencv"
+        # A frame consumed by the open-time probe read, returned first so the
+        # probe never DROPS a frame (seeking back is unreliable on non-seekable
+        # containers like MPEG-TS - R4 Phase 6 review-safety).
+        self._pending_frame: Optional[np.ndarray] = None
 
         # Integer device index (e.g. 0 for the built-in webcam)
         if isinstance(input_path, int):
@@ -216,14 +233,17 @@ class FrameSource:
             if cap.isOpened():
                 # Trust OpenCV only if it can actually produce a frame; some
                 # builds report isOpened() True yet fail on the first read for
-                # an unsupported codec. Probe once, then rewind.
-                ok, _frame = cap.read()
-                if ok:
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                # an unsupported codec. Probe once and KEEP that frame (do NOT
+                # seek back: POS_FRAMES rewind is unreliable / destructive on
+                # non-seekable containers like MPEG-TS, where it silently drops
+                # frames). read() returns the buffered frame first.
+                ok, frame = cap.read()
+                if ok and frame is not None:
+                    self._pending_frame = frame
                     self._cap = cap
                     self.fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-                    self.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                    self.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    self.width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or int(frame.shape[1])
+                    self.height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) or int(frame.shape[0])
                     self.total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
                     self.is_sequence = False
                     self.decoder = "opencv"
@@ -302,24 +322,65 @@ class FrameSource:
         self.total_frames = total
         self.is_sequence = False
         self.decoder = "ffmpeg"
+        # Drain stdout on a daemon thread so the pipeline thread never blocks on
+        # a wedged FFmpeg; frames flow through a small bounded queue (which also
+        # provides natural backpressure onto FFmpeg via the OS pipe buffer).
+        self._ff_queue = queue.Queue(maxsize=8)
+        self._ff_stop = threading.Event()
+        self._ff_reader = threading.Thread(
+            target=self._ff_reader_loop, name="framesource-ffmpeg", daemon=True)
+        self._ff_reader.start()
         log.info("FrameSource: OpenCV could not open %s; decoding via FFmpeg "
                  "(%dx%d @ %.0ffps).", Path(path).name, w, h, fps)
         return True
 
-    def _read_ffmpeg(self) -> Tuple[bool, Optional[np.ndarray]]:
-        """Read exactly one raw BGR frame from the FFmpeg stdout pipe."""
+    def _ff_reader_loop(self) -> None:
+        """Read full BGR frames from FFmpeg stdout into the queue until EOF/stop."""
         proc = self._ff_proc
-        if proc is None or proc.stdout is None:
-            return False, None
         need = self._ff_frame_bytes
-        buf = bytearray()
-        # stdout.read may return short chunks; loop until we have a full frame.
-        while len(buf) < need:
-            chunk = proc.stdout.read(need - len(buf))
-            if not chunk:
-                return False, None   # EOF / stream ended
-            buf.extend(chunk)
-        frame = np.frombuffer(bytes(buf), np.uint8).reshape((self.height, self.width, 3))
+        stop = self._ff_stop
+        q = self._ff_queue
+        if proc is None or proc.stdout is None or q is None or stop is None:
+            return
+        try:
+            while not stop.is_set():
+                buf = bytearray()
+                while len(buf) < need:
+                    if stop.is_set():
+                        return
+                    chunk = proc.stdout.read(need - len(buf))
+                    if not chunk:
+                        q.put(None)       # EOF sentinel
+                        return
+                    buf.extend(chunk)
+                # Publish the frame; block with a short timeout so a paused
+                # consumer plus a set() stop can still tear us down promptly.
+                while not stop.is_set():
+                    try:
+                        q.put(bytes(buf), timeout=0.5)
+                        break
+                    except queue.Full:
+                        continue
+        except (OSError, ValueError):
+            try:
+                q.put(None)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def _read_ffmpeg(self) -> Tuple[bool, Optional[np.ndarray]]:
+        """Return the next FFmpeg-decoded BGR frame, or (False, None) on end/stall."""
+        q = self._ff_queue
+        if q is None:
+            return False, None
+        try:
+            item = q.get(timeout=_FF_READ_TIMEOUT)
+        except queue.Empty:
+            log.warning("FrameSource: FFmpeg decode stalled (no frame in %.0fs); "
+                        "ending the stream.", _FF_READ_TIMEOUT)
+            return False, None
+        if item is None:
+            return False, None      # EOF / reader error
+        frame = np.frombuffer(item, np.uint8).reshape((self.height, self.width, 3))
         return True, frame
 
     # ------------------------------------------------------------------
@@ -345,6 +406,11 @@ class FrameSource:
         elif self._ff_proc is not None:
             return self._read_ffmpeg()
         else:
+            # Return the open-time probe frame first (seek-free; see _init_video).
+            if self._pending_frame is not None:
+                frame = self._pending_frame
+                self._pending_frame = None
+                return True, frame
             return self._cap.read()
 
     def release(self):
@@ -355,6 +421,10 @@ class FrameSource:
         if self._ff_proc is not None:
             proc = self._ff_proc
             self._ff_proc = None
+            # Signal the reader thread to stop, then tear down FFmpeg. Closing
+            # stdout unblocks any in-flight read; terminate/kill ends FFmpeg.
+            if self._ff_stop is not None:
+                self._ff_stop.set()
             try:
                 if proc.stdout is not None:
                     proc.stdout.close()
@@ -369,6 +439,10 @@ class FrameSource:
                     proc.wait(timeout=5)
                 except (OSError, subprocess.SubprocessError):
                     pass
+            if self._ff_reader is not None:
+                self._ff_reader.join(timeout=5)
+                self._ff_reader = None
+            self._ff_queue = None
 
     def get_scene_name(self) -> str:
         """

@@ -33,10 +33,12 @@ try:  # one-way import shim used throughout the repo
     from background_subtraction.background_subtraction import BackgroundSubtractor
     from pipeline.presets import DEFAULT_PRESET, PRESETS, get_preset
     from utils.ffmpeg import ffprobe_path
+    from utils.frame_source import FrameSource
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.background_subtraction.background_subtraction import BackgroundSubtractor
     from src.pipeline.presets import DEFAULT_PRESET, PRESETS, get_preset
     from src.utils.ffmpeg import ffprobe_path
+    from src.utils.frame_source import FrameSource
 
 
 # ── Tunable thresholds ────────────────────────────────────────────────────────
@@ -140,17 +142,20 @@ def analyze_video(
     if not p.exists():
         raise FileNotFoundError(f"no such file: {p}")
 
-    cap = cv2.VideoCapture(str(p))
-    if not cap.isOpened():
-        cap.release()
-        raise ValueError(f"could not open video: {p}")
+    # R4 Phase 6: decode via FrameSource so content detection is universal too
+    # (vendor/DVR containers use the FFmpeg fallback, not cv2-only). Preserve the
+    # ValueError contract when nothing can open the file.
+    try:
+        src = FrameSource(str(p))
+    except RuntimeError as exc:
+        raise ValueError(f"could not open video: {p}") from exc
 
     try:
-        src_fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
+        src_fps = src.fps or 0.0
         if src_fps <= 1e-3 or src_fps > 1000:
             src_fps = 30.0  # some containers report 0; assume a sane default
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+        width = int(src.width or 0)
+        height = int(src.height or 0)
 
         # Take every Nth source frame to approximate sample_fps.
         step = max(1, int(round(src_fps / max(0.1, sample_fps))))
@@ -161,7 +166,7 @@ def analyze_video(
         src_idx = 0
         warmed = 0
         while True:
-            ok, frame = cap.read()
+            ok, frame = src.read()
             if not ok or frame is None:
                 break
             if src_idx >= max_src_frames:
@@ -178,7 +183,7 @@ def analyze_video(
                     fg_fracs.append(fg / total if total else 0.0)
             src_idx += 1
     finally:
-        cap.release()
+        src.release()
 
     frames_analyzed = len(fg_fracs)
     seconds_analyzed = (frames_analyzed * step / src_fps) if frames_analyzed else 0.0

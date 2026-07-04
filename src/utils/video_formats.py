@@ -47,12 +47,15 @@ STANDARD_VIDEO_EXTS = frozenset({
 #   .bu        Brickcom / assorted
 #   .irf       iDVR / assorted
 #   .mxf       Material Exchange Format (pro/broadcast + some NVRs)
-#   .dat       generic MPEG program stream (VCD/DVR dumps)
-#   .raw       raw stream dumps
+# NOTE: the ultra-generic .dat / .raw are deliberately EXCLUDED. They are not
+# reliably video (a .dat could be anything), and including them would widen the
+# library file-serve disclosure surface for no real vendor-format gain (R4
+# Phase 6 review). A user can still compress such a file by passing its path
+# to the pipeline directly; the ingest ALLOWLISTS stay video-specific.
 PROPRIETARY_VIDEO_EXTS = frozenset({
     ".dav", ".264", ".h264", ".265", ".h265", ".hevc",
     ".g64", ".g64x", ".sdv", ".av", ".avr", ".bu", ".irf",
-    ".mxf", ".dat", ".raw",
+    ".mxf",
 })
 
 # Everything SVCS will ACCEPT as a video to ingest/compress.

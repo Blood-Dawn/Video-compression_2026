@@ -36,17 +36,25 @@ The 3 skips are the real-webcam hardware tests (`SVCS_TEST_WEBCAM=1` to run) - i
 | Field | Value |
 |---|---|
 | Command | `scripts/run_tests.ps1` |
-| Log | `logs/pytest_20260704_184250.log` |
-| Result | **1223 passed, 4 skipped, 0 failed** (252 s) |
+| Log | `logs/pytest_20260704_185738.log` |
+| Result | **1226 passed, 4 skipped, 0 failed** (250 s) |
 | Env | Windows 11, Python 3.11.9, `.venv` |
 
 R4 Phase 6 (universal multi-vendor format support, see docs/UNIVERSAL-FORMATS.md)
 added `src/utils/video_formats.py` (central standard/proprietary/all-ingest
 sets), an FFmpeg-pipe decode fallback in `FrameSource` for vendor/DVR containers
 OpenCV cannot demux (forced via `SVCS_FORCE_FFMPEG_DECODE=1`), and widened the
-upload / watch-folder / library / browse gates to the shared set.
-`test_universal_formats.py` (10) covers the sets, gates, both decode paths, and
-clean FFmpeg-process release. Skips unchanged (3 webcam + 1 opt-in Docker).
+upload / watch-folder / library / browse gates to the shared set. The phase
+review then fixed 4: a real MPEG-TS frame-drop (probe frame now buffered, not
+seeked), a stall-proof reader-thread for the FFmpeg pipe, dropping generic
+.dat/.raw from the ingest set, and routing content-detect through the universal
+FrameSource. `test_universal_formats.py` (13) covers the sets, gates, both
+decode paths, frame-drop guard, stall timeout, and clean release. Skips
+unchanged (3 webcam + 1 opt-in Docker build).
+
+This is the final R4 baseline: all six phases (UI/UX, compression, retention,
+server/field split, ONNX plate reader, universal formats) are implemented,
+reviewed, and green.
 
 ## GREEN baseline after R4 Phase 5 (2026-07-04)
 

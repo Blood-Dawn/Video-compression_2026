@@ -10,12 +10,15 @@
 
     Run from the repo root with the .venv activated:
 
-        .\installer\build.ps1                # full build + smoke test
+        .\installer\build.ps1                # full server build + smoke test
+        .\installer\build.ps1 -Edition field # offline field build (SVCS-Field)
         .\installer\build.ps1 -SkipSmoke     # build only
         .\installer\build.ps1 -Quick         # skip --clean (faster iteration)
 
     Build takes 5-15 minutes the first time, 1-3 minutes after that.
-    Output: dist\SVCS\SVCS.exe  (~1.5 GB folder).
+    Output: dist\SVCS\SVCS.exe (server) or dist\SVCS-Field\SVCS-Field.exe (field).
+    R4 Phase 4: -Edition selects the build; both come from installer\svcs.spec
+    (parameterized by the SVCS_BUILD_EDITION env var it sets).
 
 .NOTES
     Author: Bloodawn (KheivenD), 2026-05-14 (installer prep).
@@ -23,6 +26,8 @@
 
 [CmdletBinding()]
 param(
+    [ValidateSet("server", "field")]
+    [string]$Edition = "server", # R4 Phase 4: which build to produce
     [switch]$SkipSmoke,
     [switch]$Quick,
     [switch]$Installer,          # also package dist\SVCS into SVCS-Setup-*.exe via Inno Setup
@@ -33,12 +38,18 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# ── Build edition (R4 Phase 4) ────────────────────────────────────────
+# svcs.spec reads SVCS_BUILD_EDITION to pick the exe name + bundle the runtime
+# edition marker. "server" -> dist\SVCS\SVCS.exe; "field" -> dist\SVCS-Field\...
+$env:SVCS_BUILD_EDITION = $Edition
+$AppName = if ($Edition -eq "field") { "SVCS-Field" } else { "SVCS" }
+
 # ── Resolve repo root regardless of where the script is invoked from ──
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $SpecFile = Join-Path $RepoRoot "installer\svcs.spec"
 $DistDir  = Join-Path $RepoRoot "dist"
 $BuildDir = Join-Path $RepoRoot "build"
-$BundleExe = Join-Path $DistDir "SVCS\SVCS.exe"
+$BundleExe = Join-Path $DistDir "$AppName\$AppName.exe"
 
 # ── Code signing (TASK 5b.1) ──────────────────────────────────────────
 # The signing STEP is wired here; the cert is the owner's to provide (gated  - 

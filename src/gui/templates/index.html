@@ -2170,6 +2170,12 @@
       <div>
         <div class="logo-sub">Surveillance Video Compression System</div>
       </div>
+      {% if not server_features %}
+      <span title="Offline field build: local compression only, no network server features"
+            style="font-family:var(--mono);font-size:0.5rem;font-weight:700;letter-spacing:0.08em;
+                   color:var(--teal);border:1px solid var(--teal);border-radius:3px;
+                   padding:1px 5px;align-self:center;">OFFLINE BUILD</span>
+      {% endif %}
     </div>
     <div class="header-right">
 <div id="status-pill" class="pill offline">
@@ -2798,7 +2804,9 @@
         <button class="tab-btn"        data-tab="autocompress" onclick="switchTab('autocompress')">AUTO-COMPRESS</button>
         <button class="tab-btn"        data-tab="metrics" onclick="switchTab('metrics')">METRICS</button>
         <button class="tab-btn"        data-tab="search"  onclick="switchTab('search')">SEARCH</button>
+        {% if server_features %}
         <button class="tab-btn"        data-tab="tools"   onclick="switchTab('tools')">TOOLS</button>
+        {% endif %}
         <button class="tab-btn"        data-tab="encrypt" onclick="switchTab('encrypt')">ENCRYPT</button>
         <div class="tab-nav-right">
           <button class="btn btn-ghost" style="font-size:0.6rem;padding:0.2rem 0.6rem;" onclick="loadSegments()" title="Refresh segments">↻</button>
@@ -4039,6 +4047,12 @@
     </div>
   </div>
 
+  <!-- R4 Phase 4: build edition, so JS can gate server-only UI. The server
+       build sets true; the field (offline) build sets false. -->
+  <script>
+    window.SVCS_EDITION = "{{ edition }}";
+    window.SVCS_SERVER_FEATURES = {{ 'true' if server_features else 'false' }};
+  </script>
   <script src="{{ url_for('static', filename='js/strings.js') }}"></script>
   <script src="{{ url_for('static', filename='js/setup.js') }}"></script>
   <script src="{{ url_for('static', filename='js/pipeline.js') }}"></script>

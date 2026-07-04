@@ -31,6 +31,23 @@ Path from the stale "48 failed" claim to green: provision the env (cleared 22 en
 
 The 3 skips are the real-webcam hardware tests (`SVCS_TEST_WEBCAM=1` to run) - intentional.
 
+## GREEN baseline after R4 Phase 4 (2026-07-04)
+
+| Field | Value |
+|---|---|
+| Command | `scripts/run_tests.ps1` |
+| Log | `logs/pytest_20260704_174825.log` |
+| Result | **1200 passed, 4 skipped, 0 failed** (194 s) |
+| Env | Windows 11, Python 3.11.9, `.venv` |
+
+R4 Phase 4 (server/field build split, see docs/BUILDS.md) added
+`src/gui/edition.py` (edition resolution), edition-aware
+`register_blueprints` (the field build drops RTSP + HLS), template gating of
+the TOOLS tab, run_gui localhost/telemetry enforcement, a parameterized
+`installer/svcs.spec` (`SVCS_BUILD_EDITION`), and `test_edition.py` (12). The
+default module app is unchanged (server, 73 routes), so every other guard
+holds. Skips unchanged (3 webcam + 1 opt-in Docker build).
+
 ## GREEN baseline after R4 Phase 3 (2026-07-04)
 
 | Field | Value |

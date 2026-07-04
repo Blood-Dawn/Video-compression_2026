@@ -238,6 +238,26 @@ def main():
                              "(not recommended on an untrusted network).")
     args = parser.parse_args()
 
+    # ── Build edition (R4 Phase 4) ──────────────────────────────────────
+    # The "field" (offline, local-compression-only) build force-binds to
+    # 127.0.0.1 - it has no server surface (no RTSP/HLS, TOOLS hidden) and must
+    # never be exposed on the network - and turns telemetry off (offline).
+    try:
+        from gui.edition import get_edition, is_field
+        _edition = get_edition()
+    except Exception:  # noqa: BLE001
+        _edition = "server"
+        is_field = lambda e=None: False  # noqa: E731
+    if is_field(_edition):
+        if args.host not in ("127.0.0.1", "localhost", "::1"):
+            print(f"  [field] offline build: overriding --host {args.host} -> 127.0.0.1 "
+                  "(the field build is local-only and never binds the network).")
+        args.host = "127.0.0.1"
+        # Offline build: hard kill-switch on usage stats (utils.usage_stats
+        # honours SVCS_DISABLE_USAGE_STATS even if consent was previously given).
+        os.environ["SVCS_DISABLE_USAGE_STATS"] = "1"
+        os.environ.setdefault("SVCS_EDITION", "field")
+
     # ── Crash reporting (opt-in) ────────────────────────────────────────
     # Wire Sentry BEFORE we import gui.app so unhandled errors during
     # Flask startup are also captured. The helper is a no-op unless the

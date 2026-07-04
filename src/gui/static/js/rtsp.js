@@ -219,8 +219,12 @@ function rtspCopyUrl() {
   }
 }
 
-// Initial RTSP state load on page open
-window.addEventListener('DOMContentLoaded', () => { _rtspRefresh(); });
+// Initial RTSP state load on page open. Skipped in the field (offline) build,
+// where the RTSP server routes are not registered (R4 Phase 4).
+window.addEventListener('DOMContentLoaded', () => {
+  if (window.SVCS_SERVER_FEATURES === false) return;
+  _rtspRefresh();
+});
 
 // Auto-detect Google Drive and set as default output on page load
 window.addEventListener('DOMContentLoaded', () => { _initGDriveOutput(); });

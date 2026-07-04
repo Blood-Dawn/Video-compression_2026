@@ -62,6 +62,11 @@ build/
 dist/
 *.spec.bak
 
+# R4 Phase 4: a stray edition marker at the repo root must never be committed
+# (it would force source runs into that edition). The frozen builds bundle it
+# from build/edition_marker/ instead.
+/edition.txt
+
 # OS
 .DS_Store
 Thumbs.db

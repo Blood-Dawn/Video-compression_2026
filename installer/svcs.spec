@@ -42,6 +42,25 @@ from PyInstaller.utils.hooks import collect_submodules
 REPO_ROOT = Path(SPECPATH).parent  # noqa: F821  (SPECPATH injected by PyInstaller)
 SRC = REPO_ROOT / "src"
 
+# ── Build edition (R4 Phase 4) ────────────────────────────────────────────────
+# One spec, two builds. SVCS_BUILD_EDITION selects which:
+#   "server" (default) -> the full dashboard, exe name "SVCS" (unchanged).
+#   "field"            -> offline local-compression-only, exe name "SVCS-Field",
+#                         no server surface (the field edition drops RTSP/HLS at
+#                         runtime via the bundled edition marker).
+# Build the field exe with:  SVCS_BUILD_EDITION=field pyinstaller installer/svcs.spec
+_EDITION = (os.environ.get("SVCS_BUILD_EDITION", "server") or "server").strip().lower()
+if _EDITION not in ("server", "field"):
+    _EDITION = "server"
+_APP_NAME = "SVCS" if _EDITION == "server" else "SVCS-Field"
+
+# Write the edition marker that gui/edition.py reads at runtime (via _MEIPASS),
+# and bundle it at the frozen root so the build knows which edition it is.
+_marker_dir = REPO_ROOT / "build" / "edition_marker"
+_marker_dir.mkdir(parents=True, exist_ok=True)
+_marker_file = _marker_dir / "edition.txt"
+_marker_file.write_text(_EDITION, encoding="utf-8")
+
 # Make our first-party packages importable while this spec executes so
 # collect_submodules() below can walk them.
 for _p in (str(SRC), str(REPO_ROOT)):
@@ -116,6 +135,10 @@ if _ffmpeg_dir.exists():
 _license = REPO_ROOT / "LICENSE"
 if _license.exists():
     datas.append((str(_license), "."))
+
+# Edition marker (R4 Phase 4): gui/edition.py reads <bundle>/edition.txt to know
+# whether this is the "server" or "field" build. Bundled at the frozen root.
+datas.append((str(_marker_file), "."))
 
 
 # ── hiddenimports: modules PyInstaller's analyzer doesn't find on its own ──
@@ -279,7 +302,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="SVCS",
+    name=_APP_NAME,          # "SVCS" (server) or "SVCS-Field" (R4 Phase 4)
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -300,5 +323,5 @@ coll = COLLECT(
     strip=False,
     upx=False,
     upx_exclude=[],
-    name="SVCS",
+    name=_APP_NAME,          # dist/SVCS (server) or dist/SVCS-Field (R4 Phase 4)
 )

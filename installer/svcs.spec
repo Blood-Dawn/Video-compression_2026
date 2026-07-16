@@ -36,7 +36,7 @@ import os
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 # PyInstaller exposes SPECPATH; resolve repo root relative to it.
 REPO_ROOT = Path(SPECPATH).parent  # noqa: F821  (SPECPATH injected by PyInstaller)
@@ -281,11 +281,27 @@ excludes = [
 ]
 
 
+# ── cv2 / OpenCV explicit collection ──────────────────────────────────────
+# The opencv-contrib-python 4.x wheel loads its native extension through a
+# loader shim (cv2/__init__.py + config.py / config-3.py) rather than a plain
+# top-level cv2.pyd. PyInstaller's static analysis followed our first-party
+# `import cv2` but did NOT collect the extension binary, the config shims, or
+# the cv2/data dir - so the slim build shipped with NO cv2 at all and the
+# frozen app died at launch with "No module named 'cv2'" (the build smoke test
+# caught it). collect_all pulls the extension binaries + config + data so the
+# frozen import resolves. Keeping it explicit means a PyInstaller/opencv version
+# bump can't silently drop OpenCV again.
+# Author: Bloodawn (KheivenD), 2026-07-16 (frozen cv2 collection fix).
+_cv2_datas, _cv2_binaries, _cv2_hidden = collect_all("cv2")
+datas += _cv2_datas
+hiddenimports += _cv2_hidden
+
+
 # ── Analysis / PYZ / EXE / COLLECT ────────────────────────────────────────
 a = Analysis(
     [str(REPO_ROOT / "installer" / "launcher.py")],
     pathex=[str(REPO_ROOT), str(SRC)],
-    binaries=[],
+    binaries=_cv2_binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],

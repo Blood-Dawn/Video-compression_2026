@@ -2,7 +2,7 @@
 name = "Video-compression"
 # v2 development line. v1.0.0 is tagged on `main` (sponsor handoff). The
 # productization work on `app` is v2-in-progress.
-version = "2.1.0.dev0"
+version = "2.2.0.dev0"
 description = "Open-source selective video compression for static surveillance cameras"
 readme = "README.md"
 # 3.11+ matches CONTRIBUTING.md and the codebase, which already uses

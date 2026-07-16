@@ -14,7 +14,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-EXPECTED = "2.1.0.dev0"
+EXPECTED = "2.2.0.dev0"
 
 
 def _pyproject_version():

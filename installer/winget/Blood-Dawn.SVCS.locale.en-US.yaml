@@ -2,7 +2,7 @@
 #
 # winget default-locale manifest for SVCS (R3.2a).
 PackageIdentifier: Blood-Dawn.SVCS
-PackageVersion: 2.1.0.dev0
+PackageVersion: 2.2.0.dev0
 PackageLocale: en-US
 Publisher: SVCS Project
 PublisherUrl: https://github.com/Blood-Dawn/Video-compression_2026

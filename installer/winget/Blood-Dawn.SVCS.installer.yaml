@@ -7,10 +7,17 @@
 #
 # NOTE: InstallerSha256 must match the EXACT released asset. It is recomputed
 # against the rebuilt installer at release time (scripts/winget_validate.ps1
-# -Recompute helps). The InstallerUrl tag (v2.1.0.dev0) must match the GitHub
+# -Recompute helps). The InstallerUrl tag (v2.2.0.dev0) must match the GitHub
 # Release tag that hosts the asset.
+#
+# STALE SHA WARNING (2026-07-16): the version below was bumped to 2.2.0.dev0 to
+# match pyproject, but the SHA still belongs to the 2.1.0.dev0 asset because the
+# 2.2.0 installer has not been built or released yet. The structural test only
+# checks the 64-hex FORMAT, so it cannot catch this. Do NOT submit to winget
+# until you rebuild the installer and run `pwsh scripts/winget_validate.ps1
+# -Recompute`. Tracked in docs/BLOCKERS.md.
 PackageIdentifier: Blood-Dawn.SVCS
-PackageVersion: 2.1.0.dev0
+PackageVersion: 2.2.0.dev0
 InstallerType: inno
 Scope: machine
 InstallModes:
@@ -25,7 +32,7 @@ ProductCode: '{8E2C1F4A-3B6D-4E2A-9C7F-5A1D0B2E6C44}_is1'
 ReleaseDate: 2026-06-20
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v2.1.0.dev0/SVCS-Setup-2.1.0.dev0.exe
+    InstallerUrl: https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v2.2.0.dev0/SVCS-Setup-2.2.0.dev0.exe
     InstallerSha256: FD733100A8C7AB090708E26807658F399C7E17310AE86D475A6AACDED5097E30
 ManifestType: installer
 ManifestVersion: 1.6.0

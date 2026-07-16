@@ -4,7 +4,7 @@
 # (version / installer / locale) is what `winget validate` and the
 # microsoft/winget-pkgs submission consume. See docs/winget-submission.md.
 PackageIdentifier: Blood-Dawn.SVCS
-PackageVersion: 2.1.0.dev0
+PackageVersion: 2.2.0.dev0
 DefaultLocale: en-US
 ManifestType: version
 ManifestVersion: 1.6.0

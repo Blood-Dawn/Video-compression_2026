@@ -230,6 +230,9 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             roi_qp=bool(config.get("roi_qp", False)),
             gop_seconds=int(config.get("gop_seconds", 20)
                             if config.get("gop_seconds") is not None else 20),
+            # R5 TASK 5.1: target perceptual quality instead of a fixed CRF.
+            # None keeps today's fixed-CRF behaviour exactly.
+            target_vmaf=config.get("target_vmaf"),
         )
         _record_encode_stat(config, success=True)
 

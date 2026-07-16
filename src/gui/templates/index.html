@@ -2330,6 +2330,23 @@
           <summary style="cursor:pointer;font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);">
             Storage &amp; quality (advanced)
           </summary>
+          <!-- R5 TASK 5.1: target perceptual quality instead of a fixed CRF.
+               Off by default, so the fixed-CRF modes are untouched. -->
+          <div class="config-field">
+            <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.62rem;cursor:pointer;">
+              <input type="checkbox" id="targetvmaf-toggle" onchange="onTargetVmafToggle()" />
+              Target quality (VMAF) instead of fixed CRF
+            </label>
+            <div id="targetvmaf-row" style="display:none;margin-top:0.35rem;">
+              <input type="number" id="targetvmaf-input" min="85" max="97" step="1" value="93"
+                     style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
+              <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
+                Spends only the bits needed to hit this perceived quality (85 to 97; 93 is a good
+                default). Smallest file at constant quality. Adds a short one-time search per clip;
+                the result is cached. Falls back to the fixed CRF if VMAF is unavailable.
+              </div>
+            </div>
+          </div>
           <div class="config-field" style="margin-top:0.4rem;">
             <label class="config-label" for="maxbitrate-input">Max bitrate cap (kbps)</label>
             <input type="number" id="maxbitrate-input" min="0" max="200000" placeholder="0 = uncapped"

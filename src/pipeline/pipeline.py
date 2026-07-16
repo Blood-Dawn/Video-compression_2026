@@ -153,6 +153,7 @@ def run_pipeline(
     denoise: str = "",
     roi_qp: bool = False,
     gop_seconds: int = 20,
+    target_vmaf: Optional[float] = None,
 ):
     """
     Main pipeline loop.
@@ -325,6 +326,32 @@ def run_pipeline(
     # Author: Bloodawn (KheivenD), 2026-06-02 (per-mode codec).
     if codec is None or str(codec).strip().lower() in ("", "auto"):
         codec = default_codec_for_mode(mode)
+
+    # ── VMAF-targeted rate control (R5 TASK 5.1) ─────────────────────────────
+    # Opt-in: when target_vmaf is set and the source is a FILE, sample-encode a
+    # few short segments to find the largest CRF (smallest file) that still
+    # clears the perceptual target, and use that instead of the fixed CRF. The
+    # search never raises and never hangs: any failure (no libvmaf, live source,
+    # no convergence) keeps resolved_crf and logs the reason.
+    # Design: docs/RESEARCH-VMAF-TARGET.md.
+    if target_vmaf is not None and not isinstance(input_source, int):
+        try:
+            from compression.vmaf_target import find_crf_for_target
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.compression.vmaf_target import find_crf_for_target
+        _tv = find_crf_for_target(
+            input_source, codec=codec, fixed_crf=resolved_crf,
+            target_vmaf=target_vmaf, preset=encode_preset,
+        )
+        if _tv.used_target:
+            log.info("VMAF target %.1f: CRF %d -> %d (measured VMAF %.2f, "
+                     "%d probe(s)%s)", _tv.target_vmaf, resolved_crf, _tv.crf,
+                     _tv.measured_vmaf if _tv.measured_vmaf is not None else -1.0,
+                     _tv.probes, ", cached" if _tv.cached else "")
+            resolved_crf = _tv.crf
+        else:
+            log.info("VMAF target requested but not used (%s); keeping fixed CRF %d.",
+                     _tv.fallback_reason, resolved_crf)
 
     # Background CRF (dual-CRF background stream). None keeps the encoder's own
     # default; a preset (M3 TASK 3.1) or explicit caller can raise it for more
@@ -897,6 +924,10 @@ if __name__ == "__main__":
                         help="Pre-encode denoiser for night/IR footage. Empty = off.")
     parser.add_argument("--roi-qp", action="store_true",
                         help="Encoder-level ROI (x264/x265 only): degrade long-static areas via addroi.")
+    parser.add_argument("--target-vmaf", type=float, default=None,
+                        help="Target perceptual quality (VMAF 85-97, e.g. 93) instead of a "
+                             "fixed CRF. Sample-searches the smallest CRF that clears the "
+                             "target; falls back to the fixed CRF if VMAF is unavailable.")
     args = parser.parse_args()
 
     input_src = args.input
@@ -927,4 +958,5 @@ if __name__ == "__main__":
         gop_seconds=args.gop_seconds,
         denoise=args.denoise,
         roi_qp=args.roi_qp,
+        target_vmaf=args.target_vmaf,
     )

@@ -18,6 +18,23 @@ let segmentsInterval = null;
 let jobsInterval = null;   // recent-jobs panel refresh (R4 Phase 1)
 
 
+// ── Target quality (VMAF) toggle (R5 TASK 5.1) ─────────────────
+// Reveals the target field only when target mode is on. Off by default so the
+// fixed-CRF behaviour is unchanged; the CRF field is dimmed while on because
+// the search picks the CRF.
+function onTargetVmafToggle() {
+  const on = !!(document.getElementById('targetvmaf-toggle') || {}).checked;
+  const row = document.getElementById('targetvmaf-row');
+  if (row) row.style.display = on ? '' : 'none';
+  const crf = document.getElementById('crf-input');
+  if (crf) {
+    crf.disabled = on;
+    crf.title = on ? 'Ignored while Target quality (VMAF) is on - the search picks the CRF.' : '';
+    crf.style.opacity = on ? '0.45' : '';
+  }
+}
+window.onTargetVmafToggle = onTargetVmafToggle;
+
 // ── Preset card selection ──────────────────────────────────────
 function selectPreset(card) {
   document.querySelectorAll('.preset-card').forEach(c => c.classList.remove('selected'));
@@ -377,6 +394,11 @@ async function startPipeline() {
     verbose:          (document.getElementById('verbose-toggle') || {}).checked || false,
     // R4 Phase 2 efficiency knobs (docs/RESEARCH-COMPRESSION.md). Blank/0 keep
     // the safe defaults; the backend clamps every value.
+    // R5 TASK 5.1: target perceptual quality. Sent ONLY when the toggle is on;
+    // omitted (null) otherwise so the backend keeps the fixed-CRF path.
+    target_vmaf:      ((document.getElementById('targetvmaf-toggle') || {}).checked
+                       ? ((document.getElementById('targetvmaf-input') || {}).value || '').trim()
+                       : null),
     max_bitrate_kbps: ((document.getElementById('maxbitrate-input') || {}).value || '').trim(),
     gop_seconds:      ((document.getElementById('gop-input') || {}).value || '').trim(),
     denoise:          (document.getElementById('denoise-select') || {}).value || '',

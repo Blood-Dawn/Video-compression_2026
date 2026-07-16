@@ -31,6 +31,15 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 
 pipeline_bp = Blueprint("pipeline", __name__)
 
+# R5 TASK 5.1: the supported VMAF target band, sourced from the search module so
+# the route and the searcher cannot drift apart.
+try:
+    from compression.vmaf_target import TARGET_VMAF_MIN as _TARGET_VMAF_MIN
+    from compression.vmaf_target import TARGET_VMAF_MAX as _TARGET_VMAF_MAX
+except ModuleNotFoundError:  # pragma: no cover - import path shim
+    from src.compression.vmaf_target import TARGET_VMAF_MIN as _TARGET_VMAF_MIN
+    from src.compression.vmaf_target import TARGET_VMAF_MAX as _TARGET_VMAF_MAX
+
 
 def _clamp_int(value, default: int, lo: int, hi: int) -> int:
     """Coerce ``value`` to an int in [lo, hi], or ``default`` if unparseable.
@@ -51,6 +60,27 @@ def _clamp_int(value, default: int, lo: int, hi: int) -> int:
         return max(lo, min(hi, int(f)))
     except (TypeError, ValueError, OverflowError):
         return default
+
+
+def _clamp_float_or_none(value, lo: float, hi: float):
+    """Coerce ``value`` to a float in [lo, hi], or None when unset/unparseable.
+
+    R5 TASK 5.1: target_vmaf is optional - None means "keep the fixed CRF", so an
+    absent or garbage value must resolve to None (today's behaviour), never a
+    surprise target and never a 500 (inf/nan are rejected like _clamp_int does).
+    """
+    try:
+        if value is None:
+            return None
+        s = str(value).strip()
+        if s == "":
+            return None
+        f = float(s)
+        if f != f or f in (float("inf"), float("-inf")):
+            return None
+        return max(lo, min(hi, f))
+    except (TypeError, ValueError, OverflowError):
+        return None
 
 
 @pipeline_bp.route("/api/status")
@@ -199,6 +229,12 @@ def api_start():
         # Keyframe interval in seconds (long GOP for static cameras). Default
         # 20s; 0 keeps the FFmpeg default. Clamped to a seekable range.
         "gop_seconds": _clamp_int(data.get("gop_seconds"), 20, 0, 600),
+        # ── R5 TASK 5.1: VMAF-targeted rate control ──
+        # None (absent/blank/garbage) keeps the fixed-CRF path exactly as today.
+        # A value clamps into the supported perceptual band before it can reach
+        # the search. See docs/RESEARCH-VMAF-TARGET.md.
+        "target_vmaf": _clamp_float_or_none(
+            data.get("target_vmaf"), _TARGET_VMAF_MIN, _TARGET_VMAF_MAX),
     }
 
     _pipeline_runner._stop_event = threading.Event()

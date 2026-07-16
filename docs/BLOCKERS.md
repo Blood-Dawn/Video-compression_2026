@@ -216,3 +216,38 @@ as the run reaches them:
   owner provides it. Linux AppImage (5b.2) is done first (no cert needed).
 - **🚦 Rust encoder spike (M6)** - explicitly out of scope for this run; needs the
   owner's go-ahead. Skipped entirely.
+
+- **R5 TASK 5.2 - background-reference compression: the QP half of the thesis is
+  refuted by measurement; the win belongs to TASK 5.3.** Not a gate, and no code
+  was shipped for the mode. TASK 5.2 proposed three mechanisms; each was measured
+  on libx264 against both a clean synthetic static clip and a realistic one with
+  per-frame sensor noise:
+  1. *"raise the quantizer hard on background-only regions"* - **saturated.** File
+     size is essentially FLAT above qoffset ~0.30 while VMAF falls steeply. On the
+     noisy clip: qoffset 0.30 -> 759,847 B @ VMAF 95.65; qoffset 0.80 -> 780,159 B
+     @ VMAF 67.23 (BIGGER, and 28 VMAF points worse). R4's existing ROI already
+     sits at qoffset 0.43 by default, past the knee. There are no bits left to
+     reclaim here.
+  2. *"force a periodic clean background keyframe to act as a long-term reference"*
+     - **already done, better, by the codec.** x264's mb-tree propagates bits to
+     heavily-referenced blocks automatically. Every manual lever measured a wash or
+     a regression: `-i_qfactor 2.0` -> 21,653 B @ 96.43 vs baseline 21,622 B @ 96.79;
+     `-refs 8` -> 21,810 B @ 96.79; `-refs 16 -i_qfactor 2.0` -> 22,055 B @ 96.43.
+  3. *"let subsequent frames delta against it (conditional-replenishment style)"* -
+     **already implicit** in inter-frame skip coding; nothing to add at the ffmpeg
+     layer. An explicit injected long-term reference would need H.264 LTR control
+     that libx264 exposes no API for (NVENC does, but that is hardware-gated).
+  There is also a structural argument that needs no measurement: the proposed mode
+  differed from R4 ROI only by widening the qoffset clamp (0.6 -> 0.8), so for every
+  qoffset <= 0.6 the two emit **byte-identical** output. It could only ever differ in
+  the 0.6-0.8 band, which the data above shows is strictly worse. It therefore cannot
+  satisfy its own acceptance ("smaller than the R4 ROI mode at equal measured VMAF").
+  **What actually wins on static cameras is keyframe frequency**, which is TASK 5.3's
+  stated scope ("extending the GOP through genuinely static stretches"): on the same
+  static clip at fixed CRF 23, `-g 15` -> 37,578 B @ VMAF 96.80 vs `-g 150` -> 11,000 B
+  @ VMAF 96.83, i.e. **70% smaller at equal VMAF**. **Resolution:** 5.2 ships only the
+  piece that is real and that 5.3 requires - the static-scene measurement derived from
+  the existing foreground signal (`background_motion_score` / `scene_is_static()`),
+  which 5.3's risk note explicitly calls for ("drive this from the same foreground
+  signal 5.2 uses"). No user-facing "background reference" toggle was shipped, because
+  a control that trades 28 VMAF points for 0 bytes would mislead users.

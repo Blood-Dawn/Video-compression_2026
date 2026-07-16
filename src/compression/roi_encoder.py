@@ -151,6 +151,32 @@ _ROI_GRID_H = 9
 # cell (>= threshold) is always protected at full quality.
 _ROI_ACTIVE_THRESH = 0.5
 
+# ── Background-reference mode (R5 TASK 5.2) ──────────────────────────────────
+# ── Static-scene measurement (R5 TASK 5.2) ────────────────────────────────────
+# Is the camera ACTUALLY static? The R4 ROI cannot tell: if the camera shakes or
+# hunts exposure, "background" cells are not really background. This measures
+# staticity from the foreground signal the pipeline already produces, so no
+# second detector is introduced.
+#
+# The score is the time-averaged fraction of grid cells covered by foreground.
+# A fixed camera with intermittent motion parks near zero (a walker lights a
+# handful of 144 cells); shake or exposure hunting lights most of the frame.
+# Above this fraction the static assumption is not trusted.
+#
+# NOTE ON SCOPE: 5.2 originally also proposed pushing background QP harder once
+# static. That was built and then REMOVED, because measurement refuted it: file
+# size is flat above qoffset ~0.30 while VMAF falls steeply (on noisy static
+# footage, qoffset 0.30 -> 759,847 B @ VMAF 95.65 vs 0.80 -> 780,159 B @ 67.23,
+# i.e. bigger AND 28 VMAF points worse). R4's default ROI already sits at 0.43,
+# past the knee, so there are no bits left to reclaim by quantizing background
+# harder. What genuinely shrinks static-camera footage is keyframe frequency,
+# which is TASK 5.3's scope; this score is the signal 5.3 gates on. Full
+# measurements and reasoning: docs/BLOCKERS.md.
+_STATIC_SCENE_MAX_ACTIVE_FRAC = 0.35
+# Frames of observation before the score is trusted at all: a cold start must
+# not let one empty frame declare the scene static.
+_STATIC_SCENE_MIN_FRAMES = 30
+
 
 def _ffmpeg_has_encoder(name: str) -> bool:
     """Return True if `ffmpeg -encoders` lists the given encoder name.
@@ -293,6 +319,13 @@ class ROIEncoder:
         # of a session gets no ROI (fail-safe: full quality everywhere).
         self._activity_grid = np.zeros((_ROI_GRID_H, _ROI_GRID_W), dtype=np.float64)
         self._roi_segments_seen = 0
+
+        # ── Static-scene measurement (R5 TASK 5.2) ──
+        # Running measure of how static the scene really is: the time-averaged
+        # fraction of grid cells lit by foreground. Starts pessimistic (1.0 =
+        # "assume moving") so a cold start never reports a static scene.
+        self._bg_motion_score = 1.0
+        self._bg_frames_seen = 0
         self.db_path = db_path
         self.draw_roi_boxes = draw_roi_boxes
         # db.py owns the schema. Delegate initialization so encoder and
@@ -476,6 +509,20 @@ class ROIEncoder:
         parts.extend(self._build_roi_filters(frame_w, frame_h))
         return ",".join(parts) if parts else None
 
+    def _background_qoffset(self) -> float:
+        """The addroi qoffset applied to long-static (background) cells.
+
+        A fraction of the codec's full QP range, approximating the configured
+        CRF gap and capped well below addroi's +1.0 extreme.
+
+        The 0.6 cap is not arbitrary caution, and R5 TASK 5.2 tried and failed
+        to raise it: measured size is FLAT above qoffset ~0.30 while VMAF falls
+        steeply, so quantizing background harder than this buys no bytes and
+        only costs quality. See docs/BLOCKERS.md for the measurements.
+        """
+        qoff = (self.background_crf - self.foreground_crf) / 51.0
+        return max(0.05, min(0.6, qoff))
+
     def _build_roi_filters(self, frame_w: int, frame_h: int) -> List[str]:
         """addroi filter instances degrading long-static grid cells.
 
@@ -498,10 +545,7 @@ class ROIEncoder:
         # A cell is degradable only once its decayed activity drops below the
         # threshold; recently-active cells stay full quality (fail-safe).
         static_mask = grid < _ROI_ACTIVE_THRESH
-        # qoffset is a fraction of the codec's full QP range; approximate the
-        # configured CRF gap, capped well below addroi's +1.0 extreme.
-        qoff = (self.background_crf - self.foreground_crf) / 51.0
-        qoff = max(0.05, min(0.6, qoff))
+        qoff = self._background_qoffset()
         gh, gw = grid.shape
         cell_w = frame_w / gw
         cell_h = frame_h / gh
@@ -531,17 +575,46 @@ class ROIEncoder:
             self._activity_grid *= 0.5
 
     def _note_roi_activity(self, boxes, frame_w: int, frame_h: int) -> None:
-        """Mark grid cells covered by this frame's foreground boxes."""
-        if not boxes or frame_w <= 0 or frame_h <= 0:
+        """Mark grid cells covered by this frame's foreground boxes.
+
+        Also updates the static-scene score (R5 TASK 5.2) from the SAME
+        foreground signal, so no second motion detector is introduced.
+        """
+        if frame_w <= 0 or frame_h <= 0:
             return
         grid = self._activity_grid
         gh, gw = grid.shape
-        for bx, by, bw, bh in boxes:
+        touched = np.zeros((gh, gw), dtype=bool)
+        for bx, by, bw, bh in (boxes or []):
             c0 = max(0, min(gw - 1, int(bx * gw / frame_w)))
             c1 = max(0, min(gw - 1, int((bx + max(1, bw)) * gw / frame_w)))
             r0 = max(0, min(gh - 1, int(by * gh / frame_h)))
             r1 = max(0, min(gh - 1, int((by + max(1, bh)) * gh / frame_h)))
             grid[r0:r1 + 1, c0:c1 + 1] += 1.0
+            touched[r0:r1 + 1, c0:c1 + 1] = True
+        # Static score: EMA of the per-frame lit-cell fraction. An empty frame
+        # (no boxes) legitimately scores 0 and pulls the average toward static.
+        frac = float(touched.sum()) / float(gh * gw)
+        alpha = 0.05
+        self._bg_motion_score = (1.0 - alpha) * self._bg_motion_score + alpha * frac
+        self._bg_frames_seen += 1
+
+    @property
+    def background_motion_score(self) -> float:
+        """Time-averaged fraction of the frame showing foreground (0 = static)."""
+        return self._bg_motion_score
+
+    def scene_is_static(self) -> bool:
+        """True when the camera is measurably static (R5 TASK 5.2).
+
+        Camera shake or auto-exposure lights most of the grid and fails this
+        check, so callers can fall back rather than assume a stable scene.
+        TASK 5.3 gates GOP extension on this: holding one reference across a
+        long stretch is only safe when the stretch is genuinely static.
+        """
+        if self._bg_frames_seen < _STATIC_SCENE_MIN_FRAMES:
+            return False        # not enough evidence yet; stay conservative
+        return self._bg_motion_score <= _STATIC_SCENE_MAX_ACTIVE_FRAC
 
     def encode_segment(
         self,

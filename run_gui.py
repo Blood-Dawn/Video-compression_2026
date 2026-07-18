@@ -324,7 +324,8 @@ def main():
     # A non-localhost bind exposes the dashboard on the network; require auth
     # (or an explicit --no-auth) before we ever call app.run().
     try:
-        from gui.auth import decide_auth, install_basic_auth, AuthConfigError
+        from gui.auth import (decide_auth, install_basic_auth, AuthConfigError,
+                              bind_exposure_warning)
         decision = decide_auth(args.host, no_auth=args.no_auth,
                                username=args.username, password=args.password)
     except AuthConfigError as exc:
@@ -334,8 +335,13 @@ def main():
         install_basic_auth(app, decision.username, decision.password)
         print(f"  Dashboard auth:  ENABLED (user {decision.username!r})")
     elif decision.auth_required:
-        print("  Dashboard auth:  DISABLED via --no-auth — exposed on the "
+        print("  Dashboard auth:  DISABLED via --no-auth - exposed on the "
               f"network at {args.host} with NO login.")
+
+    # M0.8: say it out loud when the bind reaches past the local machine.
+    _exposure = bind_exposure_warning(args.host)
+    if _exposure:
+        print(f"\n  [warn] {_exposure}\n")
 
     if not args.no_browser:
         Timer(1.2, _open_browser, args=[args.host, args.port]).start()

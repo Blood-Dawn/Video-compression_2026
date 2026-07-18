@@ -238,6 +238,65 @@ def _record_success(ip: str) -> None:
         _fail_times.pop(ip, None)
 
 
+def is_private_bind(host: str) -> bool:
+    """True if ``host`` is loopback or a private/link-local range.
+
+    "Private" here means the dashboard is reachable only from networks the
+    operator plausibly controls: loopback, RFC1918, RFC4193 unique-local,
+    link-local, and the 100.64.0.0/10 CGNAT block that Tailscale uses.
+
+    0.0.0.0 and :: are NOT private: they bind every interface, which on a
+    machine with a public IP means the dashboard is on the public internet.
+    """
+    h = (host or "").strip().lower()
+    if h in _LOCALHOST_HOSTS:
+        return True
+    try:
+        import ipaddress
+        addr = ipaddress.ip_address(h)
+    except ValueError:
+        # A hostname rather than a literal. Cannot classify without resolving,
+        # and resolving at startup is a DNS dependency we do not want, so treat
+        # it as not-private and let the warning fire. A false warning is much
+        # cheaper than silently publishing surveillance footage.
+        return False
+    if addr.is_unspecified:          # 0.0.0.0 / :: - every interface
+        return False
+    if addr.is_loopback or addr.is_private or addr.is_link_local:
+        return True
+    # Tailscale hands out 100.64.0.0/10 (RFC 6598 CGNAT). Python reports those
+    # as neither private nor global, so without this branch the classifier
+    # would warn about the exact VPN this project recommends.
+    try:
+        import ipaddress as _ip
+        if addr.version == 4 and addr in _ip.ip_network("100.64.0.0/10"):
+            return True
+    except ValueError:  # pragma: no cover - defensive
+        pass
+    return False
+
+
+def bind_exposure_warning(host: str) -> Optional[str]:
+    """Return a warning for a bind that may expose the dashboard, else None.
+
+    M0.8. The dashboard serves recorded video of real people over plain HTTP,
+    and the app used to actively recommend port-forwarding and public tunnels.
+    A start that reaches beyond the local machine should say so out loud.
+    """
+    if is_private_bind(host):
+        return None
+    return (
+        f"Binding to {host!r} may expose this dashboard beyond your local "
+        "network.\n"
+        "           It serves recorded video of real people over plain HTTP, "
+        "so the password\n"
+        "           is sent in cleartext on every request. Prefer a VPN "
+        "(WireGuard / Tailscale)\n"
+        "           or a reverse proxy with real TLS. Do NOT forward this "
+        "port on your router."
+    )
+
+
 def _presented_bearer() -> Optional[str]:
     """Return the Bearer token on this request, or None.
 

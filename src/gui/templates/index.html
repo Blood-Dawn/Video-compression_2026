@@ -3852,7 +3852,11 @@
           </div>
           <div class="help-row">
             <span class="help-term">Different network?</span>
-            <span class="help-def">If your teammate is not on the same local network (e.g. off-campus), they need a VPN or port-forward. Forward TCP port 5000 on your router, or use a tool like <em>ngrok</em> (<code>ngrok http 5000</code>) to get a public URL.</span>
+            <span class="help-def">Use a VPN. <strong>WireGuard</strong> or <strong>Tailscale</strong> put the remote device on your network, so the dashboard stays private and nothing is published to the internet. Second best is a reverse proxy you control (Caddy or nginx) terminating real TLS, with a strong dashboard password set.</span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Do not port-forward</span>
+            <span class="help-def"><strong>Do not forward port 5000 on your router, and do not use a public tunnel service.</strong> This dashboard serves recorded video of real people and the server speaks plain HTTP, so a forwarded port publishes that footage and replays your password in cleartext on every request. A public tunnel additionally routes all of it through a third party, which defeats the point of self-hosting. If you can reach it from a coffee shop without a VPN, so can everyone else.</span>
           </div>
           <div class="help-row">
             <span class="help-term">Phones / tablets</span>

@@ -960,25 +960,45 @@ The Upload zone (prominent drag-and-drop area in Step 1 of the sidebar) lets any
 
 Use Upload when:
 - You're accessing the server from a different machine on the same network
-- You're using ngrok or another tunnel to share the server with teammates outside your network
+- You're on a VPN (WireGuard / Tailscale) reaching a server outside your network
 - The server is running headless (no monitor)
 
-### ngrok - sharing outside your local network
+### Reaching the server from outside your local network
 
-If teammates are outside your WiFi network, they cannot reach `http://192.168.x.x:5000` directly. Use ngrok to create a public HTTPS tunnel:
+The dashboard serves recorded video of real people, and the server speaks plain
+HTTP with no TLS. Treat every remote-access option through that lens.
+
+**Use a VPN. This is the only recommended option.** WireGuard or Tailscale put
+the remote device on your network, so the dashboard is never exposed to the
+internet, the traffic is encrypted, and nothing passes through a third party.
+Tailscale in particular needs no router configuration and no static IP, which is
+what makes port-forwarding tempting in the first place.
 
 ```bash
-# Install: https://ngrok.com/download
-ngrok http 5000
+# Tailscale: install on both the server and the remote device, then
+# reach the dashboard at the server's tailnet address.
+tailscale up
+tailscale ip -4        # -> 100.x.y.z, use http://100.x.y.z:5000
 ```
 
-This prints a public URL like `https://abc123.ngrok-free.app`. Share that URL with your team. The free tier shows a browser warning on first load - click "Visit Site" to proceed.
+**Second best: a reverse proxy you control.** Caddy or nginx terminating real
+TLS in front of the dashboard, with `SVCS_DASHBOARD_USER` and
+`SVCS_DASHBOARD_PASSWORD` set. This is the right shape for a permanently
+installed server, but you own the certificate and the patching.
 
-To skip the warning on repeated visits, teammates can add `?ngrok-skip-browser-warning=true` to the URL.
+**Do NOT forward port 5000 on your router.** It publishes your surveillance
+footage to the whole internet, and because the server is plain HTTP, HTTP Basic
+replays your password in cleartext on every single request, including every
+2-second video segment. Shodan indexes exposed camera dashboards continuously.
 
-Your personal auth token lives in the ngrok dashboard at https://dashboard.ngrok.com/authtokens. If you accidentally share a screenshot with your token visible, regenerate it immediately at that page - old tokens stop working as soon as you regenerate.
+**Do NOT use a public tunnel service** (ngrok, Cloudflare Tunnel, or similar).
+Beyond the exposure above, it routes footage of identifiable people through a
+third party you do not control, which defeats the purpose of a self-hosted,
+offline-by-design tool. This project deliberately makes no cloud calls; your
+deployment should not either.
 
-For a persistent domain or subdomain (so the URL stays the same across sessions), upgrade to a paid ngrok plan or use a self-hosted alternative like [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/).
+Rule of thumb: if you can reach the dashboard from a coffee shop without turning
+on a VPN, so can everyone else.
 
 ### EXE deployment - how file access changes
 
@@ -996,7 +1016,7 @@ The web app UI is the same in both modes. The only difference is that in EXE mod
 |---|---|---|
 | Running server on your own PC, accessing via localhost | Yes | No |
 | Running server on your PC, teammate on same WiFi | No (opens on your PC) | Yes |
-| Running server on your PC, teammate via ngrok | No (opens on your PC) | Yes |
+| Running server on your PC, teammate via VPN | No (opens on your PC) | Yes |
 | EXE installed on user's own PC | Yes | Optional |
 
 ---

@@ -1,0 +1,31 @@
+/* SVCS - Webfonts
+   Bebas Neue, Space Mono, and Outfit are all open-source families served
+   from Google Fonts (the same source the SVCS product app loads them from).
+   Importing the CSS2 endpoint declares the @font-face rules and points
+   src: url(...) at the gstatic binaries shipped to consumers.
+
+   IMPORTED from the Claude Design project "Mobile app conversion plan"
+   (19ed3076-4995-417d-8281-b994f732fa83) on 2026-07-18.
+
+   ============================ DO NOT SHIP THIS FILE ============================
+   This @import is a CDN call to fonts.googleapis.com. It is kept here only so the
+   vendored token set matches the design project byte for byte.
+
+   It MUST NOT reach the Android app, for three separate reasons:
+     1. House rule: SVCS is offline / self-hosted with no cloud calls. A font
+        fetch is a cloud call, and it leaks the user's IP and a request timestamp
+        to Google every cold start.
+     2. It would not work anyway. The app is used on a LAN pointed at a private
+        SVCS server, frequently with no internet route at all.
+     3. F-Droid rejects non-free/remote asset fetching, and Play-store privacy
+        disclosures would have to declare the transfer.
+
+   The design system readme anticipates this and states the fix: drop the .woff2
+   binaries into assets/fonts/ and replace the @import with local @font-face.
+   For Android the equivalent is to bundle the .ttf files under
+   app/src/main/res/font/ and reference them from the Compose Typography.
+   All three families are OFL-1.1 licensed, so bundling is permitted; ship the
+   license text alongside them.
+   =============================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Outfit:wght@300;400;500;600&display=swap');

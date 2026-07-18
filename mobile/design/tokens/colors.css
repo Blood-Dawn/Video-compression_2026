@@ -1,0 +1,61 @@
+/* SVCS - Color tokens
+   Dark surveillance command-center palette. Base values first,
+   semantic aliases second. ASCII hyphens only, never em/en dashes.
+
+   IMPORTED from the Claude Design project "Mobile app conversion plan"
+   (19ed3076-4995-417d-8281-b994f732fa83) on 2026-07-18. Source of truth for
+   the Android theme in mobile/android. Do not hand-edit: re-import instead,
+   so the app and the design project cannot drift. */
+
+:root {
+  /* ---- Surfaces (dark-first) ---- */
+  --bg:           #0a0e14;   /* app background */
+  --surface:      #10192a;   /* panels, header */
+  --surface2:     #162238;   /* raised cards, panel headers */
+  --surface3:     #1e3a52;   /* tracks, deepest raise */
+
+  /* ---- Borders ---- */
+  --border:        #2a4466;  /* default 1px hairline */
+  --border-bright: #3a5a7a;  /* hover / emphasized edge */
+
+  /* ---- Primary accent: amber (active / primary) ---- */
+  --amber:        #ffb900;
+  --amber-dim:    #8a6300;
+  --amber-glow:   rgba(255,185,0,0.15);
+
+  /* ---- Section accents (color-code tabs / sections) ---- */
+  --teal:        #1fd4c8;
+  --teal-dim:    rgba(31,212,200,0.12);
+  --green:       #2dd6a0;    /* good / online */
+  --green-dim:   rgba(45,214,160,0.12);
+  --yellow:      #ffc800;
+  --yellow-dim:  rgba(255,200,0,0.12);
+  --purple:      #b888ff;
+  --purple-dim:  rgba(184,136,255,0.14);
+  --blue:        #5aa9ff;    /* tools tab */
+  --orange:      #ff9e5e;    /* library tab */
+  --red:         #ff5555;    /* error / offline / stop */
+  --red-dim:     rgba(255,85,85,0.12);
+
+  /* ---- Text ---- */
+  --text:        #d8e8f5;    /* body */
+  --text-dim:    #7a8fa8;    /* labels, captions, muted */
+  --text-bright: #f0f8ff;    /* headings, key values */
+
+  /* ---- Semantic aliases (used throughout product code) ---- */
+  --surface1:      var(--surface);
+  --bg-secondary:  var(--surface);
+  --bg-tertiary:   var(--surface2);
+  --text-primary:  var(--text);
+
+  --accent:        var(--amber);          /* default interactive accent */
+  --status-active: var(--amber);          /* running / primary */
+  --status-online: var(--green);          /* good / connected */
+  --status-error:  var(--red);            /* error / offline / stop */
+
+  --surface-card:  var(--surface2);        /* card fill */
+  --surface-panel: var(--surface);         /* panel fill */
+  --text-body:     var(--text);
+  --text-muted:    var(--text-dim);
+  --text-heading:  var(--text-bright);
+}

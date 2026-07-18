@@ -1,0 +1,48 @@
+/* SVCS - Typography tokens
+   Bebas Neue (display headings, letter-spaced), Space Mono (data / labels /
+   terminal text), Outfit (body copy, kept readable). Labels are UPPERCASE
+   with wide tracking.
+
+   IMPORTED from the Claude Design project "Mobile app conversion plan"
+   (19ed3076-4995-417d-8281-b994f732fa83) on 2026-07-18. Do not hand-edit. */
+
+:root {
+  /* ---- Families ---- */
+  --display: 'Bebas Neue', sans-serif;   /* @kind font */
+  --mono:    'Space Mono', monospace;     /* @kind font */
+  --body:    'Outfit', sans-serif;        /* @kind font */
+
+  /* family aliases */
+  --font-display: var(--display);
+  --font-mono:    var(--mono);
+  --font-body:    var(--body);
+
+  /* ---- Weights ---- */
+  --weight-light:    300;
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+
+  /* ---- Letter-spacing (terminal labels run wide) ---- */
+  --track-tight:  0.04em;   /* display headings */
+  --track-wide:   0.1em;    /* logo, buttons */
+  --track-wider:  0.15em;   /* section headings */
+  --track-label:  0.2em;    /* UPPERCASE mono labels */
+
+  /* ---- Type scale ---- */
+  --text-2xs:  0.6rem;    /* micro labels, chips */
+  --text-xs:   0.7rem;    /* mono labels, table cells */
+  --text-sm:   0.8rem;    /* small body, inputs */
+  --text-base: 0.95rem;   /* body copy */
+  --text-md:   1.05rem;   /* panel titles */
+  --text-lg:   1.4rem;    /* sub headings */
+  --text-xl:   1.8rem;    /* logo */
+  --text-2xl:  2.6rem;    /* stat values */
+  --text-3xl:  3.6rem;    /* hero display */
+
+  --leading-tight: 1.1;
+  --leading-snug:  1.4;
+  --leading-body:  1.6;
+  --leading-loose: 1.8;
+}

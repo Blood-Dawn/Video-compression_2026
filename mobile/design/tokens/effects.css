@@ -1,0 +1,24 @@
+/* SVCS - Signature effects
+   The CRT scanline overlay and shared keyframes that give the dashboard its
+   surveillance-terminal feel. Apply the scanline by adding the
+   .svcs-scanlines class (or replicating body::before in product code).
+
+   IMPORTED from the Claude Design project "Mobile app conversion plan"
+   (19ed3076-4995-417d-8281-b994f732fa83) on 2026-07-18. Do not hand-edit. */
+
+.svcs-scanlines::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    transparent 0px, transparent 3px,
+    rgba(0,0,0,0.06) 3px, rgba(0,0,0,0.06) 4px
+  );
+}
+
+@keyframes svcs-blink  { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+@keyframes svcs-spin   { to { transform: rotate(360deg); } }
+@keyframes svcs-shimmer { from { filter: brightness(1); } 50% { filter: brightness(1.3); } to { filter: brightness(1); } }

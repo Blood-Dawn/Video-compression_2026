@@ -41,9 +41,13 @@ except ModuleNotFoundError:                # pragma: no cover - import path shim
 try:
     from compression.roi_encoder import draw_corner_overlay
     from utils.ffmpeg import ffmpeg_path
+    from config import (HLS_IDLE_TIMEOUT_S, HLS_LIST_SIZE, HLS_SEGMENT_SECONDS,
+                        HLS_STARTUP_GRACE_S)
 except ModuleNotFoundError:                # pragma: no cover - import path shim
     from src.compression.roi_encoder import draw_corner_overlay
     from src.utils.ffmpeg import ffmpeg_path
+    from src.config import (HLS_IDLE_TIMEOUT_S, HLS_LIST_SIZE,
+                            HLS_SEGMENT_SECONDS, HLS_STARTUP_GRACE_S)
 
 # Rebindable FFmpeg process / annotator thread / stop-event handles. Forwarded
 # from gui.app so the routes and tests share one live value.
@@ -176,6 +180,11 @@ def _hls_annotator_thread(
     log.info(f"HLS: stream dimensions {w}x{h} @ {fps:.1f} fps")
 
     # ── start FFmpeg receiving rawvideo from stdin ────────────────────────────
+    # Keyframe cadence must match the segment length: HLS can only cut a segment
+    # at an IDR. Without an explicit -g, x264's default keyint of 250 governs,
+    # so -hls_time was silently ignored and real segments ran ~10s at 25fps,
+    # pushing live latency toward 30s and making /api/hls/latency meaningless.
+    gop = max(1, int(round(HLS_SEGMENT_SECONDS * fps)))
     playlist = hls_dir / "playlist.m3u8"
     cmd = [
         ffmpeg_path(), "-y",
@@ -187,10 +196,21 @@ def _hls_annotator_thread(
         "-c:v", "libx264",
         "-preset", "ultrafast",
         "-tune", "zerolatency",
+        # Output chroma MUST be forced. The input is bgr24 (full chroma), so
+        # FFmpeg auto-selects yuv444p for libx264 and emits High 4:4:4
+        # Predictive. No Android MediaCodec decoder handles 4:4:4 and ExoPlayer
+        # ships no software H.264 fallback, so the mobile LIVE tab cannot decode
+        # it at all. yuv420p yields a baseline-compatible stream that plays
+        # everywhere, and it is what the rest of the codebase already emits
+        # (roi_encoder, demo/video_writer).
+        "-pix_fmt", "yuv420p",
+        "-g", str(gop),
+        "-keyint_min", str(gop),
+        "-sc_threshold", "0",     # no scene-cut IDRs: keep segments even
         "-an",
         "-f", "hls",
-        "-hls_time", "2",
-        "-hls_list_size", "5",
+        "-hls_time", str(HLS_SEGMENT_SECONDS),
+        "-hls_list_size", str(HLS_LIST_SIZE),
         "-hls_flags", "delete_segments",
         str(playlist),
     ]
@@ -346,6 +366,50 @@ def _hls_annotator_thread(
         args=(hls_dir, fps, 2.0, stop_event),
         daemon=True,
         name="hls-segment-latency-watcher",
+    ).start()
+
+    # ── idle watchdog (M0.5) ──────────────────────────────────────────────────
+    # Nothing stopped an abandoned stream before this. The stream ended only on
+    # an explicit POST /api/hls/stop, input EOF, a broken pipe, or an exception,
+    # and a healthy camera never reaches EOF. Because there is ONE process-wide
+    # stream slot, an abandoned stream pinned running=True and made every later
+    # /api/hls/start return 409 for every client, not just the one that walked
+    # away. A phone that backgrounds or drops off Wi-Fi is the obvious way to
+    # trigger it, but a closed browser tab already did: the dashboard's only
+    # caller of /api/hls/stop is an explicit button, with no pagehide handler.
+    #
+    # Setting stop_event is all that is needed. The frame loop is
+    # `while not stop_event.is_set()` and its finally block already tears down
+    # FFmpeg and clears running, so this reuses the existing teardown exactly.
+    def _hls_idle_watchdog(stop: threading.Event, started: float) -> None:
+        while not stop.wait(timeout=5.0):
+            with _hls_lock:
+                if not _hls_state.get("running"):
+                    return
+                last = _hls_state.get("last_segment_fetch")
+            now = time.monotonic()
+            if last is None:
+                # Nobody has fetched a segment yet. Allow a generous grace for
+                # RTSP connect + warmup + the client's own playlist polling.
+                if now - started > HLS_STARTUP_GRACE_S:
+                    log.info(
+                        f"HLS: no client fetched a segment within "
+                        f"{HLS_STARTUP_GRACE_S}s of start; stopping the stream "
+                        "so the slot is not held.")
+                    stop.set()
+                    return
+            elif now - last > HLS_IDLE_TIMEOUT_S:
+                log.info(
+                    f"HLS: no segment fetched for {HLS_IDLE_TIMEOUT_S}s; "
+                    "stopping the abandoned stream.")
+                stop.set()
+                return
+
+    threading.Thread(
+        target=_hls_idle_watchdog,
+        args=(stop_event, time.monotonic()),
+        daemon=True,
+        name="hls-idle-watchdog",
     ).start()
 
     # ── frame loop ────────────────────────────────────────────────────────────

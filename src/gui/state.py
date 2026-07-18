@@ -82,6 +82,12 @@ _hls_state: dict = {
     "error": None,
     "stream_start_time": None,   # epoch float: when FFmpeg process launched
     "ingest_latency_s": None,    # float: seconds from FFmpeg launch to first .ts segment
+    # Monotonic timestamp of the most recent .ts fetch by ANY client, or None
+    # before the first one. Drives the idle watchdog: there is a single
+    # process-wide stream slot, so a stream nobody is watching does not just
+    # burn CPU, it 409s every later start for everyone. Monotonic, not epoch,
+    # so a system clock change cannot make a live stream look abandoned.
+    "last_segment_fetch": None,
     # ─── Rolling end-to-end latency (ROADMAP 5.1) ──────────────────────────────
     # Author: Bloodawn (KheivenD)
     # ingest→HLS latency: how long does a frame read off RTSP take to land in

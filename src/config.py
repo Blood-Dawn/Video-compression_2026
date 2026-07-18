@@ -140,6 +140,21 @@ HLS_LIST_SIZE = 5
 # Length of each .ts segment in seconds.
 HLS_SEGMENT_SECONDS = 2
 
+# Stop a stream nobody is watching after this many seconds with no .ts fetch.
+# There is one process-wide stream slot, so an abandoned stream does not merely
+# waste CPU: it pins running=True and makes every later /api/hls/start return
+# 409 for EVERY client. A phone that backgrounds or drops off Wi-Fi mid-stream
+# is the common way to hit that, but a closed browser tab already does it too.
+# Comfortably longer than a player's buffer: the rolling playlist only holds
+# HLS_LIST_SIZE * HLS_SEGMENT_SECONDS = 10s, so a live player never idles 30s.
+HLS_IDLE_TIMEOUT_S = 30
+
+# Grace before the FIRST fetch, during which an unwatched stream is not reaped.
+# Must cover the RTSP connect (up to CONNECT_TIMEOUT = 10s in hls_runner), the
+# background-subtractor warmup, FFmpeg muxing the first segment, and the
+# client's own playlist poll (hls.js retries 10 times at 2s).
+HLS_STARTUP_GRACE_S = 45
+
 
 # ── CPU sampler ───────────────────────────────────────────────────────────
 
@@ -208,6 +223,8 @@ __all__ = [
     "HLS_LATENCY_TARGET_S",
     "HLS_LIST_SIZE",
     "HLS_SEGMENT_SECONDS",
+    "HLS_IDLE_TIMEOUT_S",
+    "HLS_STARTUP_GRACE_S",
     "CPU_SAMPLER_INTERVAL_S",
     "PIPELINE_JOIN_TIMEOUT_S",
     "FFMPEG_TIMEOUT_S",

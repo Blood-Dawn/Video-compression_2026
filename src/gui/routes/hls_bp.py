@@ -248,7 +248,22 @@ def api_hls_segment(camera_id: str, ts_file: str):
     if not seg.exists() or not seg.is_file():
         abort(404)
 
-    return send_from_directory(str(Path(hls_dir)), seg.name)
+    # Liveness signal for the idle watchdog (see hls_runner._hls_idle_watchdog).
+    # Stamped on a real segment hit only, so 404 probes cannot keep a dead
+    # stream alive.
+    with _hls_lock:
+        _hls_state["last_segment_fetch"] = time.monotonic()
+
+    # Force the MPEG-TS type. ".ts" is absent from CPython's builtin table, so
+    # an unqualified send_from_directory takes whatever the HOST says, and the
+    # host is wrong in different ways on each ship target: Windows resolves it
+    # to video/vnd.dlna.mpeg-tts, a bare python:3.11-slim container has no
+    # /etc/mime.types and falls back to application/octet-stream, and a desktop
+    # Linux with media-types installed returns text/vnd.trolltech.linguist
+    # (".ts" is also a Qt translation file). ExoPlayer fails on a wrong
+    # Content-Type in ways that are painful to diagnose from a phone.
+    return send_from_directory(str(Path(hls_dir)), seg.name,
+                               mimetype="video/mp2t")
 
 
 # ── Local RTSP server (optional MediaMTX integration) ────────────────────────

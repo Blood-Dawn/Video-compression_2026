@@ -192,7 +192,7 @@ def register_blueprints(flask_app: Flask, edition: str | None = None) -> None:
     R4 Phase 4: the "field" (offline, local-compression-only) edition drops the
     server-making blueprints - the RTSP server (MediaMTX) and HLS live streaming
     - so a field build has no server surface at all. The default (``edition``
-    None -> resolves to "server") registers all 18, so source runs and the
+    None -> resolves to "server") registers all 19, so source runs and the
     existing route/blueprint guards are unchanged.
     """
     try:
@@ -200,6 +200,19 @@ def register_blueprints(flask_app: Flask, edition: str | None = None) -> None:
     except ModuleNotFoundError:  # pragma: no cover - import path shim
         from src.gui.edition import is_field as _is_field
     field = _is_field(edition)
+    # Record the edition these blueprints were ACTUALLY registered under, so
+    # /api/capabilities (M0.6) reports the edition that matches the registered
+    # surface rather than re-deriving it from the environment. Those two agree
+    # in production (edition=None resolves through get_edition()), but they can
+    # diverge when a caller passes an explicit edition, and a capabilities
+    # response that disagrees with its own feature flags is worse than useless
+    # to a client deciding which tabs to draw.
+    try:
+        from gui.edition import EDITION_FIELD, EDITION_SERVER
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.gui.edition import EDITION_FIELD, EDITION_SERVER
+    flask_app.config["SVCS_RESOLVED_EDITION"] = (
+        EDITION_FIELD if field else EDITION_SERVER)
     try:
         from gui.routes.ui_bp import ui_bp
         from gui.routes.sse_bp import sse_bp
@@ -219,6 +232,7 @@ def register_blueprints(flask_app: Flask, edition: str | None = None) -> None:
         from gui.routes.library_bp import library_bp
         from gui.routes.autocompress_bp import autocompress_bp
         from gui.routes.tokens_bp import tokens_bp
+        from gui.routes.capabilities_bp import capabilities_bp
     except ModuleNotFoundError:  # pragma: no cover - import path shim
         from src.gui.routes.ui_bp import ui_bp
         from src.gui.routes.sse_bp import sse_bp
@@ -238,10 +252,11 @@ def register_blueprints(flask_app: Flask, edition: str | None = None) -> None:
         from src.gui.routes.library_bp import library_bp
         from src.gui.routes.autocompress_bp import autocompress_bp
         from src.gui.routes.tokens_bp import tokens_bp
+        from src.gui.routes.capabilities_bp import capabilities_bp
     all_bps = [ui_bp, sse_bp, metrics_bp, presets_bp, encryption_bp, plates_bp,
                queries_bp, rtsp_bp, demo_bp, hls_bp, files_bp, pipeline_bp,
                cameras_bp, usage_bp, setup_bp, library_bp, autocompress_bp,
-               tokens_bp]
+               tokens_bp, capabilities_bp]
     if field:
         # Field build: no server-making surfaces (RTSP server + HLS streaming).
         server_only = {rtsp_bp, hls_bp}

@@ -35,9 +35,18 @@ Updated:  Bloodawn (KheivenD), 2026-07-18 (M0.10 - Bearer device tokens).
 from __future__ import annotations
 
 import hmac
+import logging
 import os
+import threading
+import time
 from dataclasses import dataclass, field
-from typing import Mapping, Optional, Tuple
+from typing import Dict, Mapping, Optional, Tuple
+
+# Plain stdlib logger rather than importing gui.logging_setup. auth is imported
+# very early by both entry points, and taking a dependency on the logging
+# module here risks an import cycle for no benefit: logging_setup configures the
+# root logger, so this child inherits its handlers and formatting anyway.
+log = logging.getLogger("gui.auth")
 
 from flask import Flask, Response, g, request
 
@@ -146,6 +155,89 @@ def decide_auth(
     )
 
 
+# ── Failed-auth throttle (M0.2) ──────────────────────────────────────────────
+# Before this there was no counter, no delay, no lockout, and no logging of a
+# failed attempt. run_gui defaults --host to 0.0.0.0 and the Dockerfile passes
+# it explicitly, so an unthrottled credential endpoint is the SHIPPING
+# configuration, not a hypothetical. Adding device tokens raises the stakes:
+# a token is a bearer secret that an attacker can guess at, in principle,
+# without a username.
+#
+# Deliberately hand-rolled. flask-limiter is not in pyproject or uv.lock, and
+# pulling a dependency in to count integers would widen the license and supply
+# chain surface of an AGPL project for no gain.
+_FAIL_WINDOW_S = 300.0     # sliding window over which failures accumulate
+_FAIL_MAX = 10             # failures per window per IP before lockout
+_LOCKOUT_S = 300.0         # how long a locked-out IP stays locked out
+# Bound the table so a spoofed-IP flood cannot grow it without limit. Well above
+# any plausible number of real clients on a home or small-office LAN.
+_MAX_TRACKED_IPS = 1024
+
+_fail_lock = threading.Lock()
+#: ip -> list of monotonic failure timestamps within the window
+_fail_times: Dict[str, list] = {}
+#: ip -> monotonic time at which the lockout expires
+_locked_until: Dict[str, float] = {}
+
+
+def _client_ip() -> str:
+    """Best-effort client identity for throttling.
+
+    Uses the socket peer only. X-Forwarded-For is deliberately NOT trusted:
+    nothing in this app sets up ProxyFix, so the header is attacker-controlled
+    and honoring it would let one attacker spread their attempts across
+    unlimited fake identities and never trip the limit.
+    """
+    return request.remote_addr or "unknown"
+
+
+def _reset_throttle() -> None:
+    """Clear all throttle state. For tests and for a clean process start."""
+    with _fail_lock:
+        _fail_times.clear()
+        _locked_until.clear()
+
+
+def _is_locked_out(ip: str, now: Optional[float] = None) -> bool:
+    now = now if now is not None else time.monotonic()
+    with _fail_lock:
+        until = _locked_until.get(ip)
+        if until is None:
+            return False
+        if now >= until:
+            # Lockout served: forget it and give the client a clean slate.
+            _locked_until.pop(ip, None)
+            _fail_times.pop(ip, None)
+            return False
+        return True
+
+
+def _record_failure(ip: str, now: Optional[float] = None) -> bool:
+    """Record one failed attempt. Returns True if this trips a lockout."""
+    now = now if now is not None else time.monotonic()
+    with _fail_lock:
+        if len(_fail_times) >= _MAX_TRACKED_IPS and ip not in _fail_times:
+            # Table is full of other addresses. Drop the oldest tracked entry
+            # rather than refusing to track, so a flood cannot buy immunity for
+            # a genuine attacker by filling the table first.
+            oldest = min(_fail_times, key=lambda k: _fail_times[k][-1])
+            _fail_times.pop(oldest, None)
+        times = [t for t in _fail_times.get(ip, []) if now - t < _FAIL_WINDOW_S]
+        times.append(now)
+        _fail_times[ip] = times
+        if len(times) >= _FAIL_MAX:
+            _locked_until[ip] = now + _LOCKOUT_S
+            _fail_times.pop(ip, None)
+            return True
+        return False
+
+
+def _record_success(ip: str) -> None:
+    """Clear the failure history for an address that just authenticated."""
+    with _fail_lock:
+        _fail_times.pop(ip, None)
+
+
 def _presented_bearer() -> Optional[str]:
     """Return the Bearer token on this request, or None.
 
@@ -188,8 +280,35 @@ def install_basic_auth(app: Flask, username: str, password: str) -> None:
         return Response("Authentication required.", 401,
                         {"WWW-Authenticate": realm})
 
+    def _too_many() -> Response:
+        return Response("Too many failed authentication attempts.", 429,
+                        {"Retry-After": str(int(_LOCKOUT_S))})
+
+    def _fail(ip: str) -> Response:
+        """Record a failed attempt and return the right refusal.
+
+        Logs the source address but NEVER the attempted credential, per the
+        house rule. That is the whole value of the log line: an operator can
+        see they are being probed without the log itself becoming a place
+        passwords and tokens are written down.
+        """
+        locked = _record_failure(ip)
+        if locked:
+            log.warning(
+                f"Auth: locking out {ip} for {int(_LOCKOUT_S)}s after "
+                f"{_FAIL_MAX} failed attempts in {int(_FAIL_WINDOW_S)}s.")
+            return _too_many()
+        log.warning(f"Auth: failed attempt from {ip}.")
+        return _unauthorized()
+
     @app.before_request
     def _require_basic_auth():  # pragma: no cover - exercised via test client
+        ip = _client_ip()
+        # Locked-out addresses are refused before any credential is examined,
+        # so a lockout also stops the comparison work itself.
+        if _is_locked_out(ip):
+            return _too_many()
+
         # ── Bearer device token (M0.10) ──
         # Checked first because a mobile client always sends Bearer, so this
         # avoids running the Basic path for every .ts segment fetch.
@@ -202,11 +321,16 @@ def install_basic_auth(app: Flask, username: str, password: str) -> None:
             # Never log `presented`, and never echo it in the response.
             if verify_token(presented) is not None:
                 g.svcs_auth_scheme = SCHEME_BEARER
+                _record_success(ip)
                 return None
-            return _unauthorized()
+            return _fail(ip)
 
         auth = request.authorization
         if auth is None or auth.type != "basic":
+            # A request carrying NO credential at all is not counted as a
+            # failure. Browsers routinely fire one unauthenticated request and
+            # then retry with credentials after the 401, so counting these
+            # would lock out ordinary users on their first page load.
             return _unauthorized()
         # Compare UTF-8 BYTES, not str. hmac.compare_digest raises TypeError on
         # str operands containing non-ASCII, and the client half of each compare
@@ -222,5 +346,6 @@ def install_basic_auth(app: Flask, username: str, password: str) -> None:
                                       password.encode("utf-8"))
         if user_ok and pass_ok:
             g.svcs_auth_scheme = SCHEME_BASIC
+            _record_success(ip)
             return None
-        return _unauthorized()
+        return _fail(ip)

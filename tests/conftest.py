@@ -89,3 +89,26 @@ def tiny_frames():
         rng.integers(0, 256, (16, 16, 3), dtype=np.uint8)
         for _ in range(10)
     ]
+
+
+@pytest.fixture(autouse=True)
+def _reset_auth_throttle():
+    """Clear the failed-auth throttle between tests (M0.2).
+
+    The throttle table in gui.auth is module-global and keyed on the client
+    address, and every Flask test client reports the same loopback address. So
+    without this, failed-auth attempts accumulate ACROSS test modules and a test
+    that legitimately sends a few wrong passwords can inherit a lockout from an
+    unrelated earlier test, producing a 429 where it expects a 401. That failure
+    would depend on test ordering, which is the worst kind to debug.
+
+    Autouse and suite-wide on purpose: any future test that authenticates gets
+    isolation without having to know the throttle exists.
+    """
+    try:
+        from gui.auth import _reset_throttle
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.gui.auth import _reset_throttle
+    _reset_throttle()
+    yield
+    _reset_throttle()

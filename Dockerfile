@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1
 #
-# SVCS dashboard — server-scenario image (M4 TASK 4.2).
+# SVCS dashboard - server-scenario image (M4 TASK 4.2).
 #
 # Runs the Flask dashboard on the slim ONNX path (post-M2): object detection is
 # ONNX Runtime, NOT torch, so this image is hundreds of MB rather than the 4 GB
-# a torch image would be. FFmpeg comes from the distro (on PATH — utils.ffmpeg
+# a torch image would be. FFmpeg comes from the distro (on PATH - utils.ffmpeg
 # resolves it). Dependencies install from the committed uv.lock for
 # reproducibility.
 #
@@ -13,7 +13,7 @@
 #           -e SVCS_DASHBOARD_USER=operator -e SVCS_DASHBOARD_PASSWORD=secret \
 #           -v "$PWD/outputs:/app/outputs" svcs:latest
 #
-# Author: Bloodawn (KheivenD), 2026-06-03 (TASK 4.2 — Docker image).
+# Author: Bloodawn (KheivenD), 2026-06-03 (TASK 4.2 - Docker image).
 
 FROM python:3.11-slim
 
@@ -38,7 +38,7 @@ ENV UV_PYTHON_DOWNLOADS=never \
     PYTHONUNBUFFERED=1
 
 # --- Dependency layer (cached unless the manifests change) -------------------
-# Install ONLY the core/slim dependencies (default group from uv.lock — no
+# Install ONLY the core/slim dependencies (default group from uv.lock - no
 # torch, no extras). --no-install-project skips building the app itself here so
 # this layer stays cache-friendly and doesn't need the source tree yet.
 COPY pyproject.toml uv.lock README.md ./

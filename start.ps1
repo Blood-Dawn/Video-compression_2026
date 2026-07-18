@@ -1,4 +1,4 @@
-# start.ps1 — Launch SVCS with GPU + SR enhancement support
+# start.ps1 - Launch SVCS with GPU + SR enhancement support
 # Usage: .\start.ps1
 # Optional: .\start.ps1 --port 8080
 

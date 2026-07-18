@@ -24,11 +24,11 @@ dependencies = [
     # a fresh `uv sync` would import-error / skip GMG. Using contrib here
     # means a clean clone gets a working cv2 with MOG2 *and* GMG without a
     # manual reinstall. NOTE: this is mutually exclusive with the
-    # opencv-python-headless that easyocr ([plates]) pulls — they share the
+    # opencv-python-headless that easyocr ([plates]) pulls - they share the
     # cv2/ namespace and clobber each other. Plate-reader is therefore
     # installed/tested in a SEPARATE environment, never alongside core
     # (see the [plates] note below and docs/test-baseline.md).
-    # Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.4b — opencv dep fix).
+    # Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.4b - opencv dep fix).
     "opencv-contrib-python>=4.8.0,<4.11.0",
     "numpy>=1.24.0,<2.0.0",
     "Pillow>=10.0.0",
@@ -54,7 +54,7 @@ dependencies = [
     # NOTE (M2 TASK 2.2): ultralytics / torch / torchvision moved OUT of the
     # core dependencies into the optional [torch] extra below. The default
     # (slim) install runs object detection on ONNX Runtime (onnxruntime, core)
-    # and has no PyTorch — which is what drops the installer from multi-GB to a
+    # and has no PyTorch - which is what drops the installer from multi-GB to a
     # few hundred MB (PLAN-V2 §6). torch is still pulled when you install
     # [torch] (parity/export/the torch detector) or [enhance] (Real-ESRGAN,
     # which depends on torch). Author: Bloodawn (KheivenD), 2026-06-03.
@@ -77,7 +77,7 @@ dependencies = [
     # repo root automatically on first run so nothing is lost.
     # Author: Bloodawn (KheivenD), 2026-05-14 (installer prep).
     "platformdirs>=4.0.0",
-    # ONNX Runtime — cross-platform inference engine for the slim install
+    # ONNX Runtime - cross-platform inference engine for the slim install
     # path (PLAN-V2 §6, M2). The detector (and, where it exports cleanly, the
     # enhancer) can run on ONNX Runtime instead of PyTorch, which is what lets
     # the installer drop from multi-GB to a few hundred MB once torch becomes
@@ -88,7 +88,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# One-time ONNX export tooling (dev/build only — NOT needed at runtime).
+# One-time ONNX export tooling (dev/build only - NOT needed at runtime).
 # `yolo export model=yolov8n.pt format=onnx` and the Real-ESRGAN export need
 # these; the produced .onnx files are shipped as the optional weights
 # component. Install with: uv sync --extra onnx-export
@@ -113,7 +113,7 @@ torch = [
     "torchvision>=0.15.0",
 ]
 
-# Super-resolution enhancement — only needed if using --enhance flag.
+# Super-resolution enhancement - only needed if using --enhance flag.
 # Install with: uv sync --extra enhance
 enhance = [
     "basicsr>=1.4.2",

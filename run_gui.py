@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-run_gui.py  —  Launch the SVCS web dashboard.
+run_gui.py  -  Launch the SVCS web dashboard.
 
 Usage:
     python run_gui.py              # default: http://localhost:5000
@@ -23,7 +23,7 @@ plate reader locally), add it manually:
     uv sync --extra enhance --extra plates
 
 If ``uv`` isn't on PATH or the install fails, the dashboard still
-launches — relevant features just degrade gracefully (Real-ESRGAN
+launches - relevant features just degrade gracefully (Real-ESRGAN
 falls back to bicubic, plate reader hides its UI when no backend is
 installed, YOLO falls back to pass-through if ultralytics is missing).
 
@@ -100,12 +100,12 @@ def _running_inside_uv() -> bool:
       • print a redundant lock-acquired/released noise wall, or
       • on Windows, briefly fail with "the process cannot access the file
         because it is being used by another process" while uv still holds
-        the project lock — which surfaces to the user as an error message
+        the project lock - which surfaces to the user as an error message
         even though the dashboard would otherwise start fine.
 
     uv exposes ``UV_PROJECT_ENVIRONMENT`` (and reliably sets ``VIRTUAL_ENV``
     + ``UV``) when invoking commands via ``uv run``. We treat presence of
-    either as a strong hint and skip the recursive sync — uv has already
+    either as a strong hint and skip the recursive sync - uv has already
     installed whatever the lockfile says, including extras passed on the
     command line.
 
@@ -120,7 +120,7 @@ def _running_inside_uv() -> bool:
     # parent process command line mentions uv. Cheap heuristic.
     venv = os.environ.get("VIRTUAL_ENV", "")
     if venv and Path(venv).resolve().parent == _REPO_ROOT:
-        # We're already inside the project venv — running another sync
+        # We're already inside the project venv - running another sync
         # would just churn for nothing.
         return True
     return False
@@ -131,7 +131,7 @@ def _ensure_extras_installed(extras: list[str], skip: bool = False) -> None:
 
     Idempotent: writes a stamp file with the pyproject+lock hash and
     skips on subsequent launches if nothing relevant changed. Best-effort
-    — failures log a warning and never block dashboard startup.
+    - failures log a warning and never block dashboard startup.
 
     Skips entirely when invoked under ``uv run`` (see _running_inside_uv);
     that path expects extras to be passed on the uv-run command line, e.g.:
@@ -144,9 +144,9 @@ def _ensure_extras_installed(extras: list[str], skip: bool = False) -> None:
         return
 
     if _running_inside_uv():
-        # uv already managed the venv — don't recurse. Print a hint about
+        # uv already managed the venv - don't recurse. Print a hint about
         # how to pull in the AI extras under uv run.
-        print("  [skip] running inside `uv run` — uv already sync'd the venv")
+        print("  [skip] running inside `uv run` - uv already sync'd the venv")
         print("         If AI features ('enhance', 'plates') are missing, exit and run:")
         print("           uv run --extra enhance --extra plates python run_gui.py")
         return
@@ -154,7 +154,7 @@ def _ensure_extras_installed(extras: list[str], skip: bool = False) -> None:
     fingerprint = _pyproject_fingerprint()
     last = _SYNC_STAMP.read_text().strip() if _SYNC_STAMP.exists() else ""
     if last == fingerprint:
-        # Inputs unchanged since last successful sync — nothing to do.
+        # Inputs unchanged since last successful sync - nothing to do.
         print(f"  [ok]   extras already in sync ({', '.join(extras)})")
         return
 
@@ -169,7 +169,7 @@ def _ensure_extras_installed(extras: list[str], skip: bool = False) -> None:
     for ex in extras:
         cmd.extend(["--extra", ex])
     print(f"  [sync] {' '.join(cmd)}")
-    print( "         (one-time install — only re-runs when pyproject/uv.lock changes)")
+    print( "         (one-time install - only re-runs when pyproject/uv.lock changes)")
     t0 = time.perf_counter()
     try:
         # Inherit stdout/stderr so the operator can see download progress.
@@ -179,7 +179,7 @@ def _ensure_extras_installed(extras: list[str], skip: bool = False) -> None:
             _SYNC_STAMP.write_text(fingerprint)
             print(f"  [ok]   uv sync finished in {dt:.1f}s")
         else:
-            print(f"  [warn] uv sync exited {result.returncode} after {dt:.1f}s — "
+            print(f"  [warn] uv sync exited {result.returncode} after {dt:.1f}s - "
                   "extras may not be installed. Dashboard will start anyway.")
     except Exception as exc:  # noqa: BLE001
         print(f"  [warn] uv sync raised {type(exc).__name__}: {exc}")
@@ -208,7 +208,7 @@ def main():
     # cp1252. Our banners and pipeline logs use box-drawing glyphs (━), which
     # raise UnicodeEncodeError on cp1252 and crash the app on launch (caught by
     # the installer smoke test). Force UTF-8 (best effort) before anything
-    # prints — this also reconfigures the same sys.stderr object the logging
+    # prints - this also reconfigures the same sys.stderr object the logging
     # console handler binds to. Author: Bloodawn (KheivenD), 2026-06-02
     # (frozen-console encoding fix, surfaced by the M1 TASK 1.4 smoke test).
     for _stream in (sys.stdout, sys.stderr):
@@ -307,7 +307,7 @@ def main():
         app = create_app()
     except ModuleNotFoundError as exc:
         missing = exc.name or str(exc)
-        print(f"\n  [fatal] Could not import gui.app — missing module: {missing!r}")
+        print(f"\n  [fatal] Could not import gui.app - missing module: {missing!r}")
         print( "          Most likely a core dependency wasn't installed in this venv.")
         print( "          Try one of:")
         print( "            • uv sync                                  (installs core deps)")
@@ -316,7 +316,7 @@ def main():
         print(f"          Full error: {exc}")
         sys.exit(2)
     except Exception as exc:  # noqa: BLE001
-        print(f"\n  [fatal] Could not import gui.app — {type(exc).__name__}: {exc}")
+        print(f"\n  [fatal] Could not import gui.app - {type(exc).__name__}: {exc}")
         print( "          Run with PYTHONFAULTHANDLER=1 or python -X dev for more detail.")
         raise
 

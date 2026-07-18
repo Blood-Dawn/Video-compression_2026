@@ -102,10 +102,10 @@ config/secrets.yaml
 *.part
 ffmpeg_tmp/
 
-# MediaMTX binary (downloaded on demand — not committed)
+# MediaMTX binary (downloaded on demand - not committed)
 tools/mediamtx/
 
-# Vendored FFmpeg (fetched by installer/build.ps1 — a ~243 MB build artifact,
+# Vendored FFmpeg (fetched by installer/build.ps1 - a ~243 MB build artifact,
 # never committed). Author: Bloodawn (KheivenD), 2026-06-03 (TASK 2.3).
 tools/ffmpeg/
 
@@ -122,7 +122,7 @@ tools/ffmpeg/
 .uv_sync_stamp
 
 # Per-mode CPU benchmarks (running averages from "CPU Usage by Mode" card,
-# rebuilt on every demo run — never committed)
+# rebuilt on every demo run - never committed)
 .mode_cpu_avgs.json
 
 # QA artifacts (generated exports / slides)

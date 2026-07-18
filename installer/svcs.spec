@@ -1,6 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-installer/svcs.spec  —  PyInstaller config for the SVCS desktop bundle.
+installer/svcs.spec  -  PyInstaller config for the SVCS desktop bundle.
 
 Targets folder mode (one-dir, not one-file). One-file produces a single
 .exe but pays a 5-10s extraction tax on every launch and breaks
@@ -27,7 +27,7 @@ Things to know:
   bundle it for the Inno Setup installer later (June milestone).
 - yolov8n.pt is bundled if present so first-launch doesn't need to
   hit the internet. RealESRGAN weights are NOT bundled (63 MB, paid
-  tier only) — the GUI falls back to bicubic when they're missing.
+  tier only) - the GUI falls back to bicubic when they're missing.
 
 Author: Bloodawn (KheivenD), 2026-05-14 (installer prep).
 """
@@ -94,7 +94,7 @@ _firstparty_hidden = sorted(set(_firstparty_hidden))
 # ── datas: non-Python files to bundle ─────────────────────────────────────
 # Each tuple is (src_on_disk, dest_in_bundle).
 datas = [
-    # Flask templates — required for the dashboard to render index.html.
+    # Flask templates - required for the dashboard to render index.html.
     # Bundled under BOTH gui/templates and src/gui/templates: the frozen app
     # module resolves as `src.gui.app` (see the collect_submodules note above),
     # so Flask derives its template root_path as <bundle>/src/gui and looks for
@@ -131,7 +131,7 @@ _ffmpeg_dir = REPO_ROOT / "tools" / "ffmpeg"
 if _ffmpeg_dir.exists():
     datas.append((str(_ffmpeg_dir), "ffmpeg"))
 
-# Make sure the LICENSE text travels with the binary — required by AGPL.
+# Make sure the LICENSE text travels with the binary - required by AGPL.
 _license = REPO_ROOT / "LICENSE"
 if _license.exists():
     datas.append((str(_license), "."))
@@ -143,7 +143,7 @@ datas.append((str(_marker_file), "."))
 
 # ── hiddenimports: modules PyInstaller's analyzer doesn't find on its own ──
 hiddenimports = [
-    # Flask plumbing — Werkzeug pulls in some submodules via getattr.
+    # Flask plumbing - Werkzeug pulls in some submodules via getattr.
     "flask",
     "jinja2",
     "jinja2.ext",
@@ -151,7 +151,7 @@ hiddenimports = [
     "werkzeug.middleware",
     "werkzeug.middleware.proxy_fix",
 
-    # Our own first-party packages — collected programmatically above via
+    # Our own first-party packages - collected programmatically above via
     # collect_submodules() under both the canonical (gui.app, utils.db.schema)
     # and the full src.* mirror, because the frozen importer resolves some
     # submodules under each name (see the comment at the top of this spec).
@@ -160,10 +160,10 @@ hiddenimports = [
     *_firstparty_hidden,
 
     # M2 TASK 2.2: the SLIM default build runs object detection on ONNX
-    # Runtime, NOT PyTorch — so ultralytics / torch / torchvision are NO LONGER
+    # Runtime, NOT PyTorch - so ultralytics / torch / torchvision are NO LONGER
     # hiddenimports here and are actively EXCLUDED below. onnxruntime is the
-    # inference engine instead. (gui.app imports nothing torch eagerly — the
-    # detector/enhancer import torch lazily — so the frozen app starts fine
+    # inference engine instead. (gui.app imports nothing torch eagerly - the
+    # detector/enhancer import torch lazily - so the frozen app starts fine
     # without it; verified by an import audit.) Author: Bloodawn (KheivenD),
     # 2026-06-03.
     "onnxruntime",
@@ -206,7 +206,7 @@ excludes = [
     "PySide6",
     "wx",
 
-    # Notebook tooling — only needed for dev experimentation, never
+    # Notebook tooling - only needed for dev experimentation, never
     # at runtime. Saves ~300 MB.
     "IPython",
     "notebook",
@@ -224,7 +224,7 @@ excludes = [
     "_pytest",
     "pytest_cov",
 
-    # PaddleOCR / PaddlePaddle — premium plate reader uses EasyOCR
+    # PaddleOCR / PaddlePaddle - premium plate reader uses EasyOCR
     # exclusively in the casual edition. Excluding these saves ~600 MB.
     "paddle",
     "paddleocr",
@@ -237,7 +237,7 @@ excludes = [
     "llvmlite",
 
     # sympy is dragged in by torch.fx for symbolic-shape tracing. The
-    # frozen GUI never traces a model — we load YOLO/Real-ESRGAN
+    # frozen GUI never traces a model - we load YOLO/Real-ESRGAN
     # weights and call them. Saves ~300 MB.
     "sympy",
 
@@ -258,7 +258,7 @@ excludes = [
     "facexlib",
     "nvidia",                 # nvidia-* CUDA runtime wheels pulled by CUDA torch
     "triton",
-    # torch's own test machinery — never needed at runtime.
+    # torch's own test machinery - never needed at runtime.
     "torch.testing",
     "torch.utils.tensorboard",
 
@@ -276,7 +276,7 @@ excludes = [
     # automatically; the rest is dead weight.
     "matplotlib.tests",
 
-    # Our own test tree — never needed at runtime.
+    # Our own test tree - never needed at runtime.
     "tests",
 ]
 

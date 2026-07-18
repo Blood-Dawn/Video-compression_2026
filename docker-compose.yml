@@ -1,10 +1,10 @@
-# SVCS dashboard — server scenario (M4 TASK 4.2).
+# SVCS dashboard - server scenario (M4 TASK 4.2).
 #
 #   docker compose up --build
 #
 # Then open http://localhost:5000 and log in with the credentials below.
 # CHANGE THE DEFAULT PASSWORD before exposing this beyond localhost. Basic Auth
-# is plaintext on the wire — terminate TLS at a reverse proxy for real networks
+# is plaintext on the wire - terminate TLS at a reverse proxy for real networks
 # (see docs/deployment_packaging.md).
 
 services:

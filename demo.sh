@@ -11,7 +11,7 @@
 #   bash demo.sh --input /path/to/my.mp4 # custom clip
 #
 # Author: Bloodawn (KheivenD)
-# EGN 4950C Capstone — Group 16 — Spring 2026
+# EGN 4950C Capstone - Group 16 - Spring 2026
 
 set -euo pipefail
 
@@ -61,7 +61,7 @@ cd "$SCRIPT_DIR"
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
-echo "║   Selective Video Compression Pipeline — Live Demo       ║"
+echo "║   Selective Video Compression Pipeline - Live Demo       ║"
 echo "║   EGN 4950C Capstone · Group 16 · FAU Spring 2026        ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
@@ -94,14 +94,14 @@ if [[ -z "${VIRTUAL_ENV:-}" && -f "venv/bin/activate" ]]; then
 elif [[ -n "${VIRTUAL_ENV:-}" ]]; then
   echo "  Venv     : $VIRTUAL_ENV (already active)"
 else
-  echo "  Venv     : none — using system Python"
+  echo "  Venv     : none - using system Python"
 fi
 
 # Create output directory
 mkdir -p "$OUTPUT"
 echo "  Output   : $OUTPUT"
 
-# Warn if test clip is missing (don't abort — user may be passing a live camera)
+# Warn if test clip is missing (don't abort - user may be passing a live camera)
 if [[ "$INPUT" != "0" && ! -f "$INPUT" ]]; then
   echo ""
   echo "WARNING: Input file not found: $INPUT"
@@ -115,8 +115,8 @@ fi
 echo ""
 echo "  Mode     : $MODE ($(
   case "$MODE" in
-    mode0) echo "24/7 continuous — all frames encoded" ;;
-    mode1) echo "frame gating — active frames only" ;;
+    mode0) echo "24/7 continuous - all frames encoded" ;;
+    mode1) echo "frame gating - active frames only" ;;
     mode2) echo "background keyframe + object patches" ;;
     mode3) echo "object-only forensic mode" ;;
     *)     echo "$MODE" ;;

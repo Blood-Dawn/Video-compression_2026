@@ -1,5 +1,5 @@
 # Line-ending normalization for SVCS.
-# Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.4 — kill CRLF/LF churn).
+# Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.4 - kill CRLF/LF churn).
 #
 # Without this file, Git on Windows silently rewrites line endings and the
 # working tree drifts to CRLF while the index stays LF, producing 100+
@@ -30,10 +30,10 @@
 *.js   text eol=lf
 *.iss  text eol=lf
 
-# Extension-less shell script (AppImage AppRun) — force LF so it runs on Linux.
+# Extension-less shell script (AppImage AppRun) - force LF so it runs on Linux.
 installer/appimage/AppRun text eol=lf
 
-# Binary assets — never touch.
+# Binary assets - never touch.
 *.png  binary
 *.jpg  binary
 *.jpeg binary

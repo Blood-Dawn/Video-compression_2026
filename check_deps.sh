@@ -14,7 +14,7 @@ yellow() { echo -e "\033[33m⚠️   $1\033[0m"; }
 header() { echo -e "\n\033[1m$1\033[0m"; }
 
 header "========================================="
-header " Capstone Compression — Dependency Check "
+header " Capstone Compression - Dependency Check "
 header "========================================="
 
 # ── 1. Python version ─────────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ fi
 header "[3/6] Python packages (from requirements.txt)"
 
 if [ -z "$PYTHON_BIN" ]; then
-    yellow "Skipping package check — Python not found."
+    yellow "Skipping package check - Python not found."
 else
     PACKAGES=(
         "cv2"
@@ -85,10 +85,10 @@ else
     ALL_PKG_OK=1
     for pkg in "${PACKAGES[@]}"; do
         if "$PYTHON_BIN" -c "import $pkg" &>/dev/null 2>&1; then
-            green "  import $pkg — OK"
+            green "  import $pkg - OK"
             PASS=$((PASS + 1))
         else
-            red "  import $pkg — MISSING"
+            red "  import $pkg - MISSING"
             echo "      → Run: pip install -r requirements.txt"
             FAIL=$((FAIL + 1))
             ALL_PKG_OK=0
@@ -127,12 +127,12 @@ DIRS=("data/samples" "outputs" "logs" "notebooks" "docs")
 
 for dir in "${DIRS[@]}"; do
     if [ -d "$dir" ]; then
-        green "  $dir/ — exists"
+        green "  $dir/ - exists"
         PASS=$((PASS + 1))
     else
-        yellow "  $dir/ — missing (creating it now)"
+        yellow "  $dir/ - missing (creating it now)"
         mkdir -p "$dir"
-        green "  $dir/ — created"
+        green "  $dir/ - created"
         PASS=$((PASS + 1))
     fi
 done

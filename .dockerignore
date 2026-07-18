@@ -14,7 +14,7 @@ build
 dist
 installer/build
 installer/dist
-tools/                # vendored Windows FFmpeg — the container uses apt ffmpeg
+tools/                # vendored Windows FFmpeg - the container uses apt ffmpeg
 *.spec
 
 # Bulk data and outputs are mounted at runtime, not baked in.

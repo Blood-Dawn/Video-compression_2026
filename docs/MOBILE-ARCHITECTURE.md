@@ -1,6 +1,7 @@
 # SVCS Mobile - architecture and port plan
 
-Status: **proposed**, awaiting owner decisions in section 7.
+Status: **M0 complete, M1.1 written but not yet compiled.** Owner decisions in
+section 7 were taken on 2026-07-18.
 Branch: `mobile`. Created 2026-07-18 from `app` at `741861e`.
 Design source: `mobile/design/` (imported from Claude Design project
 `19ed3076-4995-417d-8281-b994f732fa83`).
@@ -102,23 +103,27 @@ Verified empirically, not assumed:
 `SERVER` = server-side work. `CLIENT` = Android work. `OWNER` = a decision an
 agent should not make alone.
 
-| # | Blocker | Kind |
-| --- | --- | --- |
-| B1 | Server unreachable from a phone by default (installer ships loopback) | OWNER + SERVER |
-| B2 | "Access Token" has no server-side counterpart | OWNER then CLIENT |
-| B3 | **Non-ASCII credential is an unauthenticated remote 500** | SERVER (**fixed**) |
-| B4 | No rate limiting, lockout, or failed-auth logging | SERVER |
-| B5 | No TLS anywhere; Basic replays the password on every `.ts` fetch | OWNER then CLIENT |
-| B6 | The app currently recommends port-forwarding and ngrok | SERVER (docs) |
-| B7 | HLS emits H.264 High 4:4:4, undecodable on Android | SERVER |
-| B8 | `.ts` Content-Type wrong on all three ship targets | SERVER |
-| B9 | Abandoned HLS streams never reaped; one global slot 409s everyone | SERVER |
-| B10 | Upload unusable for a phone clip; also prefers a cloud sync root | SERVER |
-| B11 | SSE log tail is destructive with more than one client | SERVER |
-| B12 | No capabilities endpoint; edition is only in rendered HTML | SERVER |
-| B13 | `/api/open_folder` remotely reachable, spawns a host subprocess | SERVER |
-| B14 | Shipped FFmpeg is GPL, not LGPL; no corresponding-source offer | OWNER + SERVER |
-| B15 | Notification transport for the closed-app case | OWNER |
+| # | Blocker | Kind | Status |
+| --- | --- | --- | --- |
+| B1 | Server unreachable from a phone by default (installer ships loopback) | OWNER + SERVER | open |
+| B2 | "Access Token" has no server-side counterpart | OWNER then CLIENT | **done** (M0.10, real tokens) |
+| B3 | Non-ASCII credential is an unauthenticated remote 500 | SERVER | **fixed** |
+| B4 | No rate limiting, lockout, or failed-auth logging | SERVER | **done** (M0.2) |
+| B5 | No TLS anywhere; Basic replays the password on every `.ts` fetch | OWNER then CLIENT | open (client-side gate landed) |
+| B6 | The app recommends port-forwarding and ngrok | SERVER (docs) | **done** (M0.8) |
+| B7 | HLS emits H.264 High 4:4:4, undecodable on Android | SERVER | **fixed** (M0.3) |
+| B8 | `.ts` Content-Type wrong on all three ship targets | SERVER | **fixed** (M0.4) |
+| B9 | Abandoned HLS streams never reaped; one global slot 409s everyone | SERVER | **fixed** (M0.5) |
+| B10 | Upload unusable for a phone clip; also prefers a cloud sync root | SERVER | cloud regression **fixed** (M0.7); chunked upload open (M4.3) |
+| B11 | SSE log tail is destructive with more than one client | SERVER | open |
+| B12 | No capabilities endpoint; edition is only in rendered HTML | SERVER | **done** (M0.6) |
+| B13 | `/api/open_folder` remotely reachable, spawns a host subprocess | SERVER | **fixed** (M0.9) |
+| B14 | Shipped FFmpeg is GPL, not LGPL; no corresponding-source offer | OWNER + SERVER | open |
+| B15 | Notification transport for the closed-app case | OWNER | open |
+
+**M0 is complete.** Owner decisions taken 2026-07-18: native Kotlin/Compose;
+real device-token auth rather than repurposing Basic; all of M0 plus the Android
+skeleton; distribution direct-APK first, then Google Play, then F-Droid.
 
 Several of these are **live defects in the shipping desktop product**, not
 mobile-only concerns:

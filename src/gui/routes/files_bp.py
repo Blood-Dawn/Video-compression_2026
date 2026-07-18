@@ -468,16 +468,48 @@ _UPLOAD_DIR_LOCAL = _ROOT / "data" / "uploads"
 # _ALLOWED_EXTENSIONS now lives in gui.state (imported at the top).
 
 
-def _upload_dir() -> Path:
-    """Return the best available upload directory.
+#: Path fragments that mean "this is inside a third-party sync root". Used only
+#: to TELL the user where their upload landed, never to choose the destination.
+#: The old check looked for "My Drive"/"Google Drive" only, so a OneDrive
+#: destination reported in_drive=false and a client could not detect the
+#: condition at all.
+_CLOUD_MARKERS = ("onedrive", "google drive", "my drive", "googledrive",
+                  "icloud", "dropbox", "box sync")
 
-    Prefers <cloud sync root>/SVCS/uploads/ (OneDrive or Google Drive) so
-    uploaded source videos land alongside pipeline output segments in the cloud.
-    Falls back to local data/uploads/ if no cloud sync is found.
+
+def _is_cloud_path(p: Path) -> bool:
+    """True if the path sits inside a recognizable cloud sync root."""
+    s = str(p).replace("\\", "/").lower()
+    return any(m in s for m in _CLOUD_MARKERS)
+
+
+def _upload_dir() -> Path:
+    """Return the upload directory, never auto-selecting a cloud folder.
+
+    Resolution order, mirroring _default_output_dir() (FIX 1):
+      1. ``<the user's explicitly chosen output_dir>/uploads``. If the user
+         picked a cloud folder in Setup, that path lives here, so a cloud
+         destination is only ever used when the user chose it.
+      2. Local ``data/uploads/``.
+
+    M0.7: this previously PREFERRED a detected OneDrive or Google Drive root
+    with no opt-in and no way to decline, which was a regression against the
+    policy FIX 1 adopted on 2026-06-03: "The app NEVER falls through to a
+    OneDrive / Google Drive / iCloud root on its own. Cloud roots are only
+    OFFERED in the Setup page."
+
+    That mattered more here than anywhere else. Uploads are surveillance
+    footage of real people, so the old behavior silently copied video of
+    identifiable people into a third-party cloud, and a 1GB phone upload also
+    triggered a 1GB cloud sync. It contradicted the product's own promise to
+    the user, which the mobile mockup states verbatim: "Nothing is sent to any
+    cloud unless you pick a cloud folder in Settings."
     """
-    root, _label, _url = _detect_cloud_root()
-    if root is not None:
-        d = root / _CLOUD_SUBFOLDER / "uploads"
+    with _state_lock:
+        cfg = _status.get("config", {}) or {}
+        persisted = (cfg.get("output_dir") or "").strip()
+    if persisted and Path(persisted).is_absolute():
+        d = Path(persisted) / "uploads"
     else:
         d = _UPLOAD_DIR_LOCAL
     d.mkdir(parents=True, exist_ok=True)
@@ -488,8 +520,20 @@ def _upload_dir() -> Path:
 def api_open_folder():
     """Open a folder in the native OS file explorer on the host machine.
 
-    Security: resolves the path and requires it to be a directory (not a file
-    or a system path trick). Runs on localhost only.
+    M0.9 hardening. This route takes a caller-supplied path, resolves it, and
+    spawns a process on the SERVER host, so it needs real confinement:
+
+      * The old docstring claimed "Runs on localhost only" but no code enforced
+        it, and the app defaults its bind to 0.0.0.0. Anyone who could reach
+        the port could spawn explorer/open/xdg-open on the host.
+      * It was also a filesystem existence oracle: a miss returned 404 naming
+        the resolved path and a hit returned 200 naming it, so an authenticated
+        but untrusted caller could map the host's filesystem one probe at a
+        time. That is exactly the oracle SEC-015 closed on /api/media_debug.
+
+    Now confined to allowed_media_roots(), the same guard /api/media and
+    /media/<path> already use, and outside-roots answers are indistinguishable
+    whether or not the target exists.
     """
     import platform as _platform
     data = request.get_json(silent=True) or {}
@@ -499,6 +543,14 @@ def api_open_folder():
 
     folder = Path(raw).resolve()
 
+    # Confine BEFORE touching the filesystem, so existence is never revealed
+    # for anything outside the allowed roots. One identical response for
+    # "outside the roots" regardless of whether the path is real.
+    roots = _ps.allowed_media_roots()
+    probe = folder if folder.suffix == "" else folder.parent
+    if not (_ps.is_path_allowed(folder, roots) or _ps.is_path_allowed(probe, roots)):
+        return jsonify({"error": "Path is outside the allowed media folders."}), 403
+
     if not folder.exists():
         return jsonify({"error": f"Path not found: {folder}"}), 404
     if not folder.is_dir():
@@ -506,6 +558,9 @@ def api_open_folder():
         folder = folder.parent
     if not folder.is_dir():
         return jsonify({"error": "Not a directory"}), 400
+    # Re-check after the parent hop: the parent must also be inside the roots.
+    if not _ps.is_path_allowed(folder, roots):
+        return jsonify({"error": "Path is outside the allowed media folders."}), 403
 
     try:
         sys_name = _platform.system()
@@ -553,7 +608,10 @@ def api_upload():
 
     f.save(str(dest))
     log.info("Uploaded video saved: %s (%d bytes)", dest.name, dest.stat().st_size)
-    return jsonify({"path": str(dest), "filename": dest.name, "in_drive": "My Drive" in str(dest) or "Google Drive" in str(dest)})
+    return jsonify({"path": str(dest), "filename": dest.name,
+                    "in_cloud": _is_cloud_path(dest),
+                    # Kept for the existing dashboard JS, which reads in_drive.
+                    "in_drive": _is_cloud_path(dest)})
 
 
 @files_bp.route("/api/segments/clear", methods=["POST"])

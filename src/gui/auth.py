@@ -16,11 +16,20 @@ real exposure. This module enforces a simple policy:
 
 The decision is pure and isolated (``decide_auth``) so it is unit-testable
 without a running server; ``install_basic_auth`` wires the actual before-request
-guard onto a Flask app. Auth is deliberately NOT installed inside create_app()  - 
+guard onto a Flask app. Auth is deliberately NOT installed inside create_app()  -
 only the real server entry point (run_gui) installs it after deciding policy, so
 the test suite's in-process client and embedded uses stay unauthenticated.
 
+M0.10 (mobile port) adds a SECOND accepted credential on the same guard:
+``Authorization: Bearer <token>``, verified against gui.device_tokens. Basic is
+unchanged and remains the browser path. Tokens exist because a credential typed
+into a phone leaves the building, and revoking one device must not mean rotating
+the password for every client. Minting and revoking deliberately require the
+PASSWORD (Basic), never a token, so a stolen token cannot mint successors or
+revoke the operator's other devices; that check lives in the routes.
+
 Author: Bloodawn (KheivenD), 2026-06-03 (TASK 4.4 - dashboard auth).
+Updated:  Bloodawn (KheivenD), 2026-07-18 (M0.10 - Bearer device tokens).
 """
 
 from __future__ import annotations
@@ -30,7 +39,25 @@ import os
 from dataclasses import dataclass, field
 from typing import Mapping, Optional, Tuple
 
-from flask import Flask, Response, request
+from flask import Flask, Response, g, request
+
+# Values stashed on flask.g so a route can tell WHICH credential authenticated
+# the current request. Token-management routes require SCHEME_BASIC: a stolen
+# device token must not be able to mint successors or revoke other devices.
+SCHEME_BASIC = "basic"
+SCHEME_BEARER = "bearer"
+#: Set when no auth guard is installed at all (localhost bind, no credentials).
+SCHEME_NONE = "none"
+
+
+def current_auth_scheme() -> str:
+    """Which credential authenticated this request.
+
+    Returns SCHEME_NONE when no guard is installed, which is the open localhost
+    case and is deliberately treated as fully privileged, matching the existing
+    no-auth model.
+    """
+    return getattr(g, "svcs_auth_scheme", SCHEME_NONE)
 
 # Hosts that mean "this machine only" - auth optional.
 _LOCALHOST_HOSTS = {"127.0.0.1", "localhost", "::1", "0:0:0:0:0:0:0:1", ""}
@@ -119,17 +146,43 @@ def decide_auth(
     )
 
 
-def install_basic_auth(app: Flask, username: str, password: str) -> None:
-    """Enforce HTTP Basic Auth on every request to ``app``.
+def _presented_bearer() -> Optional[str]:
+    """Return the Bearer token on this request, or None.
 
-    Uses constant-time comparison so the guard doesn't leak the credential via
-    timing. Applies to all routes including static assets - the whole dashboard
-    is behind the login.
+    Parsed by hand rather than via ``request.authorization`` because Werkzeug
+    only populates that for schemes it models, and the value must be read
+    verbatim. Never logged.
+    """
+    header = request.headers.get("Authorization", "")
+    scheme, _, value = header.partition(" ")
+    if scheme.lower() != "bearer":
+        return None
+    return value.strip() or None
+
+
+def install_basic_auth(app: Flask, username: str, password: str) -> None:
+    """Enforce authentication on every request to ``app``.
+
+    Accepts EITHER of two credentials:
+
+      * ``Authorization: Basic`` with the configured username and password (the
+        browser path, unchanged since TASK 4.4), or
+      * ``Authorization: Bearer <token>`` matching a live device token (M0.10,
+        the mobile path).
+
+    Both comparisons are constant-time so the guard does not leak a credential
+    via timing. Applies to all routes including static assets: the whole
+    dashboard is behind the login, and that deliberately includes the media and
+    HLS routes an Android player fetches on its own connection.
+
+    The name is kept for compatibility with existing call sites and tests.
     """
     if not username or not password:
         raise ValueError("username and password are required to enable auth")
 
-    realm = 'Basic realm="SVCS Dashboard", charset="UTF-8"'
+    # Advertise both schemes so a client knows a token is acceptable.
+    realm = ('Basic realm="SVCS Dashboard", charset="UTF-8", '
+             'Bearer realm="SVCS Dashboard"')
 
     def _unauthorized() -> Response:
         return Response("Authentication required.", 401,
@@ -137,6 +190,21 @@ def install_basic_auth(app: Flask, username: str, password: str) -> None:
 
     @app.before_request
     def _require_basic_auth():  # pragma: no cover - exercised via test client
+        # ── Bearer device token (M0.10) ──
+        # Checked first because a mobile client always sends Bearer, so this
+        # avoids running the Basic path for every .ts segment fetch.
+        presented = _presented_bearer()
+        if presented is not None:
+            try:
+                from gui.device_tokens import verify_token
+            except ModuleNotFoundError:  # pragma: no cover - import path shim
+                from src.gui.device_tokens import verify_token
+            # Never log `presented`, and never echo it in the response.
+            if verify_token(presented) is not None:
+                g.svcs_auth_scheme = SCHEME_BEARER
+                return None
+            return _unauthorized()
+
         auth = request.authorization
         if auth is None or auth.type != "basic":
             return _unauthorized()
@@ -153,5 +221,6 @@ def install_basic_auth(app: Flask, username: str, password: str) -> None:
         pass_ok = hmac.compare_digest((auth.password or "").encode("utf-8"),
                                       password.encode("utf-8"))
         if user_ok and pass_ok:
+            g.svcs_auth_scheme = SCHEME_BASIC
             return None
         return _unauthorized()

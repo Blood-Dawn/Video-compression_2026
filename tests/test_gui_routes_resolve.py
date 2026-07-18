@@ -97,6 +97,11 @@ SAMPLES = [
     ("POST", "/api/autocompress/scan_now"),
     ("GET", "/api/retention"),
     ("POST", "/api/retention/purge_now"),
+    # M0.10: device tokens for the mobile client.
+    ("GET", "/api/auth/tokens"),
+    ("POST", "/api/auth/tokens"),
+    ("DELETE", "/api/auth/tokens/abc123"),
+    ("POST", "/api/auth/tokens/revoke_all"),
 ]
 
 
@@ -114,6 +119,12 @@ def test_url_resolves(method, url):
 
 
 def test_sample_count_matches_route_count():
-    """Every registered non-static route has a resolution sample here."""
+    """Every registered non-static route has a resolution sample here.
+
+    73 through v2.2.0.dev0, then +4 for the M0.10 device-token routes. Note this
+    counts url_map rules, so the GET and POST on /api/auth/tokens count twice;
+    the sibling guard in test_gui_blueprint_registration.py keys on the rule
+    STRING instead and so expects 76, not 77.
+    """
     rules = [r for r in flask_app.url_map.iter_rules() if r.endpoint != "static"]
-    assert len(SAMPLES) == len(rules) == 73
+    assert len(SAMPLES) == len(rules) == 77

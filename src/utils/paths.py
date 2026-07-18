@@ -151,6 +151,10 @@ STATE_FILE_NAMES = [
     "usage_consent.json",
     "usage_events.jsonl",
     "job_history.json",     # R4 Phase 1: recent-jobs log (gui/services/job_history.py)
+    # M0.10: per-device API tokens (gui/device_tokens.py). Listed here so a
+    # factory reset revokes every paired phone, which is the behavior an
+    # operator resetting a machine expects.
+    "device_tokens.json",
 ]
 
 

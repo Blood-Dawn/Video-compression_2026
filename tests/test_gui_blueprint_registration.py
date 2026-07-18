@@ -101,12 +101,17 @@ EXPECTED = {
     "/api/autocompress/scan_now": "autocompress",
     "/api/retention": "autocompress",
     "/api/retention/purge_now": "autocompress",
+    # M0.10: device tokens for the mobile client.
+    "/api/auth/tokens": "tokens",
+    "/api/auth/tokens/<token_id>": "tokens",
+    "/api/auth/tokens/revoke_all": "tokens",
 }
 
 EXPECTED_BLUEPRINTS = {
     "ui", "sse", "metrics", "presets", "encryption", "plates",
     "queries", "rtsp", "demo", "hls", "files", "pipeline", "cameras", "usage",
     "setup", "library", "autocompress",
+    "tokens",          # M0.10: device-token management for the mobile client
 }
 
 
@@ -115,8 +120,11 @@ def _rules():
 
 
 def test_route_count():
+    # 73 through v2.2.0.dev0, then +3 unique rule strings for M0.10 device
+    # tokens (/api/auth/tokens carries both GET and POST, so the four routes
+    # collapse to three keys here).
     rules = _rules()
-    assert len(rules) == 73, f"expected 73 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 76, f"expected 76 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_blueprints_registered():

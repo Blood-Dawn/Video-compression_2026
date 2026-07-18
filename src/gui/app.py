@@ -192,7 +192,7 @@ def register_blueprints(flask_app: Flask, edition: str | None = None) -> None:
     R4 Phase 4: the "field" (offline, local-compression-only) edition drops the
     server-making blueprints - the RTSP server (MediaMTX) and HLS live streaming
     - so a field build has no server surface at all. The default (``edition``
-    None -> resolves to "server") registers all 17, so source runs and the
+    None -> resolves to "server") registers all 18, so source runs and the
     existing route/blueprint guards are unchanged.
     """
     try:
@@ -218,6 +218,7 @@ def register_blueprints(flask_app: Flask, edition: str | None = None) -> None:
         from gui.routes.setup_bp import setup_bp
         from gui.routes.library_bp import library_bp
         from gui.routes.autocompress_bp import autocompress_bp
+        from gui.routes.tokens_bp import tokens_bp
     except ModuleNotFoundError:  # pragma: no cover - import path shim
         from src.gui.routes.ui_bp import ui_bp
         from src.gui.routes.sse_bp import sse_bp
@@ -236,9 +237,11 @@ def register_blueprints(flask_app: Flask, edition: str | None = None) -> None:
         from src.gui.routes.setup_bp import setup_bp
         from src.gui.routes.library_bp import library_bp
         from src.gui.routes.autocompress_bp import autocompress_bp
+        from src.gui.routes.tokens_bp import tokens_bp
     all_bps = [ui_bp, sse_bp, metrics_bp, presets_bp, encryption_bp, plates_bp,
                queries_bp, rtsp_bp, demo_bp, hls_bp, files_bp, pipeline_bp,
-               cameras_bp, usage_bp, setup_bp, library_bp, autocompress_bp]
+               cameras_bp, usage_bp, setup_bp, library_bp, autocompress_bp,
+               tokens_bp]
     if field:
         # Field build: no server-making surfaces (RTSP server + HLS streaming).
         server_only = {rtsp_bp, hls_bp}

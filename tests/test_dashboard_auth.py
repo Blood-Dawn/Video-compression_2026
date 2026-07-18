@@ -135,3 +135,40 @@ def test_install_requires_both_parts():
     app = Flask(__name__)
     with pytest.raises(ValueError):
         install_basic_auth(app, "admin", "")
+
+
+# ── Non-ASCII credentials (SEC: unauthenticated 500 / lockout) ────────────────
+# hmac.compare_digest raises TypeError on str operands holding non-ASCII. The
+# client half of each compare is attacker-controlled, so comparing str made any
+# unauthenticated caller able to force a 500 plus a logged traceback, and locked
+# out operators whose password had an accent. Comparing UTF-8 bytes fixes both.
+
+@pytest.mark.parametrize("user,pw", [
+    ("admin", "passwörd"),        # non-ASCII password
+    ("øperator", "secret"),       # non-ASCII username
+    ("admin", "hunter2\U0001f600"),    # astral-plane (emoji) password
+    ("é", "é"),              # both non-ASCII
+])
+def test_non_ascii_credentials_are_401_never_500(authed_client, user, pw):
+    """An unauthenticated caller must not be able to force a server error."""
+    resp = authed_client.get("/", headers=_basic(user, pw))
+    assert resp.status_code == 401, (
+        f"non-ASCII credential {user!r}/{pw!r} returned {resp.status_code}; "
+        "a 500 here is a remote unauthenticated DoS plus a traceback leak")
+
+
+def test_non_ascii_configured_password_authenticates():
+    """An operator MAY configure a non-ASCII password and log in with it."""
+    app = Flask(__name__)
+
+    @app.route("/")
+    def index():
+        return "ok"
+
+    install_basic_auth(app, "øperator", "passwördé")
+    client = app.test_client()
+
+    ok = client.get("/", headers=_basic("øperator", "passwördé"))
+    assert ok.status_code == 200
+    # ...and a near-miss on the same non-ASCII credential is still refused.
+    assert client.get("/", headers=_basic("øperator", "passwörd")).status_code == 401

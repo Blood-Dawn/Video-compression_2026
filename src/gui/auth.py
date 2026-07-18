@@ -140,8 +140,18 @@ def install_basic_auth(app: Flask, username: str, password: str) -> None:
         auth = request.authorization
         if auth is None or auth.type != "basic":
             return _unauthorized()
-        user_ok = hmac.compare_digest((auth.username or ""), username)
-        pass_ok = hmac.compare_digest((auth.password or ""), password)
+        # Compare UTF-8 BYTES, not str. hmac.compare_digest raises TypeError on
+        # str operands containing non-ASCII, and the client half of each compare
+        # is attacker-controlled: with str operands, any unauthenticated caller
+        # who sends a non-ASCII password turns every request into a 500 plus a
+        # logged traceback (no error handler is registered), and a legitimate
+        # operator whose password has an accent can never log in. Bytes also
+        # match the charset="UTF-8" this realm already advertises, and keep the
+        # comparison constant-time.
+        user_ok = hmac.compare_digest((auth.username or "").encode("utf-8"),
+                                      username.encode("utf-8"))
+        pass_ok = hmac.compare_digest((auth.password or "").encode("utf-8"),
+                                      password.encode("utf-8"))
         if user_ok and pass_ok:
             return None
         return _unauthorized()

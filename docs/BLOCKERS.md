@@ -251,3 +251,65 @@ as the run reaches them:
   which 5.3's risk note explicitly calls for ("drive this from the same foreground
   signal 5.2 uses"). No user-facing "background reference" toggle was shipped, because
   a control that trades 28 VMAF points for 0 bytes would mislead users.
+
+- **R5 TASK 5.3 - adaptive GOP driven by the motion signal is refuted; the
+  scene-change half already worked.** Not a gate. TASK 5.3 asked for two things.
+
+  **(a) Scene-change keyframes: ALREADY WORKING, now guarded.** x264's built-in
+  scene detection places an IDR at a hard cut, and `_build_output_kwargs` passes
+  only `-g`, leaving `sc_threshold` at its default. Verified with ffprobe: at the
+  production argv shape (`-g 500`, gop_seconds=20 at 25fps) a synthetic 4s cut
+  gets an I-frame at exactly 4.0s. No new code was needed. What was missing was
+  a guard, because `-sc_threshold 0` silently disables it and that flag already
+  exists in `src/gui/services/hls_runner.py`, where it is CORRECT (HLS wants
+  evenly sized segments). Copying the HLS argv into the recording encoder would
+  degrade every recording with no error. `tests/test_scene_change_keyframes.py`
+  now pins this, including a negative control proving the test can fail.
+
+  **(b) Content-adaptive GOP from the TASK 5.2 motion signal: REFUTED.** The R5
+  plan says to drive this from "the same foreground signal 5.2 uses". Measured
+  on 7 real CDnet surveillance clips (baseline, cameraJitter, dynamicBackground,
+  intermittentObjectMotion, badWeather), sweeping GOP over 30/60/150/300/600 at
+  CRF 23 with VMAF per point, and scoring motion with the same
+  `BackgroundSubtractor` the pipeline uses:
+
+      clip                     motion   saturation GOP
+      baseline_office          0.0000        60
+      baseline_pedestrians     0.0000       300
+      baseline_highway         0.1580       300
+      jitter_boulevard         0.0600       150
+      dynamicBg_fountain01     0.0394        30
+      intermittent_parking     0.0000        30
+      badWeather_snowFall      0.0016        30
+
+  The headline Pearson r was +0.556, which looks supportive and is not:
+    * **Leave-one-out:** removing `baseline_highway` collapses r to **+0.009**.
+      A single clip carries the entire correlation.
+    * **Tied predictor:** motion = 0.0000 occurs three times, with saturation
+      GOPs of 60, 300 and 30. A **10x spread on identical predictor input.**
+    * **Permutation test:** p = 0.165 over 20,000 shuffles. Not significant.
+
+  The mechanism explains it. The clips that punish a long GOP are the fountain
+  and the snowfall: pixels churn constantly, but there is no coherent object
+  motion, so the background subtractor scores them 0.0394 and 0.0016. The axis
+  that actually moves the optimum is temporal entropy, and the available signal
+  is blind to it. Seeing that axis needs a second detector, which the task's own
+  risk note forbids ("do not double-count motion; drive this from the same
+  foreground signal 5.2 uses"). **The task's constraint forecloses the only
+  signal that would work.**
+
+  Also worth recording: longer GOP monotonically trades bytes for VMAF on every
+  clip tested, which is the same rate-distortion curve CRF already controls, and
+  controls better. And the current default (gop_seconds=20) sits in the
+  saturated region: on 5 of 6 clips, GOP 300 and 600 produced BYTE-IDENTICAL
+  output. That is not harmful, but it means the default could be halved at
+  roughly zero size cost and would double seek granularity for an operator
+  scrubbing footage. **Left as an OWNER DECISION rather than changed here**,
+  since it alters output for every existing user and the benefit is usability
+  rather than compression.
+
+  Correction worth carrying forward: an early probe suggested `-keyint_min == -g`
+  suppressed cut keyframes. It does not. Re-measured at 25 and 30 fps across
+  g=500 and g=600, the cut keyframe appeared every time (x264 also clamps
+  min-keyint to keyint/2+1, so that setting never means what it reads like). The
+  guard therefore asserts on `sc_threshold`, which reproduced reliably.

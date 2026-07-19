@@ -3,9 +3,15 @@ package org.svcs.mobile.net
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import okhttp3.Interceptor
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.logging.HttpLoggingInterceptor
 import org.svcs.mobile.BuildConfig
 import java.util.concurrent.TimeUnit
@@ -163,6 +169,92 @@ class SvcsApi(
     fun thumbUrl(path: String): String =
         "${baseUrl.trimEnd('/')}/api/library/thumb?path=" +
             java.net.URLEncoder.encode(path, "UTF-8")
+
+    // ── M3: live stream ──────────────────────────────────────────────────
+
+    fun hlsStatus(): Fetched<HlsStatus> =
+        getJson("${baseUrl.trimEnd('/')}/api/hls/status")
+
+    /** Absolute playlist URL. Handed to ExoPlayer, which uses [httpClient]. */
+    fun playlistUrl(cameraId: String): String =
+        "${baseUrl.trimEnd('/')}/api/hls/$cameraId/playlist.m3u8"
+
+    /**
+     * Ask the server to start annotating a source into HLS.
+     *
+     * 409 is NOT an error here. The server has a single process-wide stream
+     * slot, so 409 means someone else (usually the desktop) already has one
+     * running; the right response is to watch that instead of fighting for
+     * the slot.
+     */
+    fun hlsStart(inputSource: String, cameraId: String, mode: String): HlsStartResult {
+        val body = buildJsonObject {
+            put("input_source", inputSource)
+            put("camera_id", cameraId)
+            put("mode", mode)
+        }.toString().toRequestBody("application/json".toMediaType())
+        return try {
+            client.newCall(
+                Request.Builder()
+                    .url("${baseUrl.trimEnd('/')}/api/hls/start")
+                    .post(body).build(),
+            ).execute().use { resp ->
+                when {
+                    resp.isSuccessful -> HlsStartResult.Started
+                    resp.code == 409 -> HlsStartResult.AlreadyRunning
+                    resp.code == 401 -> HlsStartResult.Unauthorized
+                    else -> HlsStartResult.Failed(
+                        errorMessage(resp.body?.string()) ?: "HTTP ${resp.code}",
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            HlsStartResult.Failed(e.message ?: e.javaClass.simpleName)
+        }
+    }
+
+    /** Stop the stream. Best effort: a failure here is not worth a dialog. */
+    fun hlsStop(): Boolean = try {
+        val empty = "{}".toRequestBody("application/json".toMediaType())
+        client.newCall(
+            Request.Builder()
+                .url("${baseUrl.trimEnd('/')}/api/hls/stop")
+                .post(empty).build(),
+        ).execute().use { it.isSuccessful }
+    } catch (e: Exception) {
+        false
+    }
+
+    /**
+     * Is the playlist actually playable yet?
+     *
+     * Measured on a real-time source: the playlist 404s for ~3.2s after
+     * /api/hls/start returns 200, because ffmpeg only writes the .ts and the
+     * .m3u8 entry when the first 2s segment CLOSES. /api/hls/status reports
+     * running=true from t+0, so it cannot be used as the readiness gate.
+     * ExoPlayer's default retry budget is shorter than that gap, which is why
+     * the client polls this itself before creating a player.
+     *
+     * Requires an EXTINF line, not just a 200: an empty playlist is served
+     * briefly and gives the player nothing to load.
+     */
+    fun playlistReady(cameraId: String): Boolean = try {
+        client.newCall(
+            Request.Builder().url(playlistUrl(cameraId)).get().build(),
+        ).execute().use { resp ->
+            resp.isSuccessful && (resp.body?.string()?.contains("#EXTINF") == true)
+        }
+    } catch (e: Exception) {
+        false
+    }
+
+    /** Pull a human-usable message out of an error body, if there is one. */
+    private fun errorMessage(body: String?): String? = try {
+        body?.let { json.parseToJsonElement(it) }
+            ?.let { (it as? JsonObject)?.get("error")?.jsonPrimitive?.content }
+    } catch (e: Exception) {
+        null
+    }
 
     /**
      * GET + decode, never throwing.

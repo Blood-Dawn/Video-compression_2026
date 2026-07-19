@@ -25,7 +25,6 @@ import org.svcs.mobile.data.TokenStore
 import org.svcs.mobile.net.Capabilities
 import org.svcs.mobile.net.ProbeResult
 import org.svcs.mobile.net.SvcsApi
-import org.svcs.mobile.ui.theme.SvcsTextDim
 
 /**
  * Tabs from the design mockup. LIVE is conditional: the field edition registers
@@ -59,8 +58,22 @@ fun SvcsApp() {
     var checked by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(Tab.HOME) }
 
-    // Restore the saved pairing on launch and ask the server what it can do.
-    LaunchedEffect(Unit) {
+    /**
+     * Bumped whenever credentials are saved.
+     *
+     * Keying both the pairing probe and the per-tab ViewModels on this is what
+     * makes re-pairing actually take effect. Previously the probe ran once at
+     * launch and every screen kept the SvcsApi built from the token in force at
+     * that moment, so a user whose token had been revoked was told to re-pair
+     * under MORE, did it, and stayed broken until they force-quit the app.
+     */
+    var sessionEpoch by remember { mutableStateOf(0) }
+
+    // Restore the saved pairing and ask the server what it can do. Re-runs on
+    // re-pair so the new token is picked up in place.
+    LaunchedEffect(sessionEpoch) {
+        checked = false
+        api = null
         val url = store.serverUrl()
         val token = store.token()
         if (!url.isNullOrBlank() && !token.isNullOrBlank()) {
@@ -83,7 +96,7 @@ fun SvcsApp() {
 
     if (api == null) {
         // Not paired. The pairing screen is the whole app until it is.
-        ServerSettingsScreen()
+        ServerSettingsScreen(onCredentialsSaved = { sessionEpoch++ })
         return
     }
 
@@ -104,25 +117,29 @@ fun SvcsApp() {
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
+            // The ViewModel keys carry sessionEpoch so re-pairing discards the
+            // cached ones. They hold an SvcsApi bound to the token that was in
+            // force when they were created, and a stale one would keep 401ing
+            // against a credential the user has already replaced.
             when (tab) {
                 Tab.LIBRARY -> LibraryScreen(
-                    vm = viewModel(key = "lib") { LibraryViewModel(api) })
+                    vm = viewModel(key = "lib-$sessionEpoch") { LibraryViewModel(api) })
                 Tab.METRICS -> MetricsScreen(
-                    vm = viewModel(key = "metrics") { MetricsViewModel(api) })
-                Tab.MORE -> ServerSettingsScreen()
+                    vm = viewModel(key = "metrics-$sessionEpoch") { MetricsViewModel(api) })
+                Tab.MORE -> ServerSettingsScreen(
+                    onCredentialsSaved = { sessionEpoch++ })
                 Tab.HOME -> HomeScreen(
-                    vm = viewModel(key = "home") { HomeViewModel(api) })
-                // Named rather than blank, so the gap reads as "not built yet"
-                // instead of "broken".
-                Tab.LIVE -> Placeholder("LIVE arrives in M3 (Media3 HLS player).")
+                    vm = viewModel(key = "home-$sessionEpoch") { HomeViewModel(api) })
+                Tab.LIVE -> LiveScreen(
+                    vm = viewModel(key = "live-$sessionEpoch") {
+                        LiveViewModel(
+                            api = api,
+                            lastSourceProvider = { store.lastLiveSource() },
+                            lastSourceSaver = { store.setLastLiveSource(it) },
+                        )
+                    },
+                )
             }
         }
-    }
-}
-
-@Composable
-private fun Placeholder(text: String) {
-    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-        Text(text, style = MaterialTheme.typography.bodyMedium, color = SvcsTextDim)
     }
 }

@@ -143,6 +143,35 @@ data class RecordedTotals(
     @SerialName("duration_hours") val durationHours: Double = 0.0,
 )
 
+/**
+ * GET /api/hls/status (M3).
+ *
+ * input_source is REDACTED server-side: an RTSP URL usually carries the
+ * camera's password, and this route is readable with a device token. Treat the
+ * value as display text only; it is not a working URL.
+ */
+@Serializable
+data class HlsStatus(
+    val running: Boolean = false,
+    @SerialName("camera_id") val cameraId: String? = null,
+    @SerialName("input_source") val inputSource: String? = null,
+    @SerialName("ingest_latency_s") val ingestLatencyS: Double? = null,
+    @SerialName("latency_avg_s") val latencyAvgS: Double? = null,
+    val error: String? = null,
+)
+
+/** Outcome of POST /api/hls/start, in the terms the UI has to render. */
+sealed interface HlsStartResult {
+    data object Started : HlsStartResult
+    /**
+     * The server already has a stream running. There is one process-wide slot,
+     * so this is a normal outcome, not a failure: watch what is already there.
+     */
+    data object AlreadyRunning : HlsStartResult
+    data object Unauthorized : HlsStartResult
+    data class Failed(val detail: String) : HlsStartResult
+}
+
 /** "1.66 GB". Shared by the screens so units never disagree. */
 fun humanBytes(b: Long): String = when {
     b >= 1_073_741_824 -> String.format("%.2f GB", b / 1_073_741_824.0)

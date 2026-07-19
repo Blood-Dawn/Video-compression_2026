@@ -26,6 +26,16 @@ data class ServerSettingsState(
     val urlError: String? = null,
     val capabilities: Capabilities? = null,
     val needsPublicConsent: Boolean = false,
+    /**
+     * Bumped on every successful save.
+     *
+     * The shell watches this to rebuild its SvcsApi and drop the cached
+     * per-tab ViewModels. Without it, re-pairing wrote a new token to storage
+     * that nothing picked up: the screens kept using the client built at
+     * launch, so a user told to "re-pair under MORE" after a token revocation
+     * did exactly that and stayed broken until they force-quit the app.
+     */
+    val saveCount: Int = 0,
 )
 
 /**
@@ -131,7 +141,9 @@ class ServerSettingsViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             store.setServerUrl(_state.value.serverUrl.trim())
             store.setToken(_state.value.token.trim())
-            _state.update { it.copy(message = "Saved.", ok = true) }
+            _state.update {
+                it.copy(message = "Saved.", ok = true, saveCount = it.saveCount + 1)
+            }
         }
     }
 

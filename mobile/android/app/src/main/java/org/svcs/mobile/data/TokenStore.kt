@@ -45,6 +45,22 @@ class TokenStore(private val context: Context) {
 
         val SERVER_URL = stringPreferencesKey("server_url")
         val TOKEN_BLOB = stringPreferencesKey("token_blob")
+        val LAST_LIVE_SOURCE = stringPreferencesKey("last_live_source")
+    }
+
+    /**
+     * The camera source last used on the LIVE tab (M3).
+     *
+     * Stored in the clear, and deliberately so: this is the address the user
+     * typed, and typing an RTSP URL on a phone keyboard once is enough. If it
+     * carries credentials they are the user's own camera credentials, held on
+     * the user's own device, and the alternative is retyping them every time.
+     */
+    suspend fun lastLiveSource(): String =
+        context.settingsStore.data.first()[LAST_LIVE_SOURCE] ?: ""
+
+    suspend fun setLastLiveSource(src: String) {
+        context.settingsStore.edit { it[LAST_LIVE_SOURCE] = src.trim() }
     }
 
     suspend fun serverUrl(): String? =

@@ -65,6 +65,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.activity.compose)
 
     implementation(platform(libs.androidx.compose.bom))
@@ -83,6 +84,14 @@ dependencies {
     // the call site: these are frames of real people and must not be written
     // to the phone's storage.
     implementation(libs.coil.compose)
+
+    // M3: LIVE tab. media3-datasource-okhttp is what carries the Bearer token
+    // onto the .ts segment requests, which are separate HTTP calls from the
+    // playlist and are 401 without it.
+    implementation(libs.media3.exoplayer)
+    implementation(libs.media3.exoplayer.hls)
+    implementation(libs.media3.ui)
+    implementation(libs.media3.datasource.okhttp)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

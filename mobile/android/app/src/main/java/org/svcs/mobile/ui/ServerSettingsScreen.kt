@@ -17,6 +17,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -40,8 +41,20 @@ import org.svcs.mobile.ui.theme.SvcsYellow
  * Author: Bloodawn (KheivenD), 2026-07-18 (M1.1).
  */
 @Composable
-fun ServerSettingsScreen(vm: ServerSettingsViewModel = viewModel()) {
+fun ServerSettingsScreen(
+    vm: ServerSettingsViewModel = viewModel(),
+    /**
+     * Fired after credentials are saved, so the shell can rebuild its API
+     * client. Re-pairing is worthless if the rest of the app keeps using the
+     * client it built at launch with the old token.
+     */
+    onCredentialsSaved: () -> Unit = {},
+) {
     val state by vm.state.collectAsState()
+
+    LaunchedEffect(state.saveCount) {
+        if (state.saveCount > 0) onCredentialsSaved()
+    }
 
     Scaffold { padding ->
         Column(

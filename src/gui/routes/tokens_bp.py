@@ -86,7 +86,18 @@ def api_mint_token():
         except (TypeError, ValueError):
             ttl = None
 
-    secret, rec = device_tokens.mint_token(label, ttl_days=ttl)
+    # An unreadable store must not be papered over: minting on top of a
+    # failed read would have deleted every other paired device. Report it and
+    # let the operator fix the file.
+    try:
+        secret, rec = device_tokens.mint_token(label, ttl_days=ttl)
+    except device_tokens.StoreUnreadable as exc:
+        log.error(f"Refusing to mint a token: {exc}")
+        return jsonify({
+            "error": "The device-token store could not be read, so pairing a "
+                     "new device would have unpaired the existing ones. "
+                     "Nothing was changed. Check the server log.",
+        }), 503
     # Log the pairing event but NOT the secret, per the house rule.
     log.info(f"Device token minted: label={rec.label!r} id={rec.id} "
              f"expires={rec.expires_at or 'never'}")
@@ -106,7 +117,14 @@ def api_revoke_token(token_id):
     denied = _require_password_auth()
     if denied is not None:
         return denied
-    ok = device_tokens.revoke_token(str(token_id))
+    try:
+        ok = device_tokens.revoke_token(str(token_id))
+    except device_tokens.StoreUnreadable as exc:
+        log.error(f"Refusing to revoke a token: {exc}")
+        return jsonify({
+            "error": "The device-token store could not be read. Nothing was "
+                     "changed. Check the server log.",
+        }), 503
     if not ok:
         return jsonify({"error": "No live token with that id."}), 404
     log.info(f"Device token revoked: id={token_id}")
@@ -119,6 +137,13 @@ def api_revoke_all_tokens():
     denied = _require_password_auth()
     if denied is not None:
         return denied
-    n = device_tokens.revoke_all()
+    try:
+        n = device_tokens.revoke_all()
+    except device_tokens.StoreUnreadable as exc:
+        log.error(f"Refusing to revoke all tokens: {exc}")
+        return jsonify({
+            "error": "The device-token store could not be read. Nothing was "
+                     "changed. Check the server log.",
+        }), 503
     log.info(f"All device tokens revoked ({n}).")
     return jsonify({"revoked": True, "count": n})

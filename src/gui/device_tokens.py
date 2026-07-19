@@ -160,26 +160,89 @@ def token_path() -> Path:
     return state_file(TOKEN_FILE_NAME)
 
 
-def _read_all() -> List[DeviceToken]:
-    """Load every stored token. Returns [] when the store is absent or broken.
+class StoreUnreadable(Exception):
+    """The token store exists but could not be read or parsed.
 
-    Failing open to "no tokens" is the safe direction: it denies token holders
-    rather than admitting them, and Basic auth still works.
+    Distinct from "there are no tokens": callers that are about to WRITE the
+    store must refuse, because writing what they managed to read would delete
+    everything they did not.
+    """
+
+
+def _read_all() -> List[DeviceToken]:
+    """Load every readable token. Returns [] when the store is absent or broken.
+
+    Failing open to "no tokens" is the safe direction FOR VERIFICATION: it
+    denies token holders rather than admitting them, and Basic auth still
+    works. Individual corrupt records are skipped so that one bad entry cannot
+    lock out every other device.
+
+    Do NOT use this as the base of a read-modify-write: writing back what it
+    returns deletes whatever it skipped. Use _read_all_strict.
+    """
+    try:
+        return _load_store()[0]
+    except StoreUnreadable:
+        return []
+
+
+def _load_store() -> "tuple[List[DeviceToken], int]":
+    """Load the store. Returns (tokens, number_of_unparseable_records).
+
+    Raises StoreUnreadable when the FILE cannot be read or parsed at all. A
+    MISSING file is not an error: that is a first run, and [] is honest.
+
+    The dropped-record count is returned rather than raised because the two
+    callers need opposite things from it:
+
+      * verification must still authenticate the records that ARE readable,
+        since one corrupt entry must not lock out every other device;
+      * anything that writes the store back must refuse, because writing what
+        it could parse would delete what it could not.
+
+    Author: Bloodawn (KheivenD), 2026-07-19 (M3).
     """
     p = token_path()
     try:
-        raw = json.loads(p.read_text(encoding="utf-8"))
-    except (FileNotFoundError, json.JSONDecodeError, OSError, UnicodeDecodeError):
-        return []
+        text = p.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return [], 0                    # first run: legitimately no tokens
+    except (OSError, UnicodeDecodeError) as exc:
+        raise StoreUnreadable(f"cannot read {p}: {exc}") from exc
+    try:
+        raw = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise StoreUnreadable(f"cannot parse {p}: {exc}") from exc
     if not isinstance(raw, dict):
-        return []
+        raise StoreUnreadable(f"{p} is not a JSON object")
+
     out: List[DeviceToken] = []
+    dropped = 0
     for rec in raw.get("tokens", []) or []:
-        if isinstance(rec, dict):
-            parsed = DeviceToken.from_record(rec)
-            if parsed is not None:
-                out.append(parsed)
-    return out
+        parsed = DeviceToken.from_record(rec) if isinstance(rec, dict) else None
+        if parsed is None:
+            dropped += 1
+        else:
+            out.append(parsed)
+    return out, dropped
+
+
+def _read_all_strict() -> List[DeviceToken]:
+    """Every token, or raise if rewriting the store would lose anything.
+
+    This is what read-modify-write callers must use. The lenient reader was
+    silently destructive for them: one transient read error (a sharing
+    violation from an antivirus scanner or a sync client is the everyday
+    version on Windows) turned into a write containing only the new token, and
+    every other paired device was unpaired with no error on the server or on
+    the devices. Reproduced in tests/test_device_tokens_durability.py.
+    """
+    tokens, dropped = _load_store()
+    if dropped:
+        raise StoreUnreadable(
+            f"{dropped} unreadable token record(s) in {token_path()}; "
+            "refusing to rewrite the store and delete them")
+    return tokens
 
 
 def _write_all(tokens: List[DeviceToken]) -> None:
@@ -227,7 +290,9 @@ def mint_token(label: str, ttl_days: Optional[int] = None) -> tuple[str, DeviceT
         expires_at=expires,
     )
     with _LOCK:
-        tokens = _read_all()
+        # Strict: if the store cannot be read, appending to what we managed to
+        # read would delete every device we did not. Fail the mint instead.
+        tokens = _read_all_strict()
         tokens.append(rec)
         _write_all(tokens)
     return secret, rec
@@ -240,7 +305,7 @@ def revoke_token(token_id: str) -> bool:
     see that a device existed and when it was last used.
     """
     with _LOCK:
-        tokens = _read_all()
+        tokens = _read_all_strict()   # read-modify-write; see mint_token
         hit = False
         for t in tokens:
             if t.id == token_id and not t.revoked:
@@ -254,7 +319,7 @@ def revoke_token(token_id: str) -> bool:
 def revoke_all() -> int:
     """Revoke every live token. Returns how many were revoked."""
     with _LOCK:
-        tokens = _read_all()
+        tokens = _read_all_strict()   # read-modify-write; see mint_token
         n = 0
         for t in tokens:
             if not t.revoked:
@@ -276,13 +341,23 @@ def verify_token(presented: str, touch: bool = True) -> Optional[DeviceToken]:
         return None
     presented_hash = token_hash(presented).encode("ascii")
     with _LOCK:
-        tokens = _read_all()
+        # An unreadable FILE denies: that is the correct direction for auth.
+        # Individual corrupt records do NOT deny, because one bad entry must
+        # not lock out every other device; they only suppress the touch below,
+        # since rewriting the store would delete them.
+        try:
+            tokens, dropped = _load_store()
+        except StoreUnreadable:
+            return None
         found: Optional[DeviceToken] = None
         for t in tokens:
             if hmac.compare_digest(presented_hash, t.sha256.encode("ascii")):
                 if t.is_usable() and found is None:
                     found = t
-        if found is not None and touch:
+        if found is not None and touch and not dropped:
+            # Skipped when records were dropped: _write_all would persist only
+            # what parsed, silently deleting the rest. A missing last_used_at
+            # timestamp is a far smaller loss than a deleted device.
             found.last_used_at = _utc_now_iso()
             _write_all(tokens)
         return found

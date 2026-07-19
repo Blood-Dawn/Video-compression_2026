@@ -221,14 +221,54 @@ there is no server-side savings figure to show. The desktop derives it
 client-side from a crude estimate. Add a real cumulative figure server-side
 rather than re-deriving that estimate on the phone.
 
-### M3 - LIVE
-Media3 HLS with Basic on the data source. Gate readiness by polling the
-**playlist URL itself**, mirroring `hls.js`, not `ingest_latency_s`: the latter
-goes non-null a full segment before the playlist exists, so gating on it
-reproduces the 404. Media3's default retry budget is ~3 retries over ~3s, far
-shorter than warmup, so a client-side poll is mandatory. Ship single-camera
-first; the per-camera registry refactor (B-side of B9) is the largest server
-change in the plan and rewrites an existing asserted test.
+### M3 - LIVE  (built 2026-07-19)
+Media3 HLS, with the token on the data source via `OkHttpDataSource` wrapping
+the app's own OkHttp client. Gate readiness by polling the **playlist URL
+itself**, mirroring `hls.js`.
+
+Measured on a real-time source (synthetic 25fps feed over UDP, so the timing
+profile of an always-on RTSP camera):
+
+| event | t+ |
+|---|---|
+| `POST /api/hls/start` returns 200 | 0.02s |
+| `/api/hls/status` reports `running: true` | 0.0s |
+| playlist first returns 200 with an `#EXTINF` | **3.2s** |
+| second segment listed | 5.2s |
+
+So the gate is mandatory, and `running: true` is useless for it. Media3's
+default retry budget is shorter than the 3.2s gap, so a player built on the
+start response gives up before the stream exists.
+
+CORRECTION to the original note here, which claimed `ingest_latency_s` goes
+non-null a full segment before the playlist exists. It does not. That value is
+set when `hls_dir.glob("*.ts")` first matches, and at 100ms sampling the `.ts`
+file, the `.m3u8` file and the first `#EXTINF` all appear in the SAME sample:
+ffmpeg buffers the segment and writes it out when the segment closes, rather
+than pre-creating the file at segment start. The conclusion (poll the playlist)
+was right; the stated mechanism was wrong. `ingest_latency_s` is simply no
+earlier than the playlist, not misleadingly earlier.
+
+Also measured, and load-bearing for the client:
+
+* segment URIs in the playlist are RELATIVE (`playlist0.ts`), so ExoPlayer
+  resolves them against the playlist URL and no rewriting is needed;
+* a GET of a `.ts` with no `Authorization` header returns **401**, so the token
+  has to ride on segment requests, not just the media item;
+* segments are served `video/mp2t`, the playlist `application/vnd.apple.mpegurl`;
+* a device token can call `/api/hls/start` and `/api/hls/stop`.
+
+Shipped single-camera, as planned; the per-camera registry refactor (B-side of
+B9) is still the largest server change in the plan and rewrites an existing
+asserted test.
+
+Two server defects surfaced while building this, both fixed:
+
+* `/api/hls/status` and `/api/status` echoed `input_source` verbatim, handing
+  the camera's RTSP password to any device token (commit `7543968`);
+* `/api/hls/start` did not clear `last_segment_fetch`, so the idle watchdog
+  inherited the previous stream's timestamp and reaped a new stream 8.1s in,
+  before any client could reach it. Affects the desktop too (commit `7671b7c`).
 
 ### M4 - control and ingest
 Job registry and a TOCTOU fix on `/api/start` (two near-simultaneous POSTs, easy

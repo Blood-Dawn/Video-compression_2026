@@ -131,6 +131,55 @@ class SvcsApi(
         }
     }
 
+    // ── M2 read-only surfaces ────────────────────────────────────────────
+
+    /** One page of the library listing. */
+    fun libraryPage(folder: String?, page: Int, pageSize: Int = 60): Fetched<LibraryPage> {
+        val sb = StringBuilder("${baseUrl.trimEnd('/')}/api/library/videos")
+        sb.append("?page=").append(page).append("&page_size=").append(pageSize)
+        // Deliberately NO refresh=1. The server caches the folder walk, and
+        // paging is exactly the access pattern that cache exists for: without
+        // it a 30-day library costs ~18s PER PAGE (see M2.1a). The listing can
+        // be up to 10s stale, which is the right trade for a browse view.
+        if (!folder.isNullOrBlank()) {
+            sb.append("&folder=").append(java.net.URLEncoder.encode(folder, "UTF-8"))
+        }
+        return getJson(sb.toString())
+    }
+
+    fun systemMetrics(): Fetched<SystemMetrics> =
+        getJson("${baseUrl.trimEnd('/')}/api/system_metrics")
+
+    fun storageStats(): Fetched<StorageStats> =
+        getJson("${baseUrl.trimEnd('/')}/api/storage")
+
+    fun pipelineStatus(): Fetched<PipelineStatus> =
+        getJson("${baseUrl.trimEnd('/')}/api/status")
+
+    /** URL for one thumbnail. Handed to Coil, which uses [httpClient]. */
+    fun thumbUrl(path: String): String =
+        "${baseUrl.trimEnd('/')}/api/library/thumb?path=" +
+            java.net.URLEncoder.encode(path, "UTF-8")
+
+    /**
+     * GET + decode, never throwing.
+     *
+     * Every failure becomes a [Fetched] the UI can phrase for a human. A screen
+     * that shows "something went wrong" for both a wrong token and a dropped
+     * Wi-Fi connection sends the user debugging the wrong thing.
+     */
+    private inline fun <reified T> getJson(url: String): Fetched<T> = try {
+        client.newCall(Request.Builder().url(url).get().build()).execute().use { resp ->
+            when {
+                resp.code == 401 -> Fetched.Unauthorized
+                !resp.isSuccessful -> Fetched.Failed("HTTP ${resp.code}")
+                else -> Fetched.Ok(json.decodeFromString<T>(resp.body?.string().orEmpty()))
+            }
+        }
+    } catch (e: Exception) {
+        Fetched.Failed(e.message ?: e.javaClass.simpleName)
+    }
+
     private fun parseCapabilities(body: String): ProbeResult = try {
         val caps = json.decodeFromString<Capabilities>(body)
         if (caps.app != "SVCS") {

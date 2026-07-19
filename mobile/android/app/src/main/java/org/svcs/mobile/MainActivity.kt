@@ -5,7 +5,7 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import org.svcs.mobile.ui.ServerSettingsScreen
+import org.svcs.mobile.ui.SvcsApp
 import org.svcs.mobile.ui.theme.SvcsTheme
 
 /**
@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             SvcsTheme {
-                ServerSettingsScreen()
+                SvcsApp()
             }
         }
     }

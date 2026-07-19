@@ -242,3 +242,43 @@ def test_truncation_flag_survives_the_cache(client, tmp_path):
         assert d["total"] == monkey_cap
     finally:
         lib._LIB_CACHE_CAP = original
+
+
+# ── the remembered folder (found during M2.1 device testing) ────────────────
+
+def test_no_folder_request_reopens_the_remembered_folder(client, tmp_path):
+    """/api/library/videos promises in its own docstring that "the chosen folder
+    is remembered so the Library reopens where the user left off".
+
+    It did not. set_library_folder() was called on every request and
+    get_library_folder() existed with no callers, so _resolve_folder always fell
+    through to the output dir. The desktop masked it by echoing the folder back
+    into its input box within a page session; the phone, which sends no folder
+    at all, always got the output dir with no way to change it.
+    """
+    chosen = _make_tree(tmp_path / "chosen", 7)
+    # Browse it explicitly, which is what remembers it.
+    first = client.get(_url(chosen, page_size=200)).get_json()
+    assert first["total"] == 7
+
+    # Now ask with NO folder, the way the phone does.
+    lib._reset_library_cache()
+    again = client.get("/api/library/videos?page_size=200").get_json()
+    assert Path(again["folder"]) == chosen, (
+        f"a no-folder request returned {again['folder']!r}, not the remembered "
+        f"{str(chosen)!r}")
+    assert again["total"] == 7
+
+
+def test_remembered_folder_is_ignored_once_it_disappears(client, tmp_path):
+    """A remembered folder can be unmounted, renamed, or on a drive that is not
+    plugged in. Falling back beats reporting an empty library."""
+    gone = _make_tree(tmp_path / "gone", 3)
+    client.get(_url(gone, page_size=200))
+
+    import shutil
+    shutil.rmtree(gone)
+    lib._reset_library_cache()
+
+    d = client.get("/api/library/videos?page_size=200").get_json()
+    assert Path(d["folder"]) != gone, "a deleted folder was still used"

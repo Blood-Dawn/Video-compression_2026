@@ -64,11 +64,39 @@ _MIME = {
 
 
 def _resolve_folder(raw: str) -> Path:
-    """Resolve the requested library folder, defaulting to the output dir."""
+    """Resolve the requested library folder.
+
+    Order: the explicitly requested folder, then the one the user last browsed,
+    then the output dir.
+
+    The middle step was missing. /api/library/videos calls set_library_folder()
+    on every request and its own docstring promises "the chosen folder is
+    remembered so the Library reopens where the user left off", but nothing ever
+    read that value back: get_library_folder() existed and had no callers, so
+    the promise was unfulfilled for every client.
+
+    It went unnoticed on the desktop because its JS echoes the folder back from
+    the previous response into the input box, so within one page session it
+    looks like it works. Load the page fresh and the Library still opens on the
+    output dir. It became visible on the phone, which sends no folder at all and
+    therefore always got the output dir with no way to change it.
+    """
     raw = (raw or "").strip()
-    if not raw:
-        return Path(_default_output_dir())
-    return Path(raw).resolve()
+    if raw:
+        return Path(raw).resolve()
+    try:
+        from gui.services.gui_state_persist import get_library_folder
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.gui.services.gui_state_persist import get_library_folder
+    remembered = (get_library_folder() or "").strip()
+    if remembered:
+        p = Path(remembered)
+        # Only honor it if it still exists: a folder can be unmounted, renamed,
+        # or on a drive that is not plugged in, and falling back is friendlier
+        # than reporting an empty library.
+        if p.is_dir():
+            return p
+    return Path(_default_output_dir())
 
 
 def _safe_video(raw: str):

@@ -78,6 +78,11 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.serialization.json)
+    // M2.1: thumbnails. Coil is given the app's OkHttp client so thumbnail
+    // requests carry the same Bearer token, and disk caching is disabled at
+    // the call site: these are frames of real people and must not be written
+    // to the phone's storage.
+    implementation(libs.coil.compose)
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

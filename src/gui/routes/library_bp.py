@@ -22,6 +22,8 @@ Author: Bloodawn (KheivenD), 2026-06-03 (FIX 6 - library/gallery).
 
 import hashlib
 import subprocess
+import threading
+import time
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request, send_file
@@ -99,6 +101,132 @@ def _int_arg(name: str, default=None):
         return default
 
 
+# ── Listing cache (M2.1a) ────────────────────────────────────────────────────
+# /api/library/videos used to re-walk the entire folder tree on EVERY request,
+# including every page of the same listing. Measured on this machine:
+#
+#     100 files ->    45 ms       5,000 files -> 2,153 ms
+#     50x the files -> 47.8x the time, i.e. strictly linear
+#
+# and every page pays it again, so paging through N pages costs O(N * files).
+# Projected onto a real deployment (one camera writing 60s segments produces
+# 1,440 a day) that is ~18.6 s per page at 30 days, ~74 s at four cameras.
+#
+# This is not a mobile-only problem: the desktop Library tab calls the same
+# endpoint, so anyone with a month of footage already has an 18 second Library.
+# It became visible while sizing the phone LIBRARY tab, where infinite scroll
+# would have multiplied it.
+#
+# The split that fixes it: the WALK (rglob + a stat per file + a resolve and an
+# is_file per file for classification, plus re-reading the compressed index) is
+# expensive and does not depend on the request's filters. The FILTER and SORT
+# are cheap and do. So the walk is cached per (folder, recursive) and the
+# filters keep running per request.
+#
+# TTL rather than mtime-watching on purpose: a nested tree changes without the
+# root's mtime moving, so an mtime check would be quietly wrong. A short TTL is
+# honest about being approximate, and `refresh=1` gives an exact answer when one
+# is needed.
+_LIB_CACHE_TTL_S = 10.0
+_LIB_CACHE_MAX_FOLDERS = 4      # ~1 MB per cached folder at the 5000 cap
+_LIB_CACHE_CAP = 5000           # unchanged: the pre-existing listing cap
+
+_lib_cache_lock = threading.Lock()
+_lib_cache: dict = {}           # key -> {"at": float, "items": [...], ...}
+
+
+def _reset_library_cache() -> None:
+    """Drop every cached listing. For tests, and for a factory reset."""
+    with _lib_cache_lock:
+        _lib_cache.clear()
+
+
+def _walk_and_classify(folder: Path, recursive: bool) -> dict:
+    """Walk one folder and classify every video in it. The expensive half.
+
+    Returns the same shape the cache stores. Classification is folded in here
+    rather than left per-request because it costs a resolve() and an is_file()
+    per file, which is I/O and belongs on the cached side of the split.
+    """
+    items = []
+    truncated = False
+    try:
+        walker = folder.rglob("*") if recursive else folder.iterdir()
+        for f in walker:
+            if not (f.is_file() and f.suffix.lower() in VIDEO_EXTS):
+                continue
+            try:
+                st = f.stat()
+            except OSError:
+                continue
+            try:
+                rel = f.relative_to(folder).as_posix()
+            except ValueError:
+                rel = f.name
+            items.append({"name": rel, "path": str(f),
+                          "size": st.st_size, "mtime": st.st_mtime,
+                          "_ext": f.suffix.lower()})
+            if len(items) >= _LIB_CACHE_CAP:
+                truncated = True
+                break
+    except OSError as exc:
+        return {"items": [], "exts": [], "truncated": False, "error": str(exc)}
+
+    # R3.1d: load the compressed index ONCE and build lookups so every file can
+    # be classified (original vs compressed output) without re-reading the index
+    # per item. out_to_src maps a recorded output back to its source so a
+    # compressed clip can show where it came from.
+    _idx = _cidx._load()
+    _entries = _idx.get("entries", {})
+    out_to_src = {e.get("output", ""): e.get("source", "") for e in _entries.values()}
+    _comp_dirname = _cidx.COMPRESSED_DIRNAME
+
+    for i in items:
+        path_str = i["path"]
+        try:
+            rp = str(Path(path_str).resolve())
+        except (OSError, ValueError):
+            rp = path_str
+        in_comp_loc = _comp_dirname in {p.lower() for p in Path(rp).parts}
+        if in_comp_loc or rp in out_to_src:
+            i["kind"] = "compressed"
+            i["source"] = out_to_src.get(rp)
+        else:
+            entry = _entries.get(_cidx.signature(path_str))
+            i["kind"] = "original"
+            i["compressed"] = bool(
+                entry and entry.get("output") and Path(entry["output"]).is_file())
+
+    exts = sorted({i["_ext"].lstrip(".") for i in items})
+    return {"items": items, "exts": exts, "truncated": truncated, "error": None}
+
+
+def _cached_listing(folder: Path, recursive: bool, force: bool = False) -> dict:
+    """Return the walked+classified listing for a folder, from cache if fresh.
+
+    The lock is held across the walk deliberately. Two clients asking for the
+    same cold folder should not both walk it: on a large tree that would double
+    the very cost this cache exists to remove.
+    """
+    key = (str(folder), bool(recursive))
+    now = time.monotonic()
+    with _lib_cache_lock:
+        hit = _lib_cache.get(key)
+        if hit and not force and (now - hit["at"]) < _LIB_CACHE_TTL_S:
+            return hit
+
+        built = _walk_and_classify(folder, recursive)
+        built["at"] = now
+        _lib_cache[key] = built
+
+        # Bound the table: drop the least recently built entries.
+        if len(_lib_cache) > _LIB_CACHE_MAX_FOLDERS:
+            for stale in sorted(_lib_cache, key=lambda k: _lib_cache[k]["at"])[
+                    :len(_lib_cache) - _LIB_CACHE_MAX_FOLDERS]:
+                _lib_cache.pop(stale, None)
+        return built
+
+
 @library_bp.route("/api/library/videos", methods=["GET"])
 def api_library_videos():
     """List videos in a folder, with search / filters / sort, paginated.
@@ -148,66 +276,21 @@ def api_library_videos():
     # per-scene subfolders) finds the clips nested beneath it. Capped so a huge
     # tree cannot hang the request. ``recursive=0`` lists the top level only.
     recursive = (request.args.get("recursive", "1") or "1").strip() not in ("0", "false", "no")
-    cap = 5000
-    # Gather all video files first (so the type-filter dropdown reflects every
-    # type in the folder, independent of the active q/ext/size filters). For
-    # nested files the display name carries the relative subpath.
-    all_items = []
-    truncated = False
-    try:
-        walker = folder.rglob("*") if recursive else folder.iterdir()
-        for f in walker:
-            if not (f.is_file() and f.suffix.lower() in VIDEO_EXTS):
-                continue
-            try:
-                st = f.stat()
-            except OSError:
-                continue
-            try:
-                rel = f.relative_to(folder).as_posix()
-            except ValueError:
-                rel = f.name
-            all_items.append({"name": rel, "path": str(f),
-                              "size": st.st_size, "mtime": st.st_mtime,
-                              "_ext": f.suffix.lower()})
-            if len(all_items) >= cap:
-                truncated = True
-                break
-    except OSError as exc:
-        return jsonify({"folder": str(folder), "exists": True, "error": str(exc),
-                        "total": 0, "videos": []}), 200
+    # refresh=1 forces a rebuild, for the dashboard's refresh button and for a
+    # client that has just finished a compression and wants the new state now.
+    force = (request.args.get("refresh", "") or "").strip() in ("1", "true", "yes")
 
-    exts = sorted({i["_ext"].lstrip(".") for i in all_items})
+    listing = _cached_listing(folder, recursive, force=force)
+    all_items = listing["items"]
+    exts = listing["exts"]
+    truncated = listing["truncated"]
+    if listing.get("error"):
+        return jsonify({"folder": str(folder), "exists": True,
+                        "error": listing["error"], "total": 0, "videos": []}), 200
 
-    # R3.1d: load the compressed index ONCE and build lookups so we can classify
-    # every listed file (original vs compressed output) without re-reading the
-    # index per item. ``out_to_src`` maps a recorded output back to its source so
-    # a compressed clip can show where it came from.
-    _idx = _cidx._load()
-    _entries = _idx.get("entries", {})
-    out_to_src = {e.get("output", ""): e.get("source", "") for e in _entries.values()}
-    _comp_dirname = _cidx.COMPRESSED_DIRNAME
-
-    def _classify(path_str):
-        """Return (kind, source_or_None, has_compressed_bool) for one file.
-
-        Mirrors compressed_index.classify / is_compressed but uses the preloaded
-        index. ``has_compressed`` is only meaningful for originals (True when a
-        verified compressed output for this exact file still exists on disk).
-        """
-        try:
-            rp = str(Path(path_str).resolve())
-        except (OSError, ValueError):
-            rp = path_str
-        in_comp_loc = _comp_dirname in {p.lower() for p in Path(rp).parts}
-        if in_comp_loc or rp in out_to_src:
-            return "compressed", out_to_src.get(rp), False
-        # An original: does a current, on-disk compressed version exist?
-        entry = _entries.get(_cidx.signature(path_str))
-        has = bool(entry and entry.get("output") and Path(entry["output"]).is_file())
-        return "original", None, has
-
-    # Apply search / type / size / kind filters.
+    # Filters run over the CACHED listing. This half is pure in-memory work, so
+    # it is roughly a thousand times cheaper than the walk above and can stay
+    # per-request without hurting.
     items = []
     for i in all_items:
         if allowed_exts is not None and i["_ext"] not in allowed_exts:
@@ -218,7 +301,7 @@ def api_library_videos():
             continue
         if max_size is not None and i["size"] > max_size:
             continue
-        ikind, isource, ihas = _classify(i["path"])
+        ikind = i["kind"]
         if kind == "compressed" and ikind != "compressed":
             continue
         if kind == "original" and ikind != "original":
@@ -226,9 +309,9 @@ def api_library_videos():
         item = {"name": i["name"], "path": i["path"],
                 "size": i["size"], "mtime": i["mtime"], "kind": ikind}
         if ikind == "compressed":
-            item["source"] = isource
+            item["source"] = i.get("source")
         else:
-            item["compressed"] = ihas
+            item["compressed"] = i.get("compressed", False)
         items.append(item)
 
     key = {"name": lambda x: x["name"].lower(),

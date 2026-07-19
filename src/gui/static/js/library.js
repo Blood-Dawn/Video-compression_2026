@@ -175,7 +175,15 @@ async function loadLibrary() {
   _libStatus("Loading...");
   closeLibraryDetail();
   try {
-    const url = "/api/library/videos" + (folder ? "?folder=" + _enc(folder) : "");
+    // refresh=1 bypasses the server-side listing cache (M2.1a). loadLibrary is
+    // only ever a user-initiated action (the Load button, Enter in the folder
+    // box, picking a folder in Browse), so it must give an exact answer: a user
+    // who just compressed something and clicks Load expects to see it. The
+    // cache exists for the phone client's pagination, where one listing is
+    // fetched a page at a time; forcing it here keeps desktop behavior exactly
+    // as it was.
+    const base = "/api/library/videos?refresh=1";
+    const url = base + (folder ? "&folder=" + _enc(folder) : "");
     const data = await (await fetch(url)).json();
     if (folderEl && !folderEl.value && data.folder) folderEl.value = data.folder;
     window._svcsLibrary.loaded = true;

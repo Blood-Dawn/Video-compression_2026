@@ -233,16 +233,13 @@ def test_start_clears_the_previous_streams_liveness_stamp(client, monkeypatch,
     after the previous one ended was stopped 8.1s in, with nobody having
     fetched a single segment. Author: Bloodawn (KheivenD), 2026-07-19 (M3).
     """
-    # Do not actually spawn ffmpeg or an annotator thread; this asserts on the
-    # state the route leaves behind.
-    monkeypatch.setattr(gui_module, "_hls_annotator_thread",
-                        lambda *a, **k: None, raising=False)
-    started = []
-    monkeypatch.setattr(threading, "Thread",
-                        lambda *a, **k: type("T", (), {
-                            "start": lambda self: started.append(1),
-                            "daemon": True,
-                        })())
+    # Replace the annotator body only, so a REAL thread still starts and exits
+    # immediately. Patching threading.Thread itself would leave a stub object
+    # in hls_runner._hls_thread that later tests in the session then trip over.
+    from src.gui.routes import hls_bp as hls_bp_mod
+    from src.gui.services import hls_runner as hls_runner_mod
+    monkeypatch.setattr(hls_bp_mod, "_hls_annotator_thread",
+                        lambda *a, **k: None)
 
     with gui_module._hls_lock:
         # A previous stream ran, was watched, and ended long ago.
@@ -260,6 +257,11 @@ def test_start_clears_the_previous_streams_liveness_stamp(client, monkeypatch,
                 "a new stream inherited the previous stream's liveness stamp, "
                 "so the idle watchdog will reap it before any client arrives")
     finally:
+        thread = getattr(hls_runner_mod, "_hls_thread", None)
+        if thread is not None:
+            thread.join(timeout=5)
+        hls_runner_mod._hls_thread = None
+        hls_runner_mod._hls_stop_event = None
         with gui_module._hls_lock:
             gui_module._hls_state.update(running=False, camera_id=None,
                                          hls_dir=None, last_segment_fetch=None)

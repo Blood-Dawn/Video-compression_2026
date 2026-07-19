@@ -43,7 +43,7 @@ EN = chr(0x2013)  # en dash
 # Text extensions to scan. Binary assets are skipped by extension.
 EXTS = {".py", ".js", ".html", ".css", ".md", ".txt", ".iss",
         ".ps1", ".sh", ".yml", ".yaml", ".toml", ".kt", ".kts", ".xml",
-        ".pro", ".cfg", ".ini", ".spec", ".dockerfile"}
+        ".pro", ".cfg", ".ini", ".spec", ".dockerfile", ".properties", ".bat"}
 
 # Text files that carry NO extension, matched by exact name. Dockerfile is
 # shipped code and the dot-files carry comments, so the rule applies to them
@@ -51,6 +51,8 @@ EXTS = {".py", ".js", ".html", ".css", ".md", ".txt", ".iss",
 EXTENSIONLESS_NAMES = {
     "Dockerfile", ".dockerignore", ".gitattributes", ".gitignore",
     ".editorconfig", "Makefile", "AppRun",
+    # Gradle wrapper launcher: generated, extensionless, and committed.
+    "gradlew",
 }
 
 # Directories that are scanned for the guard.
@@ -58,9 +60,12 @@ EXTENSIONLESS_NAMES = {
 # product surface and both are covered.
 SCAN_DIRS = ["src", "tests", "docs", "installer", "scripts", ".github", "mobile"]
 
-# Directories never descended into.
+# Directories never descended into. ".gradle", ".idea" and ".cxx" are Android
+# build caches: adding "mobile" to SCAN_DIRS without them made this test walk
+# tens of thousands of generated files and took it from 0.3s to 4s.
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "dist", "build",
-             ".pytest_tmp", "logs", "tools", "data", "__pycache__"}
+             ".pytest_tmp", "logs", "tools", "data", "__pycache__",
+             ".gradle", ".idea", ".cxx", ".kotlin"}
 
 
 def _iter_text_files():

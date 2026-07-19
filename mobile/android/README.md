@@ -4,28 +4,37 @@ Thin client for a self-hosted SVCS server. It drives and monitors the server
 over its REST API; it does not encode video on the phone. See
 `docs/MOBILE-ARCHITECTURE.md` for why, and for the full milestone plan.
 
-Status: **M1.1, one screen (server pairing).** AGPL-3.0 by inheritance from the
-repo root `LICENSE`.
+Status: **M1.1, one screen (server pairing). Compiles, tests pass, APK builds.**
+AGPL-3.0 by inheritance from the repo root `LICENSE`.
 
 ---
 
-## Read this first: what has NOT been verified
+## Build status
 
-**This module has never been compiled.** The machine it was written on has no
-JDK, no Android SDK, and no Gradle. That means, concretely:
+Verified on 2026-07-19 (Windows 11, JDK 17.0.19, AGP 8.7.3, Gradle 8.11.1,
+compileSdk 35, build-tools 36.0.0):
 
-- it has **not been compiled**, so it may not build;
-- `app/src/test/.../HostClassifierTest.kt` has **never been run**;
-- **no APK exists**, and nothing has been on a device or emulator;
-- the M1.1 acceptance from the plan, "on a real device on the same LAN,
-  entering the server address and credentials and tapping Test shows the
-  server's edition and feature list", is **unmet and untested**.
+| | |
+| --- | --- |
+| `./gradlew assembleDebug` | **BUILD SUCCESSFUL**, 0 errors, 0 warnings |
+| APK | `app/build/outputs/apk/debug/app-debug.apk`, 25.93 MB |
+| `./gradlew testDebugUnitTest` | **11 tests, 0 failures**, 0 skipped |
 
-Treat the Kotlin as a reviewed first draft that needs a compile pass, not as
-working software. The first `./gradlew assembleDebug` should be expected to
-surface errors.
+Only one thing had to change to get there: `gradle.properties` was missing
+entirely, so the build died at `:app:checkDebugAarMetadata` with
+`android.useAndroidX is not enabled`. The Kotlin itself compiled clean on the
+first attempt that reached the compiler.
 
-### What HAS been verified
+### Still NOT verified
+
+- **Nothing has run on a device.** The M1.1 acceptance from the plan, "on a real
+  device on the same LAN, entering the server address and credentials and
+  tapping Test shows the server's edition and feature list", is **unmet**. A
+  clean compile says the code is well-formed, not that the screen works.
+- No instrumented tests have been run.
+- The release variant has not been built, so the ProGuard rules are unexercised.
+
+### What HAS been verified server-side
 
 The server side, which is the part the client cannot work without, is tested in
 the Python suite that does run here:
@@ -39,24 +48,48 @@ the Python suite that does run here:
 | A stolen device token cannot mint or revoke | `tests/test_device_tokens.py` |
 | `Color.kt` matches the design tokens exactly, and no font CDN is referenced | `tests/test_android_theme_sync.py` |
 
-So: if the Kotlin compiles and issues the requests it is written to issue, the
-server will answer correctly. That is a real and useful guarantee, and it is
-also strictly less than "the app works."
+The Kotlin now compiles and the requests it issues are the ones these tests
+pin, so the server will answer correctly. That is a real guarantee, and it is
+still strictly less than "the app works" until it runs on a phone.
 
 ---
 
 ## Building it
 
 ```bash
-# Requires JDK 17 and the Android SDK (via Android Studio or cmdline-tools).
 cd mobile/android
-./gradlew assembleDebug        # first run WILL likely need fixes
-./gradlew test                 # runs HostClassifierTest
+pwsh -File verify-toolchain.ps1   # check JDK/SDK/licenses BEFORE building
+./gradlew assembleDebug
+./gradlew testDebugUnitTest
 ```
 
-The Gradle wrapper JAR is not committed (see `.gitignore`); run
-`gradle wrapper --gradle-version 8.11.1` once, or open the folder in Android
-Studio and let it generate one.
+`verify-toolchain.ps1` exists because a missing SDK platform or an unaccepted
+license fails deep inside a Gradle stack trace rather than saying what is
+wrong. It reports each missing piece with the exact `sdkmanager` line to fix
+it, and refreshes `JAVA_HOME`/`PATH` from the registry first, since the shell
+you run it in is usually the one that predates the install.
+
+Pass `-WriteLocalProperties` to generate `local.properties` (gitignored,
+machine-specific).
+
+`gradlew` and `gradlew.bat` are committed; the wrapper JAR is not (it is a
+binary). Regenerate it with `gradle wrapper --gradle-version 8.11.1`, or just
+open the folder in Android Studio.
+
+### Toolchain this was built with
+
+| Component | Version | Source |
+| --- | --- | --- |
+| JDK | Microsoft OpenJDK 17.0.19 LTS | `winget install Microsoft.OpenJDK.17` |
+| Android Studio | 2026.1.2.10 | `winget install Google.AndroidStudio` |
+| Android SDK platform | android-35 | SDK Manager (matches `compileSdk`) |
+| Build tools | 36.0.0 | SDK Manager |
+| Gradle | 8.11.1 | wrapper |
+
+Note the SDK Manager installs the newest platform by default (android-36.1
+here), but AGP 8.7.3 supports `compileSdk 35`, so android-35 must be added
+explicitly. Moving to 36 means bumping AGP and Gradle together; that is a
+deliberate follow-up, not a drive-by.
 
 This build is deliberately **not** wired into `scripts/run_tests.ps1`. The
 Python suite must stay runnable on a machine with no JDK, which is the normal

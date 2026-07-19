@@ -107,6 +107,8 @@ EXPECTED = {
     "/api/auth/tokens/revoke_all": "tokens",
     # M0.6: capabilities probe (registered in BOTH editions).
     "/api/capabilities": "capabilities",
+    # M2.3: compression savings summary.
+    "/api/savings": "savings",
 }
 
 EXPECTED_BLUEPRINTS = {
@@ -115,6 +117,7 @@ EXPECTED_BLUEPRINTS = {
     "setup", "library", "autocompress",
     "tokens",          # M0.10: device-token management for the mobile client
     "capabilities",    # M0.6: capabilities probe for the mobile client
+    "savings",         # M2.3: compression savings summary
 }
 
 
@@ -127,7 +130,7 @@ def test_route_count():
     # tokens (/api/auth/tokens carries both GET and POST, so the four routes
     # collapse to three keys here), then +1 for the M0.6 capabilities probe.
     rules = _rules()
-    assert len(rules) == 77, f"expected 77 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 78, f"expected 78 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_blueprints_registered():

@@ -57,7 +57,7 @@ fun SvcsApp() {
     var api by remember { mutableStateOf<SvcsApi?>(null) }
     var caps by remember { mutableStateOf<Capabilities?>(null) }
     var checked by remember { mutableStateOf(false) }
-    var tab by remember { mutableStateOf(Tab.LIBRARY) }
+    var tab by remember { mutableStateOf(Tab.HOME) }
 
     // Restore the saved pairing on launch and ask the server what it can do.
     LaunchedEffect(Unit) {
@@ -110,12 +110,11 @@ fun SvcsApp() {
                 Tab.METRICS -> MetricsScreen(
                     vm = viewModel(key = "metrics") { MetricsViewModel(api) })
                 Tab.MORE -> ServerSettingsScreen()
-                // M3 and M2.3 respectively. Named rather than blank so the gap
-                // reads as "not built yet" instead of "broken".
+                Tab.HOME -> HomeScreen(
+                    vm = viewModel(key = "home") { HomeViewModel(api) })
+                // Named rather than blank, so the gap reads as "not built yet"
+                // instead of "broken".
                 Tab.LIVE -> Placeholder("LIVE arrives in M3 (Media3 HLS player).")
-                Tab.HOME -> Placeholder(
-                    "HOME needs cumulative byte counters the server does not " +
-                        "record yet. See M2.3 in docs/MOBILE-ARCHITECTURE.md.")
             }
         }
     }

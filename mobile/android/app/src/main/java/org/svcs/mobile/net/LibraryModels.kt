@@ -110,3 +110,43 @@ sealed interface Fetched<out T> {
     data object Unauthorized : Fetched<Nothing>
     data class Failed(val detail: String) : Fetched<Nothing>
 }
+
+@Serializable
+data class Savings(
+    val measured: MeasuredSavings = MeasuredSavings(),
+    val recorded: RecordedTotals = RecordedTotals(),
+)
+
+/**
+ * Real source-versus-output bytes, for files compressed from an existing file.
+ * This is the only place a compression ratio may honestly be shown.
+ */
+@Serializable
+data class MeasuredSavings(
+    val files: Int = 0,
+    @SerialName("source_bytes") val sourceBytes: Long = 0,
+    @SerialName("output_bytes") val outputBytes: Long = 0,
+    @SerialName("saved_bytes") val savedBytes: Long = 0,
+    val ratio: Double? = null,
+    @SerialName("saved_pct") val savedPct: Double? = null,
+)
+
+/**
+ * What the recording pipeline has written. Carries NO ratio on purpose: a live
+ * capture has no source file, so any "x smaller" would need an invented
+ * denominator. See src/gui/routes/savings_bp.py.
+ */
+@Serializable
+data class RecordedTotals(
+    val segments: Int = 0,
+    @SerialName("output_bytes") val outputBytes: Long = 0,
+    @SerialName("duration_hours") val durationHours: Double = 0.0,
+)
+
+/** "1.66 GB". Shared by the screens so units never disagree. */
+fun humanBytes(b: Long): String = when {
+    b >= 1_073_741_824 -> String.format("%.2f GB", b / 1_073_741_824.0)
+    b >= 1_048_576 -> String.format("%.1f MB", b / 1_048_576.0)
+    b >= 1024 -> String.format("%.0f KB", b / 1024.0)
+    else -> "$b B"
+}

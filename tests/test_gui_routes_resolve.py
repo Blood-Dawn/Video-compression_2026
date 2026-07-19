@@ -104,6 +104,8 @@ SAMPLES = [
     ("POST", "/api/auth/tokens/revoke_all"),
     # M0.6: capabilities probe.
     ("GET", "/api/capabilities"),
+    # M2.3: compression savings summary.
+    ("GET", "/api/savings"),
 ]
 
 
@@ -130,4 +132,4 @@ def test_sample_count_matches_route_count():
     expects 77, not 78.
     """
     rules = [r for r in flask_app.url_map.iter_rules() if r.endpoint != "static"]
-    assert len(SAMPLES) == len(rules) == 78
+    assert len(SAMPLES) == len(rules) == 79

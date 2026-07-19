@@ -156,6 +156,9 @@ class SvcsApi(
     fun pipelineStatus(): Fetched<PipelineStatus> =
         getJson("${baseUrl.trimEnd('/')}/api/status")
 
+    fun savings(): Fetched<Savings> =
+        getJson("${baseUrl.trimEnd('/')}/api/savings")
+
     /** URL for one thumbnail. Handed to Coil, which uses [httpClient]. */
     fun thumbUrl(path: String): String =
         "${baseUrl.trimEnd('/')}/api/library/thumb?path=" +

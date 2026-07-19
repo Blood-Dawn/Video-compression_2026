@@ -15,7 +15,8 @@ from flask import Blueprint, jsonify, request, abort
 try:
     from gui.state import (_state_lock, _status)
     from gui.logging_setup import log
-    from gui.services.path_safety import _safe_output_dir, is_safe_input_source
+    from gui.services.path_safety import (_safe_output_dir, is_safe_input_source,
+                                          redact_input_source)
     from gui.services.cloud_detection import _default_output_dir
     from gui.services import pipeline_runner as _pipeline_runner
     from gui.services import job_history as _job_history
@@ -23,7 +24,9 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.state import (_state_lock, _status)
     from src.gui.logging_setup import log
-    from src.gui.services.path_safety import _safe_output_dir, is_safe_input_source
+    from src.gui.services.path_safety import (_safe_output_dir,
+                                              is_safe_input_source,
+                                              redact_input_source)
     from src.gui.services.cloud_detection import _default_output_dir
     from src.gui.services import pipeline_runner as _pipeline_runner
     from src.gui.services import job_history as _job_history
@@ -101,6 +104,17 @@ def api_status():
             progress_pct = round(min(fc / total * 100, 100), 1)
             remaining_frames = max(0, total - fc)
             eta_seconds = round(remaining_frames / fps, 0) if fps and fps > 0 else None
+
+    # config.input_source can be an RTSP URL carrying the camera's password.
+    # dict(_status) above is a SHALLOW copy, so config is still the live object:
+    # copy it before redacting or this would scrub the URL the running pipeline
+    # needs. The mobile HOME tab polls this route every 2.5s on a device token,
+    # which is why a password sitting in the payload matters.
+    cfg = snap.get("config")
+    if isinstance(cfg, dict) and cfg.get("input_source") is not None:
+        cfg = dict(cfg)
+        cfg["input_source"] = redact_input_source(cfg["input_source"])
+        snap["config"] = cfg
 
     return jsonify({
         **snap,

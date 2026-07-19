@@ -200,6 +200,45 @@ _INPUT_BLOCKED_HOSTS = {"169.254.169.254", "100.100.100.100",
                         "metadata.google.internal", "metadata"}
 
 
+def redact_input_source(src) -> str:
+    """Strip the password out of an input_source before it is sent to a client.
+
+    RTSP camera URLs routinely carry credentials inline, and
+    /api/cameras/rtsp_url builds exactly that shape. Those URLs were being
+    echoed verbatim by /api/hls/status and by /api/status (as
+    config.input_source), so any caller holding a DEVICE TOKEN could read the
+    camera's password. Device tokens are deliberately the weaker credential -
+    M0.10 made sure a stolen one cannot mint successors or revoke other
+    devices - but a camera password usually unlocks the camera's own web admin,
+    which is a worse thing to lose than the dashboard.
+
+    Host, port, path and username survive: an operator still has to be able to
+    tell which camera a stream belongs to, and the house rule names passwords.
+    Webcam indexes and local file paths have no userinfo and pass through
+    untouched.
+
+    Author: Bloodawn (KheivenD), 2026-07-19 (M3 pre-work).
+    """
+    if src is None:
+        return ""
+    s = str(src)
+    # No "@" means no userinfo to strip. Cheap bail-out that also keeps
+    # Windows drive paths away from urlparse.
+    if "@" not in s:
+        return s
+    try:
+        parsed = urlparse(s)
+    except ValueError:
+        # Unparseable but contains "@": redact the whole thing rather than
+        # risk passing a credential through on a parser edge case.
+        return "***"
+    if not parsed.scheme or parsed.password is None:
+        return s
+    userinfo = f"{parsed.username}:***@" if parsed.username else "***@"
+    port = f":{parsed.port}" if parsed.port else ""
+    return f"{parsed.scheme}://{userinfo}{parsed.hostname or ''}{port}{parsed.path}"
+
+
 def is_safe_input_source(src) -> "tuple[bool, str]":
     """Validate a pipeline/HLS input_source. Returns (ok, reason).
 

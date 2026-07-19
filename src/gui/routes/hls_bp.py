@@ -19,7 +19,7 @@ try:
     from gui.services.rtsp import _rtsp_mgr
     from gui.services import hls_runner as _hls_runner
     from gui.services.hls_runner import _hls_dir_for, _hls_annotator_thread
-    from gui.services.path_safety import is_safe_input_source
+    from gui.services.path_safety import is_safe_input_source, redact_input_source
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.state import (_hls_lock, _hls_state, _hls_frame_ts_dq, _hls_segment_latencies)
     from src.gui.logging_setup import log
@@ -27,7 +27,8 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.services.rtsp import _rtsp_mgr
     from src.gui.services import hls_runner as _hls_runner
     from src.gui.services.hls_runner import _hls_dir_for, _hls_annotator_thread
-    from src.gui.services.path_safety import is_safe_input_source
+    from src.gui.services.path_safety import (is_safe_input_source,
+                                              redact_input_source)
 
 hls_bp = Blueprint("hls", __name__)
 
@@ -150,10 +151,19 @@ def api_hls_stop():
 
 @hls_bp.route("/api/hls/status")
 def api_hls_status():
-    """Return current HLS stream state."""
+    """Return current HLS stream state, with the camera password removed.
+
+    This returns the whole state dict, which includes input_source. An RTSP
+    URL commonly embeds the camera's credentials, so echoing it verbatim
+    handed the camera password to anyone holding a device token - a weaker
+    credential than the dashboard password by design. Redact on the way out
+    rather than at write time: the runner needs the working URL to open the
+    stream, only the client-facing copy has to be sanitised.
+    """
     with _hls_lock:
         snap = dict(_hls_state)
 
+    snap["input_source"] = redact_input_source(snap.get("input_source"))
     return jsonify(snap)
 
 

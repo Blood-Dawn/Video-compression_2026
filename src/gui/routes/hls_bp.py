@@ -100,6 +100,16 @@ def api_hls_start():
         _hls_state["latency_last_s"]   = None
         _hls_state["latency_samples"]  = 0
         _hls_state["stream_start_time"] = None
+        # Clear the previous stream's last-fetch timestamp, or the idle
+        # watchdog inherits it and reaps THIS stream before any client can
+        # possibly reach it. The watchdog's generous startup grace
+        # (HLS_STARTUP_GRACE_S) only applies while the value is None; a stale
+        # value from a stream that ended more than HLS_IDLE_TIMEOUT_S ago takes
+        # the other branch and trips on the first 5s tick. Measured against a
+        # running server: a stream started 32s after the previous one ended was
+        # reaped 8.1s in, with nobody having fetched anything.
+        # Author: Bloodawn (KheivenD), 2026-07-19 (M3).
+        _hls_state["last_segment_fetch"] = None
 
     _hls_runner._hls_stop_event = threading.Event()
     _hls_runner._hls_thread = threading.Thread(

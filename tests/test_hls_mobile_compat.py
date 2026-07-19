@@ -219,6 +219,52 @@ def test_missing_segment_does_not_stamp_liveness(client, tmp_path):
                                          hls_dir=None, last_segment_fetch=None)
 
 
+def test_start_clears_the_previous_streams_liveness_stamp(client, monkeypatch,
+                                                          tmp_path):
+    """A new stream must not inherit the last one's last_segment_fetch.
+
+    The watchdog gives a stream a generous HLS_STARTUP_GRACE_S to attract its
+    first client, but ONLY while last_segment_fetch is None. A stale timestamp
+    from a previous stream takes the other branch, where anything older than
+    HLS_IDLE_TIMEOUT_S is treated as abandoned, so the new stream was reaped on
+    the watchdog's first 5s tick before any client could reach it.
+
+    Measured against a running server before the fix: a stream started 32s
+    after the previous one ended was stopped 8.1s in, with nobody having
+    fetched a single segment. Author: Bloodawn (KheivenD), 2026-07-19 (M3).
+    """
+    # Do not actually spawn ffmpeg or an annotator thread; this asserts on the
+    # state the route leaves behind.
+    monkeypatch.setattr(gui_module, "_hls_annotator_thread",
+                        lambda *a, **k: None, raising=False)
+    started = []
+    monkeypatch.setattr(threading, "Thread",
+                        lambda *a, **k: type("T", (), {
+                            "start": lambda self: started.append(1),
+                            "daemon": True,
+                        })())
+
+    with gui_module._hls_lock:
+        # A previous stream ran, was watched, and ended long ago.
+        gui_module._hls_state.update(running=False,
+                                     last_segment_fetch=time.monotonic() - 600)
+    try:
+        resp = client.post("/api/hls/start", json={
+            "input_source": "0",
+            "camera_id": "cam_fresh",
+            "output_dir": str(tmp_path),
+        })
+        assert resp.status_code == 200
+        with gui_module._hls_lock:
+            assert gui_module._hls_state["last_segment_fetch"] is None, (
+                "a new stream inherited the previous stream's liveness stamp, "
+                "so the idle watchdog will reap it before any client arrives")
+    finally:
+        with gui_module._hls_lock:
+            gui_module._hls_state.update(running=False, camera_id=None,
+                                         hls_dir=None, last_segment_fetch=None)
+
+
 def test_idle_timeout_is_longer_than_the_playlist_window():
     """The watchdog must not kill a stream a live player is merely buffering.
 

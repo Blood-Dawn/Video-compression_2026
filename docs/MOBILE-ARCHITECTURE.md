@@ -1,7 +1,9 @@
 # SVCS Mobile - architecture and port plan
 
-Status: **M0 complete, M1.1 written but not yet compiled.** Owner decisions in
-section 7 were taken on 2026-07-18.
+Status: **M0 complete. M1.1 built and VERIFIED on a physical device**
+(Samsung SM-S948U1, 2026-07-19): the pairing screen reaches a real LAN server
+with a device token and renders its edition and feature list. Owner decisions
+in section 7 were taken on 2026-07-18.
 Branch: `mobile`. Created 2026-07-18 from `app` at `741861e`.
 Design source: `mobile/design/` (imported from Claude Design project
 `19ed3076-4995-417d-8281-b994f732fa83`).
@@ -186,11 +188,18 @@ connection check. One screen: server address, credential, Save, and a Test butto
 issuing `GET /api/capabilities` with Basic auth, rendering the returned edition
 and feature flags.
 
-Acceptance: on a real device on the same LAN, entering address and credentials
-and tapping Test shows the server's edition and features. Wrong credentials show
-a clear 401. A public IP is refused behind a typed confirmation. Unit tests for
-the host classifier and the credential wrap/unwrap round trip. Instrumented test
-that release-variant logcat contains no `Authorization` value.
+Acceptance: **MET 2026-07-19** on a Samsung SM-S948U1 over Wi-Fi debugging.
+The phone rendered "SVCS 2.2.0.dev0 / Server" plus all 12 feature flags, and the
+token's `last_used_at` was stamped server-side at the moment of the tap, so the
+Bearer credential was genuinely verified rather than merely parsed client-side.
+`normalizeUrl()`, `PasswordVisualTransformation` and `FLAG_SECURE` were all
+exercised incidentally and behaved. 11 JVM unit tests pass.
+
+Still open from the original acceptance: the wrong-credential 401 path and the
+public-IP typed confirmation were not driven on-device (both are covered by the
+server-side contract tests and the host-classifier unit tests, which is weaker),
+and no instrumented test yet asserts that release-variant logcat contains no
+`Authorization` value.
 
 Notes that matter: use `androidx.security-crypto` **not at all** (deprecated April
 2025); wrap an AES-256-GCM key in Keystore and store ciphertext in DataStore.

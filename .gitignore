@@ -182,3 +182,8 @@ proposal_figures/
 TASKS.md
 CLAUDE.md
 .cowork/
+
+# Ephemeral local test credential written by the mobile pairing walkthrough.
+# Never commit a credential, even a throwaway one.
+.svcs_test_pw
+.svcs_test_token

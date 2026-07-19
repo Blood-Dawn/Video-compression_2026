@@ -25,14 +25,45 @@ entirely, so the build died at `:app:checkDebugAarMetadata` with
 `android.useAndroidX is not enabled`. The Kotlin itself compiled clean on the
 first attempt that reached the compiler.
 
+## M1.1 acceptance: MET
+
+Verified 2026-07-19 on a physical **Samsung SM-S948U1 (Android 17)** over Wi-Fi
+debugging, against a real server on the LAN.
+
+The plan's criterion was: "on a real device on the same LAN, entering the server
+address and credentials and tapping Test shows the server's edition and feature
+list." The phone rendered:
+
+```
+Connected to Server.
+CONNECTED
+SVCS 2.2.0.dev0
+Server
+FEATURES: autocompress, device_tokens, encryption, hls, library,
+          logs_stream, metrics, plates, presets, retention, rtsp, upload
+```
+
+Confirmed on both sides, not just the phone's word for it: the device token's
+`last_used_at` was stamped server-side at the moment of the tap, so the Bearer
+credential really was verified by `gui/auth.py` rather than merely parsed by the
+client.
+
+Three implementation details were exercised incidentally and all behaved:
+
+- **`normalizeUrl()`** - the address was entered as `192.168.80.17:5000` with no
+  scheme, and the field afterwards read `http://192.168.80.17:5000`.
+- **`PasswordVisualTransformation`** - the token field masked all 48 characters.
+- **`FLAG_SECURE`** - `adb exec-out screencap` returned a black frame and
+  SurfaceFlinger logged the layer as `secure`. Screenshots of this app are
+  blocked, which is the intended trade for a surveillance client and does mean
+  bug reports cannot include screenshots.
+
 ### Still NOT verified
 
-- **Nothing has run on a device.** The M1.1 acceptance from the plan, "on a real
-  device on the same LAN, entering the server address and credentials and
-  tapping Test shows the server's edition and feature list", is **unmet**. A
-  clean compile says the code is well-formed, not that the screen works.
-- No instrumented tests have been run.
+- No instrumented (on-device) tests have been run; the 11 passing tests are JVM
+  unit tests.
 - The release variant has not been built, so the ProGuard rules are unexercised.
+- Only the pairing screen exists. LIVE, LIBRARY and METRICS are M2/M3.
 
 ### What HAS been verified server-side
 

@@ -37,6 +37,54 @@ def client():
     return app.test_client()
 
 
+@pytest.fixture(autouse=True)
+def _contain_the_side_effects(tmp_path, monkeypatch):
+    """Point the real destructive routes at tmp before POSTing to them.
+
+    The list above is deliberately made of REAL state-changing routes, and the
+    same-origin cases below assert the guard lets them through, which means the
+    handlers actually run. Two of them bite the developer's own install:
+
+      * ``/api/setup/reset`` is a factory reset. It deletes flask_secret,
+        gui_state.json, job_history.json and device_tokens.json out of
+        ``paths.data_dir()``. Deleting device_tokens.json unpairs every phone
+        that has ever paired with this install, permanently, and the suite was
+        doing it twice per run. A phone that had been working all evening would
+        start answering "the server rejected that token" with nothing in the
+        session to explain why.
+      * ``/api/segments/clear`` flags every row in the configured output
+        folder's metadata.db as hidden, so a real run's recordings vanish from
+        the dashboard.
+
+    Redirecting data_dir and the configured output_dir keeps the assertion
+    exactly as strong (the request still reaches the handler, the handler still
+    runs) while the damage lands in tmp. The in-memory setup flag is restored
+    too, because the reset route flips it on the shared app object.
+
+    Author: Bloodawn (KheivenD), 2026-08-17 (found during R6 Track C).
+    """
+    from utils import paths as paths_mod
+    from gui import state as gui_state
+
+    d = tmp_path / "state"
+    d.mkdir()
+    monkeypatch.setattr(paths_mod, "data_dir", lambda: d)
+
+    with gui_state._state_lock:
+        prev_cfg = dict(gui_state._status.get("config", {}))
+        prev_setup = gui_state._status.get("setup_complete")
+        gui_state._status.setdefault("config", {})["output_dir"] = str(tmp_path / "out")
+    try:
+        yield
+    finally:
+        with gui_state._state_lock:
+            gui_state._status["config"] = prev_cfg
+            if prev_setup is None:
+                gui_state._status.pop("setup_complete", None)
+            else:
+                gui_state._status["setup_complete"] = prev_setup
+
+
 # ── pure helper ───────────────────────────────────────────────────────────────
 
 def test_is_cross_origin_logic():

@@ -21,8 +21,9 @@ android {
         targetSdk = 35
         // versionCode tracks the milestone the build actually contains.
         // 3 = M3 (pairing + LIBRARY + METRICS + HOME + LIVE), first public beta.
-        versionCode = 3
-        versionName = "0.3.0-beta"
+        // 4 = 0.3.1: the save-event replay glitch fix + SAVE & OPEN pairing UX.
+        versionCode = 4
+        versionName = "0.3.1-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

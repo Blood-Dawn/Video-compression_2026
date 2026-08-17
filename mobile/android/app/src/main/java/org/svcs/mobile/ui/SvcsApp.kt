@@ -1,8 +1,11 @@
 package org.svcs.mobile.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -46,7 +49,16 @@ enum class Tab(val label: String) {
  * show but the pairing screen, so the bottom nav does not appear at all rather
  * than offering four tabs that would each report "not paired".
  *
- * Author: Bloodawn (KheivenD), 2026-07-19 (M2).
+ * 2026-08-16 rework (0.3.1): a re-pair no longer tears the whole UI down.
+ * Previously every save nulled `api` and dropped to the splash while the probe
+ * re-ran, and combined with the stale save-event replay in the settings screen
+ * (see ServerSettingsScreen) the shell cycled splash <-> settings forever the
+ * moment the user opened MORE after pairing; on the device it read as "the
+ * screen is glitching". Now the old session keeps rendering while the new
+ * probe runs, and a successful (re)pair lands the user on HOME, which is also
+ * the explicit "you are in the app now" moment the pairing flow was missing.
+ *
+ * Author: Bloodawn (KheivenD), 2026-07-19 (M2); reworked 2026-08-16.
  */
 @Composable
 fun SvcsApp() {
@@ -59,37 +71,52 @@ fun SvcsApp() {
     var tab by remember { mutableStateOf(Tab.HOME) }
 
     /**
-     * Bumped whenever credentials are saved.
-     *
-     * Keying both the pairing probe and the per-tab ViewModels on this is what
-     * makes re-pairing actually take effect. Previously the probe ran once at
-     * launch and every screen kept the SvcsApi built from the token in force at
-     * that moment, so a user whose token had been revoked was told to re-pair
-     * under MORE, did it, and stayed broken until they force-quit the app.
+     * Bumped whenever credentials are saved (a real save, not a replay; the
+     * settings screen guarantees that since 0.3.1). Keying both the pairing
+     * probe and the per-tab ViewModels on this is what makes re-pairing take
+     * effect without a force-quit.
      */
     var sessionEpoch by remember { mutableStateOf(0) }
 
     // Restore the saved pairing and ask the server what it can do. Re-runs on
-    // re-pair so the new token is picked up in place.
+    // re-pair so the new token is picked up in place. The previous session
+    // stays on screen while this runs; only the RESULT swaps the UI.
     LaunchedEffect(sessionEpoch) {
-        checked = false
-        api = null
+        val isRepair = checked
         val url = store.serverUrl()
         val token = store.token()
+        var newApi: SvcsApi? = null
+        var newCaps: Capabilities? = null
         if (!url.isNullOrBlank() && !token.isNullOrBlank()) {
             val client = SvcsApi(url, token)
             val probe = withContext(Dispatchers.IO) { client.probe() }
             if (probe is ProbeResult.Ok) {
-                api = client
-                caps = probe.capabilities
+                newApi = client
+                newCaps = probe.capabilities
             }
         }
+        api = newApi
+        caps = newCaps
         checked = true
+        // Land in the app after a successful save; the pairing screen's
+        // SAVE & OPEN button promises exactly this.
+        if (newApi != null && (isRepair || tab == Tab.MORE)) tab = Tab.HOME
     }
 
     if (!checked) {
+        // First launch only: an honest loading state, not a bare wordmark.
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            Text("SVCS", style = MaterialTheme.typography.displaySmall)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text("SVCS", style = MaterialTheme.typography.displaySmall)
+                CircularProgressIndicator()
+                Text(
+                    "CONNECTING TO SERVER...",
+                    style = MaterialTheme.typography.labelSmall,
+                )
+            }
         }
         return
     }

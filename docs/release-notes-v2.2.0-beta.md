@@ -23,14 +23,21 @@ Everything since the 2.1 beta:
   camera passwords redacted from status endpoints.
 - Fixed: the frozen exe now bundles OpenCV explicitly (2.1 packaging gap).
 
-## Mobile (SVCS-Mobile-0.3.0-beta.apk)
+## Mobile (SVCS-Mobile-0.3.1-beta.apk)
 
 Thin client for a self-hosted SVCS server; it does not encode on the phone.
 Pair by server address and access token, then LIBRARY, METRICS, HOME, and a
 LIVE tab with an HLS player. Sensitive surfaces set FLAG_SECURE, so the OS
 blocks screenshots of your footage by design. minSdk 29 (Android 10),
 self-signed release key, sideload install. Verified on a physical Samsung
-device (Android 17) against a LAN server.
+device (Android 17) against a LAN server, including the full first-run
+pairing flow.
+
+0.3.1 over 0.3.0: fixed a save-event replay that made the app cycle between
+the splash and the settings screen after visiting MORE (it read as constant
+screen glitching); pairing now ends with an explicit SAVE & OPEN button that
+lands on HOME; the CONNECTED card labels the server's version as the
+server's, and the app's own version is shown on the settings screen.
 
 ## Install and verify
 

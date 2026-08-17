@@ -20,6 +20,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -52,8 +55,24 @@ fun ServerSettingsScreen(
 ) {
     val state by vm.state.collectAsState()
 
+    // One-shot save event (0.3.1 fix). The ViewModel outlives this screen, so
+    // saveCount is STATE, not an event: after the first save it stays > 0
+    // forever, and the old `if (saveCount > 0) fire` replayed the callback on
+    // every later visit to MORE. The shell responded by rebuilding the whole
+    // session, which remounted this screen, which replayed the callback again,
+    // an infinite teardown loop that looked like the screen glitching. The
+    // baseline records the count at first composition and only a LATER
+    // increment (a save the user just performed here) fires the callback once.
+    // Author: Bloodawn (KheivenD), 2026-08-16 (0.3.1 glitch fix).
+    var savedBaseline by remember { mutableStateOf<Int?>(null) }
     LaunchedEffect(state.saveCount) {
-        if (state.saveCount > 0) onCredentialsSaved()
+        val baseline = savedBaseline
+        if (baseline == null) {
+            savedBaseline = state.saveCount
+        } else if (state.saveCount > baseline) {
+            savedBaseline = state.saveCount
+            onCredentialsSaved()
+        }
     }
 
     Scaffold { padding ->
@@ -158,12 +177,29 @@ fun ServerSettingsScreen(
             }
 
             if (state.capabilities != null) {
+                // The explicit "you are entering the app now" affordance. On a
+                // working connection this saves the pairing and the shell then
+                // lands on HOME; calling it SAVE alone left users staring at
+                // this screen wondering how to get into the app.
                 Button(
                     onClick = vm::save,
                     enabled = !state.busy,
                     modifier = Modifier.fillMaxWidth(),
-                ) { Text("SAVE") }
+                ) { Text("SAVE & OPEN") }
+                Text(
+                    "Saves this pairing and opens the dashboard.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = SvcsTextDim,
+                )
             }
+
+            // The phone app's own version, so nobody mistakes the server
+            // version shown on the CONNECTED card for the app's.
+            Text(
+                "SVCS Mobile app " + org.svcs.mobile.BuildConfig.VERSION_NAME,
+                style = MaterialTheme.typography.labelSmall,
+                color = SvcsTextDim,
+            )
         }
     }
 }
@@ -175,9 +211,12 @@ private fun CapabilitiesCard(caps: Capabilities) {
             Modifier.padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text("CONNECTED", style = MaterialTheme.typography.labelSmall,
+            Text("CONNECTED TO SERVER", style = MaterialTheme.typography.labelSmall,
                 color = SvcsGreen)
-            Text("${caps.app} ${caps.version}",
+            // This is the SERVER's version (the desktop install), not this
+            // app's. The app's own version is printed at the foot of the
+            // screen; showing a bare "SVCS 2.2.0" here read as the app version.
+            Text("Server ${caps.app} ${caps.version}",
                 style = MaterialTheme.typography.titleMedium)
             Text(caps.editionLabel, style = MaterialTheme.typography.bodyMedium,
                 color = SvcsTextDim)

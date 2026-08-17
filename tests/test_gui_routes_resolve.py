@@ -111,6 +111,11 @@ SAMPLES = [
     # R5 5.6/5.7: zones config + behavior events.
     ("GET", "/api/zones"),
     ("GET", "/api/events/recent"),
+    # R6 Track B: chunked resumable upload.
+    ("POST", "/api/upload/begin"),
+    ("GET", "/api/upload/status"),
+    ("POST", "/api/upload/chunk"),
+    ("POST", "/api/upload/finish"),
 ]
 
 
@@ -138,5 +143,5 @@ def test_sample_count_matches_route_count():
     """
     rules = [r for r in flask_app.url_map.iter_rules() if r.endpoint != "static"]
     # +1 for /api/nl_search (R5 5.4), +2 for /api/zones and /api/events/recent
-    # (R5 5.6/5.7).
-    assert len(SAMPLES) == len(rules) == 82
+    # (R5 5.6/5.7), +4 for the R6 chunked-upload routes.
+    assert len(SAMPLES) == len(rules) == 86

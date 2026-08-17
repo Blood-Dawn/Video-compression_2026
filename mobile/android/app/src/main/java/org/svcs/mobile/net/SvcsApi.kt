@@ -239,6 +239,74 @@ class SvcsApi(
     fun jobsRecent(limit: Int = 1): Fetched<JobsRecent> =
         getJson("${baseUrl.trimEnd('/')}/api/jobs/recent?limit=$limit")
 
+    // ── R6 Track B: chunked resumable upload ─────────────────────────────
+
+    fun uploadBegin(name: String, size: Long): Fetched<UploadBegin> {
+        return try {
+            val body = buildJsonObject { put("name", name); put("size", size) }
+                .toString().toRequestBody("application/json".toMediaType())
+            client.newCall(Request.Builder()
+                .url("${baseUrl.trimEnd('/')}/api/upload/begin")
+                .post(body).build()).execute().use { resp ->
+                when {
+                    resp.code == 401 -> Fetched.Unauthorized
+                    !resp.isSuccessful -> Fetched.Failed(
+                        errorMessage(resp.body?.string()) ?: "HTTP ${resp.code}")
+                    else -> Fetched.Ok(json.decodeFromString<UploadBegin>(
+                        resp.body?.string().orEmpty()))
+                }
+            }
+        } catch (e: Exception) {
+            Fetched.Failed(e.message ?: e.javaClass.simpleName)
+        }
+    }
+
+    fun uploadStatus(uploadId: String): Fetched<UploadOffset> =
+        getJson("${baseUrl.trimEnd('/')}/api/upload/status?upload_id=$uploadId")
+
+    fun uploadChunk(uploadId: String, offset: Long, bytes: ByteArray): ChunkResult {
+        return try {
+            val body = bytes.toRequestBody("application/octet-stream".toMediaType())
+            client.newCall(Request.Builder()
+                .url("${baseUrl.trimEnd('/')}/api/upload/chunk?upload_id=$uploadId&offset=$offset")
+                .post(body).build()).execute().use { resp ->
+                val parsed = try {
+                    json.parseToJsonElement(resp.body?.string().orEmpty()) as? JsonObject
+                } catch (e: Exception) { null }
+                val off = parsed?.get("offset")?.jsonPrimitive?.content?.toLongOrNull() ?: -1L
+                when {
+                    resp.code == 401 -> ChunkResult.Unauthorized
+                    resp.code == 409 -> ChunkResult.Conflict(off)
+                    !resp.isSuccessful -> ChunkResult.Failed("HTTP ${resp.code}")
+                    else -> ChunkResult.Ok(off)
+                }
+            }
+        } catch (e: Exception) {
+            ChunkResult.Failed(e.message ?: e.javaClass.simpleName)
+        }
+    }
+
+    fun uploadFinish(uploadId: String, sha256: String): Fetched<UploadFinish> {
+        return try {
+            val body = buildJsonObject {
+                put("upload_id", uploadId); put("sha256", sha256)
+            }.toString().toRequestBody("application/json".toMediaType())
+            client.newCall(Request.Builder()
+                .url("${baseUrl.trimEnd('/')}/api/upload/finish")
+                .post(body).build()).execute().use { resp ->
+                when {
+                    resp.code == 401 -> Fetched.Unauthorized
+                    !resp.isSuccessful -> Fetched.Failed(
+                        errorMessage(resp.body?.string()) ?: "HTTP ${resp.code}")
+                    else -> Fetched.Ok(json.decodeFromString<UploadFinish>(
+                        resp.body?.string().orEmpty()))
+                }
+            }
+        } catch (e: Exception) {
+            Fetched.Failed(e.message ?: e.javaClass.simpleName)
+        }
+    }
+
     /** Newest behavior events (R6 Track A: EVENTS tab + notifier). */
     fun eventsRecent(limit: Int = 100): Fetched<EventsRecent> =
         getJson("${baseUrl.trimEnd('/')}/api/events/recent?limit=$limit")

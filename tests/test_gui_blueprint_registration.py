@@ -113,6 +113,11 @@ EXPECTED = {
     # R5 5.6/5.7: zones config + behavior events.
     "/api/zones": "events",
     "/api/events/recent": "events",
+    # R6 Track B: chunked resumable upload.
+    "/api/upload/begin": "ingest",
+    "/api/upload/status": "ingest",
+    "/api/upload/chunk": "ingest",
+    "/api/upload/finish": "ingest",
 }
 
 EXPECTED_BLUEPRINTS = {
@@ -123,6 +128,7 @@ EXPECTED_BLUEPRINTS = {
     "capabilities",    # M0.6: capabilities probe for the mobile client
     "savings",         # M2.3: compression savings summary
     "events",          # R5 5.6/5.7: zones config + behavior events
+    "ingest",          # R6 Track B: chunked resumable upload
 }
 
 
@@ -135,9 +141,10 @@ def test_route_count():
     # tokens (/api/auth/tokens carries both GET and POST, so the four routes
     # collapse to three keys here), then +1 for the M0.6 capabilities probe,
     # then +1 for /api/nl_search (R5 TASK 5.4, 2026-08-16), then +2 for
-    # /api/zones (GET+POST, one rule) and /api/events/recent (R5 5.6/5.7).
+    # /api/zones (GET+POST, one rule) and /api/events/recent (R5 5.6/5.7),
+    # then +4 for the R6 chunked-upload routes.
     rules = _rules()
-    assert len(rules) == 81, f"expected 81 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 85, f"expected 85 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_blueprints_registered():

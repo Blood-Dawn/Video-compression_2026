@@ -214,6 +214,32 @@ data class ZoneLine(val id: String = "", val line: List<Double> = emptyList())
 @Serializable
 data class ZoneRect(val id: String = "", val rect: List<Double> = emptyList())
 
+/** R6 Track B: chunked resumable upload shapes. */
+@Serializable
+data class UploadBegin(
+    @SerialName("upload_id") val uploadId: String = "",
+    val offset: Long = 0,
+    @SerialName("chunk_hint") val chunkHint: Int = 1048576,
+)
+
+@Serializable
+data class UploadOffset(val offset: Long = 0)
+
+@Serializable
+data class UploadFinish(
+    val ok: Boolean = false,
+    val path: String = "",
+    val filename: String = "",
+)
+
+/** Chunk POST outcome; Conflict carries the server's REAL offset (resume). */
+sealed interface ChunkResult {
+    data class Ok(val offset: Long) : ChunkResult
+    data class Conflict(val offset: Long) : ChunkResult
+    data object Unauthorized : ChunkResult
+    data class Failed(val detail: String) : ChunkResult
+}
+
 /** GET /api/jobs/recent - the M5 notifier watches the newest entry. */
 @Serializable
 data class JobsRecent(val jobs: List<JobEntry> = emptyList())

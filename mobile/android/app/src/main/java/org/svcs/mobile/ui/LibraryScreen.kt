@@ -148,6 +148,11 @@ fun LibraryScreen(vm: LibraryViewModel) {
             KindChip("COMPRESSED", state.kind == "compressed") { vm.setKind("compressed") }
             KindChip("OUTPUTS", false) { vm.showOutputs() }
             KindChip("REFRESH", false) { vm.refresh() }
+            // R6 Track B: pick a gallery video, upload resumably, compress.
+            val picker = androidx.activity.compose.rememberLauncherForActivityResult(
+                androidx.activity.result.contract.ActivityResultContracts.GetContent(),
+            ) { uri -> if (uri != null) vm.uploadFromPhone(context.contentResolver, uri) }
+            KindChip("UPLOAD", false) { picker.launch("video/*") }
         }
 
         // Outcome of the last compress action ("started", "server busy", ...).

@@ -33,8 +33,10 @@ android {
         //     re-verified on the physical device.
         // 9 = 0.6.0 (R6 Track A): EVENTS tab with behavior-event list and
         //     notifications, plus the drag-to-draw zone/line editor.
-        versionCode = 9
-        versionName = "0.6.0-beta"
+        // 10 = 0.7.0 (R6 Track B): resumable chunked upload from the phone's
+        //      gallery, then auto-compress; completes the M4 ingest tail.
+        versionCode = 10
+        versionName = "0.7.0-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

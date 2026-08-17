@@ -19,9 +19,36 @@ android {
         // appears for later milestones.
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0-dev"
+        // versionCode tracks the milestone the build actually contains.
+        // 3 = M3 (pairing + LIBRARY + METRICS + HOME + LIVE), first public beta.
+        versionCode = 3
+        versionName = "0.3.0-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    // Release signing (first public APK, 2026-08-16). The keystore is NOT in
+    // the repo; it lives on the release machine and is passed in via env vars:
+    //   SVCS_ANDROID_KEYSTORE      absolute path to the .jks
+    //   SVCS_ANDROID_KS_PASS       keystore password
+    //   SVCS_ANDROID_KEY_ALIAS     key alias (default "svcs")
+    //   SVCS_ANDROID_KEY_PASS      key password (defaults to the store pass)
+    // When the env vars are absent (CI, contributor machines) the release
+    // buildType falls back to the debug signing config, so `assembleRelease`
+    // still produces an installable APK anywhere. A self-signed key is the
+    // normal, correct thing for a sideloaded GitHub-release APK; Play Store
+    // publishing (if ever) would use its own upload key.
+    // Author: Bloodawn (KheivenD), 2026-08-16 (first APK release).
+    signingConfigs {
+        create("release") {
+            val ksPath = System.getenv("SVCS_ANDROID_KEYSTORE")
+            if (ksPath != null) {
+                storeFile = file(ksPath)
+                storePassword = System.getenv("SVCS_ANDROID_KS_PASS")
+                keyAlias = System.getenv("SVCS_ANDROID_KEY_ALIAS") ?: "svcs"
+                keyPassword = System.getenv("SVCS_ANDROID_KEY_PASS")
+                    ?: System.getenv("SVCS_ANDROID_KS_PASS")
+            }
+        }
     }
 
     buildTypes {
@@ -35,6 +62,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            signingConfig = if (System.getenv("SVCS_ANDROID_KEYSTORE") != null) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 

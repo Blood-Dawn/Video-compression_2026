@@ -8,6 +8,7 @@ Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - blueprints).
 
 import threading
 import time
+import uuid as _uuid
 from pathlib import Path
 import re as _re
 from flask import Blueprint, jsonify, request, abort
@@ -251,19 +252,41 @@ def api_start():
             data.get("target_vmaf"), _TARGET_VMAF_MIN, _TARGET_VMAF_MAX),
     }
 
-    _pipeline_runner._stop_event = threading.Event()
-    _pipeline_runner._pipeline_thread = threading.Thread(
+    # M4: a job id the phone (or any client) can hold on to and correlate
+    # across /api/status polls and the /api/jobs/recent history.
+    config["job_id"] = _uuid.uuid4().hex[:12]
+
+    # M4 TOCTOU fix: the running-check at the top of this route and the thread
+    # spawn down here used to be ~100 lines apart with no re-check, so two
+    # near-simultaneous POSTs (easy from a phone retrying on a flaky link)
+    # could BOTH pass the early check and BOTH start worker threads. The slot
+    # is now claimed atomically: whoever takes the lock first sets
+    # running=True and everyone else gets the same 409 they would have gotten
+    # arriving a moment later. The early check stays as a cheap fast-fail
+    # before validation work.
+    # Author: Bloodawn (KheivenD), 2026-08-16 (M4 job registry + TOCTOU).
+    new_stop = threading.Event()
+    worker = threading.Thread(
         target=_run_pipeline_thread,
-        args=(config, _pipeline_runner._stop_event),
+        args=(config, new_stop),
         daemon=True,
         name="pipeline-worker",
     )
-    _pipeline_runner._pipeline_thread.start()
-
     with _state_lock:
+        if _status["running"] or (
+            _pipeline_runner._pipeline_thread is not None
+            and _pipeline_runner._pipeline_thread.is_alive()
+        ):
+            return jsonify({"error": "Pipeline already running"}), 409
+        _status["running"] = True          # claim the single job slot
+        _status["error"] = None
+        _status["job_id"] = config["job_id"]
         _status["last_config"] = config
+        _pipeline_runner._stop_event = new_stop
+        _pipeline_runner._pipeline_thread = worker
+    worker.start()
 
-    return jsonify({"ok": True, "config": config})
+    return jsonify({"ok": True, "job_id": config["job_id"], "config": config})
 
 
 @pipeline_bp.route("/api/stop", methods=["POST"])

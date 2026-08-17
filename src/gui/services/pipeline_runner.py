@@ -372,7 +372,10 @@ def _record_job_history(config, stop_event, started, error, frames, segments):
             ended_at=time.time(),
             status=status,
             counts={"frames": int(frames or 0), "segments": int(segments or 0),
-                    "mode": config.get("mode", "mode0")},
+                    "mode": config.get("mode", "mode0"),
+                    # M4 job registry: lets a client correlate this history
+                    # entry with the job_id it got back from /api/start.
+                    "job_id": config.get("job_id")},
             error=error,
         )
     except Exception:  # noqa: BLE001 - history must never affect the pipeline

@@ -111,6 +111,33 @@ def test_sql_metacharacters_cannot_alter_query(seeded_db):
     assert n == 4
 
 
+def test_old_schema_db_is_migrated_not_crashed(tmp_path):
+    """An archive DB from an older SVCS lacks the v2 metadata columns; the
+    search must migrate it idempotently instead of dying with
+    'no such column: object_classes' (found live on a real deployment DB)."""
+    import sqlite3
+    db = tmp_path / "old.db"
+    conn = sqlite3.connect(db)
+    conn.execute(
+        "CREATE TABLE segments (id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        " timestamp TEXT NOT NULL, camera_id TEXT NOT NULL,"
+        " target_detected INTEGER NOT NULL DEFAULT 0,"
+        " roi_count INTEGER NOT NULL DEFAULT 0,"
+        " file_size INTEGER NOT NULL DEFAULT 0,"
+        " duration REAL NOT NULL DEFAULT 0.0, file_path TEXT NOT NULL)"
+    )
+    conn.execute(
+        "INSERT INTO segments (timestamp, camera_id, file_path)"
+        " VALUES ('2026-08-01 10:00:00', 'cam1', 'old.mp4')"
+    )
+    conn.commit()
+    conn.close()
+    result = search("vehicles on the highway", str(db))
+    assert result["count"] == 0  # no metadata on the old row, but NO error
+    result2 = search("cam1", str(db))
+    assert result2["count"] == 1  # camera filter works on the migrated DB
+
+
 def test_hidden_rows_are_excluded(seeded_db):
     import sqlite3
     conn = sqlite3.connect(seeded_db)

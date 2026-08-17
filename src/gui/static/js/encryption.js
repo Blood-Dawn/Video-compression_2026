@@ -389,3 +389,73 @@ function loadBusiest()      { toggleArchivePanel(); setTimeout(loadArchiveBusies
 function loadDailySummary() { toggleArchivePanel(); setTimeout(loadArchiveDaily, 100); }
 
 // ── UI state helpers ──────────────────────────────────────────
+
+// ── R5 TASK 5.4: natural-language search over the segments metadata ─────────
+// One phrase -> GET /api/nl_search -> parsed-filter echo + results table.
+// The parser is deterministic and server-side (gui/services/nl_query.py);
+// this renderer only escapes and displays. Author: Bloodawn (KheivenD),
+// 2026-08-16 (R5 TASK 5.4 UI).
+async function runNlSearch() {
+  const q = (document.getElementById('nl-search-q').value || '').trim();
+  const explainEl = document.getElementById('nl-search-explain');
+  const countEl = document.getElementById('archive-result-count');
+  const table = document.getElementById('archive-results-table');
+  if (!q) {
+    explainEl.textContent = 'Type a phrase like "red car after 9pm on cam2".';
+    return;
+  }
+  // Same status-vs-table toggle the classic archive search does: the results
+  // table is display:none behind the "Configure filters" status div until a
+  // search actually runs.
+  const statusEl = document.getElementById('archive-status');
+  statusEl.style.display = 'none';
+  table.style.display = 'table';
+  table.querySelector('thead tr').innerHTML = `
+    <th>Timestamp</th><th>Camera</th><th>Type</th><th>Classes</th>
+    <th>Color</th><th>Scene</th><th>Time of day</th><th>Vehicles</th><th>People</th><th>File</th>`;
+  const body = table.querySelector('tbody');
+  body.innerHTML = '<tr><td colspan="10" style="color:var(--text-dim);">Searching...</td></tr>';
+  try {
+    const r = await fetch('/api/nl_search?q=' + encodeURIComponent(q));
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+    const ex = data.explain || {};
+    const bits = [];
+    if (ex.classes) bits.push('class: ' + ex.classes.join(', '));
+    if (ex.colors) bits.push('color: ' + ex.colors.join(', '));
+    if (ex.scenes) bits.push('scene: ' + ex.scenes.join(', '));
+    if (ex.time_of_day) bits.push('time: ' + ex.time_of_day.join(', '));
+    if (ex.after_hour !== undefined) bits.push('after ' + ex.after_hour + ':00');
+    if (ex.before_hour !== undefined) bits.push('before ' + ex.before_hour + ':00');
+    if (ex.hours) bits.push('between ' + ex.hours[0] + ':00 and ' + ex.hours[1] + ':00');
+    if (ex.date) bits.push('date: ' + ex.date);
+    if (ex.camera) bits.push('camera: ' + ex.camera);
+    if (ex.count) bits.push('count: ' + JSON.stringify(ex.count));
+    if (ex.free_text) bits.push('free text: ' + ex.free_text.join(', '));
+    explainEl.textContent = bits.length
+      ? ('Understood: ' + bits.join('  |  '))
+      : 'No structured filters recognized; matched as free text.';
+    countEl.textContent = data.count + (data.count === 1 ? ' result' : ' results');
+    if (!data.segments.length) {
+      body.innerHTML = '<tr><td colspan="10" style="color:var(--text-dim);">No matches.</td></tr>';
+      return;
+    }
+    body.innerHTML = data.segments.map(s => `
+      <tr>
+        <td>${escHtml(s.timestamp || '')}</td>
+        <td>${escHtml(s.camera_id || '')}</td>
+        <td>${escHtml(s.object_type || '')}</td>
+        <td>${escHtml(s.object_classes || '')}</td>
+        <td>${escHtml(s.dominant_color || '')}</td>
+        <td>${escHtml(s.scene_type || '')}</td>
+        <td>${escHtml(s.time_of_day || '')}</td>
+        <td>${Number(s.vehicle_count) || 0}</td>
+        <td>${Number(s.person_count) || 0}</td>
+        <td title="${escHtml(s.file_path || '')}">${escHtml(String(s.file_path || '').split(/[\\/]/).pop())}</td>
+      </tr>`).join('');
+  } catch (e) {
+    explainEl.textContent = '';
+    body.innerHTML = '<tr><td colspan="10" style="color:#f66;">Search failed: '
+      + escHtml(String(e && e.message ? e.message : e)) + '</td></tr>';
+  }
+}

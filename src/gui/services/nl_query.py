@@ -182,8 +182,22 @@ def parse(q: str) -> dict[str, Any]:
 
 
 def search(q: str, db_path: str, limit: int = 100) -> dict[str, Any]:
-    """Run a parsed phrase against the segments DB. Read-only, parameterized."""
+    """Run a parsed phrase against the segments DB. Parameterized throughout.
+
+    Runs the idempotent schema migration first: an archive DB written by an
+    older SVCS lacks the v2 metadata columns (object_classes, dominant_color,
+    scene_type, ...) because the ALTER TABLE migrations only ran at pipeline
+    startup, so the first smart search against a real deployment's DB died
+    with "no such column: object_classes". initialize_database() is designed
+    to be re-run against old databases and adds only what is missing.
+    """
     import sqlite3
+
+    try:
+        from utils.db.schema import initialize_database
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.utils.db.schema import initialize_database
+    initialize_database(db_path)
 
     parsed = parse(q)
     where = " AND ".join(["(hidden IS NULL OR hidden = 0)"] + parsed["clauses"])

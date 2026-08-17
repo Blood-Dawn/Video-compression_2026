@@ -3400,6 +3400,21 @@
           </div>
         </div>
 
+        <!-- R5 TASK 5.4: structured natural-language search. One phrase in,
+             parsed filters out; the explain line echoes what was understood
+             so a misread can be corrected instead of silently trusted. -->
+        <div class="archive-filters" style="align-items:flex-end;">
+          <div class="archive-filter-group" style="flex:1 1 320px;">
+            <label>Smart search (plain English)</label>
+            <input id="nl-search-q" type="text" placeholder="red car after 9pm on cam2"
+                   onkeydown="if(event.key==='Enter')runNlSearch()" style="width:100%;" />
+          </div>
+          <button class="btn btn-ghost" style="font-size:0.62rem;padding:0.35rem 0.7rem;"
+                  onclick="runNlSearch()">SMART SEARCH</button>
+          <span id="nl-search-explain"
+                style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);flex-basis:100%;"></span>
+        </div>
+
         <div class="archive-filters">
           <div class="archive-filter-group">
             <label>Object Type</label>

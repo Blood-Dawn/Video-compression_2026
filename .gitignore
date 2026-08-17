@@ -187,3 +187,32 @@ CLAUDE.md
 # Never commit a credential, even a throwaway one.
 .svcs_test_pw
 .svcs_test_token
+
+# ── Session scratch (2026-08-17) ────────────────────────────────────
+# These were committed once by accident and leaked live credentials into a
+# PUBLIC repo. Broad patterns, deliberately: a dot-prefixed scratch file at
+# the repo root is never something this project wants in git.
+.e2e_*
+.ntfy_*
+.svcs_*
+.phone_*
+*.png.tmp
+# Screenshots and device captures taken during verification runs
+.phone_apk_test*.png
+/*.png
+!docs/**/*.png
+!src/gui/static/**/*.png
+!mobile/**/*.png
+
+# Extra pytest basetemp dirs (parallel runs use unique names)
+.pytest_tmp*/
+
+# Background run logs written by the build/test helper scripts
+.apk_*.log
+.exe_build*.log
+.test_run*.log
+.real_videos_retest.log
+.verify_server.log
+
+# Ad-hoc local test media staged for phone/upload walkthroughs
+svcs_mobile_test/

@@ -106,6 +106,11 @@ SAMPLES = [
     ("GET", "/api/capabilities"),
     # M2.3: compression savings summary.
     ("GET", "/api/savings"),
+    # R5 5.4: natural-language search.
+    ("GET", "/api/nl_search"),
+    # R5 5.6/5.7: zones config + behavior events.
+    ("GET", "/api/zones"),
+    ("GET", "/api/events/recent"),
 ]
 
 
@@ -132,4 +137,6 @@ def test_sample_count_matches_route_count():
     expects 77, not 78.
     """
     rules = [r for r in flask_app.url_map.iter_rules() if r.endpoint != "static"]
-    assert len(SAMPLES) == len(rules) == 79
+    # +1 for /api/nl_search (R5 5.4), +2 for /api/zones and /api/events/recent
+    # (R5 5.6/5.7).
+    assert len(SAMPLES) == len(rules) == 82

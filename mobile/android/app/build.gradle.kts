@@ -56,8 +56,17 @@ android {
             applicationIdSuffix = ".debug"
         }
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // Minification OFF for the 0.3.0-beta APK: the R8-minified build
+            // rendered a black screen on the physical test device (frames drew,
+            // no exception logged; the debug build of the same code was fine),
+            // which means the keep rules for this dependency set (kotlinx
+            // serialization + Compose + Media3) were never actually exercised.
+            // An unminified sideload APK is a few MB larger and correct, which
+            // beats a small broken one. Re-enable AFTER writing and physically
+            // re-verifying real keep rules; tracked in docs/BLOCKERS.md.
+            // Author: Bloodawn (KheivenD), 2026-08-16 (0.3.0-beta release fix).
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

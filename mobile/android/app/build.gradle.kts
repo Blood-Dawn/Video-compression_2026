@@ -31,8 +31,10 @@ android {
         // 8 = 0.5.0: M5 job-completion notifications (app-alive polling),
         //     and minification is BACK ON with complete R8 keep rules,
         //     re-verified on the physical device.
-        versionCode = 8
-        versionName = "0.5.0-beta"
+        // 9 = 0.6.0 (R6 Track A): EVENTS tab with behavior-event list and
+        //     notifications, plus the drag-to-draw zone/line editor.
+        versionCode = 9
+        versionName = "0.6.0-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

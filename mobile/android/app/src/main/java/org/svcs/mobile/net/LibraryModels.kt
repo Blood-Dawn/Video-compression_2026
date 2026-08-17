@@ -160,6 +160,60 @@ data class HlsStatus(
     val error: String? = null,
 )
 
+/** GET /api/events/recent - behavior events (R6 Track A). */
+@Serializable
+data class EventsRecent(
+    val events: List<EventItem> = emptyList(),
+    @SerialName("output_dir") val outputDir: String = "",
+)
+
+@Serializable
+data class EventItem(
+    val kind: String = "",
+    @SerialName("camera_id") val cameraId: String = "",
+    val label: String = "",
+    @SerialName("geometry_id") val geometryId: String = "",
+    val direction: String? = null,
+    val t: Double = 0.0,
+    @SerialName("wall_time") val wallTime: String = "",
+    @SerialName("dwell_s") val dwellS: Double? = null,
+    @SerialName("track_id") val trackId: Int = 0,
+) {
+    fun headline(): String {
+        val who = label.ifBlank { "object" }
+        return when (kind) {
+            "line_crossing" ->
+                "$who crossed $geometryId" + (direction?.let { " heading $it" } ?: "")
+            "loitering" ->
+                "$who loitering at $geometryId" +
+                    (dwellS?.let { " for ${it.toInt()}s" } ?: "")
+            else -> "$kind at $geometryId"
+        }
+    }
+}
+
+/** GET/POST /api/zones - per-camera zones config (R6 Track A editor). */
+@Serializable
+data class ZonesConfigResponse(
+    @SerialName("camera_id") val cameraId: String = "",
+    val config: ZonesConfig = ZonesConfig(),
+)
+
+@Serializable
+data class ZonesConfig(
+    val exclude: List<List<Double>> = emptyList(),
+    val lines: List<ZoneLine> = emptyList(),
+    val zones: List<ZoneRect> = emptyList(),
+    @SerialName("loiter_s") val loiterS: Double = 30.0,
+    @SerialName("class_filter") val classFilter: List<String> = emptyList(),
+)
+
+@Serializable
+data class ZoneLine(val id: String = "", val line: List<Double> = emptyList())
+
+@Serializable
+data class ZoneRect(val id: String = "", val rect: List<Double> = emptyList())
+
 /** GET /api/jobs/recent - the M5 notifier watches the newest entry. */
 @Serializable
 data class JobsRecent(val jobs: List<JobEntry> = emptyList())

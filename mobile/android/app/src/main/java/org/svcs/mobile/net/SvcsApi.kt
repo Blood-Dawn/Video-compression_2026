@@ -4,9 +4,13 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.addJsonArray
+import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -234,6 +238,65 @@ class SvcsApi(
     /** Newest finished jobs (the M5 notifier polls this with limit=1). */
     fun jobsRecent(limit: Int = 1): Fetched<JobsRecent> =
         getJson("${baseUrl.trimEnd('/')}/api/jobs/recent?limit=$limit")
+
+    /** Newest behavior events (R6 Track A: EVENTS tab + notifier). */
+    fun eventsRecent(limit: Int = 100): Fetched<EventsRecent> =
+        getJson("${baseUrl.trimEnd('/')}/api/events/recent?limit=$limit")
+
+    /** One camera's zones/lines config (R6 Track A editor). */
+    fun getZones(cameraId: String): Fetched<ZonesConfigResponse> =
+        getJson("${baseUrl.trimEnd('/')}/api/zones?camera_id=" +
+            java.net.URLEncoder.encode(cameraId, "UTF-8"))
+
+    /** Replace one camera's zones/lines config. Applies to the NEXT run. */
+    fun saveZones(cameraId: String, config: ZonesConfig): Fetched<ZonesConfigResponse> {
+        return try {
+            val payload = buildJsonObject {
+                put("camera_id", cameraId)
+                put("loiter_s", config.loiterS)
+                putJsonArray("exclude") {
+                    config.exclude.forEach { r ->
+                        addJsonArray { r.forEach { add(it) } }
+                    }
+                }
+                putJsonArray("lines") {
+                    config.lines.forEach { l ->
+                        addJsonObject {
+                            put("id", l.id)
+                            putJsonArray("line") { l.line.forEach { add(it) } }
+                        }
+                    }
+                }
+                putJsonArray("zones") {
+                    config.zones.forEach { z ->
+                        addJsonObject {
+                            put("id", z.id)
+                            putJsonArray("rect") { z.rect.forEach { add(it) } }
+                        }
+                    }
+                }
+                putJsonArray("class_filter") {
+                    config.classFilter.forEach { add(it) }
+                }
+            }.toString().toRequestBody("application/json".toMediaType())
+            client.newCall(
+                Request.Builder()
+                    .url("${baseUrl.trimEnd('/')}/api/zones")
+                    .post(payload).build(),
+            ).execute().use { resp ->
+                when {
+                    resp.code == 401 -> Fetched.Unauthorized
+                    !resp.isSuccessful -> Fetched.Failed(
+                        errorMessage(resp.body?.string()) ?: "HTTP ${resp.code}")
+                    else -> Fetched.Ok(
+                        json.decodeFromString<ZonesConfigResponse>(
+                            resp.body?.string().orEmpty()))
+                }
+            }
+        } catch (e: Exception) {
+            Fetched.Failed(e.message ?: e.javaClass.simpleName)
+        }
+    }
 
     fun systemMetrics(): Fetched<SystemMetrics> =
         getJson("${baseUrl.trimEnd('/')}/api/system_metrics")

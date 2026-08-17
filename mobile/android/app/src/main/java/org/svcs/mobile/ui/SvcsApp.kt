@@ -41,6 +41,7 @@ enum class Tab(val label: String) {
     HOME("HOME"),
     LIBRARY("LIBRARY"),
     LIVE("LIVE"),
+    EVENTS("EVENTS"),
     METRICS("METRICS"),
     MORE("MORE"),
 }
@@ -114,6 +115,8 @@ fun SvcsApp() {
     LaunchedEffect(sessionEpoch) {
         var lastSeen: Double? = null
         var baselined = false
+        var lastEvent: String? = null
+        var eventBaselined = false
         while (true) {
             val client = api
             if (client != null) {
@@ -128,6 +131,20 @@ fun SvcsApp() {
                         lastSeen = ts
                         JobNotifier.notifyJobDone(
                             appContext, newest.label, newest.status)
+                    }
+                }
+                // R6 Track A4: behavior events ride the same poll cadence.
+                val er = withContext(Dispatchers.IO) { client.eventsRecent(1) }
+                if (er is Fetched.Ok) {
+                    val ev = er.value.events.firstOrNull()
+                    val et = ev?.wallTime
+                    if (!eventBaselined) {
+                        lastEvent = et
+                        eventBaselined = true
+                    } else if (ev != null && et != null && et != lastEvent) {
+                        lastEvent = et
+                        JobNotifier.notifyJobDone(
+                            appContext, ev.headline(), "detected")
                     }
                 }
             }
@@ -189,6 +206,8 @@ fun SvcsApp() {
                     onCredentialsSaved = { sessionEpoch++ })
                 Tab.HOME -> HomeScreen(
                     vm = viewModel(key = "home-$sessionEpoch") { HomeViewModel(api) })
+                Tab.EVENTS -> EventsScreen(
+                    vm = viewModel(key = "events-$sessionEpoch") { EventsViewModel(api) })
                 Tab.LIVE -> LiveScreen(
                     vm = viewModel(key = "live-$sessionEpoch") {
                         LiveViewModel(

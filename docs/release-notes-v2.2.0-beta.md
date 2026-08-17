@@ -23,7 +23,7 @@ Everything since the 2.1 beta:
   camera passwords redacted from status endpoints.
 - Fixed: the frozen exe now bundles OpenCV explicitly (2.1 packaging gap).
 
-## Mobile (SVCS-Mobile-0.4.2-beta.apk)
+## Mobile (SVCS-Mobile-0.5.0-beta.apk)
 
 Thin client for a self-hosted SVCS server; it does not encode on the phone.
 Pair by server address and access token, then LIBRARY, METRICS, HOME, and a
@@ -32,6 +32,14 @@ blocks screenshots of your footage by design. minSdk 29 (Android 10),
 self-signed release key, sideload install. Verified on a physical Samsung
 device (Android 17) against a LAN server, including the full first-run
 pairing flow.
+
+0.5.0: system notifications when a server job finishes (while the app is
+running; grant the notification permission on first launch), and the APK is
+84 percent smaller (4.4 MB) with minification re-enabled under completed R8
+keep rules, re-verified on a physical device. Server side, the pipeline
+gained per-camera exclude zones and behavior events (line-crossing,
+loitering, direction) recorded to events.jsonl with /api/zones and
+/api/events/recent to drive them.
 
 0.4.2: COMPRESS opens a mode picker mirroring the desktop's four presets
 (live surveillance / event recording / smart compress / object only) with

@@ -36,6 +36,8 @@ data class ServerSettingsState(
      * did exactly that and stayed broken until they force-quit the app.
      */
     val saveCount: Int = 0,
+    /** 0.8.0: whether an upload auto-starts a mode1 compress. */
+    val autoCompressUpload: Boolean = true,
 )
 
 /**
@@ -56,7 +58,19 @@ class ServerSettingsViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val url = store.serverUrl().orEmpty()
             val tok = store.token().orEmpty()
-            _state.update { it.copy(serverUrl = url, token = tok) }
+            val auto = store.autoCompressUpload()
+            _state.update {
+                it.copy(serverUrl = url, token = tok, autoCompressUpload = auto)
+            }
+        }
+    }
+
+    /** 0.8.0: flip whether uploads auto-start a compress. */
+    fun toggleAutoCompress() {
+        viewModelScope.launch {
+            val next = !_state.value.autoCompressUpload
+            store.setAutoCompressUpload(next)
+            _state.update { it.copy(autoCompressUpload = next) }
         }
     }
 

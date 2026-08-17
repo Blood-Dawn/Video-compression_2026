@@ -35,8 +35,11 @@ android {
         //     notifications, plus the drag-to-draw zone/line editor.
         // 10 = 0.7.0 (R6 Track B): resumable chunked upload from the phone's
         //      gallery, then auto-compress; completes the M4 ingest tail.
-        versionCode = 10
-        versionName = "0.7.0-beta"
+        // 11 = 0.8.0: auto-compress-on-upload becomes a MORE toggle, and INFO
+        //      on every clip shows per-video metrics (codec, resolution, fps,
+        //      duration, provenance) instead of only server-wide numbers.
+        versionCode = 11
+        versionName = "0.8.0-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

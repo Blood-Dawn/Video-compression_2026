@@ -193,6 +193,29 @@ fun ServerSettingsScreen(
                 )
             }
 
+            // 0.8.0: upload behavior. Some operators want to upload now and
+            // pick a mode later; the auto-compress is a choice, not a law.
+            androidx.compose.foundation.layout.Row(
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Auto-compress uploads",
+                        style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        "When on, an uploaded video immediately compresses " +
+                            "with mode 1. When off, it just lands in the " +
+                            "server's uploads folder for later.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = SvcsTextDim,
+                    )
+                }
+                androidx.compose.material3.Switch(
+                    checked = state.autoCompressUpload,
+                    onCheckedChange = { vm.toggleAutoCompress() },
+                )
+            }
+
             // The phone app's own version, so nobody mistakes the server
             // version shown on the CONNECTED card for the app's.
             Text(

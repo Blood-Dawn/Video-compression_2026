@@ -99,6 +99,56 @@ fun LibraryScreen(vm: LibraryViewModel) {
         }
     }
 
+    // 0.8.0: per-video metrics dialog. The metrics that matter for a
+    // compression tool: codec, resolution, fps, duration, size, and where a
+    // compressed clip came from.
+    state.metaFor?.let { item ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = vm::dismissMeta,
+            confirmButton = {},
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = vm::dismissMeta) {
+                    Text("CLOSE")
+                }
+            },
+            title = { Text(item.displayName(),
+                style = MaterialTheme.typography.titleSmall, maxLines = 1) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    val badge = if (item.isCompressed) "COMPRESSED OUTPUT"
+                        else if (item.compressed) "ORIGINAL (has a compressed copy)"
+                        else "ORIGINAL"
+                    Text(badge, style = MaterialTheme.typography.labelSmall,
+                        color = if (item.isCompressed) SvcsGreen else SvcsAmber)
+                    item.source?.let {
+                        Text("Compressed from: " + it.substringAfterLast('\\')
+                            .substringAfterLast('/'),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = SvcsTextDim)
+                    }
+                    val m = state.meta
+                    when {
+                        state.metaError != null -> Text(state.metaError!!,
+                            style = MaterialTheme.typography.bodyMedium, color = SvcsRed)
+                        m == null -> Text("Reading metrics...",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = SvcsTextDim)
+                        else -> {
+                            MetaRow("Size", item.humanSize())
+                            MetaRow("Codec", m.codec.ifBlank { "?" }
+                                .uppercase() + if (m.codec == "av1")
+                                    " (needs an AV1 decoder to play here)" else "")
+                            MetaRow("Resolution",
+                                if (m.width.isNotBlank()) "${m.width} x ${m.height}" else "?")
+                            MetaRow("Frame rate", m.humanFps())
+                            MetaRow("Duration", m.humanDuration())
+                        }
+                    }
+                }
+            },
+        )
+    }
+
     // Coil MUST be handed the app's authenticated OkHttp client. Its default
     // client has no Authorization header, so every thumbnail 401s and the grid
     // silently renders empty tiles with no error anywhere. Verified on device:
@@ -195,6 +245,7 @@ fun LibraryScreen(vm: LibraryViewModel) {
                     compressEnabled = !state.compressing,
                     onPlay = { playing = item },
                     onCompress = { compressTarget = item },
+                    onInfo = { vm.showMeta(item) },
                 )
             }
         }
@@ -255,6 +306,15 @@ private fun CompressModeDialog(
     )
 }
 
+@Composable
+private fun MetaRow(label: String, value: String) {
+    Row {
+        Text(label, style = MaterialTheme.typography.labelSmall,
+            color = SvcsTextDim, modifier = Modifier.padding(end = 8.dp))
+        Text(value, style = MaterialTheme.typography.bodyMedium)
+    }
+}
+
 /** One filter chip. Text-only to match the app's flat design tokens. */
 @Composable
 private fun KindChip(label: String, selected: Boolean, onClick: () -> Unit) {
@@ -277,6 +337,7 @@ private fun ClipTile(
     compressEnabled: Boolean = true,
     onPlay: () -> Unit = {},
     onCompress: () -> Unit = {},
+    onInfo: () -> Unit = {},
 ) {
     // Vendor originals Android cannot demux stay thumbnail-only (M4 scope
     // decision); everything else opens the in-app player on tap.
@@ -350,6 +411,11 @@ private fun ClipTile(
                         modifier = Modifier.clickable(enabled = compressEnabled,
                             onClick = onCompress).padding(top = 6.dp))
                 }
+                // 0.8.0: per-video metrics (codec, resolution, fps, duration).
+                Text("INFO", style = MaterialTheme.typography.labelSmall,
+                    color = SvcsTextDim,
+                    modifier = Modifier.clickable(onClick = onInfo)
+                        .padding(top = 6.dp))
             }
         }
     }

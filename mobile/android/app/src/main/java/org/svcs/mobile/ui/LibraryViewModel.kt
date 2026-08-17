@@ -38,6 +38,10 @@ data class LibraryState(
     val folderPath: String? = null,
     /** One-line outcome of the last compress action, shown under the header. */
     val actionMessage: String? = null,
+    /** 0.8.0: the INFO dialog's target + fetched metrics. */
+    val metaFor: LibraryItem? = null,
+    val meta: org.svcs.mobile.net.VideoMeta? = null,
+    val metaError: String? = null,
     /** True while a compress request is in flight (disables the buttons). */
     val compressing: Boolean = false,
 )
@@ -50,7 +54,32 @@ data class LibraryState(
  *
  * Author: Bloodawn (KheivenD), 2026-07-19 (M2.1).
  */
-class LibraryViewModel(private val api: SvcsApi?) : ViewModel() {
+class LibraryViewModel(
+    private val api: SvcsApi?,
+    /** 0.8.0: whether an upload auto-starts a compress (MORE toggle). */
+    private val autoCompress: suspend () -> Boolean = { true },
+) : ViewModel() {
+
+    /** 0.8.0: open the INFO dialog for one clip and fetch its metrics. */
+    fun showMeta(item: LibraryItem) {
+        val client = api ?: return
+        _state.update { it.copy(metaFor = item, meta = null, metaError = null) }
+        viewModelScope.launch {
+            val r = withContext(Dispatchers.IO) {
+                client.videoMeta(item.path, _state.value.folderPath)
+            }
+            _state.update { s ->
+                when (r) {
+                    is Fetched.Ok -> s.copy(meta = r.value)
+                    Fetched.Unauthorized -> s.copy(metaError = "Token rejected.")
+                    is Fetched.Failed -> s.copy(metaError = r.detail)
+                }
+            }
+        }
+    }
+
+    fun dismissMeta() =
+        _state.update { it.copy(metaFor = null, meta = null, metaError = null) }
 
     private companion object { const val PAGE_SIZE = 60 }
 
@@ -191,7 +220,7 @@ class LibraryViewModel(private val api: SvcsApi?) : ViewModel() {
         }
     }
 
-    private fun doUpload(client: SvcsApi, resolver: ContentResolver, uri: Uri): String {
+    private suspend fun doUpload(client: SvcsApi, resolver: ContentResolver, uri: Uri): String {
         var name = "phone_upload.mp4"
         var size = -1L
         resolver.query(uri, null, null, null, null)?.use { c ->
@@ -263,7 +292,12 @@ class LibraryViewModel(private val api: SvcsApi?) : ViewModel() {
         val fin = client.uploadFinish(uploadId, sha)
         if (fin !is Fetched.Ok) return "Finalize failed: " +
             ((fin as? Fetched.Failed)?.detail ?: "re-pair under MORE")
-        // The obvious intent of uploading from a phone is to compress it.
+        // 0.8.0: auto-compress is a CHOICE (MORE toggle), not a law. Off means
+        // the file just lands in the uploads folder for later.
+        if (!autoCompress()) {
+            return "Uploaded ${fin.value.filename}. Auto-compress is off; " +
+                "compress it whenever you are ready."
+        }
         val started = client.startCompress(fin.value.path, mode = "mode1")
         return if (started is StartCompressResult.Started) {
             "Uploaded ${fin.value.filename}; compressing on the server (mode1)."

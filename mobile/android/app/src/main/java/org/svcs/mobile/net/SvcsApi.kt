@@ -231,6 +231,11 @@ class SvcsApi(
         }
     }
 
+    /** Per-video ffprobe metrics (0.8.0), folder-pinned like thumb/file. */
+    fun videoMeta(path: String, folder: String? = null): Fetched<VideoMeta> =
+        getJson("${baseUrl.trimEnd('/')}/api/library/meta?path=" +
+            java.net.URLEncoder.encode(path, "UTF-8") + folderSuffix(folder))
+
     /** The server's configured save folder (for the OUTPUTS shortcut). */
     fun setupState(): Fetched<SetupState> =
         getJson("${baseUrl.trimEnd('/')}/api/setup/state")

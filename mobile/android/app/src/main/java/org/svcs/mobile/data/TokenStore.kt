@@ -46,6 +46,21 @@ class TokenStore(private val context: Context) {
         val SERVER_URL = stringPreferencesKey("server_url")
         val TOKEN_BLOB = stringPreferencesKey("token_blob")
         val LAST_LIVE_SOURCE = stringPreferencesKey("last_live_source")
+        val AUTO_COMPRESS_UPLOAD = stringPreferencesKey("auto_compress_upload")
+    }
+
+    /**
+     * Whether an upload should auto-start a compress (0.8.0). Defaults ON,
+     * matching the behavior users saw first; the MORE screen offers the off
+     * switch for people who want to upload now and choose a mode later.
+     */
+    suspend fun autoCompressUpload(): Boolean =
+        context.settingsStore.data.first()[AUTO_COMPRESS_UPLOAD] != "off"
+
+    suspend fun setAutoCompressUpload(on: Boolean) {
+        context.settingsStore.edit {
+            it[AUTO_COMPRESS_UPLOAD] = if (on) "on" else "off"
+        }
     }
 
     /**

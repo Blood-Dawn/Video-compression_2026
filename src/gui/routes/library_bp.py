@@ -502,7 +502,7 @@ def api_library_browse_folder():
 @library_bp.route("/api/library/meta", methods=["GET"])
 def api_library_meta():
     """Return ffprobe metadata (duration, dims, fps, codec) for one video."""
-    p = _safe_video(request.args.get("path", ""))
+    p = _safe_video(request.args.get("path", ""), request.args.get("folder", ""))
     if p is None:
         return jsonify({"error": "not a video file"}), 400
     meta = {"name": p.name, "path": str(p), "size": p.stat().st_size}

@@ -199,7 +199,10 @@ fun SvcsApp() {
             // against a credential the user has already replaced.
             when (tab) {
                 Tab.LIBRARY -> LibraryScreen(
-                    vm = viewModel(key = "lib-$sessionEpoch") { LibraryViewModel(api) })
+                    vm = viewModel(key = "lib-$sessionEpoch") {
+                        LibraryViewModel(api,
+                            autoCompress = { store.autoCompressUpload() })
+                    })
                 Tab.METRICS -> MetricsScreen(
                     vm = viewModel(key = "metrics-$sessionEpoch") { MetricsViewModel(api) })
                 Tab.MORE -> ServerSettingsScreen(

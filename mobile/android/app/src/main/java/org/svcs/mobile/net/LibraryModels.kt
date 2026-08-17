@@ -214,6 +214,31 @@ data class ZoneLine(val id: String = "", val line: List<Double> = emptyList())
 @Serializable
 data class ZoneRect(val id: String = "", val rect: List<Double> = emptyList())
 
+/** GET /api/library/meta - per-video metrics (0.8.0). Raw ffprobe keys. */
+@Serializable
+data class VideoMeta(
+    val name: String = "",
+    val size: Long = 0,
+    @SerialName("codec_name") val codec: String = "",
+    val width: String = "",
+    val height: String = "",
+    @SerialName("r_frame_rate") val frameRate: String = "",
+    val duration: String = "",
+) {
+    fun humanDuration(): String {
+        val s = duration.toDoubleOrNull() ?: return "?"
+        val m = (s / 60).toInt()
+        return if (m > 0) "${m}m ${(s % 60).toInt()}s" else "${s.toInt()}s"
+    }
+
+    fun humanFps(): String {
+        val parts = frameRate.split("/")
+        val num = parts.getOrNull(0)?.toDoubleOrNull() ?: return "?"
+        val den = parts.getOrNull(1)?.toDoubleOrNull() ?: 1.0
+        return if (den > 0) "%.0f fps".format(num / den) else "?"
+    }
+}
+
 /** R6 Track B: chunked resumable upload shapes. */
 @Serializable
 data class UploadBegin(

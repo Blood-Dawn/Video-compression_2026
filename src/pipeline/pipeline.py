@@ -269,6 +269,39 @@ def run_pipeline(
     db_path = str(Path(output_dir) / "metadata.db")
 
     log.info(f"Source: {input_source} | {frame_w}x{frame_h} @ {fps:.1f}fps")
+
+    # ── R5 TASKS 5.6/5.7: zone masks + behavior events ───────────────────────
+    # Per-camera config is read ONCE at run start (a saved change applies to
+    # the next run). Every failure path only disables the feature; it can
+    # never take down an encode. Author: Bloodawn (KheivenD), 2026-08-17.
+    _zone_cfg = None
+    _event_engine = None
+    try:
+        try:
+            from utils.zones_config import (load_camera_config as _load_zcfg,
+                                            filter_regions as _zone_filter)
+            from utils.track_events import EventEngine as _EventEngine
+            from utils.event_log import append_events as _append_events
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.utils.zones_config import (load_camera_config as _load_zcfg,
+                                                filter_regions as _zone_filter)
+            from src.utils.track_events import EventEngine as _EventEngine
+            from src.utils.event_log import append_events as _append_events
+        _zone_cfg = _load_zcfg(camera_id)
+        if _zone_cfg["lines"] or _zone_cfg["zones"]:
+            _event_engine = _EventEngine(
+                lines=_zone_cfg["lines"], zones=_zone_cfg["zones"],
+                loiter_s=_zone_cfg["loiter_s"],
+                class_filter=_zone_cfg["class_filter"])
+            log.info("Behavior events armed: %d line(s), %d loiter zone(s).",
+                     len(_zone_cfg["lines"]), len(_zone_cfg["zones"]))
+        if _zone_cfg["exclude"]:
+            log.info("Zone masks active: %d exclude region(s).",
+                     len(_zone_cfg["exclude"]))
+    except Exception as _zexc:  # noqa: BLE001 - feature must never kill a run
+        log.warning("Zones/events config unavailable: %s", _zexc)
+        _zone_cfg = None
+        _event_engine = None
     log.info(f"Segment length: {segment_seconds}s ({frames_per_segment} frames)")
     log.info(f"Mode: {mode}")
     warmup_secs = (effective_warmup / fps) if fps > 0 else 0.0
@@ -616,6 +649,34 @@ def run_pipeline(
                         _seg_all_classes |= labels
             else:
                 regions = raw_regions
+
+            # R5 TASK 5.6: exclude-zone mask. A region dropped here never
+            # becomes foreground at all - no event, no ROI bits - which is
+            # the double win the spec names (fewer false alerts AND smaller
+            # files, e.g. mask the road and the tree line, watch the door).
+            if _zone_cfg and _zone_cfg["exclude"]:
+                regions = _zone_filter(regions, _zone_cfg["exclude"],
+                                       frame_w, frame_h)
+
+            # R5 TASK 5.7: behavior events on tracked objects (line-crossing,
+            # loitering, direction), recorded to <output_dir>/events.jsonl.
+            if _event_engine is not None:
+                try:
+                    _boxes_n = [(r.x / frame_w, r.y / frame_h,
+                                 (r.x + r.w) / frame_w, (r.y + r.h) / frame_h)
+                                for r in regions]
+                    _evts = _event_engine.step(
+                        _boxes_n, t=source_frame_index / max(fps, 1.0))
+                    if _evts:
+                        for _e in _evts:
+                            log.info("EVENT %s at %s: track %s (%s) dir=%s",
+                                     _e["kind"], _e["geometry_id"],
+                                     _e["track_id"], _e.get("label") or "?",
+                                     _e.get("direction"))
+                        _append_events(output_dir, _evts, camera_id=camera_id)
+                except Exception as _eexc:  # noqa: BLE001
+                    log.warning("Event engine disabled for this run: %s", _eexc)
+                    _event_engine = None
 
             has_regions = len(regions) > 0
 

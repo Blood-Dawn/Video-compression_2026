@@ -110,6 +110,9 @@ EXPECTED = {
     "/api/capabilities": "capabilities",
     # M2.3: compression savings summary.
     "/api/savings": "savings",
+    # R5 5.6/5.7: zones config + behavior events.
+    "/api/zones": "events",
+    "/api/events/recent": "events",
 }
 
 EXPECTED_BLUEPRINTS = {
@@ -119,6 +122,7 @@ EXPECTED_BLUEPRINTS = {
     "tokens",          # M0.10: device-token management for the mobile client
     "capabilities",    # M0.6: capabilities probe for the mobile client
     "savings",         # M2.3: compression savings summary
+    "events",          # R5 5.6/5.7: zones config + behavior events
 }
 
 
@@ -130,9 +134,10 @@ def test_route_count():
     # 73 through v2.2.0.dev0, then +3 unique rule strings for M0.10 device
     # tokens (/api/auth/tokens carries both GET and POST, so the four routes
     # collapse to three keys here), then +1 for the M0.6 capabilities probe,
-    # then +1 for /api/nl_search (R5 TASK 5.4, 2026-08-16).
+    # then +1 for /api/nl_search (R5 TASK 5.4, 2026-08-16), then +2 for
+    # /api/zones (GET+POST, one rule) and /api/events/recent (R5 5.6/5.7).
     rules = _rules()
-    assert len(rules) == 79, f"expected 79 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 81, f"expected 81 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_blueprints_registered():

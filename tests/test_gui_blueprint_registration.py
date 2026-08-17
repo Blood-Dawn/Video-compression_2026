@@ -118,6 +118,9 @@ EXPECTED = {
     "/api/upload/status": "ingest",
     "/api/upload/chunk": "ingest",
     "/api/upload/finish": "ingest",
+    # R6 Track C: closed-app push settings.
+    "/api/push/config": "push",
+    "/api/push/test": "push",
 }
 
 EXPECTED_BLUEPRINTS = {
@@ -129,6 +132,7 @@ EXPECTED_BLUEPRINTS = {
     "savings",         # M2.3: compression savings summary
     "events",          # R5 5.6/5.7: zones config + behavior events
     "ingest",          # R6 Track B: chunked resumable upload
+    "push",            # R6 Track C: closed-app push settings
 }
 
 
@@ -142,9 +146,10 @@ def test_route_count():
     # collapse to three keys here), then +1 for the M0.6 capabilities probe,
     # then +1 for /api/nl_search (R5 TASK 5.4, 2026-08-16), then +2 for
     # /api/zones (GET+POST, one rule) and /api/events/recent (R5 5.6/5.7),
-    # then +4 for the R6 chunked-upload routes.
+    # then +4 for the R6 chunked-upload routes, then +2 for the R6 Track C
+    # push routes (/api/push/config carries GET+POST on one rule).
     rules = _rules()
-    assert len(rules) == 85, f"expected 85 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 87, f"expected 87 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_blueprints_registered():

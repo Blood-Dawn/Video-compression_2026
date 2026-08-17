@@ -45,6 +45,18 @@ def append_events(output_dir, events: list, camera_id: str = "") -> int:
                 written += 1
     except OSError:
         return written
+    # R6 TRACK C1: closed-app push. Opt-in and off by default, so this
+    # costs one config read when nothing is configured. The publisher
+    # queues onto its own worker and swallows its own failures, because a
+    # notification must never be able to fail the encode that raised it.
+    try:
+        from utils.push_notify import publish_events as _publish
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.utils.push_notify import publish_events as _publish
+    try:
+        _publish(events, camera_id=camera_id)
+    except Exception:  # noqa: BLE001 - best effort, always
+        pass
     return written
 
 

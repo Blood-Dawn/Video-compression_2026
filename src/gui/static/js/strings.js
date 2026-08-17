@@ -26,6 +26,16 @@ const STRINGS = {
     tagline: "Selective Video Compression System",
   },
 
+  // Closed-app phone alerts (R6 TRACK C1). The token copy is the only place
+  // the UI can tell an operator that a secret exists without revealing it.
+  push: {
+    tokenStored: "a token is stored, leave blank to keep it",
+    tokenNone: "optional, for a topic that requires auth",
+    testSent: "Test sent. Check your phone.",
+    savedOn: "Saved. Alerts are on.",
+    savedOff: "Saved. Alerts are off.",
+  },
+
   // Pipeline control (start/stop, status banners)
   pipeline: {
     start: "Start",

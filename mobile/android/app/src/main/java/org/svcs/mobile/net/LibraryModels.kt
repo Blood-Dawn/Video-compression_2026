@@ -332,3 +332,34 @@ fun humanBytes(b: Long): String = when {
     b >= 1024 -> String.format("%.0f KB", b / 1024.0)
     else -> "$b B"
 }
+
+/**
+ * GET and POST /api/push/config (R6 Track C: closed-app push).
+ *
+ * These settings live on the SERVER, because the server is what posts to the
+ * ntfy topic. This app edits them remotely rather than keeping a local copy.
+ * The server answers with ``has_token`` and never the token itself, so the
+ * phone can edit a secret it is never given.
+ */
+@Serializable
+data class PushConfigResponse(
+    val config: PushConfig = PushConfig(),
+    val error: String? = null,
+)
+
+@Serializable
+data class PushConfig(
+    val enabled: Boolean = false,
+    @SerialName("topic_url") val topicUrl: String = "",
+    @SerialName("on_jobs") val onJobs: Boolean = true,
+    @SerialName("on_events") val onEvents: Boolean = true,
+    val priority: String = "",
+    @SerialName("has_token") val hasToken: Boolean = false,
+)
+
+/** POST /api/push/test. A failed test is a normal answer, not an error. */
+@Serializable
+data class PushTestResult(
+    val ok: Boolean = false,
+    val detail: String = "",
+)

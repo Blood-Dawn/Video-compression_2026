@@ -109,6 +109,17 @@ def record_job(
             f = _jobs_file()
             f.parent.mkdir(parents=True, exist_ok=True)
             f.write_text(json.dumps(jobs, indent=2), encoding="utf-8")
+        # R6 TRACK C1: closed-app push for finished runs. Deliberately
+        # after the history write, so a push problem can never cost us
+        # the record itself. Off by default; the publisher checks.
+        try:
+            from utils.push_notify import publish_job as _publish_job
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.utils.push_notify import publish_job as _publish_job
+        try:
+            _publish_job(entry)
+        except Exception:  # noqa: BLE001 - best effort, always
+            pass
         return entry
     except Exception:  # noqa: BLE001 - history must never break a run
         return None

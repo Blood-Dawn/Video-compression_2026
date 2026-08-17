@@ -195,25 +195,116 @@ fun ServerSettingsScreen(
 
             // 0.8.0: upload behavior. Some operators want to upload now and
             // pick a mode later; the auto-compress is a choice, not a law.
-            androidx.compose.foundation.layout.Row(
-                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Auto-compress uploads",
-                        style = MaterialTheme.typography.bodyMedium)
-                    Text(
-                        "When on, an uploaded video immediately compresses " +
-                            "with mode 1. When off, it just lands in the " +
-                            "server's uploads folder for later.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = SvcsTextDim,
-                    )
+            SettingSwitchRow(
+                title = "Auto-compress uploads",
+                subtitle = "When on, an uploaded video immediately compresses " +
+                    "with mode 1. When off, it just lands in the server's " +
+                    "uploads folder for later.",
+                checked = state.autoCompressUpload,
+                onToggle = vm::toggleAutoCompress,
+            )
+
+            // R6 Track C (0.9.0): closed-app push. These settings live on the
+            // SERVER, because the server is what posts to ntfy, so this is a
+            // remote control rather than a phone preference. Hidden until the
+            // pairing exists, since without it there is nothing to talk to.
+            if (state.serverUrl.isNotBlank() && state.token.isNotBlank()) {
+                LaunchedEffect(state.serverUrl, state.token) {
+                    if (!state.pushLoaded) vm.loadPushConfig()
                 }
-                androidx.compose.material3.Switch(
-                    checked = state.autoCompressUpload,
-                    onCheckedChange = { vm.toggleAutoCompress() },
-                )
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text("PHONE ALERTS WHILE SVCS IS CLOSED",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SvcsYellow)
+                        Text(
+                            "This app's own notifications stop when Android " +
+                                "stops the app. To still hear about a line " +
+                                "crossing, the server posts to an ntfy topic " +
+                                "you host, and the ntfy app on this phone " +
+                                "wakes up for it. Setup is in " +
+                                "docs/PUSH-NOTIFICATIONS.md.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = SvcsTextDim,
+                        )
+                        OutlinedTextField(
+                            value = state.pushTopicUrl,
+                            onValueChange = vm::onPushTopicChanged,
+                            label = { Text("NTFY TOPIC URL") },
+                            placeholder = { Text("http://192.168.1.50:8080/svcs-a7f3c9d2") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        OutlinedTextField(
+                            value = state.pushToken,
+                            onValueChange = vm::onPushTokenChanged,
+                            label = { Text("NTFY TOKEN") },
+                            placeholder = {
+                                Text(
+                                    if (state.pushHasToken)
+                                        "a token is stored, leave blank to keep it"
+                                    else "optional, for a topic that needs auth",
+                                )
+                            },
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        SettingSwitchRow(
+                            title = "Send alerts to my ntfy topic",
+                            subtitle = "Off by default. With no topic URL the " +
+                                "server never opens a socket for this.",
+                            checked = state.pushEnabled,
+                            onToggle = vm::togglePushEnabled,
+                        )
+                        SettingSwitchRow(
+                            title = "Compression finished or failed",
+                            subtitle = null,
+                            checked = state.pushOnJobs,
+                            onToggle = vm::togglePushOnJobs,
+                        )
+                        SettingSwitchRow(
+                            title = "Line crossings and loitering",
+                            subtitle = null,
+                            checked = state.pushOnEvents,
+                            onToggle = vm::togglePushOnEvents,
+                        )
+                        androidx.compose.foundation.layout.Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            TextButton(
+                                onClick = vm::testPush,
+                                enabled = !state.pushBusy,
+                                modifier = Modifier.weight(1f),
+                            ) { Text(if (state.pushBusy) "WORKING..." else "SEND TEST") }
+                            Button(
+                                onClick = vm::savePushConfig,
+                                enabled = !state.pushBusy,
+                                modifier = Modifier.weight(1f),
+                            ) { Text("SAVE ALERTS") }
+                        }
+                        state.pushMessage?.let { msg ->
+                            Text(
+                                msg,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (state.pushOk) SvcsGreen else SvcsRed,
+                            )
+                        }
+                        Text(
+                            "Alerts carry the event kind, camera id, and class " +
+                                "label only. No plate text, no file paths, no " +
+                                "camera credentials.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = SvcsTextDim,
+                        )
+                    }
+                }
             }
 
             // The phone app's own version, so nobody mistakes the server
@@ -224,6 +315,33 @@ fun ServerSettingsScreen(
                 color = SvcsTextDim,
             )
         }
+    }
+}
+
+/**
+ * One labelled switch, used by the auto-compress toggle and by every push
+ * switch. Extracted when the third hand-rolled Row of the same shape appeared.
+ */
+@Composable
+private fun SettingSwitchRow(
+    title: String,
+    subtitle: String?,
+    checked: Boolean,
+    onToggle: () -> Unit,
+) {
+    androidx.compose.foundation.layout.Row(
+        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium)
+            subtitle?.let {
+                Text(it, style = MaterialTheme.typography.labelSmall,
+                    color = SvcsTextDim)
+            }
+        }
+        androidx.compose.material3.Switch(checked = checked,
+            onCheckedChange = { onToggle() })
     }
 }
 

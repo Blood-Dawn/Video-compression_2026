@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.svcs.mobile.data.TokenStore
 import org.svcs.mobile.net.Capabilities
+import org.svcs.mobile.net.Fetched
 import org.svcs.mobile.net.HostClassifier
 import org.svcs.mobile.net.ProbeResult
 import org.svcs.mobile.net.SvcsApi
@@ -38,6 +39,23 @@ data class ServerSettingsState(
     val saveCount: Int = 0,
     /** 0.8.0: whether an upload auto-starts a mode1 compress. */
     val autoCompressUpload: Boolean = true,
+
+    // ── 0.9.0 / R6 Track C: the SERVER's closed-app push settings ────────
+    // These are not phone preferences. The server is what posts to ntfy, so
+    // this screen is a remote control for a server-side config, and every
+    // field here has to be fetched before it can be shown truthfully.
+    val pushLoaded: Boolean = false,
+    val pushEnabled: Boolean = false,
+    val pushTopicUrl: String = "",
+    val pushOnJobs: Boolean = true,
+    val pushOnEvents: Boolean = true,
+    /** Whether the SERVER holds a token. The token itself never comes back. */
+    val pushHasToken: Boolean = false,
+    /** Write-only. Cleared after a save so it is never held longer than needed. */
+    val pushToken: String = "",
+    val pushBusy: Boolean = false,
+    val pushOk: Boolean = false,
+    val pushMessage: String? = null,
 )
 
 /**
@@ -151,6 +169,145 @@ class ServerSettingsViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ── R6 Track C: the server's push settings ───────────────────────────
+
+    /** An API client on the SAVED pairing, or null if there is not one yet. */
+    private fun pairedApi(): SvcsApi? {
+        val url = normalizeUrl(_state.value.serverUrl.trim()) ?: return null
+        val tok = _state.value.token.trim()
+        if (tok.isBlank()) return null
+        return SvcsApi(url, tok)
+    }
+
+    fun onPushTopicChanged(v: String) {
+        _state.update { it.copy(pushTopicUrl = v, pushMessage = null) }
+    }
+
+    fun onPushTokenChanged(v: String) {
+        _state.update { it.copy(pushToken = v, pushMessage = null) }
+    }
+
+    fun togglePushEnabled() {
+        _state.update { it.copy(pushEnabled = !it.pushEnabled, pushMessage = null) }
+    }
+
+    fun togglePushOnJobs() {
+        _state.update { it.copy(pushOnJobs = !it.pushOnJobs, pushMessage = null) }
+    }
+
+    fun togglePushOnEvents() {
+        _state.update { it.copy(pushOnEvents = !it.pushOnEvents, pushMessage = null) }
+    }
+
+    /** Fetch the settings once, so the switches show the server's truth. */
+    fun loadPushConfig() {
+        val api = pairedApi() ?: return
+        _state.update { it.copy(pushBusy = true) }
+        viewModelScope.launch {
+            val res = withContext(Dispatchers.IO) { api.getPushConfig() }
+            _state.update { s ->
+                when (res) {
+                    is Fetched.Ok -> s.copy(
+                        pushBusy = false, pushLoaded = true,
+                        pushEnabled = res.value.config.enabled,
+                        pushTopicUrl = res.value.config.topicUrl,
+                        pushOnJobs = res.value.config.onJobs,
+                        pushOnEvents = res.value.config.onEvents,
+                        pushHasToken = res.value.config.hasToken,
+                    )
+                    // A failure SAYS SO rather than quietly leaving defaults on
+                    // screen. Blank fields next to a server that actually has a
+                    // topic saved read as "this feature is off", and an operator
+                    // acting on that turns alerts on twice and wonders why.
+                    //
+                    // pushLoaded also stays FALSE here on purpose. Marking a
+                    // failed fetch as loaded is what made a re-pair never pick
+                    // the settings up: the first fetch 401'd on a dead token,
+                    // the flag latched, and the successful pairing that
+                    // followed left the fields showing defaults that did not
+                    // match the server.
+                    is Fetched.Failed -> s.copy(
+                        pushBusy = false, pushOk = false,
+                        pushMessage = "Could not read the server's alert " +
+                            "settings: " + res.detail)
+                    Fetched.Unauthorized -> s.copy(
+                        pushBusy = false, pushOk = false,
+                        pushMessage = "Could not read the server's alert " +
+                            "settings: the server rejected this device token.")
+                }
+            }
+        }
+    }
+
+    fun savePushConfig() {
+        val api = pairedApi() ?: return
+        val s0 = _state.value
+        _state.update { it.copy(pushBusy = true, pushMessage = null) }
+        viewModelScope.launch {
+            val res = withContext(Dispatchers.IO) {
+                api.savePushConfig(
+                    enabled = s0.pushEnabled,
+                    topicUrl = s0.pushTopicUrl.trim(),
+                    onJobs = s0.pushOnJobs,
+                    onEvents = s0.pushOnEvents,
+                    token = s0.pushToken.trim().ifBlank { null },
+                )
+            }
+            _state.update { s ->
+                when (res) {
+                    is Fetched.Ok -> s.copy(
+                        pushBusy = false, pushOk = true, pushToken = "",
+                        pushEnabled = res.value.config.enabled,
+                        pushTopicUrl = res.value.config.topicUrl,
+                        pushOnJobs = res.value.config.onJobs,
+                        pushOnEvents = res.value.config.onEvents,
+                        pushHasToken = res.value.config.hasToken,
+                        pushMessage = if (res.value.config.enabled)
+                            "Saved. Alerts are on." else "Saved. Alerts are off.",
+                    )
+                    is Fetched.Failed -> s.copy(
+                        pushBusy = false, pushOk = false,
+                        pushMessage = res.detail)
+                    Fetched.Unauthorized -> s.copy(
+                        pushBusy = false, pushOk = false,
+                        pushMessage = "The server rejected this device token.")
+                }
+            }
+        }
+    }
+
+    fun testPush() {
+        val api = pairedApi() ?: return
+        val s0 = _state.value
+        if (s0.pushTopicUrl.isBlank()) {
+            _state.update {
+                it.copy(pushOk = false, pushMessage = "Enter a topic URL first.")
+            }
+            return
+        }
+        _state.update { it.copy(pushBusy = true, pushMessage = null) }
+        viewModelScope.launch {
+            val res = withContext(Dispatchers.IO) {
+                api.testPush(s0.pushTopicUrl.trim(), s0.pushToken.trim().ifBlank { null })
+            }
+            _state.update { s ->
+                when (res) {
+                    is Fetched.Ok -> s.copy(
+                        pushBusy = false, pushOk = res.value.ok,
+                        pushMessage = if (res.value.ok)
+                            "Test sent. Your ntfy app should buzz."
+                        else "Test failed: " + res.value.detail)
+                    is Fetched.Failed -> s.copy(
+                        pushBusy = false, pushOk = false,
+                        pushMessage = res.detail)
+                    Fetched.Unauthorized -> s.copy(
+                        pushBusy = false, pushOk = false,
+                        pushMessage = "The server rejected this device token.")
+                }
+            }
+        }
+    }
+
     fun save() {
         viewModelScope.launch {
             store.setServerUrl(_state.value.serverUrl.trim())
@@ -158,6 +315,14 @@ class ServerSettingsViewModel(app: Application) : AndroidViewModel(app) {
             _state.update {
                 it.copy(message = "Saved.", ok = true, saveCount = it.saveCount + 1)
             }
+            // Re-read the server-side push settings with the credentials that
+            // were just saved. The screen's LaunchedEffect cannot do this: it
+            // keys on the server URL and the token, and BOTH already hold
+            // their final values by the time the pairing succeeds, because the
+            // user typed them before pressing TEST. So its only run happened
+            // against the dead credential, and a phone that re-paired kept
+            // showing an empty topic URL while the server had one saved.
+            loadPushConfig()
         }
     }
 

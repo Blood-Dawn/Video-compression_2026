@@ -23,6 +23,39 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from utils.db import initialize_database, insert_segment  # noqa: E402
+from utils import push_notify as _push_notify  # noqa: E402
+
+
+# ---------------------------------------------------------------------------
+# Safety fixtures
+# ---------------------------------------------------------------------------
+
+@pytest.fixture(scope="session")
+def _push_config_dir(tmp_path_factory):
+    """ONE directory for the whole session.
+
+    Deliberately session-scoped. Minting a fresh tmp dir per test ran pytest's
+    basetemp retention sweep on every one of 1650 tests, and on Windows that
+    sweep dies with WinError 32 the moment any earlier test still holds a
+    sqlite handle open. One directory, cleaned between tests, costs nothing.
+    """
+    return tmp_path_factory.mktemp("push_state")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_push_config(_push_config_dir, monkeypatch):
+    """No test may read the developer's real push config or notify their phone.
+
+    R6 Track C hung a publisher off job_history.record_job and
+    event_log.append_events. It is off by default, but "off by default on THIS
+    machine" is not a thing a suite should be trusting, so every test starts
+    from an empty config and has to write one itself to opt in.
+    """
+    path = _push_config_dir / _push_notify.CONFIG_FILENAME
+    if path.exists():
+        path.unlink()
+    monkeypatch.setattr(_push_notify, "config_path", lambda: path)
+    yield
 
 
 # ---------------------------------------------------------------------------

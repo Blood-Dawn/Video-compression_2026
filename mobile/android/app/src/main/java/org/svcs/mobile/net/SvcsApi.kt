@@ -371,6 +371,82 @@ class SvcsApi(
         }
     }
 
+    // ── R6 Track C: closed-app push settings ─────────────────────────────
+
+    /** The server's push settings. ``has_token`` stands in for the secret. */
+    fun getPushConfig(): Fetched<PushConfigResponse> =
+        getJson("${baseUrl.trimEnd('/')}/api/push/config")
+
+    /**
+     * Replace the server's push settings.
+     *
+     * ``token`` is omitted from the payload when null or blank, which is how
+     * the server is told to keep the stored one. Sending an empty string
+     * would CLEAR it, so a phone editing the topic URL must not send one.
+     */
+    fun savePushConfig(
+        enabled: Boolean,
+        topicUrl: String,
+        onJobs: Boolean,
+        onEvents: Boolean,
+        token: String? = null,
+    ): Fetched<PushConfigResponse> {
+        return try {
+            val payload = buildJsonObject {
+                put("enabled", enabled)
+                put("topic_url", topicUrl)
+                put("on_jobs", onJobs)
+                put("on_events", onEvents)
+                if (!token.isNullOrBlank()) put("token", token)
+            }.toString().toRequestBody("application/json".toMediaType())
+            client.newCall(
+                Request.Builder()
+                    .url("${baseUrl.trimEnd('/')}/api/push/config")
+                    .post(payload).build(),
+            ).execute().use { resp ->
+                when {
+                    resp.code == 401 -> Fetched.Unauthorized
+                    !resp.isSuccessful -> Fetched.Failed(
+                        errorMessage(resp.body?.string()) ?: "HTTP ${resp.code}")
+                    else -> Fetched.Ok(json.decodeFromString<PushConfigResponse>(
+                        resp.body?.string().orEmpty()))
+                }
+            }
+        } catch (e: Exception) {
+            Fetched.Failed(e.message ?: e.javaClass.simpleName)
+        }
+    }
+
+    /**
+     * Ask the server to post one test message now.
+     *
+     * The typed URL is sent so an operator can prove a topic works BEFORE
+     * saving it, which is the order people actually work in.
+     */
+    fun testPush(topicUrl: String, token: String? = null): Fetched<PushTestResult> {
+        return try {
+            val payload = buildJsonObject {
+                put("topic_url", topicUrl)
+                if (!token.isNullOrBlank()) put("token", token)
+            }.toString().toRequestBody("application/json".toMediaType())
+            client.newCall(
+                Request.Builder()
+                    .url("${baseUrl.trimEnd('/')}/api/push/test")
+                    .post(payload).build(),
+            ).execute().use { resp ->
+                when {
+                    resp.code == 401 -> Fetched.Unauthorized
+                    !resp.isSuccessful -> Fetched.Failed(
+                        errorMessage(resp.body?.string()) ?: "HTTP ${resp.code}")
+                    else -> Fetched.Ok(json.decodeFromString<PushTestResult>(
+                        resp.body?.string().orEmpty()))
+                }
+            }
+        } catch (e: Exception) {
+            Fetched.Failed(e.message ?: e.javaClass.simpleName)
+        }
+    }
+
     fun systemMetrics(): Fetched<SystemMetrics> =
         getJson("${baseUrl.trimEnd('/')}/api/system_metrics")
 

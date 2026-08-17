@@ -38,8 +38,11 @@ android {
         // 11 = 0.8.0: auto-compress-on-upload becomes a MORE toggle, and INFO
         //      on every clip shows per-video metrics (codec, resolution, fps,
         //      duration, provenance) instead of only server-wide numbers.
-        versionCode = 11
-        versionName = "0.8.0-beta"
+        // 12 = 0.9.0 (R6 Track C): closed-app push. MORE gains a remote control
+        //      for the server's ntfy settings, so an alert reaches the phone
+        //      through the ntfy app even when Android has stopped SVCS.
+        versionCode = 12
+        versionName = "0.9.0-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

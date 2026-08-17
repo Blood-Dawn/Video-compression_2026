@@ -236,6 +236,7 @@ def register_blueprints(flask_app: Flask, edition: str | None = None) -> None:
         from gui.routes.savings_bp import savings_bp
         from gui.routes.events_bp import events_bp
         from gui.routes.ingest_bp import ingest_bp
+        from gui.routes.push_bp import push_bp
     except ModuleNotFoundError:  # pragma: no cover - import path shim
         from src.gui.routes.ui_bp import ui_bp
         from src.gui.routes.sse_bp import sse_bp
@@ -259,10 +260,12 @@ def register_blueprints(flask_app: Flask, edition: str | None = None) -> None:
         from src.gui.routes.savings_bp import savings_bp
         from src.gui.routes.events_bp import events_bp
         from src.gui.routes.ingest_bp import ingest_bp
+        from src.gui.routes.push_bp import push_bp
     all_bps = [ui_bp, sse_bp, metrics_bp, presets_bp, encryption_bp, plates_bp,
                queries_bp, rtsp_bp, demo_bp, hls_bp, files_bp, pipeline_bp,
                cameras_bp, usage_bp, setup_bp, library_bp, autocompress_bp,
-               tokens_bp, capabilities_bp, savings_bp, events_bp, ingest_bp]
+               tokens_bp, capabilities_bp, savings_bp, events_bp, ingest_bp,
+               push_bp]
     if field:
         # Field build: no server-making surfaces (RTSP server + HLS streaming).
         server_only = {rtsp_bp, hls_bp}

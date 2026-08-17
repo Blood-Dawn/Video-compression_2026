@@ -231,6 +231,10 @@ class SvcsApi(
     fun setupState(): Fetched<SetupState> =
         getJson("${baseUrl.trimEnd('/')}/api/setup/state")
 
+    /** Newest finished jobs (the M5 notifier polls this with limit=1). */
+    fun jobsRecent(limit: Int = 1): Fetched<JobsRecent> =
+        getJson("${baseUrl.trimEnd('/')}/api/jobs/recent?limit=$limit")
+
     fun systemMetrics(): Fetched<SystemMetrics> =
         getJson("${baseUrl.trimEnd('/')}/api/system_metrics")
 

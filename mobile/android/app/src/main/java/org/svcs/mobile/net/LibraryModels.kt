@@ -160,6 +160,18 @@ data class HlsStatus(
     val error: String? = null,
 )
 
+/** GET /api/jobs/recent - the M5 notifier watches the newest entry. */
+@Serializable
+data class JobsRecent(val jobs: List<JobEntry> = emptyList())
+
+@Serializable
+data class JobEntry(
+    val kind: String = "",
+    val label: String = "",
+    val status: String = "",
+    @SerialName("ended_at") val endedAt: Double? = null,
+)
+
 /**
  * GET /api/setup/state - the phone reads the server's chosen save folder so
  * the OUTPUTS shortcut can jump straight to where compressions land.

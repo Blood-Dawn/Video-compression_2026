@@ -23,9 +23,12 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import org.svcs.mobile.JobNotifier
 import org.svcs.mobile.data.TokenStore
 import org.svcs.mobile.net.Capabilities
+import org.svcs.mobile.net.Fetched
 import org.svcs.mobile.net.ProbeResult
 import org.svcs.mobile.net.SvcsApi
 
@@ -101,6 +104,35 @@ fun SvcsApp() {
         // Land in the app after a successful save; the pairing screen's
         // SAVE & OPEN button promises exactly this.
         if (newApi != null && (isRepair || tab == Tab.MORE)) tab = Tab.HOME
+    }
+
+    // M5 slice: notify when a server job finishes. Polls /api/jobs/recent
+    // every 10s while the app process lives; the FIRST result only baselines
+    // (jobs that finished before the app opened are history, not news).
+    // Closed-app push transport remains open work per MOBILE-ARCHITECTURE.
+    val appContext = context.applicationContext
+    LaunchedEffect(sessionEpoch) {
+        var lastSeen: Double? = null
+        var baselined = false
+        while (true) {
+            val client = api
+            if (client != null) {
+                val r = withContext(Dispatchers.IO) { client.jobsRecent(1) }
+                if (r is Fetched.Ok) {
+                    val newest = r.value.jobs.firstOrNull()
+                    val ts = newest?.endedAt
+                    if (!baselined) {
+                        lastSeen = ts
+                        baselined = true
+                    } else if (newest != null && ts != null && ts != lastSeen) {
+                        lastSeen = ts
+                        JobNotifier.notifyJobDone(
+                            appContext, newest.label, newest.status)
+                    }
+                }
+            }
+            delay(10_000)
+        }
     }
 
     if (!checked) {

@@ -28,8 +28,11 @@ android {
         //     register in the compressed index so COMPRESSED shows them.
         // 7 = 0.4.2: compression-mode picker on COMPRESS (the desktop's four
         //     modes with honest codec notes; mode1 stays the default).
-        versionCode = 7
-        versionName = "0.4.2-beta"
+        // 8 = 0.5.0: M5 job-completion notifications (app-alive polling),
+        //     and minification is BACK ON with complete R8 keep rules,
+        //     re-verified on the physical device.
+        versionCode = 8
+        versionName = "0.5.0-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -63,17 +66,14 @@ android {
             applicationIdSuffix = ".debug"
         }
         release {
-            // Minification OFF for the 0.3.0-beta APK: the R8-minified build
-            // rendered a black screen on the physical test device (frames drew,
-            // no exception logged; the debug build of the same code was fine),
-            // which means the keep rules for this dependency set (kotlinx
-            // serialization + Compose + Media3) were never actually exercised.
-            // An unminified sideload APK is a few MB larger and correct, which
-            // beats a small broken one. Re-enable AFTER writing and physically
-            // re-verifying real keep rules; tracked in docs/BLOCKERS.md.
-            // Author: Bloodawn (KheivenD), 2026-08-16 (0.3.0-beta release fix).
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // Minification back ON (0.5.0): the 0.3.0 black screen was the
+            // generated kotlinx-serialization $$serializer classes and the
+            // Signature attribute being stripped; proguard-rules.pro now keeps
+            // them wholesale, and the minified build is re-verified on the
+            // physical device before every release per the R8 note there.
+            // Author: Bloodawn (KheivenD), 2026-08-17 (R8 keep rules).
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",

@@ -265,6 +265,17 @@ def _process_one(
     entry = cidx.record(src, output, preset=preset, mode=encode_kwargs.get("mode", mode))
     log.info("Auto-compressed %s -> %s", src.name, output.name)
 
+    # R5 TASK 5.8: tamper-evident manifest. Recorded only AFTER ffprobe
+    # verification so the manifest never vouches for a broken file. Best-effort:
+    # a hash/write failure must never fail a compress that already succeeded.
+    # Author: Bloodawn (KheivenD), 2026-08-16 (R5 TASK 5.8).
+    try:
+        from utils.integrity import append_manifest
+        if append_manifest(comp_dir, output) is None:
+            log.warning("Integrity manifest entry could not be written for %s", output.name)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Integrity manifest skipped for %s: %s", output.name, exc)
+
     if delete_original:
         _safe_delete_original(src, output, comp_dir, watch_root)
 

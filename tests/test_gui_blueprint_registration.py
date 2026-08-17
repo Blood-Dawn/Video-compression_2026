@@ -47,6 +47,7 @@ EXPECTED = {
     "/api/segments/cleanup_missing": "files",
     "/api/logs": "sse",
     "/api/query_segments": "queries",
+    "/api/nl_search": "queries",
     "/api/daily_summary": "queries",
     "/api/busiest": "queries",
     "/api/demo": "demo",
@@ -128,9 +129,10 @@ def _rules():
 def test_route_count():
     # 73 through v2.2.0.dev0, then +3 unique rule strings for M0.10 device
     # tokens (/api/auth/tokens carries both GET and POST, so the four routes
-    # collapse to three keys here), then +1 for the M0.6 capabilities probe.
+    # collapse to three keys here), then +1 for the M0.6 capabilities probe,
+    # then +1 for /api/nl_search (R5 TASK 5.4, 2026-08-16).
     rules = _rules()
-    assert len(rules) == 78, f"expected 78 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 79, f"expected 79 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_blueprints_registered():

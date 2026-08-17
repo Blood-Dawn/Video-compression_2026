@@ -55,6 +55,39 @@ def api_query_segments():
     return jsonify({"segments": _rows_to_segment_list(rows, db_path.parent), "db_path": str(db_path)})
 
 
+@queries_bp.route("/api/nl_search")
+def api_nl_search():
+    """R5 TASK 5.4: structured natural-language search over segment metadata.
+
+    Query params:
+        q      - required phrase, e.g. "red car after 9pm on cam2"
+        limit  - optional, default 100, capped at 500
+    The parser is deterministic and offline (gui.services.nl_query); every
+    value is SQL-bound, and unrecognized words degrade to a LIKE match. The
+    response echoes an "explain" of what was understood so the UI can show it.
+    Author: Bloodawn (KheivenD), 2026-08-16 (R5 TASK 5.4).
+    """
+    q = request.args.get("q", "").strip()
+    if not q:
+        return jsonify({"error": "q is required"}), 400
+
+    db_path = _get_archive_db_path()
+    if not db_path.exists():
+        return jsonify({"query": q, "explain": {}, "count": 0, "segments": [],
+                        "db_path": str(db_path)})
+    try:
+        from gui.services.nl_query import search as _nl_search
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.gui.services.nl_query import search as _nl_search
+    try:
+        limit = int(request.args.get("limit", 100))
+        result = _nl_search(q, str(db_path), limit=limit)
+    except Exception as exc:  # noqa: BLE001
+        return jsonify({"error": str(exc)}), 500
+    result["db_path"] = str(db_path)
+    return jsonify(result)
+
+
 @queries_bp.route("/api/daily_summary")
 def api_daily_summary():
     """Return daily storage totals grouped by date and camera."""

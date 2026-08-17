@@ -160,6 +160,26 @@ data class HlsStatus(
     val error: String? = null,
 )
 
+/** Outcome of the M4 compress-from-phone action. */
+sealed interface StartCompressResult {
+    data object Started : StartCompressResult
+    /** The server encodes one job at a time and one is already running. */
+    data object Busy : StartCompressResult
+    data object Unauthorized : StartCompressResult
+    data class Failed(val detail: String) : StartCompressResult
+}
+
+/**
+ * Extensions Android can demux for in-app playback (M4). Mirrors the repo's
+ * BROWSER_PLAYABLE_EXTS idea: compressed outputs are always mp4, so they play;
+ * vendor originals (.dav, .g64, raw .264, ...) are thumbnail-only by design
+ * (MOBILE-ARCHITECTURE "What not to build").
+ */
+val PLAYABLE_EXTS = setOf("mp4", "m4v", "mkv", "mov", "webm", "ts")
+
+fun LibraryItem.isPlayable(): Boolean =
+    name.substringAfterLast('.', "").lowercase() in PLAYABLE_EXTS
+
 /** Outcome of POST /api/hls/start, in the terms the UI has to render. */
 sealed interface HlsStartResult {
     data object Started : HlsStartResult

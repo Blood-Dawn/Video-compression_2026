@@ -99,8 +99,21 @@ def _resolve_folder(raw: str) -> Path:
     return Path(_default_output_dir())
 
 
-def _safe_video(raw: str):
-    """Resolve a video path; return Path if it is an existing video file, else None."""
+def _safe_video(raw: str, context_folder: str = ""):
+    """Resolve a video path; return Path if it is an existing video file, else None.
+
+    ``context_folder`` (mobile fix, 2026-08-16): the file/thumb/compress routes
+    accept an explicit ``folder`` the client is browsing. Multiple clients share
+    the server-global "last library folder" that allowed_media_roots() derives
+    from, so when the desktop browses elsewhere, a phone's already-listed paths
+    fall out of the allowed set MID-SESSION and playback 400s for no visible
+    reason. An authenticated client can already make any existing folder the
+    library root via /api/library/videos?folder=..., which joins that same
+    allowed set; honoring the identical folder here, stated explicitly per
+    request, grants nothing an authed client could not already reach and
+    removes the cross-client race. The path must still be a real video file
+    strictly INSIDE the stated folder.
+    """
     raw = (raw or "").strip()
     if not raw:
         return None
@@ -114,9 +127,18 @@ def _safe_video(raw: str):
     # entirely, so /api/library/file could stream any video on the host.
     if not (p.is_file() and p.suffix.lower() in VIDEO_EXTS):
         return None
-    if not _ps.is_path_allowed(p, _ps.allowed_media_roots()):
-        return None
-    return p
+    if _ps.is_path_allowed(p, _ps.allowed_media_roots()):
+        return p
+    ctx = (context_folder or "").strip()
+    if ctx:
+        try:
+            root = Path(ctx).resolve()
+            if root.is_dir():
+                p.relative_to(root)  # ValueError if p is not inside root
+                return p
+        except (OSError, ValueError):
+            return None
+    return None
 
 
 def _int_arg(name: str, default=None):
@@ -497,7 +519,7 @@ def _thumb_path(video: Path) -> Path:
 @library_bp.route("/api/library/thumb", methods=["GET"])
 def api_library_thumb():
     """Return a cached JPEG thumbnail, generating it once with ffmpeg if needed."""
-    p = _safe_video(request.args.get("path", ""))
+    p = _safe_video(request.args.get("path", ""), request.args.get("folder", ""))
     if p is None:
         return jsonify({"error": "not a video file"}), 400
     thumb = _thumb_path(p)
@@ -523,7 +545,7 @@ def api_library_thumb():
 @library_bp.route("/api/library/file", methods=["GET"])
 def api_library_file():
     """Stream a video file (range-enabled) for the inline detail player."""
-    p = _safe_video(request.args.get("path", ""))
+    p = _safe_video(request.args.get("path", ""), request.args.get("folder", ""))
     if p is None:
         return jsonify({"error": "not a video file"}), 400
     mime = _MIME.get(p.suffix.lower(), "application/octet-stream")
@@ -540,7 +562,7 @@ def api_library_compress():
     data = request.get_json(silent=True)
     if not data or not isinstance(data, dict):
         return jsonify({"error": "Request body must be a JSON object"}), 400
-    p = _safe_video(data.get("path", ""))
+    p = _safe_video(data.get("path", ""), str(data.get("folder", "") or ""))
     if p is None:
         return jsonify({"error": "not a video file"}), 400
     log.info("Library: selected %s for compression", p.name)

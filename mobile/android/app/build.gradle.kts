@@ -22,8 +22,10 @@ android {
         // versionCode tracks the milestone the build actually contains.
         // 3 = M3 (pairing + LIBRARY + METRICS + HOME + LIVE), first public beta.
         // 4 = 0.3.1: the save-event replay glitch fix + SAVE & OPEN pairing UX.
-        versionCode = 4
-        versionName = "0.3.1-beta"
+        // 5 = 0.4.0 (M4 first slice): in-app clip playback, library filter
+        //     views, compress-from-phone (server-side path).
+        versionCode = 5
+        versionName = "0.4.0-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

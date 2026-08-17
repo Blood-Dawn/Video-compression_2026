@@ -139,8 +139,13 @@ class SvcsApi(
 
     // ── M2 read-only surfaces ────────────────────────────────────────────
 
-    /** One page of the library listing. */
-    fun libraryPage(folder: String?, page: Int, pageSize: Int = 60): Fetched<LibraryPage> {
+    /** One page of the library listing. kind: "all" | "original" | "compressed". */
+    fun libraryPage(
+        folder: String?,
+        page: Int,
+        pageSize: Int = 60,
+        kind: String = "all",
+    ): Fetched<LibraryPage> {
         val sb = StringBuilder("${baseUrl.trimEnd('/')}/api/library/videos")
         sb.append("?page=").append(page).append("&page_size=").append(pageSize)
         // Deliberately NO refresh=1. The server caches the folder walk, and
@@ -150,7 +155,76 @@ class SvcsApi(
         if (!folder.isNullOrBlank()) {
             sb.append("&folder=").append(java.net.URLEncoder.encode(folder, "UTF-8"))
         }
+        if (kind != "all") sb.append("&kind=").append(kind)
         return getJson(sb.toString())
+    }
+
+    /**
+     * Range-enabled URL for one clip (M4 playback). Handed to ExoPlayer, which
+     * uses [httpClient] so the Authorization header rides on every range
+     * request. Same path format and folder-pinning as [thumbUrl].
+     */
+    fun fileUrl(path: String, folder: String? = null): String =
+        "${baseUrl.trimEnd('/')}/api/library/file?path=" +
+            java.net.URLEncoder.encode(path, "UTF-8") +
+            folderSuffix(folder)
+
+    private fun folderSuffix(folder: String?): String =
+        if (folder.isNullOrBlank()) ""
+        else "&folder=" + java.net.URLEncoder.encode(folder, "UTF-8")
+
+    /**
+     * M4: start a server-side compress of a library clip (zero phone bytes,
+     * per MOBILE-ARCHITECTURE M4: the file is already on the server).
+     *
+     * Two-step against existing endpoints, mirroring the desktop flow:
+     * /api/library/compress validates the path is a real library video, then
+     * /api/start launches the pipeline on it. 409 means a job is already
+     * running (the server encodes one at a time), which the UI phrases as
+     * "busy", not an error.
+     */
+    fun startCompress(path: String, mode: String = "mode1"): StartCompressResult {
+        return try {
+            val validate = buildJsonObject { put("path", path) }
+                .toString().toRequestBody("application/json".toMediaType())
+            val validated = client.newCall(
+                Request.Builder()
+                    .url("${baseUrl.trimEnd('/')}/api/library/compress")
+                    .post(validate).build(),
+            ).execute().use { resp ->
+                when {
+                    resp.code == 401 -> return StartCompressResult.Unauthorized
+                    !resp.isSuccessful -> return StartCompressResult.Failed(
+                        errorMessage(resp.body?.string()) ?: "HTTP ${resp.code}",
+                    )
+                    else -> {
+                        val obj = json.parseToJsonElement(resp.body?.string().orEmpty()) as? JsonObject
+                        obj?.get("path")?.jsonPrimitive?.content ?: path
+                    }
+                }
+            }
+            val body = buildJsonObject {
+                put("input_source", validated)
+                put("camera_id", "mobile")
+                put("mode", mode)
+            }.toString().toRequestBody("application/json".toMediaType())
+            client.newCall(
+                Request.Builder()
+                    .url("${baseUrl.trimEnd('/')}/api/start")
+                    .post(body).build(),
+            ).execute().use { resp ->
+                when {
+                    resp.isSuccessful -> StartCompressResult.Started
+                    resp.code == 409 -> StartCompressResult.Busy
+                    resp.code == 401 -> StartCompressResult.Unauthorized
+                    else -> StartCompressResult.Failed(
+                        errorMessage(resp.body?.string()) ?: "HTTP ${resp.code}",
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            StartCompressResult.Failed(e.message ?: e.javaClass.simpleName)
+        }
     }
 
     fun systemMetrics(): Fetched<SystemMetrics> =
@@ -165,10 +239,18 @@ class SvcsApi(
     fun savings(): Fetched<Savings> =
         getJson("${baseUrl.trimEnd('/')}/api/savings")
 
-    /** URL for one thumbnail. Handed to Coil, which uses [httpClient]. */
-    fun thumbUrl(path: String): String =
+    /**
+     * URL for one thumbnail. Handed to Coil, which uses [httpClient].
+     *
+     * ``folder`` pins the request to the folder this client listed. The
+     * server's "current library folder" is global and another client (the
+     * desktop) can move it mid-session, which silently invalidates bare
+     * paths; the explicit context keeps this listing self-consistent.
+     */
+    fun thumbUrl(path: String, folder: String? = null): String =
         "${baseUrl.trimEnd('/')}/api/library/thumb?path=" +
-            java.net.URLEncoder.encode(path, "UTF-8")
+            java.net.URLEncoder.encode(path, "UTF-8") +
+            folderSuffix(folder)
 
     // ── M3: live stream ──────────────────────────────────────────────────
 

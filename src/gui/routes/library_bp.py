@@ -205,6 +205,19 @@ def _walk_and_classify(folder: Path, recursive: bool) -> dict:
         for f in walker:
             if not (f.is_file() and f.suffix.lower() in VIDEO_EXTS):
                 continue
+            # Skip the live stream's WORKING segments (2026-08-16): the HLS
+            # runner writes transient playlist*.ts chunks under <root>/hls/
+            # while a stream runs, and a recursive listing offered them as
+            # compressible "originals", which is exactly the redundant clutter
+            # the owner asked removed. Pointing the library AT an hls folder
+            # explicitly still lists it (the skip keys on a subfolder relative
+            # to the listing root, not on the root itself).
+            try:
+                _rel_parts = {p.lower() for p in f.relative_to(folder).parts[:-1]}
+            except ValueError:
+                _rel_parts = set()
+            if "hls" in _rel_parts:
+                continue
             try:
                 st = f.stat()
             except OSError:

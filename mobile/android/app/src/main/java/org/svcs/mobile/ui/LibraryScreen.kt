@@ -71,6 +71,21 @@ fun LibraryScreen(vm: LibraryViewModel) {
     // M4: tap-to-play. Local state rather than a nav library on purpose; the
     // player is the only pushed screen the app has.
     var playing by remember { mutableStateOf<LibraryItem?>(null) }
+
+    // Mode picker for COMPRESS: the desktop's four modes, phone-sized. The
+    // dialog names match the desktop preset cards so the two UIs teach each
+    // other. mode1 is the highlighted default (H.264, plays anywhere).
+    var compressTarget by remember { mutableStateOf<LibraryItem?>(null) }
+    compressTarget?.let { target ->
+        CompressModeDialog(
+            clipName = target.displayName(),
+            onPick = { mode ->
+                compressTarget = null
+                vm.compress(target, mode)
+            },
+            onDismiss = { compressTarget = null },
+        )
+    }
     playing?.let { item ->
         val url = vm.fileUrl(item)
         if (url != null) {
@@ -174,11 +189,65 @@ fun LibraryScreen(vm: LibraryViewModel) {
                     imageLoader = imageLoader,
                     compressEnabled = !state.compressing,
                     onPlay = { playing = item },
-                    onCompress = { vm.compress(item) },
+                    onCompress = { compressTarget = item },
                 )
             }
         }
     }
+}
+
+/**
+ * The compression-mode picker (mirrors the desktop preset cards).
+ *
+ * Mode facts stay honest: mode0/1 encode H.264 and preview on any phone;
+ * mode2/3 encode AV1, smallest files, and need an AV1-capable device to
+ * preview in-app. Author: Bloodawn (KheivenD), 2026-08-16 (mode picker).
+ */
+@Composable
+private fun CompressModeDialog(
+    clipName: String,
+    onPick: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val modes = listOf(
+        Triple("mode0", "MODE 0 - LIVE SURVEILLANCE",
+            "Full 24/7 recording, every frame kept. H.264, plays anywhere."),
+        Triple("mode1", "MODE 1 - EVENT RECORDING",
+            "Saves only when motion is detected. H.264, plays anywhere. Default."),
+        Triple("mode2", "MODE 2 - SMART COMPRESS",
+            "Full background plus high-detail patches on moving objects. AV1, max savings."),
+        Triple("mode3", "MODE 3 - OBJECT ONLY",
+            "Records only the detected objects. AV1, smallest file size."),
+    )
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("CANCEL") }
+        },
+        title = { Text("Compress on server", style = MaterialTheme.typography.titleMedium) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(clipName, style = MaterialTheme.typography.labelSmall,
+                    color = SvcsTextDim, maxLines = 1)
+                modes.forEach { (mode, title, blurb) ->
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, if (mode == "mode1") SvcsAmber else SvcsBorder,
+                                RoundedCornerShape(2.dp))
+                            .clickable { onPick(mode) }
+                            .padding(10.dp),
+                    ) {
+                        Text(title, style = MaterialTheme.typography.labelSmall,
+                            color = if (mode == "mode1") SvcsAmber else SvcsGreen)
+                        Text(blurb, style = MaterialTheme.typography.bodyMedium,
+                            color = SvcsTextDim)
+                    }
+                }
+            }
+        },
+    )
 }
 
 /** One filter chip. Text-only to match the app's flat design tokens. */
@@ -270,6 +339,7 @@ private fun ClipTile(
                 // yet. Runs on the SERVER (M4: server-side path, zero phone
                 // bytes); progress shows on HOME like a desktop-started job.
                 if (!item.isCompressed && !item.compressed) {
+                    // Opens the mode picker; the job starts with the chosen mode.
                     Text("COMPRESS", style = MaterialTheme.typography.labelSmall,
                         color = if (compressEnabled) SvcsGreen else SvcsTextDim,
                         modifier = Modifier.clickable(enabled = compressEnabled,

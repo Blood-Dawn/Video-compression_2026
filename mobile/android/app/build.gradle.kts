@@ -26,8 +26,10 @@ android {
         //     views, compress-from-phone (server-side path).
         // 6 = 0.4.1: OUTPUTS shortcut; server-side, pipeline outputs now
         //     register in the compressed index so COMPRESSED shows them.
-        versionCode = 6
-        versionName = "0.4.1-beta"
+        // 7 = 0.4.2: compression-mode picker on COMPRESS (the desktop's four
+        //     modes with honest codec notes; mode1 stays the default).
+        versionCode = 7
+        versionName = "0.4.2-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

@@ -101,6 +101,26 @@ def test_non_video_suffix_rejected_even_in_context(tmp_path, client):
     assert r.status_code == 400
 
 
+def test_hls_working_segments_excluded_from_listing(tmp_path, client):
+    """Transient live-stream chunks under <root>/hls/ must not list as
+    compressible originals; an explicit listing OF an hls folder still works."""
+    root = tmp_path / "lib"
+    (root / "hls" / "cam_x").mkdir(parents=True)
+    _fake_mp4(root, "real_clip.mp4")
+    hls_seg = root / "hls" / "cam_x" / "playlist1.ts"
+    hls_seg.write_bytes(b"\x47" * 400)  # ts sync bytes
+    r = client.get("/api/library/videos",
+                   query_string={"folder": str(root), "refresh": "1"})
+    names = [v["name"] for v in r.get_json()["videos"]]
+    assert "real_clip.mp4" in names
+    assert not any("playlist1.ts" in n for n in names)
+    # Explicitly browsing the hls folder itself still lists its segments.
+    r2 = client.get("/api/library/videos",
+                    query_string={"folder": str(root / "hls"), "refresh": "1"})
+    names2 = [v["name"] for v in r2.get_json()["videos"]]
+    assert any("playlist1.ts" in n for n in names2)
+
+
 def test_safe_video_unit_context(tmp_path):
     video = _fake_mp4(tmp_path / "ctx")
     assert _safe_video(str(video), str(tmp_path / "ctx")) is not None

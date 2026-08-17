@@ -129,17 +129,18 @@ class LibraryViewModel(private val api: SvcsApi?) : ViewModel() {
 
     /**
      * M4: ask the server to compress this clip (server-side path, zero phone
-     * bytes). mode1 is the deliberate default: H.264 output that any device
-     * (including this phone) can play back, which matters more on mobile than
-     * mode2/3's smaller AV1 files. The desktop keeps the full mode picker.
+     * bytes). The mode comes from the picker dialog; mode1 (event recording,
+     * H.264) stays the highlighted default because its output plays back on
+     * any device, while mode2/3 produce smaller AV1 files that need an AV1
+     * decoder to preview on the phone.
      */
-    fun compress(item: LibraryItem) {
+    fun compress(item: LibraryItem, mode: String = "mode1") {
         val client = api ?: return
         if (_state.value.compressing) return
         _state.update { it.copy(compressing = true, actionMessage = null) }
         viewModelScope.launch {
             val result = withContext(Dispatchers.IO) {
-                client.startCompress(item.path, mode = "mode1")
+                client.startCompress(item.path, mode = mode)
             }
             _state.update { s ->
                 s.copy(

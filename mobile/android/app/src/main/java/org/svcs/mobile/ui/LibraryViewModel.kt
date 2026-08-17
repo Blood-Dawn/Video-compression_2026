@@ -87,8 +87,44 @@ class LibraryViewModel(private val api: SvcsApi?) : ViewModel() {
     /** Switch between all | original | compressed, like the desktop views. */
     fun setKind(kind: String) {
         if (kind == _state.value.kind) return
-        _state.value = LibraryState(kind = kind)
+        _state.value = LibraryState(kind = kind, folderPath = _state.value.folderPath)
         fetch(1)
+    }
+
+    /**
+     * OUTPUTS shortcut: jump to the server's save folder, where compress jobs
+     * (desktop- or phone-started) write. Asks the server for its configured
+     * output_dir, then relists there. A fresh compression is one tap away
+     * instead of "browse to wherever the save folder happens to be".
+     */
+    fun showOutputs() {
+        val client = api ?: return
+        _state.update { it.copy(loading = true, error = null, actionMessage = null) }
+        viewModelScope.launch {
+            val setup = withContext(Dispatchers.IO) { client.setupState() }
+            when (setup) {
+                is Fetched.Ok -> {
+                    val dir = setup.value.effectiveOutputDir()
+                    if (dir.isBlank()) {
+                        _state.update {
+                            it.copy(loading = false,
+                                error = "The server has no save folder configured yet.")
+                        }
+                    } else {
+                        _state.value = LibraryState(folderPath = dir)
+                        fetch(1)
+                    }
+                }
+                Fetched.Unauthorized -> _state.update {
+                    it.copy(loading = false,
+                        error = "The server rejected this device's token. Re-pair under MORE.")
+                }
+                is Fetched.Failed -> _state.update {
+                    it.copy(loading = false,
+                        error = "Could not read the server's save folder. ${setup.detail}")
+                }
+            }
+        }
     }
 
     /**

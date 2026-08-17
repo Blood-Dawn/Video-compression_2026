@@ -19,6 +19,7 @@ services (acyclic service->service), and pipeline.pipeline.run_pipeline.
 Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - pipeline-runner extraction).
 """
 
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -235,6 +236,16 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             target_vmaf=config.get("target_vmaf"),
         )
         _record_encode_stat(config, success=True)
+        # M4 follow-up (2026-08-16): register file-input outputs in the
+        # compressed index. Auto-compress records its outputs, but a compress
+        # started from the dashboard or the phone (/api/start on a server-side
+        # file) never did, so the fresh output classified as "original" and a
+        # user's just-compressed clip was invisible under the Library's
+        # COMPRESSED view. Interrupted runs never reach this line, and the
+        # helper ffprobe-verifies before recording, so a broken output is
+        # never indexed as a compressed copy.
+        if not stop_event.is_set():
+            _record_compressed_outputs(config)
 
     except Exception as exc:
         log.error(f"Pipeline error: {exc}", exc_info=True)
@@ -273,6 +284,66 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
         _active_encoder = None
         _stop_cpu_sampler()
         log.info("Pipeline stopped.")
+
+
+def _record_compressed_outputs(config: dict) -> None:
+    """Pair a completed file-input run's outputs with their source in the
+    compressed index, so the Library classifies them as "compressed".
+
+    Only runs for a real source FILE (webcam indices and stream URLs have no
+    source file to pair). Each candidate output must be a video written after
+    the run started, carry this run's camera_id prefix, and pass an ffprobe
+    decode check, the same bar auto-compress applies before it records. The
+    index keys on the SOURCE, so a multi-segment run records its newest
+    segment; that is the entry the COMPRESSED view needs to show the result.
+    Best effort by design: never raises into the pipeline thread.
+    Author: Bloodawn (KheivenD), 2026-08-16 (M4 follow-up).
+    """
+    try:
+        raw = config.get("input_source")
+        if not isinstance(raw, str) or not raw.strip():
+            return
+        src = Path(raw)
+        if not src.is_file():
+            return
+        out_dir = Path(config.get("output_dir", "") or "")
+        cam = str(config.get("camera_id", "cam_00"))
+        if not out_dir.is_dir():
+            return
+        with _state_lock:
+            started = float(_status.get("start_time") or 0.0)
+        try:
+            from utils import compressed_index as cidx
+            from utils.ffmpeg import ffprobe_path
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.utils import compressed_index as cidx
+            from src.utils.ffmpeg import ffprobe_path
+        vid_exts = {".mp4", ".mkv", ".avi", ".mov", ".webm"}
+        candidates = []
+        for p in out_dir.glob(f"{cam}_*"):
+            try:
+                if (p.is_file() and p.suffix.lower() in vid_exts
+                        and p.stat().st_mtime >= started - 2.0
+                        and p.stat().st_size > 0):
+                    candidates.append(p)
+            except OSError:
+                continue
+        if not candidates:
+            return
+        candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        output = candidates[0]
+        probe = subprocess.run(
+            [ffprobe_path(), "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(output)],
+            capture_output=True, text=True, timeout=30,
+        )
+        if probe.returncode != 0 or "video" not in (probe.stdout or ""):
+            log.warning("Not indexing unverified output %s", output.name)
+            return
+        cidx.record(src, output, mode=config.get("mode"))
+        log.info("Compressed index: %s -> %s", src.name, output.name)
+    except Exception as exc:  # noqa: BLE001 - best effort
+        log.warning("Compressed-index recording skipped: %s", exc)
 
 
 def _record_job_history(config, stop_event, started, error, frames, segments):

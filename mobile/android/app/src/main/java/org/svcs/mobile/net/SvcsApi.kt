@@ -227,6 +227,10 @@ class SvcsApi(
         }
     }
 
+    /** The server's configured save folder (for the OUTPUTS shortcut). */
+    fun setupState(): Fetched<SetupState> =
+        getJson("${baseUrl.trimEnd('/')}/api/setup/state")
+
     fun systemMetrics(): Fetched<SystemMetrics> =
         getJson("${baseUrl.trimEnd('/')}/api/system_metrics")
 

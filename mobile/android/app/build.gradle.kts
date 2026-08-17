@@ -24,8 +24,10 @@ android {
         // 4 = 0.3.1: the save-event replay glitch fix + SAVE & OPEN pairing UX.
         // 5 = 0.4.0 (M4 first slice): in-app clip playback, library filter
         //     views, compress-from-phone (server-side path).
-        versionCode = 5
-        versionName = "0.4.0-beta"
+        // 6 = 0.4.1: OUTPUTS shortcut; server-side, pipeline outputs now
+        //     register in the compressed index so COMPRESSED shows them.
+        versionCode = 6
+        versionName = "0.4.1-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

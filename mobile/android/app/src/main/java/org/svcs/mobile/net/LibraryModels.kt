@@ -160,6 +160,22 @@ data class HlsStatus(
     val error: String? = null,
 )
 
+/**
+ * GET /api/setup/state - the phone reads the server's chosen save folder so
+ * the OUTPUTS shortcut can jump straight to where compressions land.
+ */
+@Serializable
+data class SetupState(
+    @SerialName("setup_complete") val setupComplete: Boolean = false,
+    @SerialName("output_dir") val outputDir: String = "",
+    @SerialName("encrypted_dir") val encryptedDir: String = "",
+    @SerialName("library_folder") val libraryFolder: String = "",
+    @SerialName("default_output_dir") val defaultOutputDir: String = "",
+) {
+    /** The folder compress jobs write to, with the neutral fallback. */
+    fun effectiveOutputDir(): String = outputDir.ifBlank { defaultOutputDir }
+}
+
 /** Outcome of the M4 compress-from-phone action. */
 sealed interface StartCompressResult {
     data object Started : StartCompressResult

@@ -131,6 +131,7 @@ fun LibraryScreen(vm: LibraryViewModel) {
             KindChip("ALL", state.kind == "all") { vm.setKind("all") }
             KindChip("ORIGINALS", state.kind == "original") { vm.setKind("original") }
             KindChip("COMPRESSED", state.kind == "compressed") { vm.setKind("compressed") }
+            KindChip("OUTPUTS", false) { vm.showOutputs() }
             KindChip("REFRESH", false) { vm.refresh() }
         }
 

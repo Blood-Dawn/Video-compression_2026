@@ -870,3 +870,123 @@ Troubleshooting recorded: "Google Drive for Desktop not found" means it needs in
 that fills but produces no synced files usually means Drive for Desktop is not running in the system
 tray; missing files may mean the wrong Google account is signed in; and a subfolder missing from the
 sponsor's view means the shortcut was never added from the shared folder link.
+
+---
+
+## May through August 2026 - the summer catch-up
+
+*(from CHANGES-SUMMER-2026.md, written September 2026 by Bloodawn (KheivenD))*
+
+Between May 1 and August 18 the repository took 158 commits: 401 files changed,
+62,174 lines added, 11,278 removed. The project went from a working capstone
+prototype to something that could be handed to someone else: a real installer,
+a searchable library, auto-compress with retention, a security audit, and an
+Android companion app that did not exist in April. The Python test suite grew
+from 274 passing tests to 1,651 across 96 files; the Flask route count grew
+from 48 routes to 87 across 22 blueprints; the frozen desktop bundle shrank
+from 4.6 GB to 339 MB unpacked by moving object detection onto ONNX Runtime
+instead of PyTorch.
+
+**May: making v2 a real codebase.** The test suite went from red to a green
+513 passing, fixing a mode 2 CRF bug, a leaked SQLite handle, and cross-test
+isolation problems along the way. Continuous integration was added for Linux
+and Windows, validating produced clips with `ffprobe` rather than `cv2` so a
+decode-library mismatch could not hide a real bug. The single large
+`gui/app.py` was split into a state module, a logging module, nine service
+modules, and twelve route blueprints; the inline dashboard JavaScript was
+split into feature modules the same way. The codec choice per mode was fixed
+in code rather than set by hand: modes 0 and 1 default to H.264, modes 2 and 3
+default to AV1, and H.265 is never selected.
+
+**June 3: an installer, and a smaller one.** A real Inno Setup installer
+shipped, vendoring FFmpeg so a fresh machine needs nothing preinstalled.
+Switching detection to ONNX Runtime by default, with PyTorch made optional,
+took the frozen bundle from 4.6 GB to 339 MB. A named preset system replaced
+exposed mode numbers, with rule-based content auto-detection recommending a
+preset from the footage itself. ONVIF camera discovery, RTSP auto-configuration,
+and a watch-folder hardening pass (partial-write safety, crash resume,
+per-vendor export profiles) rounded out ingestion. A nine-item usability pass
+added, among other things, a first-run destination chooser with no implicit
+cloud default, and a guard test that fails the build if an em dash or en dash
+appears anywhere in the source tree.
+
+**June 5: the library becomes usable**, with a folder picker, search,
+extension filtering, and reliable population, plus a real end-to-end
+integration test run against actual CDnet footage rather than only synthetic
+frames.
+
+**June 20 to 21: auto-compress and the security audit.** Auto-compress added a
+watch-folder service that compresses new footage on arrival, tracked through
+an already-compressed index so nothing is processed twice. The security audit
+(SEC-001 through SEC-016) added a same-origin CSRF guard on every
+state-changing request (the dashboard binds the LAN and browsers replay Basic
+auth, so a malicious page could previously have driven a start or delete
+action), confined media and library file serving to the operator's own
+folders, closed a delete-original data-loss path, and added an SSRF guard on
+camera source input that blocks `file://` and cloud metadata hosts while
+leaving real LAN cameras working. The suite reached 1,025 passing.
+
+**July 4: the compression actually got better**, across six phases in one
+round. The encoder gained long-GOP and capped-CRF options, hardware NVENC
+encoding, denoise, encoder-level ROI, and VMAF measurement. Disk-budget
+auto-purge retention shipped, closing what competitor research had flagged as
+the single biggest gap against other NVR products, off by default and never
+touching original footage. One codebase began producing two builds, Server and
+Field (see `docs/BUILD-AND-RELEASE.md`). The plate reader moved to an
+in-process ONNX backend so it ships in one environment rather than clobbering
+OpenCV. Universal multi-vendor format support landed through an FFmpeg decode
+fallback, so vendor containers such as `.dav`, `.g64`, and `.mxf` ingest
+correctly (see `docs/SYSTEM-ARCHITECTURE.md`).
+
+**July 16: quality-targeted compression.** Rather than picking a CRF value and
+hoping, the encoder began searching for the smallest file that still met a
+measured VMAF quality floor. A related proposal to add a background-QP
+compression mode was measured directly against real footage and refuted; it
+was dropped rather than kept for appearances, and the actual win, extending
+the keyframe interval through genuinely static stretches, shipped instead.
+
+**July 18 to 19: the Android port begins.** Before any Android code could
+land, the server needed ten fixes to stop being hostile to a phone client: a
+non-ASCII credential had been returning an unauthenticated HTTP 500 instead of
+401, failed-auth attempts needed throttling and logging, the HLS stream was
+emitting a pixel format no Android device can decode, and abandoned streams
+were never being reaped. Per-device bearer tokens with independent revocation
+replaced the idea of repurposing Basic auth. The Android module itself then
+shipped a pairing screen with a live capabilities check, verified on a
+physical Samsung device, followed quickly by library, metrics, and a live HLS
+view.
+
+**August 16 to 18: search, zones, events, and the mobile app fills out.**
+Server-side additions included natural-language search, tamper-evident
+manifests, per-camera zone masks that exclude regions like a road or tree line
+from triggering alerts, and behavior events (line crossing with direction,
+loitering with dwell time) raised from tracked objects rather than raw pixel
+motion. The mobile app moved from version 0.3.0 through 0.9.0 across this
+window, adding in-app playback, phone-triggered compression, a minification
+pass that cut the APK from 27.5 MB to 4.39 MB, an events tab with a
+drag-to-draw zone editor, chunked resumable upload from the phone's gallery,
+and finally, at 0.9.0, push notifications that arrive while the app is closed,
+delivered through a self-hosted ntfy topic rather than a third-party push
+service (see `docs/SYSTEM-ARCHITECTURE.md`).
+
+**A test-isolation bug worth recording on its own.** For a stretch of this
+period, every full test run was silently unpairing every phone that had ever
+paired with the local install, because a CSRF regression test exercised the
+real factory-reset route against the developer's actual application-data
+directory instead of a temporary one. It looked like a broken phone, not a
+broken test, and cost real debugging time before the cause was found. The fix
+was a fixture that redirects the data directory to a temporary path before any
+destructive route is allowed to run for real; the rule that came out of it is
+that any test exercising a genuinely destructive handler must redirect the
+specific state path involved, never the shared path-resolution function
+underneath it, since patching that shared function drags every other module
+along with it.
+
+**Open at the end of this period:** mobile pairing does not yet persist
+correctly across an app restart, phone uploads do not survive the app being
+killed mid-transfer, and the mobile app has almost no automated test coverage
+of its own. All three are the stated priorities for the next round of work,
+tracked in `docs/CLAUDE-CODE-R7.md`. See `docs/CHANGES-SUMMER-2026.md` for the
+full narrative walkthrough of this period, including the per-round numbers and
+the reading guide by subsystem, and `docs/2026-08-31-Progress-Report-Grp-16.md`
+for the team's formal weekly report covering the same window.

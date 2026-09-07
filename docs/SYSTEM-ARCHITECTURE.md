@@ -2,11 +2,10 @@
 
 This is the current, reader-facing description of how SVCS is built: the desktop
 pipeline, how footage gets in, what formats it accepts, the Android companion
-app, and how the two talk to each other. It replaces four narrower documents
-that used to cover these topics separately (camera ingestion, format support,
-mobile architecture, and push notifications); their original text is preserved
-under `docs/archive/superseded/` for anyone who wants the full detail behind a
-specific decision.
+app, and how the two talk to each other. It replaces the narrower camera
+ingestion, format support, mobile architecture, and push notification
+overviews. Their dated source records remain in `docs/` and are listed in
+`docs/README.md`.
 
 For the research behind the compression and detection algorithms, see
 `docs/RESEARCH.md`. For the security model and audit history, see
@@ -131,7 +130,7 @@ FFmpeg wrapper, was retired in January 2025. Because the server does all the
 processing, most of the mobile work turned out to be server-side hardening
 rather than Android code: the server had been built for a same-machine
 browser, and pointing a phone at it over the LAN exposed a set of defects that
-a localhost browser never triggers (see the archived `MOBILE-ARCHITECTURE.md`
+a localhost browser never triggers (see `architecture/MOBILE-ARCHITECTURE.md`
 for the full list, several of which were live defects in the desktop product
 itself and are now fixed there too).
 
@@ -215,8 +214,8 @@ same machine as SVCS is fine), pick a long, unguessable topic name since
 knowing the topic name is, by default, the same as having the password, point
 SVCS at the topic from the desktop TOOLS tab or the phone's MORE tab, and
 subscribe to the same topic in the ntfy app with instant delivery turned on.
-The full walkthrough, including the API for scripting this, lives in the
-archived `PUSH-NOTIFICATIONS.md`.
+The full walkthrough, including the API for scripting this, lives in
+`architecture/PUSH-NOTIFICATIONS.md`.
 
 **What gets sent** is text only: a title and a short description naming the
 kind of event, the camera, and the zone for behavior alerts, or the before and
@@ -241,3 +240,44 @@ followed; and credentials embedded directly in the URL are refused in favor of
 a separate token field. Delivery itself runs on a single background worker
 behind a bounded queue with a short timeout, so a slow or unreachable ntfy
 server never stalls an encode.
+
+## 6. Live preview and compression boundary
+
+The browser HLS preview and the compression pipeline are separate consumers of
+the source. HLS opens its own `FrameSource`, annotates frames with foreground
+regions, and pipes them to a low-latency FFmpeg process that writes short-lived
+segments under `outputs/hls/<camera_id>/`. It does not write archive segments,
+update `metadata.db`, apply frame gating, or use the dual-CRF archive settings.
+The playlist keeps only a small rolling window.
+
+The compression pipeline opens its own source, runs background subtraction,
+buffers a configured segment, and writes an indexed MP4 through `ROIEncoder`.
+Mode 0 keeps every frame, Mode 1 gates frames without detected activity, Mode 2
+preserves a background reference with foreground patches, and Mode 3 keeps the
+object-focused representation. The dashboard polls each subsystem separately.
+
+This separation is intentional in the current release: it keeps preview
+latency independent from archive encoding and permits both features to run at
+once. An integrated `LivePipeline` remains a future optimization for cameras
+where decoding the source twice would waste CPU or network bandwidth. It would
+fan one decoded frame stream into HLS and the segment encoder, with encoding on
+a queue so a slow archive write cannot stall preview.
+
+## 7. Current feature inventory
+
+Desktop ingest includes file upload, webcam and index sources, RTSP, ONVIF
+discovery, watch folders, and HLS preview. Compression includes Modes 0-3,
+H.264, H.265, AV1, selectable NVENC paths with fallback, named surveillance
+presets, dual-CRF and optional ROI-QP, long GOP, capped CRF, denoising, and
+content auto-detection. Detection includes MOG2/KNN/GMG motion, YOLOv8 ONNX
+objects, object search metadata, and optional plate reading.
+
+The library provides gallery filters, search, lazy thumbnails, playback, and
+range requests. Storage provides AES-256-GCM encryption, retention and purge,
+cloud-path detection, and metrics including VMAF, PSNR, SSIM, compression ratio,
+and daily summaries. The REST API and SSE log are shared by desktop and mobile.
+
+Known boundaries remain: no timeline review UI, no full multi-camera manager,
+no built-in HTTPS or RBAC, no ONVIF Profile G recording server, and no outbound
+webhook or MQTT integration. These are tracked in `plans/BLOCKERS.md` and
+`plans/UPGRADE-PLAN-R6.md`, not silently presented as shipped capabilities.

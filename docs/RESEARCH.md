@@ -2,12 +2,17 @@
 
 This document consolidates the research, literature review, benchmarking, and design-note
 material produced for SVCS (Surveillance Video Compression System, EGN 4950C Capstone
-Group 16, DIU / NIWC Pacific). It merges fifteen separate docs written between March 2026
-and July 2026 into a single reference. Each section records where it came from. Measured
+Group 16, DIU / NIWC Pacific). It merges the research records written between March 2026
+and July 2026 into a single reference, including the standalone benchmark and tuning notes.
+Each section records where it came from. Measured
 numbers, benchmark tables, citations, and the conclusions that decisions were based on are
 preserved verbatim in substance; process chatter and pure duplication have been removed.
 Where two source documents disagree, both positions are kept and the conflict is called out
 (see the final section).
+
+The dated source records remain in this folder for provenance. The canonical current decisions
+are the ones in this document; update them here when a later experiment supersedes an older
+recommendation.
 
 ## Table of contents
 
@@ -21,7 +26,8 @@ Where two source documents disagree, both positions are kept and the conflict is
 8. [R4 Phase 3: competitor apps and gap analysis](#8-r4-phase-3-competitor-apps-and-gap-analysis)
 9. [R4 Phase 5: plate-reader solution research round](#9-r4-phase-5-plate-reader-solution-research-round)
 10. [R5 Task 5.1: VMAF-targeted rate control](#10-r5-task-51-vmaf-targeted-rate-control)
-11. [Known discrepancies between source documents](#11-known-discrepancies-between-source-documents)
+11. [Tests and empirical validation](#11-tests-and-empirical-validation)
+12. [Known discrepancies between source documents](#12-known-discrepancies-between-source-documents)
 
 ---
 
@@ -536,7 +542,7 @@ noise. The tuned parameters landed on `history=500, varThreshold=50, detectShado
 0 detections (0% false positives) on a static scene, consistent detection across frames on a
 moving scene, and detection within roughly 1 to 3 frames after motion begins. Its final
 recommendation is `varThreshold=50, detectShadows=False`. This conflicts with sections 2.1 and 2.2;
-see section 11.
+see section 12.
 
 ---
 
@@ -907,7 +913,7 @@ Deliberately not used:
 | Vendor APIs (Google Vision, AWS Rekognition, Plate Recognizer) | proprietary | Not open source, require keys, and outbound network calls disqualify them for an air-gapped Navy base. |
 
 Note: the later R4 Phase 5 research round (section 9) revisits fast-plate-ocr and reverses this
-call in favour of an ONNX backend built on it. See section 11.
+call in favour of an ONNX backend built on it. See section 12.
 
 ### 5.3 API surface
 
@@ -1351,7 +1357,7 @@ needs a separate venv: it cannot ship in one env or exe.
 
 The research could not confirm from metadata that a `--no-deps` install actually runs against
 opencv-contrib's cv2, so it was tested locally in a THROWAWAY venv, never the core env. See
-`docs/PLATES-VALIDATION.md` for the exact commands and result. The recorded outcome drives whether the
+`testing/PLATES-VALIDATION.md` for the exact commands and result. The recorded outcome drives whether the
 in-process backend ships enabled by default or stays behind the documented recipe.
 
 ### 9.4 Decision
@@ -1368,7 +1374,7 @@ in-process backend ships enabled by default or stays behind the documented recip
   when present and hides the plate UI when absent (unchanged behaviour).
 - **Keep EasyOCR as a legacy, separate-env option**, demoted below the ONNX path in docs.
 
-### 9.5 Honest caveats carried forward (also in docs/BLOCKERS.md)
+### 9.5 Honest caveats carried forward (also in plans/BLOCKERS.md)
 
 `--no-deps` is a maintenance liability: re-audit the cv2 and numpy pins on every fast-plate-ocr or
 open-image-models upgrade. The default bundled model weights may carry their own non-MIT license, so
@@ -1496,7 +1502,109 @@ the feature; the cache is what makes it acceptable in practice.
 
 ---
 
-## 11. Known discrepancies between source documents
+## 11. Tests and empirical validation
+
+This section consolidates the original benchmark and test-evidence records that
+were previously separate from the research narrative. These results are
+evidence from specific clips, resolutions, hardware, and test configurations;
+they are not universal performance guarantees. Current regression coverage and
+fresh commands live in [TESTING.md](TESTING.md), while the dated source records
+remain available for provenance.
+
+### 11.1 Milestone 1 selective-compression benchmark
+
+Source: `milestone1_results.md`, using `notebooks/milestone1_benchmark.ipynb`
+on `data/samples/test.mp4` with MOG2 background subtraction.
+
+| Scenario | Baseline ratio | Selective ratio | PSNR | SSIM | Foreground coverage |
+|---|---:|---:|---:|---:|---:|
+| Normal detection | 1.6x | 1.0x | 41.2 dB | 0.9783 | 10.5% |
+| Forced no foreground | 1.6x | 16.6x | 29.1 dB | 0.7903 | 0.0% |
+
+The benchmark demonstrated that selective compression adapts to scene content:
+foreground preservation kept visual quality high but did not beat the baseline
+on that clip, while the forced no-foreground case produced much higher storage
+savings at lower quality. The original acceptance checks passed notebook
+execution, PSNR at or above 30 dB, and SSIM at or above 0.85; the compression
+target of 3x was met only in the no-foreground scenario. This result motivated
+more granular mode and ROI evaluation rather than a single global compression
+claim.
+
+### 11.2 Mode-size and ROI findings
+
+The real CDnet measurements in section 1 show why a strict ordering of
+`mode3 < mode2 < mode1 < mode0` is not a valid invariant. The corresponding
+test suite asserts that every mode runs, outputs remain smaller than raw
+uncompressed bytes, Mode 3 emits its expected sparse representation, outputs
+are decodable, and sparse overhead does not exceed the configured regression
+bound. It deliberately does not assert a universal size ranking.
+
+The original milestone evidence also records the practical interpretation:
+Mode 0 is often the smallest on static, sparse-motion scenes; Mode 3 can win on
+large noisy or continuously busy scenes; Mode 1 is useful when long empty spans
+can be removed; and Mode 2 trades storage for forensic context. Results from
+the earlier Mode 2 CRF 18 and per-object Mode 3 design are historical and are
+superseded by the later mode settings described in section 1.
+
+### 11.3 One-hour pipeline stress test
+
+Source: `stress_test_results.md`, `tests/test_pipeline_stress.py`. The test
+looped a 320x240 CDnet baseline clip for one simulated hour at 30 fps, using
+60-second segments, MOG2 `varThreshold=16`, foreground CRF 18, background CRF
+45, a standard x86 CPU, and Python `tracemalloc`.
+
+| Measurement | Result |
+|---|---:|
+| Peak memory | under 250 MB |
+| Memory at start | about 45 MB |
+| Memory at end | about 48 MB |
+| Growth over one hour | under 5 MB |
+| Segments | 60 |
+| Total storage | about 51 MB |
+| Naive full-frame H.264 estimate | about 320 MB |
+| Effective compression ratio | about 6.3x |
+
+The run completed without a crash or runaway memory growth. Its storage
+extrapolation estimated about 1.2 GB per camera per day, about 8.4 GB for one
+camera over one week, and about 840 GB for 100 cameras over one week under a
+30% foreground-activity assumption. Those figures are workload estimates from
+low-resolution CDnet footage, not deployment sizing guarantees; 1080p camera
+tests and real activity distributions must replace them for procurement.
+
+### 11.4 Detection, integration, and safety test evidence
+
+The detection evidence is consolidated in section 2: the 46-scene CDnet
+comparison, the three-condition tuning sweep, and the conflicting standalone
+`varThreshold=50` pass. The relevant conclusion is to retain MOG2 as the
+default, use the tested day/night profiles as the supported baseline, and keep
+the standalone tuning result as a narrow experiment rather than a global rule.
+
+The broader executable evidence is recorded in these source files:
+
+| Evidence | What it establishes |
+|---|---|
+| `testing/FEATURE-AUDIT.md` | Browser/API smoke coverage, real short-clip compression, encryption round trip, library flow, and dependency status |
+| `testing/test-baseline.md` | Green suite checkpoints from the initial 513-test baseline through R4 Phase 6 at 1,226 passing and 4 skipped |
+| `testing/PLATES-VALIDATION.md` | Throwaway-environment validation that the ONNX plate reader works with contrib OpenCV when installed without resolver dependencies |
+| `TESTING.md` | Current September baseline, focused gates, environment rules, and owner-gated validation |
+
+Do not treat a green synthetic or short-clip test as proof of live camera
+coverage. Real RTSP, MediaMTX, installer, physical-device, and owner-run
+security checks remain separate validation gates.
+
+### 11.5 Research-to-test change gates
+
+Any codec or detection change must preserve the data-integrity suite, valid
+output decoding, representative CDnet behavior, and the real-time gate of at
+least 25 fps at 720p on target hardware. Plate-reader changes must preserve
+graceful absence behavior and rerun the throwaway OpenCV coexistence recipe.
+Changes that delete originals, expose the dashboard, or add network-facing
+behavior require the focused security tests plus the manual checklist in
+`SECURITY.md`.
+
+---
+
+## 12. Known discrepancies between source documents
 
 *(cross-cutting; identified while merging all fifteen source documents)*
 

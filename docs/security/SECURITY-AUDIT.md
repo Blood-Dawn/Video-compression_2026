@@ -56,7 +56,7 @@ Date: 2026-06-21. Branch: `app`.
 - External network penetration test against a live LAN bind.
 - A fuzzing campaign (AFL/boofuzz) on the video-ingest + ffmpeg path with dedicated tools.
 - Live RTSP/ONVIF camera-path testing with real hardware / MediaMTX.
-- Upgrading the dev/notebook dependency stack (jupyter-server, jupyterlab, mistune, notebook, tornado, bleach, basicsr); tracked in `docs/BLOCKERS.md`.
+- Upgrading the dev/notebook dependency stack (jupyter-server, jupyterlab, mistune, notebook, tornado, bleach, basicsr); tracked in `docs/plans/BLOCKERS.md`.
 
 ## Test suite
 

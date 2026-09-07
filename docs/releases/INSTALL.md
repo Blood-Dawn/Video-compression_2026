@@ -18,9 +18,11 @@ This opens a small SVCS-themed menu (a dark, amber-accented window, or a text
 menu over SSH) where you pick what to install:
 
 - **SVCS core app** (required) - the app itself.
-- **AI plate reader** (optional) - license-plate super-resolution. It runs in a
-  separate Python environment and is not bundled; the menu records the request
-  and points you at the docs.
+- **AI plate reader** (optional) - an ONNX OCR and detection path installed into
+   the core environment with the documented `--no-deps` recipe. EasyOCR remains
+   a legacy separate-environment option because its headless OpenCV dependency
+   can clobber the core contrib build. See `../RESEARCH.md` and
+   `../testing/PLATES-VALIDATION.md`.
 - **Local RTSP server (MediaMTX)** (optional) - for local RTSP/HLS testing;
   downloaded into the app data folder.
 - **Sample clips** (optional) - a couple of CDnet surveillance clips to try.
@@ -74,7 +76,7 @@ the GitHub Release instead. Maintainers: see
 If you would rather run from source (any OS), see the "How to run it" section in
 the [README](../README.md): install [uv](https://docs.astral.sh/uv/), run
 `uv sync`, install FFmpeg, and start the dashboard. A
-[Docker image](deployment_packaging.md) is also available for server use.
+   [Docker image](../BUILD-AND-RELEASE.md) is also available for server use.
 
 ## After installing
 

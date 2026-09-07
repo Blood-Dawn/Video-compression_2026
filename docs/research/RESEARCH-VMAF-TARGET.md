@@ -1,7 +1,7 @@
 # RESEARCH: VMAF-targeted rate control (R5 TASK 5.1)
 
 Date: 2026-07-16. Research spike written BEFORE coding, the way
-docs/RESEARCH-PLATES.md preceded the plate reader. Sources are the ones scouted
+docs/research/RESEARCH-PLATES.md preceded the plate reader. Sources are the ones scouted
 during that research spike; the measurements below were taken locally on this
 machine against real sample footage.
 

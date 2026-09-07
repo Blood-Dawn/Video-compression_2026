@@ -3,7 +3,7 @@
 This is the exact procedure to publish SVCS to the public winget repository
 (`microsoft/winget-pkgs`) so that `winget install Blood-Dawn.SVCS` works for
 everyone. It is **owner-gated**: it requires a published GitHub Release and (in
-practice) a code-signed installer. See `docs/BLOCKERS.md`.
+practice) a code-signed installer. See `docs/plans/BLOCKERS.md`.
 
 The manifest lives in `installer/winget/` (three files):
 
@@ -79,7 +79,7 @@ wingetcreate submit --token <github-pat> installer\winget
 Microsoft's winget pipeline runs the installer in a sandbox and is far more
 likely to accept (and SmartScreen far less likely to warn on) a **code-signed**
 installer. SVCS signing is tied to the existing gated signing certificate (see
-`docs/BLOCKERS.md`). Until the installer is signed with a real Authenticode
+`docs/plans/BLOCKERS.md`). Until the installer is signed with a real Authenticode
 certificate, treat winget submission as a release-time owner step, not a CI step.
 
 ## Notes

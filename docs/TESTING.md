@@ -3,9 +3,9 @@
 How to run the test suite, where the project stands today, and the environment
 quirks worth knowing before a first run. For the detailed, dated log of how the
 suite grew from its first green baseline to its current size, including every
-bug that log of triage work turned up, see `docs/test-baseline.md`. For the
+bug that log of triage work turned up, see `docs/testing/test-baseline.md`. For the
 list of owner-gated and deferred items (things a build cannot finish on its
-own, such as code signing or a live pentest), see `docs/BLOCKERS.md`.
+own, such as code signing or a live pentest), see `docs/plans/BLOCKERS.md`.
 
 ## How to run the tests
 
@@ -47,8 +47,8 @@ headless OpenCV into the same environment can silently clobber the shared
 `cv2` binaries, breaking even basic calls like creating a background
 subtractor. The test runner scripts sync only the core, non-conflicting extras
 by default for this reason; the plate-reader stack is validated separately, in
-its own throwaway environment, following the recipe in the archived
-`PLATES-VALIDATION.md` material now folded into `docs/RESEARCH.md`.
+its own throwaway environment, following the reproducible recipe in
+`testing/PLATES-VALIDATION.md`.
 
 **Line endings are normalized.** A `.gitattributes` file pins most text files
 to `LF` and leaves PowerShell and batch scripts as `CRLF`, since those tools
@@ -71,8 +71,31 @@ rest of `docs/`, follows the same rule.
 
 A living list of deferred and owner-gated items, things that could not be
 finished inside an automated build session because they need a credential, a
-piece of hardware, or a human decision, is kept in `docs/BLOCKERS.md` rather
+piece of hardware, or a human decision, is kept in `docs/plans/BLOCKERS.md` rather
 than duplicated here. As of this writing that list includes an external
 network penetration test, a fuzzing pass on the video-ingest path, live
 camera-path testing against real RTSP hardware, and the Windows code-signing
 certificate needed before a general-availability release.
+
+## Validation evidence
+
+The dated records below are the evidence behind the current baseline. They are
+kept as source records, while this section is the index for what each one
+proves.
+
+| Record | Coverage | Current interpretation |
+|---|---|---|
+| `testing/test-baseline.md` | Provisioning, triage, and green-suite checkpoints from M0 through the current rounds | Historical explanations for failures and environment fixes; use the commands above for a fresh run |
+| `testing/FEATURE-AUDIT.md` | Route and feature behavior, including upload, library, auto-compress, and live-path checks | CI-safe checks are automated; real RTSP and MediaMTX checks remain owner-gated |
+| `testing/PLATES-VALIDATION.md` | Throwaway-environment proof that the ONNX plate-reader packages can coexist with contrib OpenCV when installed with `--no-deps` | Do not install the plate extra through a normal resolver path without rechecking the documented pins |
+| `research/stress_test_results.md` | Pipeline memory, storage, throughput, and long-running behavior | Stress results are workload-specific evidence, not a universal performance guarantee |
+
+## Focused validation gates
+
+For a code change, run the narrowest relevant check first, then the full suite
+before release. Encoder changes need data-integrity, output-decodability, and
+mode behavior tests. Route changes need the blueprint and route-resolution
+guards. Security changes need the matching regression tests under
+`tests/security/`. Desktop changes that affect a frozen build also need the
+PyInstaller smoke path; mobile changes need an Android build and a physical or
+emulated device check because the JVM test coverage remains thin.

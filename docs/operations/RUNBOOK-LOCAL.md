@@ -42,7 +42,7 @@ Get-CimInstance Win32_Process -Filter "Name='python.exe'" |
 ## 2. Start ntfy, for alerts while the app is closed
 
 Only needed for the R6 Track C push feature. Skip it if you do not want phone
-alerts. Full background is in `docs/PUSH-NOTIFICATIONS.md`.
+alerts. Full background is in `docs/architecture/PUSH-NOTIFICATIONS.md`.
 
 Docker, which survives reboots:
 

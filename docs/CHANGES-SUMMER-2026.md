@@ -37,7 +37,7 @@ Table 1. Project state before and after the summer.
 * `src/gui/static/js/` holds the dashboard front end split by feature, with
   `strings.js` as the single copy catalog.
 * `mobile/android/` is the Android app, Kotlin and Jetpack Compose.
-* `docs/RUNBOOK-LOCAL.md` tells you how to start everything without asking anyone.
+* `docs/operations/RUNBOOK-LOCAL.md` tells you how to start everything without asking anyone.
 * The "What is broken right now" section below is the spec for what happens next.
 
 ## Round by round
@@ -130,7 +130,7 @@ Round 4, six phases. This is the "fixed compression" part.
   default.
 * **Phase 1, the UX round**: persistent job history, explicit completion
   summaries, and batch progress, all grounded in the NN/g long-running-work
-  guidance written up in `docs/RESEARCH-UIUX.md`.
+  guidance written up in `docs/research/RESEARCH-UIUX.md`.
 * **Phase 4**: one codebase now produces two builds, Server and Field. The
   Field build is offline and forces loopback.
 * **Phase 5**: the plate reader moved in-process on ONNX, so it ships in one
@@ -256,7 +256,7 @@ SVCS: loitering             A person is loitering in driveway for 41s on cam_00.
 SVCS: compression finished  highway_demo.mp4 finished in 42.3s, 209.8 MB to 29.6 MB, 86 percent saved.
 ```
 
-Full operator guide: `docs/PUSH-NOTIFICATIONS.md`.
+Full operator guide: `docs/architecture/PUSH-NOTIFICATIONS.md`.
 
 ## One bug worth everyone's attention
 
@@ -321,8 +321,8 @@ attribute is shared and patching it drags every other module along with it.
 | Metadata and queries | `src/utils/db/`, `src/gui/routes/queries_bp.py`, and the nl_search work |
 | Encryption | unchanged this summer, but note the security audit touched adjacent paths |
 | Ingest and streams | `src/utils/watchfolder.py`, `multi_source.py`, R4 Phase 6 |
-| Anything mobile | `docs/MOBILE-ARCHITECTURE.md`, then `mobile/android/` |
-| Everything | `docs/RUNBOOK-LOCAL.md` to get it running, then the "What is broken right now" section above |
+| Anything mobile | `docs/architecture/MOBILE-ARCHITECTURE.md`, then `mobile/android/` |
+| Everything | `docs/operations/RUNBOOK-LOCAL.md` to get it running, then the "What is broken right now" section above |
 
 Table 2. Suggested reading by subsystem owner.
 

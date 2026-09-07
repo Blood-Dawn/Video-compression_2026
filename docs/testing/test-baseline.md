@@ -65,8 +65,8 @@ reviewed, and green.
 | Result | **1210 passed, 4 skipped, 0 failed** (196 s) |
 | Env | Windows 11, Python 3.11.9, `.venv` |
 
-R4 Phase 5 (plate-reader solution, see docs/RESEARCH-PLATES.md +
-docs/PLATES-VALIDATION.md) added an in-process ONNX ALPR backend
+R4 Phase 5 (plate-reader solution, see docs/research/RESEARCH-PLATES.md +
+docs/testing/PLATES-VALIDATION.md) added an in-process ONNX ALPR backend
 (`_FastPlateOcrBackend`: fast-plate-ocr + open-image-models, MIT, torch-free)
 that installs alongside opencv-contrib in ONE env via a `--no-deps` recipe
 (`scripts/install_plates.ps1`) - empirically validated in a throwaway venv. It
@@ -102,7 +102,7 @@ holds. Skips unchanged (3 webcam + 1 opt-in Docker build).
 | Result | **1188 passed, 4 skipped, 0 failed** (195 s) |
 | Env | Windows 11, Python 3.11.9, `.venv` |
 
-R4 Phase 3 (competitor gap analysis, see docs/RESEARCH-COMPETITORS.md) added
+R4 Phase 3 (competitor gap analysis, see docs/research/RESEARCH-COMPETITORS.md) added
 retention / disk-budget / auto-purge (the #1 table-stakes NVR gap):
 `gui/services/retention.py`, two new routes on `autocompress_bp`
 (`/api/retention` GET+POST, `/api/retention/purge_now`; route guard 71 -> 73,
@@ -121,7 +121,7 @@ never purged mid-write, inf/nan guards on the policy, and a locked
 | Result | **1163 passed, 4 skipped, 0 failed** (222 s) |
 | Env | Windows 11, Python 3.11.9, `.venv` |
 
-R4 Phase 2 (compression research adoptions, see docs/RESEARCH-COMPRESSION.md)
+R4 Phase 2 (compression research adoptions, see docs/research/RESEARCH-COMPRESSION.md)
 added `test_encoder_r4.py` (22: long-GOP/capped-CRF/NVENC arg builders,
 denoise + addroi filter chains, VMAF; guarded real NVENC + libvmaf smokes)
 and 2 GUI-API knob tests. New encoder knobs (long GOP default, capped CRF,
@@ -142,8 +142,8 @@ on inf/1e999 (would 500), and inert ROI grid aging (`<= 0` never fired; now a
 | Env | Windows 11, Python 3.11.9, `.venv` |
 
 Between R3 and R4 the security audit added `tests/security/` (94 tests, see
-docs/SECURITY-AUDIT.md). R4 Phase 1 (UI/UX research adoptions, see
-docs/RESEARCH-UIUX.md) added `test_job_history.py` (19, incl. 5 regression
+docs/security/SECURITY-AUDIT.md). R4 Phase 1 (UI/UX research adoptions, see
+docs/research/RESEARCH-UIUX.md) added `test_job_history.py` (19, incl. 5 regression
 tests from the phase review) and the new `/api/jobs/recent` endpoint; the
 route guard moved to 71 routes (blueprints stay at 17). Skips unchanged
 (3 webcam + 1 opt-in Docker build).

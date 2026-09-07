@@ -4,9 +4,9 @@ How SVCS is built, packaged, and shipped: the two build editions, how the
 installer and container image are produced, why the bundled FFmpeg carries the
 license it does, the ONNX path that keeps the install small, and the checklist
 for cutting a release, including publishing to winget. This replaces seven
-narrower documents that covered these topics separately; their original text
-is preserved under `docs/archive/superseded/` for anyone who wants the full
-detail.
+narrower documents that covered these topics separately. The dated source
+records remain in `docs/` for provenance and are listed in the canonical
+source-record section below.
 
 For the current test suite and how to run it, see `docs/TESTING.md`. For the
 system's architecture, see `docs/SYSTEM-ARCHITECTURE.md`.
@@ -223,3 +223,38 @@ it.
 
 Until the installer is code-signed, winget submission should be treated as a
 release-time owner step, not something a routine build performs.
+
+## 7. Linux AppImage and current build evidence
+
+The Linux distribution path is an AppImage built by `installer/build.sh` and
+the repository CI workflow. It is the portable offline artifact for Linux; the
+Windows path remains the Inno Setup installer and the server deployment path
+remains Docker. The AppImage build is owner-published: the CI artifact must be
+smoke-tested, attached to the release, and checked against the release notes.
+
+The two edition builds share the same source and spec. The Server edition
+includes LAN-facing authentication, RTSP, and HLS surfaces. The Field edition
+forces loopback and omits RTSP and HLS while retaining local compression,
+auto-compress, retention, encryption, and plate reading. Verify the edition
+marker in the frozen bundle instead of inferring it from the output folder.
+
+The slim ONNX build is the shipping baseline. The YOLOv8-nano ONNX detector is
+parity-tested and avoids bundling PyTorch or CUDA. Real-ESRGAN remains an
+optional enhancement model and is not part of the slim detector path. The
+optional plate-reader models are also not assumed to be bundled: their package
+licenses and weight licenses must be checked separately before adding them to a
+frozen installer.
+
+The historical size evidence is retained in `build/build-metrics.md`: the unpacked
+bundle dropped from about 4,632 MB in the Torch build to about 339 MB on the
+ONNX path, and the early installer measured about 210.6 MB. These figures are
+milestone measurements, not release guarantees; every release records fresh
+bundle and installer sizes.
+
+## 8. Canonical source records
+
+The detailed source records remain beside this document for dated evidence:
+`build/BUILDS.md`, `build/deployment_packaging.md`, `build/ffmpeg-licensing.md`,
+`build/onnx-models.md`, `build/build-metrics.md`, `releases/RELEASE-CHECKLIST.md`,
+and `releases/winget-submission.md`. Update this document when a current build policy or
+release procedure changes; keep those records dated rather than deleting them.

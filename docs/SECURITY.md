@@ -6,7 +6,8 @@ tool. This file merges the red-team audit record, the audit brief, and the
 owner-run manual verification checklist into one document.
 
 Audit performed 2026-06-21 on branch `app`. Sources merged here:
-`docs/SECURITY-AUDIT.md` and `docs/SECURITY-MANUAL-VERIFY.md`.
+`docs/security/SECURITY-AUDIT.md` and `docs/security/SECURITY-MANUAL-VERIFY.md`.
+Deferred owner actions are also summarized here from `docs/plans/BLOCKERS.md`.
 
 ---
 
@@ -212,7 +213,7 @@ These are honest gaps. They were not run and are not claimed as covered.
 * Live RTSP/ONVIF camera-path testing with real hardware or MediaMTX.
 * Upgrading the dev/notebook dependency stack (jupyter-server, jupyterlab,
   mistune, notebook, tornado, bleach, basicsr). Not runtime dependencies, but
-  still outstanding. Tracked in `docs/BLOCKERS.md`.
+  still outstanding. Tracked in `docs/plans/BLOCKERS.md`.
 * The installer is unsigned, so SmartScreen fires. Expected until it is signed.
 
 ---
@@ -402,3 +403,25 @@ These are not preferences. A change that violates one of them does not ship.
 8. **Do not weaken or delete a test to make something pass.** If a security fix
    legitimately changes behavior a test asserted, update the test and say why in
    a comment.
+
+---
+
+## Owner and deferred security work
+
+The CI-safe security core is covered by `tests/security/`, but several checks
+remain owner-run because they require a real deployment, special tooling, or a
+licensing decision. These items were previously recorded only in
+`plans/BLOCKERS.md`.
+
+| Item | Why it is deferred | Required action |
+|---|---|---|
+| Development and notebook dependency CVEs | They are not runtime dependencies in the frozen app, but they remain part of the development environment | Upgrade the notebook stack in a dedicated lockfile pass when notebooks are next touched |
+| External network penetration test | It needs a live LAN bind and an external tester | Test a real deployment before production or public rollout |
+| Video-ingest and FFmpeg fuzzing | AFL, boofuzz, or equivalent dedicated tooling is not a deterministic unit test | Fuzz upload, watch-folder, thumbnail, and decode paths with malformed media |
+| Live RTSP and ONVIF testing | It requires hardware or a running MediaMTX relay | Exercise discovery, authentication, reconnect, and sustained capture manually |
+| Plate-reader model bundling | Framework licenses do not automatically cover downloaded model weights | Verify each weight license before adding models to a frozen installer |
+| Plate-reader `--no-deps` maintenance | The resolver cannot enforce the OpenCV and ONNX Runtime floors for the optional packages | Run `scripts/install_plates.ps1 -Verify` after every package upgrade |
+
+The manual network-exposure, delete-original, path-confinement, malformed-input,
+and installer checks from `SECURITY-MANUAL-VERIFY.md` remain mandatory evidence
+for a release. A passing unit suite does not replace them.

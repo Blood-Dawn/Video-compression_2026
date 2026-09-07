@@ -1,6 +1,6 @@
 # Plate reader: in-process ONNX coexistence - empirical validation (R4 Phase 5)
 
-Date: 2026-07-04. The deep research (docs/RESEARCH-PLATES.md) could not confirm
+Date: 2026-07-04. The deep research (docs/research/RESEARCH-PLATES.md) could not confirm
 from package metadata alone that a `--no-deps` install of the ankandrew ONNX
 ALPR stack actually RUNS against SVCS's `opencv-contrib-python` without pulling
 `opencv-python-headless`. This was tested locally in a THROWAWAY venv (never the

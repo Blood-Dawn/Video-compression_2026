@@ -21,7 +21,7 @@ system on the desktop, and harden the whole thing into something a sponsor can
 deploy.
 
 The technical backlog comes from the open items in `docs/CHANGES-SUMMER-2026.md`
-and `docs/BLOCKERS.md`. Ownership follows the
+and `docs/plans/BLOCKERS.md`. Ownership follows the
 subsystems each member already held in the spring, so nobody starts from zero:
 
 | Member | Subsystem owned in spring | Fall focus |
@@ -140,8 +140,8 @@ independently discovering and reading Help.
 | 3.11 | Fresh-install walkthrough on a clean machine: install `SVCS-Setup.exe`, complete first-run Setup, run one compression, all without opening the source code | All, each on their own machine | A written note per person of every point of confusion or friction, with the worst three filed as fixes |
 | 3.12 | Test the Compact install path with no FFmpeg on PATH | Riley | Confirmation of whether the app warns before Start is clickable, or fails silently on the first compression, plus a fix if it is silent |
 | 3.13 | Add a folder-browse button to the Setup destination field, reusing the Library folder-browser modal | Ashleyn | Setup no longer requires typing a raw folder path from memory |
-| 3.14 | External network penetration test against a running SVCS instance | Victor | Written findings against the threat model in `docs/SECURITY.md`; anything found gets a severity-rated entry in `docs/BLOCKERS.md`, matching the pentest item already deferred there |
-| 3.15 | Fuzz the video-ingest and upload path with malformed media | Victor | A clean rejection or a filed crash report for each malformed file tried, closing the fuzzing item already deferred in `docs/BLOCKERS.md` |
+| 3.14 | External network penetration test against a running SVCS instance | Victor | Written findings against the threat model in `docs/SECURITY.md`; anything found gets a severity-rated entry in `docs/plans/BLOCKERS.md`, matching the pentest item already deferred there |
+| 3.15 | Fuzz the video-ingest and upload path with malformed media | Victor | A clean rejection or a filed crash report for each malformed file tried, closing the fuzzing item already deferred in `docs/plans/BLOCKERS.md` |
 
 Table 3a. Application testing pass, added to week 3.
 

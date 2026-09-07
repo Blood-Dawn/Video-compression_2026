@@ -2,7 +2,7 @@
 
 A repeatable checklist for cutting a public release. The build/verify steps are
 done by whoever prepares the release; **tagging and publishing the GitHub Release
-is the owner's action** (it's a gated step - see `docs/BLOCKERS.md`).
+is the owner's action** (it's a gated step - see `docs/plans/BLOCKERS.md`).
 
 Versions follow the installer name: `SVCS-Setup-<version>.exe`. The first public
 drop is the **unsigned beta** `v2.1.0-beta`.
@@ -51,7 +51,7 @@ drop is the **unsigned beta** `v2.1.0-beta`.
 - [ ] Mark it a **pre-release**; the title/notes state clearly it is an
       **unsigned beta** and SmartScreen will warn.
 - [ ] **Owner action:** create the tag (`v2.1.0-beta`) and click *Publish*.
-      The agent does not tag or publish (gated - `docs/BLOCKERS.md`).
+      The agent does not tag or publish (gated - `docs/plans/BLOCKERS.md`).
 
 ## 6b. Code signing (GA - TASK 5b.1)  🚦 *needs a cert*
 

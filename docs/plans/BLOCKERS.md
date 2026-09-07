@@ -15,7 +15,7 @@ Author: Bloodawn (KheivenD), 2026-06-02 (autonomous v2 build).
 
 The plate reader now defaults to the ONNX ALPR stack (fast-plate-ocr +
 open-image-models, MIT, torch-free), which installs alongside opencv-contrib in
-ONE env (validated: docs/PLATES-VALIDATION.md). Residual owner/maintenance items:
+ONE env (validated: docs/testing/PLATES-VALIDATION.md). Residual owner/maintenance items:
 
 | Item | Why | Action |
 |------|-----|--------|
@@ -25,20 +25,20 @@ ONE env (validated: docs/PLATES-VALIDATION.md). Residual owner/maintenance items
 
 ### R4 Phase 3 - competitor-gap features deferred (2026-07-04)
 
-Phase 3 (docs/RESEARCH-COMPETITORS.md) implemented the #1 table-stakes gap
+Phase 3 (docs/research/RESEARCH-COMPETITORS.md) implemented the #1 table-stakes gap
 (retention / disk-budget / auto-purge). These verified-but-deferred gaps are
 recorded here rather than silently dropped:
 
 | Item | Why deferred | Proposed approach |
 |------|-------------|-------------------|
 | Outbound webhook / MQTT / email on events | Real gap (Frigate MQTT, On-Guard). A safe outbound webhook needs SSRF guarding (post-to-internal-host risk); MQTT needs a broker dependency the local-first installer avoids. | A single opt-in outbound webhook: JSON POST on job-complete / purge, target URL vetted through the existing `path_safety` host checks (block link-local / metadata). Add after the Phase 4 split so it lands in the SERVER build only. |
-| Timeline review UI | Also deferred in Phase 1 (docs/RESEARCH-UIUX.md finding 5/7). Large front-end effort; the Phase 4 shell change will move the goalposts. | Revisit post-split with Frigate/XProtect two-track timeline patterns. |
+| Timeline review UI | Also deferred in Phase 1 (docs/research/RESEARCH-UIUX.md finding 5/7). Large front-end effort; the Phase 4 shell change will move the goalposts. | Revisit post-split with Frigate/XProtect two-track timeline patterns. |
 | Multi-user / RBAC + built-in HTTPS/TLS | Single-node local-first tool; the documented production answer is a reverse proxy (nginx/Caddy) which also terminates TLS. Full RBAC would make SVCS a VMS. | Document the reverse-proxy pattern in the SERVER build's getting-started (Phase 4); do not build in-app RBAC. |
 | ONVIF Profile G recording/replay server | Would turn a compressor into a full VMS - out of scope. | Not planned. |
 
 ### Security audit - deferred items (2026-06-21)
 
-The security audit (`docs/SECURITY-AUDIT.md`) fixed every Critical/High and the
+The security audit (`docs/security/SECURITY-AUDIT.md`) fixed every Critical/High and the
 cheap Medium/Low findings this session. Genuinely-deferred items:
 
 | Item | Severity | Why deferred | Proposed approach |
@@ -46,7 +46,7 @@ cheap Medium/Low findings this session. Genuinely-deferred items:
 | Dev/notebook dependency CVEs | Medium | `pip-audit` flagged jupyter-server, jupyterlab, mistune, notebook, tornado, bleach, basicsr, idna - all DEV/notebook-only deps, not imported by the runtime app or shipped in the installer. The runtime ones (cryptography, urllib3) were bumped (SEC-008). | Bump the notebook stack in a dedicated `uv lock --upgrade-package` pass when the notebooks are next touched; they are not in the frozen app. |
 | External network penetration test | n/a (process) | Requires a live LAN bind + an external tester; not a pytest-coverable, CI-safe activity. | Owner runs a pentest against a real deployment before any public/production rollout. |
 | Fuzzing the video-ingest / ffmpeg path | n/a (process) | A real fuzzing campaign (AFL/boofuzz) needs dedicated tooling + time and is not deterministic in CI. | Owner runs a fuzzing pass on the upload/watch-folder/thumbnail path with malformed media corpora. |
-| Live RTSP/ONVIF camera-path testing | n/a (process) | Needs a real camera or a running MediaMTX server; hardware/timing dependent. | Owner exercises the live camera path manually (see `docs/FEATURE-AUDIT.md`). |
+| Live RTSP/ONVIF camera-path testing | n/a (process) | Needs a real camera or a running MediaMTX server; hardware/timing dependent. | Owner exercises the live camera path manually (see `docs/testing/FEATURE-AUDIT.md`). |
 
 The CI-safe core (path traversal, SQLi, XSS, CSRF, auth, crypto, delete-original
 safety, SSRF input guard, supply-chain pins) is covered by `tests/security/`.
@@ -58,7 +58,7 @@ distribution) is built, but parts are NOT pytest-coverable and need the owner:
 
 | Item | Why gated | What's ready | Owner action |
 |------|-----------|--------------|--------------|
-| **winget public submission** | submission is the owner's GitHub action; Microsoft prefers a code-signed installer | `installer/winget/` manifest (3 files), `scripts/winget_validate.ps1`, `docs/winget-submission.md`, structural test green | publish a Release with the asset, run `winget_validate.ps1 -Recompute` to fix the SHA, then `wingetcreate submit` (steps in winget-submission.md) |
+| **winget public submission** | submission is the owner's GitHub action; Microsoft prefers a code-signed installer | `installer/winget/` manifest (3 files), `scripts/winget_validate.ps1`, `docs/releases/winget-submission.md`, structural test green | publish a Release with the asset, run `winget_validate.ps1 -Recompute` to fix the SHA, then `wingetcreate submit` (steps in winget-submission.md) |
 | **winget InstallerSha256** | must match the EXACT released asset | SHA computed against the current `dist/` installer. **STALE as of 2026-07-16:** the manifests now say 2.2.0.dev0 (to match pyproject, which the version-bump commit missed) but the SHA still belongs to the 2.1.0.dev0 asset, since no 2.2.0 installer has been built. The structural test only checks the 64-hex format, so it cannot catch this. | rebuild the installer for the current app, then `pwsh scripts/winget_validate.ps1 -Recompute`, BEFORE any winget submission |
 | **Install-SVCS.ps1 GUI** | a WPF window cannot be pytest-tested | script parses, `-DryRun`/`-NoGui` verified, structural test (8) green | run it once on Windows and confirm the window + each component |
 | **PSScriptAnalyzer lint** | analyzer not in the CI env | scripts written clean; Write-Host suppressed via attribute | `Install-Module PSScriptAnalyzer; Invoke-ScriptAnalyzer installer/Install-SVCS.ps1, scripts/winget_validate.ps1` |

@@ -41,7 +41,7 @@ it cannot ship in one env/exe.
 ## Empirical validation (done here, resolving the research's open caveat)
 The research could NOT confirm from metadata that a `--no-deps` install actually
 runs against opencv-contrib's cv2. So it was tested locally in a THROWAWAY venv
-(never the core env): see docs/PLATES-VALIDATION.md for the exact commands and
+(never the core env): see docs/testing/PLATES-VALIDATION.md for the exact commands and
 result. Outcome recorded there drives whether in-process ships enabled by
 default or stays behind the documented recipe.
 
@@ -61,7 +61,7 @@ default or stays behind the documented recipe.
 - **Keep EasyOCR as a legacy, separate-env option**, demoted below the ONNX
   path in docs.
 
-## Honest caveats carried forward (also in docs/BLOCKERS.md)
+## Honest caveats carried forward (also in docs/plans/BLOCKERS.md)
 - `--no-deps` is a maintenance liability: re-audit the cv2/numpy pins on every
   fast-plate-ocr / open-image-models upgrade.
 - The default bundled model weights may carry their own (non-MIT) license -

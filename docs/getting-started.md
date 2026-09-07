@@ -24,7 +24,7 @@ first compressed clip in a few minutes.
 SVCS_DASHBOARD_PASSWORD='a-long-passphrase' docker compose up --build
 # then open http://localhost:5000  (log in: operator / your-password)
 ```
-See [`deployment_packaging.md`](deployment_packaging.md).
+See [`BUILD-AND-RELEASE.md`](BUILD-AND-RELEASE.md).
 
 **From source**
 ```bash
@@ -48,7 +48,7 @@ You can feed SVCS three ways - pick whichever matches your setup:
 - **A single file**, by dropping it into `data/` and selecting it in the
   dashboard.
 
-See [`camera-ingestion.md`](camera-ingestion.md) for the full per-camera guide,
+See [`SYSTEM-ARCHITECTURE.md`](SYSTEM-ARCHITECTURE.md) for the full per-camera guide,
 including cloud-locked cameras (Ring/Nest/Arlo).
 
 ---
@@ -65,16 +65,16 @@ You don't pick "Mode 0-3" - you pick **what the camera is watching**:
 Or let SVCS pick for you: content auto-detection analyzes the first ~30 seconds
 and recommends a preset. Hit **Start** and watch the live size savings.
 
-Compressed segments are written to your output folder (default `outputs/`, or a
-detected OneDrive/Google Drive folder). Original files are never modified.
+Compressed segments are written to the output folder chosen during first-run
+setup. Original files are never modified.
 
 ---
 
 ## 4. Where to go next
 
-- **Cameras:** [`camera-ingestion.md`](camera-ingestion.md) - RTSP/ONVIF,
+- **Cameras:** [`SYSTEM-ARCHITECTURE.md`](SYSTEM-ARCHITECTURE.md) - RTSP/ONVIF,
   watch-folder profiles, and the bridge path for cloud-locked cameras.
-- **Server deployment & auth:** [`deployment_packaging.md`](deployment_packaging.md).
+- **Server deployment & auth:** [`BUILD-AND-RELEASE.md`](BUILD-AND-RELEASE.md).
 - **Privacy:** usage stats are **off by default** and never include footage,
   filenames, or paths - opt in from the first-run banner if you'd like to help.
 

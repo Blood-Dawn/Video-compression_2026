@@ -1,0 +1,58 @@
+Task Name,Bucket Name,Assigned To,Start Date,Due Date,Progress,Notes
+1.1 Review the summer build and audit repository state,Week 1 (2026-08-31),Kheiven D'Haiti,2026-08-31,2026-09-06,Completed,Confirm nothing is stranded locally; account for what changed May to August.
+1.2 Build the fall semester planner,Week 1 (2026-08-31),Kheiven D'Haiti,2026-08-31,2026-09-06,Completed,"docs/PLANNER-FALL-2026.md plus this Teams Planner, filled four weeks ahead."
+1.3 Review my spring contributions and the current state of the ingest subsystem,Week 1 (2026-08-31),Jorge Sanchez,2026-08-31,2026-09-06,Completed,What I own and how it changed over the summer: multi_source.py and watchfolder.py.
+1.4 Team review session on the summer build and fall ownership,Week 1 (2026-08-31),Jorge Sanchez,2026-08-31,2026-09-06,Completed,Agree which fall tasks I take.
+1.5 Review my spring contributions and the current state of the metadata subsystem,Week 1 (2026-08-31),Ashleyn Montano,2026-08-31,2026-09-06,Completed,What I own and how it changed over the summer: the query interface and db_query CLI.
+1.6 Team review session on the summer build and fall ownership,Week 1 (2026-08-31),Ashleyn Montano,2026-08-31,2026-09-06,Completed,Agree which fall tasks I take.
+1.7 Review my spring contributions and the current state of the compression modes subsystem,Week 1 (2026-08-31),Riley Roberts,2026-08-31,2026-09-06,Completed,What I own and how it changed over the summer: modes 2 and 3.
+1.8 Team review session on the summer build and fall ownership,Week 1 (2026-08-31),Riley Roberts,2026-08-31,2026-09-06,Completed,Agree which fall tasks I take.
+1.9 Review my spring contributions and the current state of the security subsystem,Week 1 (2026-08-31),Victor De Souza Teixeira,2026-08-31,2026-09-06,Completed,What I own and how it changed over the summer: encryption and the enhancement module.
+1.10 Team review session on the summer build and fall ownership,Week 1 (2026-08-31),Victor De Souza Teixeira,2026-08-31,2026-09-06,Completed,Agree which fall tasks I take.
+2.1 Write the summer changes document for the team,Week 2 (2026-09-07),Kheiven D'Haiti,2026-09-07,2026-09-13,Not started,docs/CHANGES-SUMMER-2026.md committed and pushed.
+2.2 Commit stranded documentation and re-verify push status,Week 2 (2026-09-07),Kheiven D'Haiti,2026-09-07,2026-09-13,Not started,"RESEARCH.md, SECURITY.md, PROJECT-HISTORY.md."
+2.3 Revised proposal: system design section and functional diagrams,Week 2 (2026-09-07),Kheiven D'Haiti,2026-09-07,2026-09-13,Not started,"Architecture including the mobile client, revisions in red."
+2.4 Revised proposal: requirements list including mobile requirements,Week 2 (2026-09-07),Jorge Sanchez,2026-09-07,2026-09-13,Not started,New requirements in red per the assignment.
+2.5 Revised proposal: literature survey and reference list,Week 2 (2026-09-07),Ashleyn Montano,2026-09-07,2026-09-13,Not started,Consistent citation format; sources from the summer research docs.
+2.6 Revised proposal: Gantt chart built from the planner,Week 2 (2026-09-07),Riley Roberts,2026-09-07,2026-09-13,Not started,"14 weeks, owners, dependencies, milestones."
+2.7 Revised proposal: organizational chart and completed task list,Week 2 (2026-09-07),Victor De Souza Teixeira,2026-09-07,2026-09-13,Not started,Org chart naming the team leader.
+3.1 Make SvcsApi fakeable and add JVM view model tests,Week 3 (2026-09-14),Kheiven D'Haiti,2026-09-14,2026-09-20,Not started,"gradlew testDebugUnitTest covers pairing, library, events, home."
+3.2 Add a debug build variant with HTTP logging,Week 3 (2026-09-14),Kheiven D'Haiti,2026-09-14,2026-09-20,Not started,Failing requests show a reason instead of a mystery on a minified build.
+3.3 Investigate WorkManager and draft the upload worker design,Week 3 (2026-09-14),Jorge Sanchez,2026-09-14,2026-09-20,Not started,Move the chunked upload out of viewModelScope.
+3.4 Audit the resumable upload protocol for resume correctness,Week 3 (2026-09-14),Jorge Sanchez,2026-09-14,2026-09-20,Not started,Confirm /api/upload/status returns a usable offset.
+"3.5 Build the desktop EVENTS panel, read-only table",Week 3 (2026-09-14),Ashleyn Montano,2026-09-14,2026-09-20,Not started,Newest-first from /api/events/recent. Spec D1.
+3.6 Add empty state and ten second auto-refresh to EVENTS panel,Week 3 (2026-09-14),Ashleyn Montano,2026-09-14,2026-09-20,Not started,Refresh stops when the tab is hidden.
+3.7 Add GET /api/zones/frame returning a still frame,Week 3 (2026-09-14),Riley Roberts,2026-09-14,2026-09-20,Not started,JPEG or black placeholder. Update all three route guards.
+3.8 Draft the zone editor canvas layout,Week 3 (2026-09-14),Riley Roberts,2026-09-14,2026-09-20,Not started,Toolbar and canvas matching the phone editor. Spec D2.
+3.9 Specify the webhook emitter reusing is_safe_push_url,Week 3 (2026-09-14),Victor De Souza Teixeira,2026-09-14,2026-09-20,Not started,utils/event_webhook.py. Spec D4.
+3.10 Write the socket-server test harness for webhook delivery,Week 3 (2026-09-14),Victor De Souza Teixeira,2026-09-14,2026-09-20,Not started,Style of tests/test_push_notify.py.
+4.1 Diagnose the mobile pairing persistence defect,Week 4 (2026-09-21),Kheiven D'Haiti,2026-09-21,2026-09-27,Not started,Root cause proven by a failing unit test.
+4.2 Fix pairing persistence and prove it with an instrumented test,Week 4 (2026-09-21),Kheiven D'Haiti,2026-09-21,2026-09-27,Not started,"Pairs once, stays paired across restarts and updates."
+4.3 Implement the upload CoroutineWorker with foreground notification,Week 4 (2026-09-21),Jorge Sanchez,2026-09-21,2026-09-27,Not started,Upload survives the app being killed.
+4.4 Test upload survival: force-stop mid-transfer and confirm resume,Week 4 (2026-09-21),Jorge Sanchez,2026-09-21,2026-09-27,Not started,Resumes from the server-reported offset.
+4.5 Wire desktop event toasts to the existing SSE stream,Week 4 (2026-09-21),Ashleyn Montano,2026-09-21,2026-09-27,Not started,One toast per EVENT line. Spec D3.
+4.6 Write browser tests for the EVENTS panel,Week 4 (2026-09-21),Ashleyn Montano,2026-09-21,2026-09-27,Not started,Rows from a seeded events file; empty state verified.
+4.7 Implement drag-to-draw exclude rectangles and crossing lines,Week 4 (2026-09-21),Riley Roberts,2026-09-21,2026-09-27,Not started,Normalized coordinates round-trip through POST and GET.
+4.8 Implement loiter zones plus SAVE and CLEAR,Week 4 (2026-09-21),Riley Roberts,2026-09-21,2026-09-27,Not started,Banner states that changes apply to the next run.
+4.9 Implement utils/event_webhook.py with the SSRF guard,Week 4 (2026-09-21),Victor De Souza Teixeira,2026-09-21,2026-09-27,Not started,"Fire and forget, two second timeout, never blocks the pipeline."
+4.10 Add the webhook configuration UI beside the push panel,Week 4 (2026-09-21),Victor De Souza Teixeira,2026-09-21,2026-09-27,Not started,"Off by default, write-only secret field."
+5.1 Build scripts/verify_mobile.ps1 end to end,Week 5 (2026-09-28),Kheiven D'Haiti,2026-09-28,2026-10-04,Not started,"Build, install, launch, assert, no human input."
+5.2 Design and produce the Android launcher icon,Week 5 (2026-09-28),Kheiven D'Haiti,2026-09-28,2026-10-04,Not started,Adaptive icon at every density.
+5.3 Begin the per-camera HLS registry refactor,Week 5 (2026-09-28),Jorge Sanchez,2026-09-28,2026-10-04,Not started,Scope the single global stream slot.
+5.4 Add regression tests for existing single-camera HLS behavior,Week 5 (2026-09-28),Jorge Sanchez,2026-09-28,2026-10-04,Not started,Pin behavior before the refactor changes it.
+5.5 Extend the query archive sidebar with full-text and multi-tag search,Week 5 (2026-09-28),Ashleyn Montano,2026-09-28,2026-10-04,Not started,Desktop UI matches the multi-type CLI.
+5.6 Write an integration test for event and query interaction,Week 5 (2026-09-28),Ashleyn Montano,2026-09-28,2026-10-04,Not started,Pipeline run produces retrievable events.
+5.7 Add the camera id datalist from library folder labels,Week 5 (2026-09-28),Riley Roberts,2026-09-28,2026-10-04,Not started,Real camera ids rather than free text.
+5.8 Browser-verify the zone editor over a real backdrop frame,Week 5 (2026-09-28),Riley Roberts,2026-09-28,2026-10-04,Not started,Screenshot evidence over actual footage.
+5.9 Review the mobile credential storage path end to end,Week 5 (2026-09-28),Victor De Souza Teixeira,2026-09-28,2026-10-04,Not started,Does a failed decrypt fail closed or return a stale credential.
+5.10 Write tests for webhook URL rejection cases,Week 5 (2026-09-28),Victor De Souza Teixeira,2026-09-28,2026-10-04,Not started,"Metadata endpoints, redirects, embedded credentials."
+6.1 Add instrumented tests for pairing and settings flows,Week 6 (2026-10-05),Kheiven D'Haiti,2026-10-05,2026-10-11,Not started,gradlew connectedDebugAndroidTest green on the device.
+6.2 Research the UnifiedPush distributor registration flow,Week 6 (2026-10-05),Kheiven D'Haiti,2026-10-05,2026-10-11,Not started,Design for native push replacing the separate ntfy app.
+6.3 Implement the per-camera HLS registry,Week 6 (2026-10-05),Jorge Sanchez,2026-10-05,2026-10-11,Not started,Two cameras stream without blocking each other.
+6.4 Update the HLS idle watchdog for multiple streams,Week 6 (2026-10-05),Jorge Sanchez,2026-10-05,2026-10-11,Not started,Each stream reaped independently.
+6.5 Write the semantic search research document,Week 6 (2026-10-05),Ashleyn Montano,2026-10-05,2026-10-11,Not started,docs/RESEARCH-SEMANTIC-SEARCH.md. R5 task 5.5.
+6.6 Build the semantic search skeleton with a stub embedder,Week 6 (2026-10-05),Ashleyn Montano,2026-10-05,2026-10-11,Not started,Opt-in extra; no model downloaded in CI.
+6.7 Run the CDnet corpus with and without exclude zones,Week 6 (2026-10-05),Riley Roberts,2026-10-05,2026-10-11,Not started,Measure the file size difference from zone masking.
+6.8 Write up the zone compression benefit with numbers,Week 6 (2026-10-05),Riley Roberts,2026-10-05,2026-10-11,Not started,Claim confirmed or corrected for the final report.
+6.9 Add the server endpoint for per-device push endpoint registration,Week 6 (2026-10-05),Victor De Souza Teixeira,2026-10-05,2026-10-11,Not started,Device tokens carry a push endpoint.
+6.10 Security review of endpoint registration,Week 6 (2026-10-05),Victor De Souza Teixeira,2026-10-05,2026-10-11,Not started,One device cannot read another device's endpoint.

@@ -109,6 +109,45 @@ each, per the course guidance.
 | 3.9 | Read `push_notify.is_safe_push_url` and specify the webhook emitter | Victor | Written specification for `utils/event_webhook.py` reusing the existing guard |
 | 3.10 | Write the socket-server test harness for webhook delivery | Victor | Test fixture in the style of `tests/test_push_notify.py` |
 
+### Week 3 addendum: application testing pass
+
+Added September 7: before the mobile-focused tasks above, the whole team
+spends part of week 3 testing the desktop application itself, since nobody
+has done a cold, fresh-install pass since the summer build changed so much.
+This came out of a review of the installer and first-run Setup flow. The
+review's findings are folded into the tasks below rather than kept as a
+separate document, so they show up as things to actually check off.
+
+**What the review found.** The onboarding is honest and privacy-respecting
+where it matters: Setup states plainly that nothing goes to a cloud folder
+unless the user picks one, a Skip option exists for anyone who does not care,
+and a factory reset is built in specifically so a clean install can be
+retested without reinstalling. Three real gaps stood out. The destination
+field in Setup is a raw text box with no folder-browse button, even though
+the Library tab already has a folder-browser modal that could be reused, so a
+non-technical operator has to know or type a Windows path from memory. The
+installer's "Compact - use a system FFmpeg on PATH" component gives no
+indication, during Setup or on first Start, of whether FFmpeg was actually
+found; the dependency checker that would catch this lives inside the Help
+overlay, a place a first-time user has no reason yet to open. And nothing in
+the first-run flow explains what a compression mode is before asking the
+operator to use the app, so understanding the actual core feature depends on
+independently discovering and reading Help.
+
+| ID | Task | Owner | Outcome |
+|---|---|---|---|
+| 3.11 | Fresh-install walkthrough on a clean machine: install `SVCS-Setup.exe`, complete first-run Setup, run one compression, all without opening the source code | All, each on their own machine | A written note per person of every point of confusion or friction, with the worst three filed as fixes |
+| 3.12 | Test the Compact install path with no FFmpeg on PATH | Riley | Confirmation of whether the app warns before Start is clickable, or fails silently on the first compression, plus a fix if it is silent |
+| 3.13 | Add a folder-browse button to the Setup destination field, reusing the Library folder-browser modal | Ashleyn | Setup no longer requires typing a raw folder path from memory |
+| 3.14 | External network penetration test against a running SVCS instance | Victor | Written findings against the threat model in `docs/SECURITY.md`; anything found gets a severity-rated entry in `docs/BLOCKERS.md`, matching the pentest item already deferred there |
+| 3.15 | Fuzz the video-ingest and upload path with malformed media | Victor | A clean rejection or a filed crash report for each malformed file tried, closing the fuzzing item already deferred in `docs/BLOCKERS.md` |
+
+Table 3a. Application testing pass, added to week 3.
+
+Victor's week 3 load is now four tasks (3.9, 3.10, 3.14, 3.15) against everyone
+else's two. If that proves too much, move 3.9 and 3.10 (the webhook design
+work) to week 4 rather than rushing the security testing.
+
 ### Week 4: September 21 to September 27
 
 | ID | Task | Owner | Outcome |

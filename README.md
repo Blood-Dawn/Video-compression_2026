@@ -257,4 +257,4 @@ under the AGPL's terms.
 
 ---
 
-*EGN 4950C Senior Design Capstone | Florida Atlantic University | Group 16 | Fall 2026 semester runs through December 6, 2026*
+*EGN 4950C Senior Design Capstone | Florida Atlantic University | Group 22 | spring/Fall 2026 semesters*

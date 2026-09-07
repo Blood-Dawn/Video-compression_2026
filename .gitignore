@@ -216,3 +216,7 @@ CLAUDE.md
 
 # Ad-hoc local test media staged for phone/upload walkthroughs
 svcs_mobile_test/
+
+# Local drop folder the Claude desktop app saves chat file deliveries into;
+# never meant to be committed, files get filed into their real location.
+/Claude outputs/

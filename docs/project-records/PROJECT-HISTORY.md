@@ -986,5 +986,5 @@ killed mid-transfer, and the mobile app has almost no automated test coverage
 of its own. All three are the stated priorities for the next round of work.
 See `docs/CHANGES-SUMMER-2026.md` for the
 full narrative walkthrough of this period, including the per-round numbers and
-the reading guide by subsystem, and `docs/2026-08-31-Progress-Report-Grp-16.md`
+the reading guide by subsystem, and `docs/project-records/2026-08-31-Progress-Report-Grp-16.md`
 for the team's formal weekly report covering the same window.

@@ -305,11 +305,11 @@ Kheiven - the goal is a working demo on a laptop with no GPU. Cody confirmed gov
 
 ### 3.6 - Final report and results
 
-Kheiven - `docs/final_report.md` exists and the abstract has real benchmark numbers (16.6x compression, PSNR 41.2 dB, SSIM 0.9783 on CDnet footage). The open task is the reproducible notebook.
+Kheiven - `docs/project-records/final_report.md` exists and the abstract has real benchmark numbers (16.6x compression, PSNR 41.2 dB, SSIM 0.9783 on CDnet footage). The open task is the reproducible notebook.
 
 | Task | Assigned To | Due | Priority | Status | Notes |
 |---|---|---|---|---|---|
-| Create `docs/final_report.md` - architecture, results, limitations | KD | 2026-04-18 | Urgent | Done | File exists; 13 sections including mode descriptions, benchmark results, encryption design |
+| Create `docs/project-records/final_report.md` - architecture, results, limitations | KD | 2026-04-18 | Urgent | Done | File exists; 13 sections including mode descriptions, benchmark results, encryption design |
 | Populate final numbers table: compression ratio, PSNR, SSIM, storage/day/camera | KD | 2026-04-19 | Urgent | Done | Numbers in report abstract: 16.6x compression, PSNR 41.2 dB, SSIM 0.9783 |
 | Create `notebooks/final_results.ipynb` - re-run all benchmarks from scratch | KD | 2026-04-20 | Important | Not Started | Must run end-to-end without errors on the final codebase. |
 | Include side-by-side figure: original vs Mode 0 vs Mode 1 compressed frame | KD | 2026-04-21 | Medium | Not Started | Add to `final_report.md` and `final_results.ipynb`. |
@@ -369,7 +369,7 @@ AV1 is from the Alliance for Open Media (Apple, Google, Microsoft, Netflix, Amaz
 | Add `codec` parameter to `ROIEncoder.encode_segment()` - support `libx264` and `libsvtav1` | JS | 2026-04-23 | Important | Not Started | Default stays `libx264`. AV1 CRF scale differs: ~35 foreground, ~55 background (equivalent quality to H.264 CRF 18/45). |
 | Add codec selector dropdown to GUI (H.264 / AV1) | KD | 2026-04-24 | Medium | Not Started | AV1 option disabled if encoder not detected at startup. Show warning: "AV1 is ~3× slower to encode on CPU." |
 | Benchmark AV1 vs H.264 encode time and output file size on CPU hardware | JS | 2026-04-25 | Important | Not Started | Same test clip, both codecs. Report: encode time (sec), output size (MB), PSNR. Document in `docs/av1_benchmark.md`. |
-| Add AV1 section to `docs/final_report.md` | KD | 2026-04-26 | Medium | Not Started | Highlight for sponsor: AV1 = zero licensing cost. Note real-time encoding trade-off vs H.264. |
+| Add AV1 section to `docs/project-records/final_report.md` | KD | 2026-04-26 | Medium | Not Started | Highlight for sponsor: AV1 = zero licensing cost. Note real-time encoding trade-off vs H.264. |
 
 ### 4.3 - Rich metadata: color detection + robust object classification
 
@@ -573,7 +573,7 @@ Implementation sketch:
 | 3.5 | demo.sh one-click launcher | Done ✅ |
 | 3.5 | Confirm webcam / IP camera real-time input | Open 🔲 |
 | 3.5 | No-GPU laptop test | Open 🔲 |
-| 3.6 | Final report (`docs/final_report.md`) | Done ✅ |
+| 3.6 | Final report (`docs/project-records/final_report.md`) | Done ✅ |
 | 3.6 | Final results notebook (`final_results.ipynb`) | Open 🔲 |
 | 3.7 | Repository polish + documentation | Open 🔲 |
 | 3.8 | Capstone presentation (team lead) | Open 🔲 |

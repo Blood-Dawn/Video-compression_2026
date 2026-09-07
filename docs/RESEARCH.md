@@ -348,7 +348,7 @@ sparse is bigger than Mode 0 because per-file `.mp4` container overhead (roughly
 plus `manifest.json` exceeds what is saved by skipping background pixels on one small object.
 
 **On real footage the relative numbers shift dramatically.** On the M1 CDnet baseline runs (per
-`docs/final_report.md`), Mode 0's effective ratio averaged 6.3x versus naive H.264, meaning about
+`docs/project-records/final_report.md`), Mode 0's effective ratio averaged 6.3x versus naive H.264, meaning about
 6x compression even on full-frame output. On clips where vehicles are 0.5 to 2 percent of frame
 area at 1080p, Mode 3 sparse is consistently 5 to 20x smaller than Mode 0 because the
 `(plate_W x plate_H) / (1920 x 1080)` ratio is microscopic.

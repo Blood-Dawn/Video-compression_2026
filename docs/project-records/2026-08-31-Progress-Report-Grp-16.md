@@ -25,7 +25,7 @@
 **All team members have detailed tasks listed on Teams Planner:** YES. A new
 planner was built this period covering all fourteen weeks of the semester, with
 weeks 1 through 6 broken down into individual assigned tasks and weeks 7 through
-14 outlined by theme. Source document: `docs/PLANNER-FALL-2026.md`.
+14 outlined by theme. Source document: `docs/project-records/PLANNER-FALL-2026.md`.
 
 ## 1. Team Meeting
 
@@ -122,7 +122,7 @@ Table 2. Current report summary.
 # Part 2: Individual Sections
 
 Each member writes their own section. Task numbers match the MS Teams Planner
-and `docs/PLANNER-FALL-2026.md`.
+and `docs/project-records/PLANNER-FALL-2026.md`.
 
 ---
 
@@ -210,7 +210,7 @@ urgent problem. Diagnosing it on a minified release build with no tests is what
 consumed most of a session in August. Building the harness first is slower for
 one week and faster for the eleven after it.
 
-Outcome: `docs/PLANNER-FALL-2026.md` and a companion CSV that imports into MS
+Outcome: `docs/project-records/PLANNER-FALL-2026.md` and a companion CSV that imports into MS
 Teams Planner. Every member has assigned, dated tasks for at least the next four
 weeks, which satisfies the planner requirement and gives everyone something
 concrete to write about in next week's report.
@@ -490,11 +490,11 @@ the specification and the socket-server test harness first, in the style of
 zero unpushed commits on all six tracked branches with `mobile` and `app` at
 commit `faeebd1`. [INSERT SCREENSHOT]
 
-**Figure 2.** The phase and milestone table from `docs/PLANNER-FALL-2026.md`,
+**Figure 2.** The phase and milestone table from `docs/project-records/PLANNER-FALL-2026.md`,
 showing the four phases and their milestones across the fourteen weeks.
 [INSERT SCREENSHOT]
 
-**Figure 3.** The MS Teams Planner populated from `docs/PLANNER-FALL-2026.csv`,
+**Figure 3.** The MS Teams Planner populated from `docs/project-records/PLANNER-FALL-2026.csv`,
 showing week buckets with assigned tasks for all five members.
 [INSERT SCREENSHOT]
 

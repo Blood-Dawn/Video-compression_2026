@@ -65,7 +65,7 @@ So on a synthetic clip:
 
 The relative numbers shift dramatically on real surveillance footage:
 
-* On the M1 CDnet baseline runs (per `docs/final_report.md`), Mode 0's effective ratio averaged 6.3× vs. naive H.264, meaning ~6× compression even on full-frame output.
+* On the M1 CDnet baseline runs (per `docs/project-records/final_report.md`), Mode 0's effective ratio averaged 6.3× vs. naive H.264, meaning ~6× compression even on full-frame output.
 * On clips where vehicles are 0.5-2% of frame area at 1080p, Mode 3 sparse is consistently 5-20× smaller than Mode 0 because the `(plate_W × plate_H) / (1920 × 1080)` ratio is microscopic.
 
 ## Why the strict hierarchy doesn't hold

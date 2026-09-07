@@ -20,7 +20,8 @@ Things to know:
   but it works in source mode, add the offending name here.
 - The excludes list strips ~500 MB of stuff we *never* use (tkinter,
   matplotlib's Qt backends, the Tcl/Tk runtime, paddleocr because we
-  ship EasyOCR in the premium bundle, the entire test suite). Without
+  ship EasyOCR instead for the optional plate reader, the entire test
+  suite). Without
   these, dist/SVCS/ ends up around 3.5 GB. With them, ~1.5 GB.
 - ffmpeg is NOT bundled. We expect users to have it on PATH; the GUI
   detects its absence on launch and shows a download link. We will
@@ -224,8 +225,8 @@ excludes = [
     "_pytest",
     "pytest_cov",
 
-    # PaddleOCR / PaddlePaddle - premium plate reader uses EasyOCR
-    # exclusively in the casual edition. Excluding these saves ~600 MB.
+    # PaddleOCR / PaddlePaddle - the optional plate reader uses EasyOCR
+    # exclusively. Excluding these saves ~600 MB.
     "paddle",
     "paddleocr",
     "paddlepaddle",

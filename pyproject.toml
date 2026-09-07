@@ -161,9 +161,9 @@ plates = [
 # Opt-in crash reporting (Sentry). Disabled by default; the user has to
 # both install this extra AND set SVCS_ENABLE_SENTRY=1 with a valid
 # SENTRY_DSN env var before any traces are sent. The casual installer
-# does NOT ship this; we add it for the premium / enterprise tier and
-# for our own internal dogfood builds where we want backtraces from
-# production crashes. PII (cookies, request headers, user IPs) is
+# does NOT ship this; it is only for our own internal dogfood builds
+# where we want backtraces from production crashes, and for anyone
+# else who explicitly opts in. PII (cookies, request headers, user IPs) is
 # scrubbed; only the exception type, message, and Python traceback are
 # transmitted.
 # Install:  uv sync --extra crash-reporting

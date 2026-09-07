@@ -115,7 +115,7 @@ left open until it finishes. The app also has almost no automated test
 coverage of its own yet, so most changes are still checked by hand on a
 physical phone rather than caught by a test suite, and it has not yet been
 through an outside security test (one is planned for the coming weeks; see
-`docs/PLANNER-FALL-2026.md`).
+`docs/project-records/PLANNER-FALL-2026.md`).
 
 **How to try it:** there is no public download yet, no Play Store listing and
 no signed installer. If you are comfortable building an Android app from
@@ -250,10 +250,10 @@ IARPA DIVA program via Kitware.
 ## License
 
 SVCS is **free and open source under the GNU AGPL-3.0** (see `LICENSE`).
-There is no paid or commercial edition. You can use, modify, self-host, and
-redistribute it under the AGPL's terms. (`CLA.md` and `LICENSE-COMMERCIAL.md`
-are dormant drafts kept only in case a future commercial fork is ever pursued;
-they are not in force today, see their headers.)
+There is no paid or commercial edition, and no plan to add one to this
+repository; a commercial variant, if one is ever built, would live in its
+own separate fork. You can use, modify, self-host, and redistribute SVCS
+under the AGPL's terms.
 
 ---
 

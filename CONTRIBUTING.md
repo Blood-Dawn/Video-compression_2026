@@ -9,32 +9,13 @@ compression toolkit aimed at self-hosted media libraries and surveillance.
 Be civil. Disagreements about technical decisions are welcome, personal
 attacks are not.
 
-## Two licenses, one decision to make
+## License
 
-SVCS is dual-licensed. Read both before contributing:
-
-- `LICENSE` (AGPL-3.0): the open-source side. Free for personal, academic,
-  and OSS use.
-- `LICENSE-COMMERCIAL.md`: the commercial side for companies that don't
-  want to ship their source code under AGPL.
-
-If you contribute code that ends up in the main branch, your contribution
-is dual-licensed under both. That means:
-
-- Anyone using SVCS under AGPL can use your contribution for free.
-- Anyone buying a commercial license also gets your contribution, and a
-  share of the revenue flows back to all contributors per the schedule
-  in `CLA.md`.
-
-## CLA
-
-Before your first substantial contribution is merged, you need to sign
-the Contributor License Agreement in `CLA.md`. Trivial contributions
-(typo fixes, doc tweaks) can be merged without a CLA.
-
-To sign, open a PR adding your name and signature to the table at the
-bottom of `CLA.md`. The current maintainer (Kheiven D'Haiti) will
-confirm.
+SVCS is open source only, under AGPL-3.0 (see `LICENSE`). There is no
+commercial edition and no CLA to sign. By opening a pull request, you
+agree your contribution is licensed under the same AGPL-3.0 terms as the
+rest of the project. If a commercial variant is ever built, it will live
+in its own separate fork and repository, not here.
 
 ## How to contribute
 
@@ -75,22 +56,18 @@ PRs are reviewed within 7 days. Smaller PRs get merged faster.
 
 | Branch | Purpose |
 |---|---|
-| `main` | Stable release line. Tagged versions only. |
-| `dev` | Active development of the Python pipeline (v1 series). |
-| `app` | Primary branch - the open-source (AGPL-3.0) edition: installers, presets, camera ingestion, everything. |
-| `premium` | **Dormant.** Held only as the seam for a possible future commercial fork. Nothing new lands here in v2. |
-| `kdev` | Experimental Rust port (v2 series). Not stable. |
+| `main` | Public, stable branch. Kept current with the full desktop feature set; excludes the in-progress mobile app. |
+| `app` / `mobile` | Internal working branches, currently identical. Everything lands here first, including the in-progress Android app under `mobile/android/`. |
 
 ### One open-source edition
 
-SVCS v2 ships as a single open-source edition built from `app`, under
-AGPL-3.0. There is no paid tier and no `premium` build in v2 (see
-`README.md` and the dormant `LICENSE-COMMERCIAL.md`). Everything is free:
+SVCS ships as a single open-source edition, under AGPL-3.0. There is no
+paid tier (see `README.md`). Everything is free:
 compression, the four modes, search, encryption, YOLO object filter,
 Real-ESRGAN enhancement, and the AI plate reader.
 
 Some features stay behind optional `pyproject.toml` extras only to keep the
-default install small (not to gate them behind payment):
+default install small, not to gate them behind payment:
 
 - `[plates]` - the AI plate reader (EasyOCR). Free; split out because
   EasyOCR is heavy. The dashboard hides the plate-reader controls when the
@@ -100,10 +77,8 @@ default install small (not to gate them behind payment):
 - `[enhance]` - Real-ESRGAN super-resolution.
 - `[crash-reporting]` - opt-in Sentry (off by default).
 
-The `premium` branch is dormant. If a commercial fork is ever pursued (and
-only if the team is legally cleared - see PLAN-V2 §0/§13), it would branch
-from a frozen open-source release at that point. There is **no** routine
-`app` -> `premium` mirroring; just push `app`.
+If a commercial variant is ever built, it will be a separate fork in its
+own repository, not a branch here.
 
 ## Tests
 

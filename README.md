@@ -127,7 +127,9 @@ this mobile app fit together end to end is in `docs/SYSTEM-ARCHITECTURE.md`.
 
 SVCS, including this mobile module, is free and open source under the GNU
 AGPL-3.0 (see `LICENSE`), by inheritance from the repository root. There is
-no paid or commercial edition.
+no paid or commercial edition, and no plan to add one to this repository.
+A commercial variant, if one is ever built, would live in its own separate
+fork.
 
 ---
 

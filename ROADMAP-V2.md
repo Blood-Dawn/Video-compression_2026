@@ -5,9 +5,8 @@ keeps the AI-aware compression engine from v1 but expands beyond
 surveillance to any video and adds a real installer, a mobile app, and
 auto-detected presets.
 
-See `docs/SYSTEM-ARCHITECTURE.md` for how the system is actually built today,
-and `LICENSE-COMMERCIAL.md` for the dual-license strategy. The Rust-core and
-Flutter-UI plan once described in the old root ARCHITECTURE.md was abandoned;
+See `docs/SYSTEM-ARCHITECTURE.md` for how the system is actually built today.
+The Rust-core and Flutter-UI plan once described in the old root ARCHITECTURE.md was abandoned;
 the shipped stack is Python/Flask on desktop and Kotlin/Compose on Android.
 
 ## June 2026 - Desktop installer (Python, on `app` branch)

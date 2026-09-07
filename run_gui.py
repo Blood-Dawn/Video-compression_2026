@@ -16,9 +16,8 @@ runs ``uv sync --extra enhance`` to install the Real-ESRGAN
 super-resolution stack. The YOLO object filter is already in the core
 deps; no extra needed.
 
-The ``plates`` extra is premium-only and not pulled in by default. If
-you're building the premium edition (or a developer who wants the
-plate reader locally), add it manually:
+The ``plates`` extra is optional and not pulled in by default. If you
+want the plate reader locally, add it manually:
 
     uv sync --extra enhance --extra plates
 
@@ -282,11 +281,11 @@ def main():
     # (gui.app imports modules that lazily reference paddleocr/realesrgan).
     # First-run: ~1-3 minutes for the heavy installs; subsequent launches
     # are instant because the stamp file matches.
-    # The casual / open-source edition only auto-installs `enhance`.
-    # `plates` is premium-only and intentionally NOT pulled in here. If
-    # you're building the premium edition, edit this list locally or
-    # pass --extra plates to your launch wrapper before calling this
-    # script. Author: Bloodawn (KheivenD), 2026-05-14 (premium split).
+    # The default install only auto-installs `enhance`.
+    # `plates` is optional and intentionally NOT pulled in here. If you
+    # want the plate reader locally, edit this list or pass --extra
+    # plates to your launch wrapper before calling this script.
+    # Author: Bloodawn (KheivenD), 2026-05-14.
     _ensure_extras_installed(["enhance"], skip=args.no_sync)
 
     print(f"{'━'*55}")

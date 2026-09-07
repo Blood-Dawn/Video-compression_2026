@@ -38,7 +38,7 @@ in the binary is irrelevant to what we actually encode.
 
 ## Readiness for a possible future (non-GPL) fork
 
-If a future commercial fork needs to avoid GPL (e.g. to distribute under a
+If a future fork ever needs to avoid GPL (for example to distribute under a
 proprietary licence), the seam is:
 - swap the bundle to an **LGPL FFmpeg** build, and
 - change the Mode 0/1 default from `libx264` to **`libopenh264`** (BSD) - an

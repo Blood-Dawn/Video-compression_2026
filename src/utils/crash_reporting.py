@@ -5,7 +5,7 @@ Crash reporting is opt-in for two reasons: privacy, and not wanting the
 casual / open-source install to phone home to our infra by default. The
 flow:
 
-1. The user (or our premium installer) installs sentry-sdk via
+1. The user (or our own internal build) installs sentry-sdk via
    ``uv sync --extra crash-reporting``. Without the SDK, this module
    is a no-op - every public function returns immediately.
 

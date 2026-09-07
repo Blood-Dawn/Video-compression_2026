@@ -6,8 +6,7 @@ tool. This file merges the red-team audit record, the audit brief, and the
 owner-run manual verification checklist into one document.
 
 Audit performed 2026-06-21 on branch `app`. Sources merged here:
-`docs/SECURITY-AUDIT.md`, `docs/CLAUDE-CODE-SECURITY-AUDIT.md`,
-`docs/SECURITY-MANUAL-VERIFY.md`.
+`docs/SECURITY-AUDIT.md` and `docs/SECURITY-MANUAL-VERIFY.md`.
 
 ---
 

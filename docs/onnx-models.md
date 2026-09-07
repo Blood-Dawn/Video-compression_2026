@@ -3,7 +3,7 @@
 Author: Bloodawn (KheivenD), 2026-06-02 (TASK 2.1).
 
 The v2 installer drops from multi-GB to a few hundred MB by running inference on
-**ONNX Runtime** instead of PyTorch (PLAN-V2 §6). The `.onnx` weights are an
+**ONNX Runtime** instead of PyTorch. The `.onnx` weights are an
 **optional component**, not committed to the repo (`*.onnx` is gitignored). They
 are produced once from the PyTorch checkpoints and shipped alongside the
 installer (or fetched on first run - TASK 2.4).
@@ -36,7 +36,7 @@ installer (or fetched on first run - TASK 2.4).
 
 ## Enhancement - Real-ESRGAN x4plus (DEFERRED - follow-up)
 
-Per PLAN-V2 §6 / EXECUTION TASK 2.1 ("if x4plus won't export cleanly, ship
+The plan was: "if x4plus won't export cleanly, ship
 detection-on-ONNX first, enhancement as a follow-up"), the Real-ESRGAN ONNX
 path is **intentionally deferred**. Reasons:
 

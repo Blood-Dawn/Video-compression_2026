@@ -116,7 +116,7 @@ work: pairing does not persist across an app restart (the app can come back
 using a stale server address and token), and uploads do not survive the app
 being killed mid-transfer, because the transfer runs in a scope that gets torn
 down rather than in a background-safe worker. Both are tracked in
-`docs/CLAUDE-CODE-R7.md`. The mobile test suite is also thin, one JVM test
+`docs/CHANGES-SUMMER-2026.md`. The mobile test suite is also thin, one JVM test
 file, which is why mobile changes have so far needed a human holding a physical
 device to verify them.
 

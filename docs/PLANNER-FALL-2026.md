@@ -20,7 +20,8 @@ not "build the project"; it is finish the mobile port, expose the zone and event
 system on the desktop, and harden the whole thing into something a sponsor can
 deploy.
 
-The technical backlog comes from `docs/CLAUDE-CODE-R7.md`. Ownership follows the
+The technical backlog comes from the open items in `docs/CHANGES-SUMMER-2026.md`
+and `docs/BLOCKERS.md`. Ownership follows the
 subsystems each member already held in the spring, so nobody starts from zero:
 
 | Member | Subsystem owned in spring | Fall focus |

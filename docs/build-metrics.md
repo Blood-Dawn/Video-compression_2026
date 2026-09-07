@@ -1,7 +1,7 @@
 # Build metrics - installer size
 
 Tracks the unpacked PyInstaller bundle size (`dist/SVCS/`) as the M2 slimming
-work progresses. Goal (PLAN-V2 §6/§8): get the installer download from
+work progresses. Goal: get the installer download from
 2.5-4.7 GB to ~400-600 MB by replacing PyTorch with ONNX Runtime - no rewrite.
 
 Measure with:

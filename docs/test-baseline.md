@@ -1,7 +1,7 @@
 # Test Baseline & Triage (M0 TASK 0.1 + 0.2)
 
 **Author:** Bloodawn (KheivenD), 2026-05-31.
-**Purpose:** Establish the reproducible test baseline and triage every failure, so "the suite is green" stops being a sentence in a doc and becomes a CI-verified fact (PLAN-V2 §11).
+**Purpose:** Establish the reproducible test baseline and triage every failure, so "the suite is green" stops being a sentence in a doc and becomes a CI-verified fact.
 
 ---
 
@@ -226,7 +226,7 @@ Categories: **(A) missing-dep** - environment, not a code bug, fixed by `uv sync
 | `test_encryption.py` (all) | 26 | `RuntimeError: cryptography package is required but not installed`. `cryptography>=41.0.0` **is** a declared core dep (`pyproject.toml:62`) - the run just didn't install it. | `uv sync` (core). In CI, assert core deps present. No code change. |
 | `test_crash_reporting.py` (all) | 14 | `sentry-sdk` (the `[crash-reporting]` extra) not installed → the stub/patch the tests rely on can't bind → asserts diverge (`init.called == False`, `init_crash_reporting() is False` returns True, `NoneType has no attribute kwargs`). | `uv sync --extra crash-reporting`. Then in TASK 0.3, gate these with `importorskip("sentry_sdk")` so a casual checkout skips them cleanly instead of failing. |
 
-**40/48 failures are Category A.** This is the confirmation of the "whole files fail together = missing deps" hypothesis from PLAN-V2 §11.
+**40/48 failures are Category A.** This is the confirmation of the "whole files fail together = missing deps" hypothesis from early planning.
 
 ### B - Windows file-handle / `%TEMP%` cleanup (5 errors + ~2 failures) - real, Windows-specific
 
@@ -272,7 +272,7 @@ Second, latent issue found while diagnosing:
 
 **Fixes:**
 - **Immediate (done in the script):** `run_tests.ps1`/`.sh` no longer install `[plates]` by default; they sync `enhance + crash-reporting` only, then sanity-check that `cv2` is whole before running. Plate-reader tests get `importorskip` and are validated in a dedicated environment. → **TASK 0.3b** below.
-- **Proper (pyproject):** declare the OpenCV dependency correctly and stop the dual-install. Recommended: switch the project to **`opencv-contrib-python`** (the code needs `cv2.bgsegm`), and add a `[tool.uv]` override so easyocr's `opencv-python-headless` resolves to the same single OpenCV build instead of a second one. → **TASK 0.4b** below. This also reinforces the PLAN-V2 §6 ONNX direction: these heavy, fragile vision deps are exactly what the ONNX migration thins out.
+- **Proper (pyproject):** declare the OpenCV dependency correctly and stop the dual-install. Recommended: switch the project to **`opencv-contrib-python`** (the code needs `cv2.bgsegm`), and add a `[tool.uv]` override so easyocr's `opencv-python-headless` resolves to the same single OpenCV build instead of a second one. → **TASK 0.4b** below. This also reinforces the ONNX-migration direction: these heavy, fragile vision deps are exactly what that migration thins out.
 
 > Net: the `--extra plates` failure is a packaging bug, not a code regression. The real baseline must be taken **without** `[plates]` (the updated script does this). Re-run and record the number below.
 

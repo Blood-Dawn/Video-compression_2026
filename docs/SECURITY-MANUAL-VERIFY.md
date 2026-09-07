@@ -1,6 +1,6 @@
 # SVCS - Manual security verification (run this yourself on the real build)
 
-Run this AFTER Claude Code finishes the security-audit round and you have rebuilt the installer. Automated tests prove the code rejects attack inputs; this checklist proves the two highest-consequence failure modes are actually safe on the real, frozen app, where only a human can confirm them:
+Run this AFTER the security-audit round is finished and you have rebuilt the installer. Automated tests prove the code rejects attack inputs; this checklist proves the two highest-consequence failure modes are actually safe on the real, frozen app, where only a human can confirm them:
 
 - **A. Network exposure** - "anyone on the same wifi can open my camera dashboard."
 - **B. Delete-original** - "the app deleted the only copy of my footage."

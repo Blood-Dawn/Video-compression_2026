@@ -2,7 +2,7 @@
 
 Date: 2026-07-16. Research spike written BEFORE coding, the way
 docs/RESEARCH-PLATES.md preceded the plate reader. Sources are the ones scouted
-in docs/CLAUDE-CODE-R5.md; the measurements below were taken locally on this
+during that research spike; the measurements below were taken locally on this
 machine against real sample footage.
 
 ## The problem with a fixed CRF

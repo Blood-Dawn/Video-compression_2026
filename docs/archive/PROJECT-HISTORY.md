@@ -300,8 +300,6 @@ recorded as genuine.
 
 ## May 2, 2026 - technical handoff snapshot
 
-*(from handoff_may2026.md)*
-
 Written May 2, 2026 as the orientation document for whoever picked the project up next.
 
 **Architecture as built:** `FrameSource` yields BGR numpy frames from files, webcam indices, RTSP
@@ -645,7 +643,7 @@ passing `codec="libsvtav1"`; Mode 3 output is encrypted only when `encrypt=True`
 
 *(from build-metrics.md)*
 
-Goal from PLAN-V2 sections 6 and 8: cut the installer download from 2.5-4.7 GB to roughly
+Goal: cut the installer download from 2.5-4.7 GB to roughly
 400-600 MB by replacing PyTorch with ONNX Runtime, without rewriting the application. Measured as
 total bytes under `dist/SVCS/` after `installer/build.ps1 -Quick -SkipSmoke`.
 
@@ -985,8 +983,8 @@ along with it.
 **Open at the end of this period:** mobile pairing does not yet persist
 correctly across an app restart, phone uploads do not survive the app being
 killed mid-transfer, and the mobile app has almost no automated test coverage
-of its own. All three are the stated priorities for the next round of work,
-tracked in `docs/CLAUDE-CODE-R7.md`. See `docs/CHANGES-SUMMER-2026.md` for the
+of its own. All three are the stated priorities for the next round of work.
+See `docs/CHANGES-SUMMER-2026.md` for the
 full narrative walkthrough of this period, including the per-round numbers and
 the reading guide by subsystem, and `docs/2026-08-31-Progress-Report-Grp-16.md`
 for the team's formal weekly report covering the same window.

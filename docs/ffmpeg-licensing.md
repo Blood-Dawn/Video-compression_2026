@@ -45,7 +45,7 @@ proprietary licence), the seam is:
   LGPL FFmpeg includes it. SVT-AV1 (Mode 2/3) needs no change (BSD, in LGPL).
 
 That keeps the entire bundled stack permissive (LGPL FFmpeg + BSD encoders) with
-no GPL code. This doc is the readiness note for that path (PLAN-V2 §13); it is
+no GPL code. This doc is the readiness note for that path; it is
 not in force for the open-source AGPL edition.
 
 ## Pinned build

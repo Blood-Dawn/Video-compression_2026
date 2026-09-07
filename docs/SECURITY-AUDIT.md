@@ -1,6 +1,6 @@
 # SVCS Security Audit (red-team + hardening)
 
-Living record of the security audit run per `docs/CLAUDE-CODE-SECURITY-AUDIT.md`.
+Living record of the security audit run against this codebase.
 Phase 1 attacked the app across the 8 checklist categories (Flask test client +
 code review + the `/security-review` command + an adversarial multi-agent recon
 pass that produced 22 candidates, kept 14, refuted 8). Phase 2 fixes every

@@ -38,7 +38,7 @@ Table 1. Project state before and after the summer.
   `strings.js` as the single copy catalog.
 * `mobile/android/` is the Android app, Kotlin and Jetpack Compose.
 * `docs/RUNBOOK-LOCAL.md` tells you how to start everything without asking anyone.
-* `docs/CLAUDE-CODE-R7.md` is the spec for what happens next.
+* The "What is broken right now" section below is the spec for what happens next.
 
 ## Round by round
 
@@ -285,8 +285,8 @@ attribute is shared and patching it drags every other module along with it.
   and OPEN is tapped, restarting the app comes back using an older token and an
   older server address. Proven by pointing the app at a logging listener: it
   sent a token ending `s6WlSc` while the validated one ended `62jf5Y`. This
-  blocks the phone's push settings panel from working and is the top item in
-  `docs/CLAUDE-CODE-R7.md`. Best suspect is that `save()` runs in
+  blocks the phone's push settings panel from working and is the top
+  priority for the next round of mobile work. Best suspect is that `save()` runs in
   `viewModelScope` while `onCredentialsSaved` bumps `sessionEpoch` and tears
   that scope down mid-write.
 * **Uploads do not survive the app being killed.** The resumable protocol is
@@ -322,7 +322,7 @@ attribute is shared and patching it drags every other module along with it.
 | Encryption | unchanged this summer, but note the security audit touched adjacent paths |
 | Ingest and streams | `src/utils/watchfolder.py`, `multi_source.py`, R4 Phase 6 |
 | Anything mobile | `docs/MOBILE-ARCHITECTURE.md`, then `mobile/android/` |
-| Everything | `docs/RUNBOOK-LOCAL.md` to get it running, then `docs/CLAUDE-CODE-R7.md` |
+| Everything | `docs/RUNBOOK-LOCAL.md` to get it running, then the "What is broken right now" section above |
 
 Table 2. Suggested reading by subsystem owner.
 

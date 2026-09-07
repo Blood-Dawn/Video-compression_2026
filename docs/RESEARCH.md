@@ -1383,7 +1383,7 @@ gracefully when the package or model is absent, and the tests use a stub.
 *(consolidated from RESEARCH-VMAF-TARGET.md)*
 
 Date 2026-07-16. A research spike written BEFORE coding, the same way RESEARCH-PLATES preceded the
-plate reader. Sources are the ones scouted in `docs/CLAUDE-CODE-R5.md`; the measurements below were
+plate reader. Sources are the ones scouted during that research spike; the measurements below were
 taken locally against real sample footage.
 
 ### 10.1 The problem with a fixed CRF

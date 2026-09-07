@@ -4,7 +4,7 @@
 > project under **AGPL-3.0 only**; there is no commercial edition and no
 > revenue split in effect. This CLA is retained as a *draft* in case the
 > team later decides to fork a commercial edition (and only if the team is
-> legally cleared to do so - see PLAN-V2 §0/§13). It is not required to
+> legally cleared to do so). It is not required to
 > contribute to the open-source project, and no contributor is bound by it.
 > Do not sign it. Revive it (with a lawyer) only if a commercial fork is
 > actually pursued.

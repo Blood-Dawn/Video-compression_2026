@@ -18,7 +18,7 @@ drop is the **unsigned beta** `v2.1.0-beta`.
 ## 2. Quality gate
 
 - [ ] `pwsh scripts/run_tests.ps1` → **green** (≥513 passed, 0 failed, 3 webcam skips).
-- [ ] No `[ ]` non-gated tasks remain for this milestone in `docs/CLAUDE-CODE-MASTER-PLAN.md`.
+- [ ] No open tasks remain for this milestone in the team's project tracker.
 
 ## 3. Build the installer
 

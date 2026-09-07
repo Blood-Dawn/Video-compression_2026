@@ -101,7 +101,7 @@ default install small (not to gate them behind payment):
 - `[crash-reporting]` - opt-in Sentry (off by default).
 
 The `premium` branch is dormant. If a commercial fork is ever pursued (and
-only if the team is legally cleared - see PLAN-V2 §0/§13), it would branch
+only if the team is legally cleared), it would branch
 from a frozen open-source release at that point. There is **no** routine
 `app` -> `premium` mirroring; just push `app`.
 

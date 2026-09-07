@@ -5,11 +5,11 @@ Status: **M0 complete. M1.1 built and VERIFIED on a physical device**
 with a device token and renders its edition and feature list. Owner decisions
 in section 7 were taken on 2026-07-18.
 Branch: `mobile`. Created 2026-07-18 from `app` at `741861e`.
-Design source: `mobile/design/` (imported from Claude Design project
-`19ed3076-4995-417d-8281-b994f732fa83`).
+Design source: `mobile/design/` (built with an AI-assisted design tool, then
+adapted here by hand).
 
-Grounded by a 66-agent parallel investigation of the live codebase, with every
-blocker-or-major claim adversarially re-verified against source. Roughly a third
+Grounded in a thorough pass over the live codebase, with every
+blocker-or-major claim independently re-verified against source. Roughly a third
 of the first-pass claims were refuted or corrected in that second pass; only
 survivors are recorded here.
 

@@ -34,7 +34,7 @@ The mobile app is the one part of the system this does not cover well. It has
 a single JVM unit test file as of this writing, which is why mobile changes
 have so far needed a person holding a physical device to verify them; building
 out mobile test coverage is the first item on the next round of mobile work
-(`docs/CLAUDE-CODE-R7.md`).
+(see `docs/CHANGES-SUMMER-2026.md`).
 
 ## Environment quirks worth knowing before a first run
 

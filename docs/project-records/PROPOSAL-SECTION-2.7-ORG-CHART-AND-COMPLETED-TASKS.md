@@ -23,9 +23,9 @@ people and reporting lines, labeled the way the assignment asks for.
 
 ```mermaid
 flowchart TB
-    SPONSOR["Sponsor<br/>Cody Hayashi — DIU / NIWC Pacific<br/>Geena Wann-Kung — Project Coordinator, NIWC Pacific"]
+    SPONSOR["Sponsor<br/>Cody Hayashi — DIU / NIWC Pacific<br/>Geena Wann-Kung — NIWC Pacific Project Coordinator"]
     ADVISOR["Faculty Advisor<br/>Dr. Rabia Shahid, FAU CECS"]
-    LEADER["TEAM LEADER / PROJECT COORDINATOR<br/>Kheiven D'Haiti<br/>Mobile app completion & test infrastructure"]
+    LEADER["STUDENT TEAM LEADER / PROJECT COORDINATOR<br/>Kheiven D'Haiti<br/>Mobile app completion & test infrastructure"]
 
     JORGE["Jorge Sanchez<br/>Ingest, uploads, multi-camera streaming"]
     ASHLEYN["Ashleyn Montano<br/>Event surfacing and search"]
@@ -41,10 +41,14 @@ flowchart TB
 ```
 
 **Notes for the written proposal:**
-- Kheiven D'Haiti is designated **Team Leader / Project Coordinator** for the
-  Fall 2026 semester, matching his role as integration lead in Fig. 6.1 and
-  his ownership of the master planner (`docs/project-records/PLANNER-FALL-2026.md`)
-  and roadmap (`ROADMAP.md`).
+- Kheiven D'Haiti is designated **Student Team Leader / Project Coordinator**
+  for the Fall 2026 semester, matching his role as integration lead in Fig.
+  6.1 and his ownership of the master planner
+  (`docs/project-records/PLANNER-FALL-2026.md`) and roadmap (`ROADMAP.md`).
+  This is deliberately worded to distinguish him from Geena Wann-Kung, who
+  holds the title "Project Coordinator" on the sponsor side at NIWC Pacific —
+  the two roles are unrelated and the shared word "Coordinator" should not be
+  read as a reporting relationship between them.
 - Reporting line: Sponsor and Faculty Advisor sit above the team; the Team
   Leader reports to both and coordinates the four subsystem owners, who each
   report to the Team Leader and continue owning the vertical slice they held
@@ -62,13 +66,20 @@ Compiled from `docs/archive/ROADMAP-SPRING-2026.md`, `docs/CHANGES-SUMMER-2026.m
 and `docs/project-records/PLANNER-FALL-2026.md`. Organized by the three periods
 of work completed before this proposal's submission date (Sep 13, 2026).
 
-### 2a. Spring 2026 (Jan 13 – May 6, 2026) — Milestones 1–4, capstone delivered
+### 2a. Spring 2026 (Jan 13 – May 6, 2026) — Milestones 1–3 complete, capstone delivered
 
 | Milestone | Deliverable | Status |
 |---|---|---|
 | M1 (Mar 31) | Core pipeline: dual-CRF ROI encoder, background subtraction, PSNR/SSIM/compression-ratio metrics, SQLite metadata index | Done ✅ |
 | M2 (Apr 18) | Super-resolution enhancer, mode dispatch (Modes 0–3), algorithm comparison + stress test, Flask dashboard GUI | Done ✅ |
-| M3/M4 (May 6) | AES-256-GCM encryption, HLS live streaming, AV1 codec support, color/object-type metadata, final report, capstone demo | Done ✅ |
+| M3 (Apr 26) | AES-256-GCM encryption, watchfolder + multi-source ingestion, YOLO detection gate, test-suite repair (274 passing) | Done ✅ |
+| M4/M5 (target May 6) | HLS live streaming, final report, capstone demo/presentation | Done ✅ — shipped by the May 6 deadline, tagged `v1.0.0` |
+| M4/M5 open at capstone | AV1 codec support, full color/dominant-color metadata, remaining benchmarks | **Not done by May 6** — `docs/archive/ROADMAP-SPRING-2026.md` marks these "Not Started"/"In Progress" as of that record, and `final_report.md` (v1.0.0) lists SVT-AV1 explicitly as future work, not a delivered feature |
+
+Per-mode codec selection (H.264 for Modes 0–1, AV1 for Modes 2–3) was
+implemented afterward, in the May 2026 "codec law" fix described in
+`docs/CHANGES-SUMMER-2026.md` — it is listed under Summer 2026 below, not as
+a Spring capstone deliverable.
 
 **Completed tasks by owner (Spring):**
 
@@ -100,6 +111,7 @@ format):
 |---|---|
 | Distribution | Signed Windows installer (`SVCS-Setup.exe`), Docker server image, Linux AppImage, slim build (4.6 GB → 339 MB) |
 | Desktop features | Preset system, ONVIF camera discovery, watchfolder hardening, auto-compress service, disk-budget retention, library UI (Originals/Compressed/All) |
+| **Codec law fix (completes the Spring M4/M5 AV1 item)** | Per-mode codec now enforced in code: Modes 0–1 default to H.264, Modes 2–3 default to AV1 (SVT-AV1), never H.265 |
 | Compression quality | VMAF-targeted rate control, encoder-level ROI, long-GOP/NVENC/denoise phase, static-scene measurement |
 | **Security audit (SEC-001–SEC-016)** | Same-origin CSRF guard, media/library path confinement, encrypt-path confinement, XSS escaping, auth-bypass close, **SSRF input guard on `input_source`** |
 | Mobile app | Android companion app built from nothing to **v0.9.0-beta** (4.5 MB APK): live view, library, playback, phone-initiated compression, resumable chunked upload, behavior-alert notifications, **closed-app push via ntfy/UnifiedPush with a second SSRF guard (`push_notify.is_safe_push_url`)** |

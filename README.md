@@ -1,5 +1,5 @@
 # Selective Video Compression for Surveillance Cameras
-**EGN 4950C Senior Design Capstone | Florida Atlantic University | Group 16**
+**EGN 4950C Senior Design Capstone | Florida Atlantic University | Group 22**
 Sponsored by the Defense Innovation Unit (DIU) / NIWC Pacific
 
 ---

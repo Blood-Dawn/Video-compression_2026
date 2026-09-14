@@ -4,7 +4,7 @@
 
 **Project Title:** Open Source Selective Video Compression for Static Surveillance Cameras
 **Technical Sponsor:** Defense Innovation Unit (DIU) / NIWC Pacific, Cody Hayashi
-**Group:** 16
+**Group:** 22
 **Report Date:** September 7, 2026
 **Report Period:** September 7, 2026 to September 13, 2026
 **Team Members:** Kheiven D'Haiti (CS, AI Minor) | Jorge Sanchez (CS) | Ashleyn Montano (CS) | Riley Roberts (CS) | Victor De Souza Teixeira (CS, Cybersecurity)
@@ -13,7 +13,7 @@
 > being filed on September 14, one day after the Sunday deadline. Read your
 > own section, correct anything that is wrong, and fill in the two [FILL IN]
 > items in Part 1 before this goes out. Export to PDF named
-> `2026-09-07-Progress-Report-Grp-16.pdf`.
+> `2026-09-07-Progress-Report-Grp-22.pdf`.
 
 ---
 

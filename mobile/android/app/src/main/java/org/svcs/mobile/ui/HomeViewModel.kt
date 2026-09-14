@@ -2,6 +2,7 @@ package org.svcs.mobile.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,7 +13,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.svcs.mobile.net.Fetched
-import org.svcs.mobile.net.SvcsApi
+import org.svcs.mobile.net.SvcsApiClient
 
 data class HomeState(
     val running: Boolean = false,
@@ -39,7 +40,11 @@ data class HomeState(
  *
  * Author: Bloodawn (KheivenD), 2026-07-19 (M2.3).
  */
-class HomeViewModel(private val api: SvcsApi?) : ViewModel() {
+class HomeViewModel(
+    private val api: SvcsApiClient?,
+    /** Overridden in tests so a fetch resolves on the test's virtual clock. */
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+) : ViewModel() {
 
     private companion object { const val POLL_MS = 2500L }
 
@@ -56,8 +61,8 @@ class HomeViewModel(private val api: SvcsApi?) : ViewModel() {
         }
         viewModelScope.launch {
             while (isActive) {
-                val status = withContext(Dispatchers.IO) { client.pipelineStatus() }
-                val savings = withContext(Dispatchers.IO) { client.savings() }
+                val status = withContext(ioDispatcher) { client.pipelineStatus() }
+                val savings = withContext(ioDispatcher) { client.savings() }
                 _state.update { s ->
                     var next = s.copy(error = null)
                     when (status) {

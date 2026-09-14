@@ -2,6 +2,7 @@ package org.svcs.mobile.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,7 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.svcs.mobile.net.EventItem
 import org.svcs.mobile.net.Fetched
-import org.svcs.mobile.net.SvcsApi
+import org.svcs.mobile.net.SvcsApiClient
 import org.svcs.mobile.net.ZoneLine
 import org.svcs.mobile.net.ZonesConfig
 
@@ -33,7 +34,11 @@ data class EventsState(
  *
  * Author: Bloodawn (KheivenD), 2026-08-17 (R6 Track A).
  */
-class EventsViewModel(private val api: SvcsApi?) : ViewModel() {
+class EventsViewModel(
+    private val api: SvcsApiClient?,
+    /** Overridden in tests so a fetch resolves on the test's virtual clock. */
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+) : ViewModel() {
 
     private val _state = MutableStateFlow(EventsState())
     val state: StateFlow<EventsState> = _state.asStateFlow()
@@ -50,7 +55,7 @@ class EventsViewModel(private val api: SvcsApi?) : ViewModel() {
     fun refresh() {
         val client = api ?: return
         viewModelScope.launch {
-            val r = withContext(Dispatchers.IO) { client.eventsRecent(100) }
+            val r = withContext(ioDispatcher) { client.eventsRecent(100) }
             _state.update { s ->
                 when (r) {
                     is Fetched.Ok -> s.copy(events = r.value.events, error = null)
@@ -99,7 +104,7 @@ class EventsViewModel(private val api: SvcsApi?) : ViewModel() {
         val cam = _state.value.editorCamera.trim()
         if (cam.isBlank()) return
         viewModelScope.launch {
-            val r = withContext(Dispatchers.IO) { client.getZones(cam) }
+            val r = withContext(ioDispatcher) { client.getZones(cam) }
             _state.update { s ->
                 when (r) {
                     is Fetched.Ok -> s.copy(
@@ -123,7 +128,7 @@ class EventsViewModel(private val api: SvcsApi?) : ViewModel() {
         if (cam.isBlank()) return
         viewModelScope.launch {
             val cfg = ZonesConfig(exclude = s0.editorExcludes, lines = s0.editorLines)
-            val r = withContext(Dispatchers.IO) { client.saveZones(cam, cfg) }
+            val r = withContext(ioDispatcher) { client.saveZones(cam, cfg) }
             _state.update { s ->
                 when (r) {
                     is Fetched.Ok -> s.copy(

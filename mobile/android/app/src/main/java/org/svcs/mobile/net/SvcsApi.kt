@@ -80,7 +80,7 @@ sealed interface ProbeResult {
 class SvcsApi(
     private val baseUrl: String,
     private val token: String,
-) {
+) : SvcsApiClient {
     private val json = Json {
         ignoreUnknownKeys = true
         isLenient = true
@@ -108,7 +108,7 @@ class SvcsApi(
         .build()
 
     /** The OkHttp client, for Coil and ExoPlayer to reuse (M2 / M3). */
-    fun httpClient(): OkHttpClient = client
+    override fun httpClient(): OkHttpClient = client
 
     /**
      * Probe the server: is this address reachable, is the token accepted, and
@@ -118,7 +118,7 @@ class SvcsApi(
      * human, because "something went wrong" on a pairing screen is what makes
      * users start port-forwarding.
      */
-    fun probe(): ProbeResult {
+    override fun probe(): ProbeResult {
         val url = "${baseUrl.trimEnd('/')}/api/capabilities"
         return try {
             client.newCall(Request.Builder().url(url).get().build()).execute()
@@ -144,11 +144,11 @@ class SvcsApi(
     // ── M2 read-only surfaces ────────────────────────────────────────────
 
     /** One page of the library listing. kind: "all" | "original" | "compressed". */
-    fun libraryPage(
+    override fun libraryPage(
         folder: String?,
         page: Int,
-        pageSize: Int = 60,
-        kind: String = "all",
+        pageSize: Int,
+        kind: String,
     ): Fetched<LibraryPage> {
         val sb = StringBuilder("${baseUrl.trimEnd('/')}/api/library/videos")
         sb.append("?page=").append(page).append("&page_size=").append(pageSize)
@@ -168,7 +168,7 @@ class SvcsApi(
      * uses [httpClient] so the Authorization header rides on every range
      * request. Same path format and folder-pinning as [thumbUrl].
      */
-    fun fileUrl(path: String, folder: String? = null): String =
+    override fun fileUrl(path: String, folder: String?): String =
         "${baseUrl.trimEnd('/')}/api/library/file?path=" +
             java.net.URLEncoder.encode(path, "UTF-8") +
             folderSuffix(folder)
@@ -187,7 +187,7 @@ class SvcsApi(
      * running (the server encodes one at a time), which the UI phrases as
      * "busy", not an error.
      */
-    fun startCompress(path: String, mode: String = "mode1"): StartCompressResult {
+    override fun startCompress(path: String, mode: String): StartCompressResult {
         return try {
             val validate = buildJsonObject { put("path", path) }
                 .toString().toRequestBody("application/json".toMediaType())
@@ -232,21 +232,21 @@ class SvcsApi(
     }
 
     /** Per-video ffprobe metrics (0.8.0), folder-pinned like thumb/file. */
-    fun videoMeta(path: String, folder: String? = null): Fetched<VideoMeta> =
+    override fun videoMeta(path: String, folder: String?): Fetched<VideoMeta> =
         getJson("${baseUrl.trimEnd('/')}/api/library/meta?path=" +
             java.net.URLEncoder.encode(path, "UTF-8") + folderSuffix(folder))
 
     /** The server's configured save folder (for the OUTPUTS shortcut). */
-    fun setupState(): Fetched<SetupState> =
+    override fun setupState(): Fetched<SetupState> =
         getJson("${baseUrl.trimEnd('/')}/api/setup/state")
 
     /** Newest finished jobs (the M5 notifier polls this with limit=1). */
-    fun jobsRecent(limit: Int = 1): Fetched<JobsRecent> =
+    override fun jobsRecent(limit: Int): Fetched<JobsRecent> =
         getJson("${baseUrl.trimEnd('/')}/api/jobs/recent?limit=$limit")
 
     // ── R6 Track B: chunked resumable upload ─────────────────────────────
 
-    fun uploadBegin(name: String, size: Long): Fetched<UploadBegin> {
+    override fun uploadBegin(name: String, size: Long): Fetched<UploadBegin> {
         return try {
             val body = buildJsonObject { put("name", name); put("size", size) }
                 .toString().toRequestBody("application/json".toMediaType())
@@ -266,10 +266,10 @@ class SvcsApi(
         }
     }
 
-    fun uploadStatus(uploadId: String): Fetched<UploadOffset> =
+    override fun uploadStatus(uploadId: String): Fetched<UploadOffset> =
         getJson("${baseUrl.trimEnd('/')}/api/upload/status?upload_id=$uploadId")
 
-    fun uploadChunk(uploadId: String, offset: Long, bytes: ByteArray): ChunkResult {
+    override fun uploadChunk(uploadId: String, offset: Long, bytes: ByteArray): ChunkResult {
         return try {
             val body = bytes.toRequestBody("application/octet-stream".toMediaType())
             client.newCall(Request.Builder()
@@ -291,7 +291,7 @@ class SvcsApi(
         }
     }
 
-    fun uploadFinish(uploadId: String, sha256: String): Fetched<UploadFinish> {
+    override fun uploadFinish(uploadId: String, sha256: String): Fetched<UploadFinish> {
         return try {
             val body = buildJsonObject {
                 put("upload_id", uploadId); put("sha256", sha256)
@@ -313,16 +313,16 @@ class SvcsApi(
     }
 
     /** Newest behavior events (R6 Track A: EVENTS tab + notifier). */
-    fun eventsRecent(limit: Int = 100): Fetched<EventsRecent> =
+    override fun eventsRecent(limit: Int): Fetched<EventsRecent> =
         getJson("${baseUrl.trimEnd('/')}/api/events/recent?limit=$limit")
 
     /** One camera's zones/lines config (R6 Track A editor). */
-    fun getZones(cameraId: String): Fetched<ZonesConfigResponse> =
+    override fun getZones(cameraId: String): Fetched<ZonesConfigResponse> =
         getJson("${baseUrl.trimEnd('/')}/api/zones?camera_id=" +
             java.net.URLEncoder.encode(cameraId, "UTF-8"))
 
     /** Replace one camera's zones/lines config. Applies to the NEXT run. */
-    fun saveZones(cameraId: String, config: ZonesConfig): Fetched<ZonesConfigResponse> {
+    override fun saveZones(cameraId: String, config: ZonesConfig): Fetched<ZonesConfigResponse> {
         return try {
             val payload = buildJsonObject {
                 put("camera_id", cameraId)
@@ -374,7 +374,7 @@ class SvcsApi(
     // ── R6 Track C: closed-app push settings ─────────────────────────────
 
     /** The server's push settings. ``has_token`` stands in for the secret. */
-    fun getPushConfig(): Fetched<PushConfigResponse> =
+    override fun getPushConfig(): Fetched<PushConfigResponse> =
         getJson("${baseUrl.trimEnd('/')}/api/push/config")
 
     /**
@@ -384,12 +384,12 @@ class SvcsApi(
      * the server is told to keep the stored one. Sending an empty string
      * would CLEAR it, so a phone editing the topic URL must not send one.
      */
-    fun savePushConfig(
+    override fun savePushConfig(
         enabled: Boolean,
         topicUrl: String,
         onJobs: Boolean,
         onEvents: Boolean,
-        token: String? = null,
+        token: String?,
     ): Fetched<PushConfigResponse> {
         return try {
             val payload = buildJsonObject {
@@ -423,7 +423,7 @@ class SvcsApi(
      * The typed URL is sent so an operator can prove a topic works BEFORE
      * saving it, which is the order people actually work in.
      */
-    fun testPush(topicUrl: String, token: String? = null): Fetched<PushTestResult> {
+    override fun testPush(topicUrl: String, token: String?): Fetched<PushTestResult> {
         return try {
             val payload = buildJsonObject {
                 put("topic_url", topicUrl)
@@ -447,16 +447,16 @@ class SvcsApi(
         }
     }
 
-    fun systemMetrics(): Fetched<SystemMetrics> =
+    override fun systemMetrics(): Fetched<SystemMetrics> =
         getJson("${baseUrl.trimEnd('/')}/api/system_metrics")
 
-    fun storageStats(): Fetched<StorageStats> =
+    override fun storageStats(): Fetched<StorageStats> =
         getJson("${baseUrl.trimEnd('/')}/api/storage")
 
-    fun pipelineStatus(): Fetched<PipelineStatus> =
+    override fun pipelineStatus(): Fetched<PipelineStatus> =
         getJson("${baseUrl.trimEnd('/')}/api/status")
 
-    fun savings(): Fetched<Savings> =
+    override fun savings(): Fetched<Savings> =
         getJson("${baseUrl.trimEnd('/')}/api/savings")
 
     /**
@@ -467,18 +467,18 @@ class SvcsApi(
      * desktop) can move it mid-session, which silently invalidates bare
      * paths; the explicit context keeps this listing self-consistent.
      */
-    fun thumbUrl(path: String, folder: String? = null): String =
+    override fun thumbUrl(path: String, folder: String?): String =
         "${baseUrl.trimEnd('/')}/api/library/thumb?path=" +
             java.net.URLEncoder.encode(path, "UTF-8") +
             folderSuffix(folder)
 
     // ── M3: live stream ──────────────────────────────────────────────────
 
-    fun hlsStatus(): Fetched<HlsStatus> =
+    override fun hlsStatus(): Fetched<HlsStatus> =
         getJson("${baseUrl.trimEnd('/')}/api/hls/status")
 
     /** Absolute playlist URL. Handed to ExoPlayer, which uses [httpClient]. */
-    fun playlistUrl(cameraId: String): String =
+    override fun playlistUrl(cameraId: String): String =
         "${baseUrl.trimEnd('/')}/api/hls/$cameraId/playlist.m3u8"
 
     /**
@@ -489,7 +489,7 @@ class SvcsApi(
      * running; the right response is to watch that instead of fighting for
      * the slot.
      */
-    fun hlsStart(inputSource: String, cameraId: String, mode: String): HlsStartResult {
+    override fun hlsStart(inputSource: String, cameraId: String, mode: String): HlsStartResult {
         val body = buildJsonObject {
             put("input_source", inputSource)
             put("camera_id", cameraId)
@@ -516,7 +516,7 @@ class SvcsApi(
     }
 
     /** Stop the stream. Best effort: a failure here is not worth a dialog. */
-    fun hlsStop(): Boolean = try {
+    override fun hlsStop(): Boolean = try {
         val empty = "{}".toRequestBody("application/json".toMediaType())
         client.newCall(
             Request.Builder()
@@ -540,7 +540,7 @@ class SvcsApi(
      * Requires an EXTINF line, not just a 200: an empty playlist is served
      * briefly and gives the player nothing to load.
      */
-    fun playlistReady(cameraId: String): Boolean = try {
+    override fun playlistReady(cameraId: String): Boolean = try {
         client.newCall(
             Request.Builder().url(playlistUrl(cameraId)).get().build(),
         ).execute().use { resp ->

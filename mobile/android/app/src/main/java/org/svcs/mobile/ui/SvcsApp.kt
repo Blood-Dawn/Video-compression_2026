@@ -31,6 +31,7 @@ import org.svcs.mobile.net.Capabilities
 import org.svcs.mobile.net.Fetched
 import org.svcs.mobile.net.ProbeResult
 import org.svcs.mobile.net.SvcsApi
+import org.svcs.mobile.net.SvcsApiClient
 
 /**
  * Tabs from the design mockup. LIVE is conditional: the field edition registers
@@ -69,7 +70,7 @@ fun SvcsApp() {
     val context = LocalContext.current
     val store = remember { TokenStore(context) }
 
-    var api by remember { mutableStateOf<SvcsApi?>(null) }
+    var api by remember { mutableStateOf<SvcsApiClient?>(null) }
     var caps by remember { mutableStateOf<Capabilities?>(null) }
     var checked by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(Tab.HOME) }
@@ -89,7 +90,7 @@ fun SvcsApp() {
         val isRepair = checked
         val url = store.serverUrl()
         val token = store.token()
-        var newApi: SvcsApi? = null
+        var newApi: SvcsApiClient? = null
         var newCaps: Capabilities? = null
         if (!url.isNullOrBlank() && !token.isNullOrBlank()) {
             val client = SvcsApi(url, token)

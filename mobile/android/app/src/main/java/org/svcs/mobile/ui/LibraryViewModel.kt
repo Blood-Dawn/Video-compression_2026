@@ -2,6 +2,7 @@ package org.svcs.mobile.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -17,7 +18,7 @@ import org.svcs.mobile.net.ChunkResult
 import org.svcs.mobile.net.Fetched
 import org.svcs.mobile.net.LibraryItem
 import org.svcs.mobile.net.StartCompressResult
-import org.svcs.mobile.net.SvcsApi
+import org.svcs.mobile.net.SvcsApiClient
 
 data class LibraryState(
     val items: List<LibraryItem> = emptyList(),
@@ -55,9 +56,11 @@ data class LibraryState(
  * Author: Bloodawn (KheivenD), 2026-07-19 (M2.1).
  */
 class LibraryViewModel(
-    private val api: SvcsApi?,
+    private val api: SvcsApiClient?,
     /** 0.8.0: whether an upload auto-starts a compress (MORE toggle). */
     private val autoCompress: suspend () -> Boolean = { true },
+    /** Overridden in tests so a fetch resolves on the test's virtual clock. */
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
 
     /** 0.8.0: open the INFO dialog for one clip and fetch its metrics. */
@@ -65,7 +68,7 @@ class LibraryViewModel(
         val client = api ?: return
         _state.update { it.copy(metaFor = item, meta = null, metaError = null) }
         viewModelScope.launch {
-            val r = withContext(Dispatchers.IO) {
+            val r = withContext(ioDispatcher) {
                 client.videoMeta(item.path, _state.value.folderPath)
             }
             _state.update { s ->
@@ -135,7 +138,7 @@ class LibraryViewModel(
         val client = api ?: return
         _state.update { it.copy(loading = true, error = null, actionMessage = null) }
         viewModelScope.launch {
-            val setup = withContext(Dispatchers.IO) { client.setupState() }
+            val setup = withContext(ioDispatcher) { client.setupState() }
             when (setup) {
                 is Fetched.Ok -> {
                     val dir = setup.value.effectiveOutputDir()
@@ -173,7 +176,7 @@ class LibraryViewModel(
         if (_state.value.compressing) return
         _state.update { it.copy(compressing = true, actionMessage = null) }
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
+            val result = withContext(ioDispatcher) {
                 client.startCompress(item.path, mode = mode)
             }
             _state.update { s ->
@@ -212,7 +215,7 @@ class LibraryViewModel(
         if (_state.value.compressing) return
         _state.update { it.copy(compressing = true, actionMessage = "Preparing upload...") }
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
+            val result = withContext(ioDispatcher) {
                 runCatching { doUpload(client, resolver, uri) }
                     .getOrElse { "Upload failed: ${it.message ?: it.javaClass.simpleName}" }
             }
@@ -220,7 +223,7 @@ class LibraryViewModel(
         }
     }
 
-    private suspend fun doUpload(client: SvcsApi, resolver: ContentResolver, uri: Uri): String {
+    private suspend fun doUpload(client: SvcsApiClient, resolver: ContentResolver, uri: Uri): String {
         var name = "phone_upload.mp4"
         var size = -1L
         resolver.query(uri, null, null, null, null)?.use { c ->
@@ -315,7 +318,7 @@ class LibraryViewModel(
         inFlight = true
         _state.update { it.copy(loading = true, error = null) }
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
+            val result = withContext(ioDispatcher) {
                 client.libraryPage(folder = _state.value.folderPath, page = page,
                     pageSize = PAGE_SIZE, kind = _state.value.kind)
             }

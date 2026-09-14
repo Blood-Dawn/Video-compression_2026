@@ -3,6 +3,7 @@ package org.svcs.mobile.ui
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +17,7 @@ import org.svcs.mobile.net.Fetched
 import org.svcs.mobile.net.HostClassifier
 import org.svcs.mobile.net.ProbeResult
 import org.svcs.mobile.net.SvcsApi
+import org.svcs.mobile.net.SvcsApiClient
 import java.net.URI
 
 data class ServerSettingsState(
@@ -61,9 +63,21 @@ data class ServerSettingsState(
 /**
  * Pairing logic.
  *
+ * [apiFactory] builds the [SvcsApiClient] used to test a connection and to
+ * talk to the currently-saved pairing (push settings). It defaults to the
+ * real [SvcsApi] constructor; JVM tests (ROADMAP 3.1) inject a fake
+ * instead, via the `@JvmOverloads`-generated two-arg constructor, so the
+ * default no-arg-from-Application path Compose's `viewModel()` uses in
+ * production is unaffected.
+ *
  * Author: Bloodawn (KheivenD), 2026-07-18 (M1.1).
  */
-class ServerSettingsViewModel(app: Application) : AndroidViewModel(app) {
+class ServerSettingsViewModel @JvmOverloads constructor(
+    app: Application,
+    private val apiFactory: (String, String) -> SvcsApiClient = { url, tok -> SvcsApi(url, tok) },
+    /** Overridden in tests so a fetch resolves on the test's virtual clock. */
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+) : AndroidViewModel(app) {
 
     private val store = TokenStore(app)
     private val _state = MutableStateFlow(ServerSettingsState())
@@ -134,8 +148,8 @@ class ServerSettingsViewModel(app: Application) : AndroidViewModel(app) {
 
         _state.update { it.copy(busy = true, message = null, capabilities = null) }
         viewModelScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                SvcsApi(normalized, _state.value.token.trim()).probe()
+            val result = withContext(ioDispatcher) {
+                apiFactory(normalized, _state.value.token.trim()).probe()
             }
             _state.update { s ->
                 when (result) {
@@ -172,11 +186,11 @@ class ServerSettingsViewModel(app: Application) : AndroidViewModel(app) {
     // ── R6 Track C: the server's push settings ───────────────────────────
 
     /** An API client on the SAVED pairing, or null if there is not one yet. */
-    private fun pairedApi(): SvcsApi? {
+    private fun pairedApi(): SvcsApiClient? {
         val url = normalizeUrl(_state.value.serverUrl.trim()) ?: return null
         val tok = _state.value.token.trim()
         if (tok.isBlank()) return null
-        return SvcsApi(url, tok)
+        return apiFactory(url, tok)
     }
 
     fun onPushTopicChanged(v: String) {
@@ -204,7 +218,7 @@ class ServerSettingsViewModel(app: Application) : AndroidViewModel(app) {
         val api = pairedApi() ?: return
         _state.update { it.copy(pushBusy = true) }
         viewModelScope.launch {
-            val res = withContext(Dispatchers.IO) { api.getPushConfig() }
+            val res = withContext(ioDispatcher) { api.getPushConfig() }
             _state.update { s ->
                 when (res) {
                     is Fetched.Ok -> s.copy(
@@ -244,7 +258,7 @@ class ServerSettingsViewModel(app: Application) : AndroidViewModel(app) {
         val s0 = _state.value
         _state.update { it.copy(pushBusy = true, pushMessage = null) }
         viewModelScope.launch {
-            val res = withContext(Dispatchers.IO) {
+            val res = withContext(ioDispatcher) {
                 api.savePushConfig(
                     enabled = s0.pushEnabled,
                     topicUrl = s0.pushTopicUrl.trim(),
@@ -287,7 +301,7 @@ class ServerSettingsViewModel(app: Application) : AndroidViewModel(app) {
         }
         _state.update { it.copy(pushBusy = true, pushMessage = null) }
         viewModelScope.launch {
-            val res = withContext(Dispatchers.IO) {
+            val res = withContext(ioDispatcher) {
                 api.testPush(s0.pushTopicUrl.trim(), s0.pushToken.trim().ifBlank { null })
             }
             _state.update { s ->

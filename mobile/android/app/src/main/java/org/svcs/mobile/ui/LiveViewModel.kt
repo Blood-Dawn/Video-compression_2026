@@ -15,7 +15,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import org.svcs.mobile.net.Fetched
 import org.svcs.mobile.net.HlsStartResult
-import org.svcs.mobile.net.SvcsApi
+import org.svcs.mobile.net.SvcsApiClient
 
 /** What the LIVE tab is doing. Each state maps to one thing on screen. */
 sealed interface LiveState {
@@ -71,7 +71,7 @@ sealed interface LiveState {
  * Author: Bloodawn (KheivenD), 2026-07-19 (M3).
  */
 class LiveViewModel(
-    private val api: SvcsApi?,
+    private val api: SvcsApiClient?,
     private val lastSourceProvider: suspend () -> String = { "" },
     private val lastSourceSaver: suspend (String) -> Unit = {},
 ) : ViewModel() {

@@ -12,7 +12,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.svcs.mobile.net.Fetched
-import org.svcs.mobile.net.SvcsApi
+import org.svcs.mobile.net.SvcsApiClient
 
 data class MetricsState(
     val cpuPct: Double? = null,
@@ -40,7 +40,7 @@ data class MetricsState(
  *
  * Author: Bloodawn (KheivenD), 2026-07-19 (M2.2).
  */
-class MetricsViewModel(private val api: SvcsApi?) : ViewModel() {
+class MetricsViewModel(private val api: SvcsApiClient?) : ViewModel() {
 
     private companion object { const val POLL_MS = 4000L }
 

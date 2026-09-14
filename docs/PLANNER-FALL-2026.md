@@ -1,6 +1,6 @@
 # SVCS fall 2026 semester planner
 
-**Course:** EGN4950C Senior Design (ED2), Group 16
+**Course:** EGN4950C Senior Design (ED2), Group 22
 **Project:** Open Source Selective Video Compression for Static Surveillance Cameras
 **Sponsor:** Defense Innovation Unit (DIU) / NIWC Pacific, Cody Hayashi
 **Planner period:** August 31, 2026 to December 6, 2026 (14 weeks)

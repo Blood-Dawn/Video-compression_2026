@@ -67,47 +67,47 @@ each, per the course guidance.
 
 | ID | Task | Owner | Outcome | Status |
 |---|---|---|---|---|
-| 1.1 | Review the summer build and audit repository state | Kheiven | Written account of what changed and confirmation that nothing is stranded locally | Complete Sep 6 |
-| 1.2 | Build the fall semester planner | Kheiven | This document; MS Teams Planner populated four weeks ahead | Complete Sep 6 |
-| 1.3 | Review my spring contributions and the current state of the ingest subsystem | Jorge | Written account of what I own and how it changed | Complete Sep 5 |
-| 1.4 | Team review session on the summer build and fall ownership | Jorge | Agreement on which fall tasks I take | Complete Sep 6 |
-| 1.5 | Review my spring contributions and the current state of the metadata subsystem | Ashleyn | Written account of what I own and how it changed | Complete Sep 5 |
-| 1.6 | Team review session on the summer build and fall ownership | Ashleyn | Agreement on which fall tasks I take | Complete Sep 6 |
-| 1.7 | Review my spring contributions and the current state of the compression modes | Riley | Written account of what I own and how it changed | Complete Sep 5 |
-| 1.8 | Team review session on the summer build and fall ownership | Riley | Agreement on which fall tasks I take | Complete Sep 6 |
-| 1.9 | Review my spring contributions and the current state of the security subsystem | Victor | Written account of what I own and how it changed | Complete Sep 5 |
-| 1.10 | Team review session on the summer build and fall ownership | Victor | Agreement on which fall tasks I take | Complete Sep 6 |
+| 1.1 | Review the summer build and audit repository state | Kheiven | Written account of what changed and confirmation that nothing is stranded locally | Complete |
+| 1.2 | Build the fall semester planner | Kheiven | This document; MS Teams Planner populated four weeks ahead | Complete |
+| 1.3 | Review my spring contributions and the current state of the ingest subsystem | Jorge | Written account of what I own and how it changed | Complete |
+| 1.4 | Team review session on the summer build and fall ownership | Jorge | Agreement on which fall tasks I take | Complete |
+| 1.5 | Review my spring contributions and the current state of the metadata subsystem | Ashleyn | Written account of what I own and how it changed | Complete |
+| 1.6 | Team review session on the summer build and fall ownership | Ashleyn | Agreement on which fall tasks I take | Complete |
+| 1.7 | Review my spring contributions and the current state of the compression modes | Riley | Written account of what I own and how it changed | Complete |
+| 1.8 | Team review session on the summer build and fall ownership | Riley | Agreement on which fall tasks I take | Complete |
+| 1.9 | Review my spring contributions and the current state of the security subsystem | Victor | Written account of what I own and how it changed | Complete |
+| 1.10 | Team review session on the summer build and fall ownership | Victor | Agreement on which fall tasks I take | Complete |
 
 ### Week 2: September 7 to September 13
 
 **Milestone: revised proposal submitted (Sep 13).**
 
-| ID | Task | Owner | Outcome |
-|---|---|---|---|
-| 2.1 | Write the summer changes document for the team | Kheiven | `docs/CHANGES-SUMMER-2026.md` committed and pushed |
-| 2.2 | Verify push status on all branches and commit stranded documentation | Kheiven | Zero unpushed commits; `RESEARCH.md`, `SECURITY.md`, `PROJECT-HISTORY.md` committed |
-| 2.3 | Revised proposal: update system design section and functional diagrams | Kheiven | Current architecture diagram including the mobile client, in red per the assignment |
-| 2.4 | Revised proposal: update the requirements list with mobile requirements | Jorge | Requirements covering the phone client, added in red |
-| 2.5 | Revised proposal: update the literature survey and reference list | Ashleyn | Citations formatted consistently, new sources from the summer research documents |
-| 2.6 | Revised proposal: build the Gantt chart from this planner | Riley | Gantt covering all 14 weeks with owners, dependencies, and milestones |
-| 2.7 | Revised proposal: organizational chart and completed-tasks list | Victor | Org chart naming the team leader; list of tasks completed to date |
+| ID | Task | Owner | Outcome | Status |
+| --- | --- | --- | --- | --- |
+| 2.1 | Write the summer changes document for the team | Kheiven | `docs/CHANGES-SUMMER-2026.md` committed and pushed | Complete Sep 13 |
+| 2.2 | Verify push status on all branches and commit stranded documentation | Kheiven | Zero unpushed commits; `RESEARCH.md`, `SECURITY.md`, `PROJECT-HISTORY.md` committed | Complete Sep 13 |
+| 2.3 | Revised proposal: update system design section and functional diagrams | Kheiven | Current architecture diagram including the mobile client, in red per the assignment | Carried to week 3 |
+| 2.4 | Revised proposal: update the requirements list with mobile requirements | Jorge | Requirements covering the phone client, added in red | Carried to week 3 |
+| 2.5 | Revised proposal: update the literature survey and reference list | Ashleyn | Citations formatted consistently, new sources from the summer research documents | Carried to week 3 |
+| 2.6 | Revised proposal: build the Gantt chart from this planner | Riley | Gantt covering all 14 weeks with owners, dependencies, and milestones | Carried to week 3 |
+| 2.7 | Revised proposal: organizational chart and completed-tasks list | Victor | Org chart naming the team leader; list of tasks completed to date | Complete Sep 12 |
 
 ### Week 3: September 14 to September 20
 
 **Milestone M1 target: mobile changes verifiable without a human holding the phone.**
 
-| ID | Task | Owner | Outcome |
-|---|---|---|---|
-| 3.1 | Make `SvcsApi` fakeable and add JVM unit tests for the view models | Kheiven | `gradlew testDebugUnitTest` covers pairing, library, events, and home view models |
-| 3.2 | Add a debug build variant with HTTP logging for diagnosis | Kheiven | A failing request shows its reason in logcat instead of being a mystery on a minified build |
-| 3.3 | Investigate the WorkManager API and draft the upload worker design | Jorge | Written design for moving the chunked upload out of `viewModelScope` |
-| 3.4 | Audit the resumable upload protocol for resume correctness | Jorge | Confirmation that `/api/upload/status` returns an offset a worker can resume from |
-| 3.5 | Build the desktop EVENTS panel, read-only table | Ashleyn | Newest-first table on the TOOLS tab from `/api/events/recent` |
-| 3.6 | Add the empty state and ten second auto-refresh to the EVENTS panel | Ashleyn | Panel refreshes while visible, stops when hidden, tells the operator to draw zones first |
-| 3.7 | Add the `GET /api/zones/frame` route returning a still frame | Riley | JPEG still for a camera, black placeholder when no thumbnail exists, all three route guards updated |
-| 3.8 | Draft the zone editor canvas layout | Riley | Toolbar and canvas markup matching the phone editor |
-| 3.9 | Read `push_notify.is_safe_push_url` and specify the webhook emitter | Victor | Written specification for `utils/event_webhook.py` reusing the existing guard |
-| 3.10 | Write the socket-server test harness for webhook delivery | Victor | Test fixture in the style of `tests/test_push_notify.py` |
+| ID | Task | Owner | Outcome | Status |
+| --- | --- | --- | --- | --- |
+| 3.1 | Make `SvcsApi` fakeable and add JVM unit tests for the view models | Kheiven | `gradlew testDebugUnitTest` covers pairing, library, events, and home view models | Complete Sep 14 |
+| 3.2 | Add a debug build variant with HTTP logging for diagnosis | Kheiven | A failing request shows its reason in logcat instead of being a mystery on a minified build | Not started |
+| 3.3 | Investigate the WorkManager API and draft the upload worker design | Jorge | Written design for moving the chunked upload out of `viewModelScope` | Not started |
+| 3.4 | Audit the resumable upload protocol for resume correctness | Jorge | Confirmation that `/api/upload/status` returns an offset a worker can resume from | Not started |
+| 3.5 | Build the desktop EVENTS panel, read-only table | Ashleyn | Newest-first table on the TOOLS tab from `/api/events/recent` | Not started |
+| 3.6 | Add the empty state and ten second auto-refresh to the EVENTS panel | Ashleyn | Panel refreshes while visible, stops when hidden, tells the operator to draw zones first | Not started |
+| 3.7 | Add the `GET /api/zones/frame` route returning a still frame | Riley | JPEG still for a camera, black placeholder when no thumbnail exists, all three route guards updated | Not started |
+| 3.8 | Draft the zone editor canvas layout | Riley | Toolbar and canvas markup matching the phone editor | Not started |
+| 3.9 | Read `push_notify.is_safe_push_url` and specify the webhook emitter | Victor | Written specification for `utils/event_webhook.py` reusing the existing guard | Not started |
+| 3.10 | Write the socket-server test harness for webhook delivery | Victor | Test fixture in the style of `tests/test_push_notify.py` | Not started |
 
 ### Week 3 addendum: application testing pass
 
@@ -134,13 +134,14 @@ the first-run flow explains what a compression mode is before asking the
 operator to use the app, so understanding the actual core feature depends on
 independently discovering and reading Help.
 
-| ID | Task | Owner | Outcome |
-|---|---|---|---|
-| 3.11 | Fresh-install walkthrough on a clean machine: install `SVCS-Setup.exe`, complete first-run Setup, run one compression, all without opening the source code | All, each on their own machine | A written note per person of every point of confusion or friction, with the worst three filed as fixes |
-| 3.12 | Test the Compact install path with no FFmpeg on PATH | Riley | Confirmation of whether the app warns before Start is clickable, or fails silently on the first compression, plus a fix if it is silent |
-| 3.13 | Add a folder-browse button to the Setup destination field, reusing the Library folder-browser modal | Ashleyn | Setup no longer requires typing a raw folder path from memory |
-| 3.14 | External network penetration test against a running SVCS instance | Victor | Written findings against the threat model in `docs/SECURITY.md`; anything found gets a severity-rated entry in `docs/BLOCKERS.md`, matching the pentest item already deferred there |
-| 3.15 | Fuzz the video-ingest and upload path with malformed media | Victor | A clean rejection or a filed crash report for each malformed file tried, closing the fuzzing item already deferred in `docs/BLOCKERS.md` |
+| ID | Task | Owner | Outcome | Status |
+| --- | --- | --- | --- | --- |
+| 3.11 | Fresh-install walkthrough on a clean machine: install `SVCS-Setup.exe`, complete first-run Setup, run one compression, all without opening the source code | All, each on their own machine | A written note per person of every point of confusion or friction, with the worst three filed as fixes | Not started |
+| 3.12 | Test the Compact install path with no FFmpeg on PATH | Riley | Confirmation of whether the app warns before Start is clickable, or fails silently on the first compression, plus a fix if it is silent | Not started |
+| 3.13 | Add a folder-browse button to the Setup destination field, reusing the Library folder-browser modal | Ashleyn | Setup no longer requires typing a raw folder path from memory | Not started |
+| 3.14 | External network penetration test against a running SVCS instance | Victor | Written findings against the threat model in `docs/SECURITY.md`; anything found gets a severity-rated entry in `docs/BLOCKERS.md`, matching the pentest item already deferred there | Not started |
+| 3.15 | Fuzz the video-ingest and upload path with malformed media | Victor | A clean rejection or a filed crash report for each malformed file tried, closing the fuzzing item already deferred in `docs/BLOCKERS.md` | Not started |
+| 3.16 | Verify the Docker install path end to end on a fresh clone, then fix `docs/getting-started.md` | Kheiven | `docker compose up --build` either succeeds from a clean checkout, or the missing `yolov8n.onnx` prerequisite is documented plainly (or the build fetches it automatically); the getting-started guide reflects whichever is true | Not started |
 
 Table 3a. Application testing pass, added to week 3.
 
@@ -150,50 +151,50 @@ work) to week 4 rather than rushing the security testing.
 
 ### Week 4: September 21 to September 27
 
-| ID | Task | Owner | Outcome |
-|---|---|---|---|
-| 4.1 | Diagnose the mobile pairing persistence defect | Kheiven | Root cause proven by a failing unit test, not by inspection |
-| 4.2 | Fix pairing persistence and prove it with an instrumented test | Kheiven | A phone that pairs once stays paired across restarts and app updates |
-| 4.3 | Implement the upload `CoroutineWorker` with a foreground notification | Jorge | Upload runs outside the view model scope with visible progress |
-| 4.4 | Test upload survival: force-stop mid-transfer and confirm resume | Jorge | Transfer resumes from the server-reported offset and completes |
-| 4.5 | Wire desktop event toasts to the existing SSE stream | Ashleyn | An `EVENT` line raises exactly one toast; other log lines raise none |
-| 4.6 | Write browser tests for the EVENTS panel | Ashleyn | Rows render from a seeded events file; empty state verified |
-| 4.7 | Implement drag-to-draw for exclude rectangles and crossing lines | Riley | Zones round-trip through POST and GET with normalized coordinates intact |
-| 4.8 | Implement loiter zones and the SAVE and CLEAR actions | Riley | Full toolbar working, banner states that changes apply to the next run |
-| 4.9 | Implement `utils/event_webhook.py` with the SSRF guard | Victor | Events post to a configured URL, fire and forget, two second timeout |
-| 4.10 | Add the webhook configuration UI next to the push panel | Victor | Off by default, write-only secret field, refuses metadata endpoints |
+| ID | Task | Owner | Outcome | Status |
+| --- | --- | --- | --- | --- |
+| 4.1 | Diagnose the mobile pairing persistence defect | Kheiven | Root cause proven by a failing unit test, not by inspection | Not started |
+| 4.2 | Fix pairing persistence and prove it with an instrumented test | Kheiven | A phone that pairs once stays paired across restarts and app updates | Not started |
+| 4.3 | Implement the upload `CoroutineWorker` with a foreground notification | Jorge | Upload runs outside the view model scope with visible progress | Not started |
+| 4.4 | Test upload survival: force-stop mid-transfer and confirm resume | Jorge | Transfer resumes from the server-reported offset and completes | Not started |
+| 4.5 | Wire desktop event toasts to the existing SSE stream | Ashleyn | An `EVENT` line raises exactly one toast; other log lines raise none | Not started |
+| 4.6 | Write browser tests for the EVENTS panel | Ashleyn | Rows render from a seeded events file; empty state verified | Not started |
+| 4.7 | Implement drag-to-draw for exclude rectangles and crossing lines | Riley | Zones round-trip through POST and GET with normalized coordinates intact | Not started |
+| 4.8 | Implement loiter zones and the SAVE and CLEAR actions | Riley | Full toolbar working, banner states that changes apply to the next run | Not started |
+| 4.9 | Implement `utils/event_webhook.py` with the SSRF guard | Victor | Events post to a configured URL, fire and forget, two second timeout | Not started |
+| 4.10 | Add the webhook configuration UI next to the push panel | Victor | Off by default, write-only secret field, refuses metadata endpoints | Not started |
 
 ### Week 5: September 28 to October 4
 
-| ID | Task | Owner | Outcome |
-|---|---|---|---|
-| 5.1 | Build `scripts/verify_mobile.ps1` end to end | Kheiven | Build, install, launch, assert, exit non-zero on failure, no human input |
-| 5.2 | Design and produce the real Android launcher icon | Kheiven | Adaptive icon at every density replacing the template robot |
-| 5.3 | Begin the per-camera HLS registry refactor | Jorge | Design written; the single global stream slot is identified and scoped |
-| 5.4 | Add regression tests for the existing single-camera HLS behavior | Jorge | Existing behavior pinned before the refactor changes it |
-| 5.5 | Extend the query archive sidebar with full-text and multi-tag search | Ashleyn | Desktop query UI matches the multi-type CLI capability |
-| 5.6 | Write an integration test for event and query interaction | Ashleyn | Pipeline run produces events that the query interface can retrieve |
-| 5.7 | Add the camera id datalist from library folder labels | Riley | Zone editor offers real camera ids rather than free text |
-| 5.8 | Browser-verify the zone editor against a real backdrop frame | Riley | Screenshot evidence of a zone drawn over actual footage |
-| 5.9 | Review the mobile credential storage path end to end | Victor | Written finding on whether a failed decrypt fails closed or returns a stale credential |
-| 5.10 | Write tests for webhook URL rejection cases | Victor | Metadata endpoints, redirects, and embedded credentials all refused |
+| ID | Task | Owner | Outcome | Status |
+| --- | --- | --- | --- | --- |
+| 5.1 | Build `scripts/verify_mobile.ps1` end to end | Kheiven | Build, install, launch, assert, exit non-zero on failure, no human input | Not started |
+| 5.2 | Design and produce the real Android launcher icon | Kheiven | Adaptive icon at every density replacing the template robot | Not started |
+| 5.3 | Begin the per-camera HLS registry refactor | Jorge | Design written; the single global stream slot is identified and scoped | Not started |
+| 5.4 | Add regression tests for the existing single-camera HLS behavior | Jorge | Existing behavior pinned before the refactor changes it | Not started |
+| 5.5 | Extend the query archive sidebar with full-text and multi-tag search | Ashleyn | Desktop query UI matches the multi-type CLI capability | Not started |
+| 5.6 | Write an integration test for event and query interaction | Ashleyn | Pipeline run produces events that the query interface can retrieve | Not started |
+| 5.7 | Add the camera id datalist from library folder labels | Riley | Zone editor offers real camera ids rather than free text | Not started |
+| 5.8 | Browser-verify the zone editor against a real backdrop frame | Riley | Screenshot evidence of a zone drawn over actual footage | Not started |
+| 5.9 | Review the mobile credential storage path end to end | Victor | Written finding on whether a failed decrypt fails closed or returns a stale credential | Not started |
+| 5.10 | Write tests for webhook URL rejection cases | Victor | Metadata endpoints, redirects, and embedded credentials all refused | Not started |
 
 ### Week 6: October 5 to October 11
 
 **Milestone M2 target: desktop and mobile feature parity on zones and events.**
 
-| ID | Task | Owner | Outcome |
-|---|---|---|---|
-| 6.1 | Add instrumented tests for the pairing and settings flows | Kheiven | `gradlew connectedDebugAndroidTest` green on the physical device |
-| 6.2 | Research the UnifiedPush distributor registration flow | Kheiven | Written design for native push replacing the separate ntfy app |
-| 6.3 | Implement the per-camera HLS registry | Jorge | Two cameras stream simultaneously without one blocking the other |
-| 6.4 | Update the HLS idle watchdog for multiple streams | Jorge | Each stream reaped independently on abandonment |
-| 6.5 | Write the semantic search research document | Ashleyn | `docs/RESEARCH-SEMANTIC-SEARCH.md` covering model choice, storage, offline story |
-| 6.6 | Build the semantic search skeleton with a stub embedder | Ashleyn | Opt-in extra; no model downloaded in CI |
-| 6.7 | Run the CDnet corpus with and without exclude zones | Riley | Measured file size difference from zone masking |
-| 6.8 | Write up the zone compression benefit with numbers | Riley | Table for the final report; the claim is either confirmed or corrected |
-| 6.9 | Add the server endpoint for registering a push endpoint per device | Victor | Device tokens can carry a push endpoint for the native path |
-| 6.10 | Security review of the new endpoint registration | Victor | Confirmation that one device cannot register or read another device's endpoint |
+| ID | Task | Owner | Outcome | Status |
+| --- | --- | --- | --- | --- |
+| 6.1 | Add instrumented tests for the pairing and settings flows | Kheiven | `gradlew connectedDebugAndroidTest` green on the physical device | Not started |
+| 6.2 | Research the UnifiedPush distributor registration flow | Kheiven | Written design for native push replacing the separate ntfy app | Not started |
+| 6.3 | Implement the per-camera HLS registry | Jorge | Two cameras stream simultaneously without one blocking the other | Not started |
+| 6.4 | Update the HLS idle watchdog for multiple streams | Jorge | Each stream reaped independently on abandonment | Not started |
+| 6.5 | Write the semantic search research document | Ashleyn | `docs/RESEARCH-SEMANTIC-SEARCH.md` covering model choice, storage, offline story | Not started |
+| 6.6 | Build the semantic search skeleton with a stub embedder | Ashleyn | Opt-in extra; no model downloaded in CI | Not started |
+| 6.7 | Run the CDnet corpus with and without exclude zones | Riley | Measured file size difference from zone masking | Not started |
+| 6.8 | Write up the zone compression benefit with numbers | Riley | Table for the final report; the claim is either confirmed or corrected | Not started |
+| 6.9 | Add the server endpoint for registering a push endpoint per device | Victor | Device tokens can carry a push endpoint for the native path | Not started |
+| 6.10 | Security review of the new endpoint registration | Victor | Confirmation that one device cannot register or read another device's endpoint | Not started |
 
 ### Weeks 7 to 14: outline
 
@@ -250,4 +251,79 @@ Table 6. Risk register.
   Slipping a documented task costs nothing. A planner that does not match the
   report costs points from everyone.
 
-Author: Bloodawn (KheivenD), 2026-09-06.
+## Keeping this planner in sync (automated)
+
+Added September 15: this planner used to drift because the CSV (the source
+for the MS Teams Planner) and this Markdown file's per-week tables were
+hand-edited separately, and it is easy to update one and forget the other.
+`scripts/update_planner.py` fixes that by making the CSV the single source
+of truth for every task's status, and generating this file's `Status`
+column from it. Nobody should hand-edit a Status cell in this Markdown file
+directly anymore; the script overwrites it on the next sync.
+
+**Step by step, whenever a task finishes, slips, or starts:**
+
+1. Open a terminal at the repository root (the folder with this `docs/`
+   directory in it).
+2. Run one command per task that changed:
+
+   ```
+   python scripts/update_planner.py set <task-id> Completed --date YYYY-MM-DD
+   ```
+
+   For example, closing out this week's mobile test-harness task:
+
+   ```
+   python scripts/update_planner.py set 3.1 Completed --date 2026-09-14
+   ```
+
+   Progress must be exactly one of `"Not started"`, `"In progress"`, or
+   `"Completed"` (the three values Planner itself uses). Add `--note "..."`
+   to record why, or `--note "..." --append` to add to what is already
+   there instead of replacing it. `--date` defaults to today when you mark
+   something `Completed` and is otherwise ignored.
+
+   To flag a slipped task instead of closing one, leave Progress as
+   `"Not started"` and say why in the note, using the words "Carried to
+   week N" -- the script recognizes that phrase and shows "Carried to week
+   N" in the Status column instead of a bare "Not started", the same way
+   this week's proposal sections (2.3 through 2.6) are shown below:
+
+   ```
+   python scripts/update_planner.py set 2.3 "Not started" --note "Carried to week 3." --append
+   ```
+
+3. That single command already rewrites both files: it updates the row in
+   `docs/PLANNER-FALL-2026.csv` and regenerates every `Status` cell in this
+   file's week tables to match. You do not need a separate sync step after
+   `set`.
+4. If you ever hand-edit the CSV directly (bulk changes, fixing a typo) run
+   the regeneration step on its own afterward:
+
+   ```
+   python scripts/update_planner.py sync-md
+   ```
+
+5. Before filing the weekly progress report, run the consistency check so a
+   forgotten `sync-md` never makes it into what you hand in:
+
+   ```
+   python scripts/update_planner.py check
+   ```
+
+   It exits non-zero and tells you to run `sync-md` if the two files
+   disagree, so this is safe to drop into a pre-commit hook or a GitHub
+   Actions step later if the team wants it fully hands-off; for now, running
+   it by hand before writing the report is enough.
+6. `python scripts/update_planner.py list` (optionally `--week N`) prints
+   every task's current status without opening either file, useful while
+   writing the "tasks completed" section of the weekly report.
+7. **This does not reach the real Teams Planner by itself.** Microsoft
+   Planner has no supported bulk import for updating an existing plan, so
+   after running `set`, still tick the matching task's checkbox in Teams by
+   hand (a few seconds per task). What this script guarantees is that the
+   CSV you are copying from, and the roadmap the team actually reads, always
+   agree with each other -- the thing the maintenance notes above call out
+   as the actual point-costing failure mode.
+
+Author: Bloodawn (KheivenD), 2026-09-06. Automation section added 2026-09-15.

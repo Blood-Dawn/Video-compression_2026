@@ -215,12 +215,11 @@ CLAUDE.md
 .verify_server.log
 
 # Teammates' real school email addresses, used only by
-# scripts/update_planner.py export-m365/export-flow to fill in Planner
-# task assignees. Kept out of the public repo on purpose -- see that
+# scripts/update_planner.py export-flow to fill in Planner task
+# assignees. Kept out of the public repo on purpose -- see that
 # script and docs/PLANNER-FALL-2026.md, "Populating the real Teams
 # Planner," for what writes/reads it.
 scripts/team-emails.local.json
-*.local.ps1
 *.local.json
 
 # Ad-hoc local test media staged for phone/upload walkthroughs

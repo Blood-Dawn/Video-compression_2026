@@ -50,14 +50,27 @@ real Teams Planner" section of PLANNER-FALL-2026.md, for the one-time
 setup (installing the CLI, logging in, what to do if your tenant blocks
 it) before running it.
 
+If your tenant blocks CLI for Microsoft 365 from registering its own
+Entra app (FAU's does -- `m365 setup` fails with a 403 after a
+successful sign-in), use the Power Automate flow instead. Generate the
+JSON it feeds into a Compose action:
+    python scripts/update_planner.py export-flow --week 3 --pending-only -o week3.local.json
+
+That command needs no app registration at all -- see "Populating the
+real Teams Planner", Option B, in PLANNER-FALL-2026.md for the full
+flow build (every action it uses is Standard tier, free on any
+Microsoft 365 Education plan).
+
 Note: Microsoft Planner has no supported bulk CSV import/export for an
-existing plan through its own UI. `export-m365` works around that by
-driving the Microsoft Graph API through CLI for Microsoft 365 instead
-(see the docs it prints); this script's `set`/`sync-md`/`check` commands
-still only keep the two files *in this repo* honest with each other.
-Treat the CSV as the thing you update first, always.
+existing plan through its own UI. `export-m365` and `export-flow` work
+around that -- one by driving the Microsoft Graph API through CLI for
+Microsoft 365, the other by feeding Power Automate's own Planner
+connector (see the docs each prints); this script's `set`/`sync-md`/
+`check` commands still only keep the two files *in this repo* honest
+with each other. Treat the CSV as the thing you update first, always.
 
 Author: Bloodawn (KheivenD), 2026-09-15. export-m365 added 2026-09-19.
+export-flow added 2026-09-19 (CLI path blocked by FAU's tenant).
 """
 from __future__ import annotations
 
@@ -293,7 +306,13 @@ def cmd_check(args: argparse.Namespace) -> int:
 
 
 PROGRESS_TO_PERCENT = {"Not started": 0, "In progress": 50, "Completed": 100}
-PROGRESS_TO_PERCENT = {"Not started": 0, "In progress": 50, "Completed": 100}
+
+# Graph's plannerTask.priority is an int 0-10 (0 = highest). Planner's UI
+# only shows four buckets -- Urgent/Important/Medium/Low -- and picking one
+# representative value per bucket (rather than, say, 0 or 7) keeps the icon
+# Planner displays unambiguous. Same four words as VALID_PRIORITY/`m365
+# planner task add --priority`.
+PRIORITY_TO_INT = {"Urgent": 1, "Important": 3, "Medium": 5, "Low": 9}
 
 
 def _export_header(plan_title: str, owner_group: str, names: list) -> list:
@@ -408,6 +427,73 @@ def cmd_export_m365(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_export_flow(args: argparse.Namespace) -> int:
+    """Emit a JSON array for the Power Automate flow described in
+    PLANNER-FALL-2026.md ("Populating the real Teams Planner", Option B).
+
+    Paste the output into that flow's "This week's tasks" Compose action.
+    Each object has exactly the fields the flow's Apply-to-each loop reads:
+    title, bucketName, assignedTo, priority (0-10 int), percentComplete
+    (0-100 int), startDateTime/dueDateTime (ISO 8601 UTC), notes. No AAD
+    lookup is needed -- Planner's "Create a task (Preview)" action accepts
+    a plain email address (or semicolon-separated list) directly in its
+    Assigned User Ids field.
+    """
+    rows = read_csv_rows()
+    if args.week is not None:
+        rows = [r for r in rows if (task_id_of(r["Task Name"]) or "").startswith("{}.".format(args.week))]
+    if args.pending_only:
+        rows = [r for r in rows if r.get("Progress", "Not started") != "Completed"]
+    if not rows:
+        print("error: no matching tasks (check --week / --pending-only)", file=sys.stderr)
+        return 1
+
+    known = load_email_map()
+    tasks = []
+    unresolved = []
+    for r in rows:
+        tid = task_id_of(r["Task Name"]) or ""
+        owner = r["Assigned To"].strip()
+        email = known.get(owner, "")
+        if not email:
+            unresolved.append("{} ({})".format(tid, owner))
+
+        priority_word = (r.get("Priority") or "Medium").strip() or "Medium"
+        if priority_word not in VALID_PRIORITY:
+            priority_word = "Medium"
+
+        start = (r.get("Start Date") or "").strip()
+        due = (r.get("Due Date") or "").strip()
+
+        tasks.append({
+            "id": tid,
+            "title": r["Task Name"].strip(),
+            "bucketName": r["Bucket Name"].strip(),
+            "assignedTo": email,
+            "priority": PRIORITY_TO_INT[priority_word],
+            "percentComplete": PROGRESS_TO_PERCENT.get(r.get("Progress", "Not started"), 0),
+            "startDateTime": "{}T00:00:00Z".format(start) if start else "",
+            "dueDateTime": "{}T23:59:00Z".format(due) if due else "",
+            "notes": (r.get("Notes") or "").strip(),
+        })
+
+    text = json.dumps(tasks, indent=2) + "\n"
+    if args.output:
+        Path(args.output).write_text(text, encoding="utf-8")
+        print("wrote {} task object(s) to {}".format(len(tasks), args.output), file=sys.stderr)
+    else:
+        sys.stdout.write(text)
+
+    if unresolved:
+        print(
+            "warning: no email in scripts/team-emails.local.json for: {} "
+            "-- assignedTo is blank for these; the flow will create the "
+            "task unassigned.".format(", ".join(unresolved)),
+            file=sys.stderr,
+        )
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -441,6 +527,15 @@ def main(argv: list[str] | None = None) -> int:
     p_export.add_argument("--owner-group", default=None, help="Fill in the owning M365 Group/Team name now instead of leaving a TODO placeholder.")
     p_export.add_argument("-o", "--output", default=None, help="Write the script to this path instead of stdout.")
     p_export.set_defaults(func=cmd_export_m365)
+
+    p_flow = sub.add_parser(
+        "export-flow",
+        help="Generate the JSON array the Power Automate flow's Compose action needs to create these tasks.",
+    )
+    p_flow.add_argument("--week", type=int, default=None, help="Only export tasks NN.* for this week number.")
+    p_flow.add_argument("--pending-only", action="store_true", help="Skip tasks already marked Completed.")
+    p_flow.add_argument("-o", "--output", default=None, help="Write the JSON to this path instead of stdout.")
+    p_flow.set_defaults(func=cmd_export_flow)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -377,25 +377,104 @@ tool (CLI for Microsoft 365 / PnP) instead of raw HTTP calls.
    created yet (`--week` and `--pending-only` help scope that), or comment
    out the lines for what already exists.
 
-### Option B: Power Automate (no app consent needed)
+### Option B: Power Automate (no app registration needed)
 
-If Option A's login step is blocked by tenant policy, Power Automate's
-Planner connector is a first-party Microsoft connector already trusted in
-any Microsoft 365 tenant that has Planner and Power Automate licensed
-(standard in an educational tenant), so it does not hit the same
-admin-consent wall:
+This is the option we ended up using, since FAU's tenant blocks Option A's
+`m365 setup` step (a 403 after a successful sign-in -- the tenant refuses
+to let a student-run tool register its own Entra app; confirmed against
+the real error, 2026-09-19). Power Automate's Planner connector sidesteps
+that wall completely: every action below is **Standard tier**, which
+means it ships free with Planner and Power Automate on any Microsoft 365
+Education license and needs no premium plan, no admin consent, and no app
+registration of any kind (verified against Microsoft's own connector
+reference, 2026-09-19). It also does not need anyone's Azure AD object
+ID -- Planner's task-creation action accepts a plain email address.
 
-1. In Power Automate, build a flow with a manual trigger (or one reading
-   an Excel table you paste this CSV's rows into on OneDrive/SharePoint).
-2. Add "Apply to each" over the rows, then a Planner "Create a task"
-   action inside it, mapping Title / Bucket / Assigned to / Due date from
-   each row. Priority is not exposed in the basic action; add a follow-up
-   "Update task" (Planner) step, or a "Send an HTTP request" (Planner)
-   action, if you want priority set in the same flow.
-3. Run the flow once per week's batch of tasks.
+**Build this flow once. Re-run it, unedited, every week** by generating a
+new JSON file and pasting it into the one Compose action that changes.
 
-This needs more manual mapping in the flow designer than Option A, but
-needs zero command-line setup and works even where `m365 login` does not.
+**One-time flow build (do this once, in Power Automate -- make.powerautomate.com):**
+
+1. Create a new **Instant cloud flow**, trigger **Manually trigger a flow**.
+   Name it something like "SVCS Planner - Import Week's Tasks."
+2. Add a **Compose** action right after the trigger. Rename it (the "..." >
+   Rename) to `This Weeks Tasks`. Leave its Inputs box empty for now --
+   you paste JSON into it before each run (step 4 below).
+3. Add **Initialize variable**: name `BucketId`, type String, value left
+   blank -- filled by the next two actions.
+4. Add **List buckets** (Planner). Set **Plan Id** to your real plan (pick
+   it from the dropdown the first time; Power Automate remembers it).
+5. Add **Filter array**: **From** = the output of *List buckets*, condition
+   `displayName is equal to` and, on the right side, type the exact bucket
+   name for the week you are about to run (e.g. `Week 3 (2026-09-14)`) --
+   this is the one thing you also hand-edit each week, alongside the
+   Compose JSON. (The bucket itself has to already exist in Planner --
+   create it once in the Planner UI, or with `m365 planner bucket add` if
+   Option A's login worked for at least that -- this flow does not create
+   buckets.)
+6. **Set variable**: `BucketId` = `first(body('Filter_array'))?['id']`.
+7. Add **Apply to each**. **Select an output from previous steps** =
+   `outputs('This_Weeks_Tasks')` (switch that field to "Enter custom
+   value" and type the expression if the picker does not offer it
+   directly, since Compose's output is only recognized as an array once it
+   actually contains one).
+8. Inside the loop, add **Create a task (Preview)** (Planner). Map:
+
+   | Field | Value |
+   |---|---|
+   | Group Id | pick your Team/Group from the dropdown |
+   | Plan Id | pick your plan from the dropdown |
+   | Title | `items('Apply_to_each')?['title']` |
+   | Bucket Id | variable `BucketId` |
+   | Assigned User Ids | `items('Apply_to_each')?['assignedTo']` |
+   | Priority | `items('Apply_to_each')?['priority']` |
+   | Start Date Time | `items('Apply_to_each')?['startDateTime']` |
+   | Due Date Time | `items('Apply_to_each')?['dueDateTime']` |
+
+9. Still inside the loop, add **Update a task (V2) (Preview)** (Planner) --
+   this action carries Percent Complete, which "Create a task" does not
+   expose:
+
+   | Field | Value |
+   |---|---|
+   | Task Id | `outputs('Create_a_task_(Preview)')?['id']` |
+   | Percent Complete | `items('Apply_to_each')?['percentComplete']` |
+
+10. Still inside the loop, add **Update task details** (Planner) -- the
+    task's Notes live in a separate `taskDetails` object in Graph, hence
+    the third action:
+
+    | Field | Value |
+    |---|---|
+    | Task Id | `outputs('Create_a_task_(Preview)')?['id']` |
+    | Description | `items('Apply_to_each')?['notes']` |
+
+11. Save the flow.
+
+**Every week after that:**
+
+1. `python scripts/update_planner.py export-flow --week 3 --pending-only
+   -o week3.local.json` (name it `*.local.json` -- already gitignored --
+   it carries real school emails). Fix any `assignedTo: ""` entries the
+   script warns about by adding that person to
+   `scripts/team-emails.local.json` and re-running.
+2. Create that week's bucket in Planner if it does not exist yet.
+3. Open the flow, edit the **Filter array** step's bucket-name value and
+   the **Compose** step's Inputs (paste the JSON file's contents in), then
+   **Save**.
+4. Click **Run** (manual trigger) and confirm all tasks appear in Planner
+   with the right bucket, assignee, priority, dates, and description.
+
+Two things worth knowing before you rely on this: Planner has no
+create-if-missing for tasks either, so re-running the same JSON through
+the flow creates duplicates -- scope `--pending-only` (and `--week`) the
+same way Option A's script does, and don't re-run a week you already
+imported. And unlike Option A, this flow was never actually run against
+FAU's tenant as of this writing (Option A's login failure is what
+surfaced this whole detour) -- the field mappings above come from
+Microsoft's own connector reference and community write-ups, not a
+live FAU test, so budget time for one trial run against a throwaway
+bucket before trusting it with a real week's tasks.
 
 ### Neither option is required to keep this document itself honest
 
@@ -405,4 +484,6 @@ CSV and Markdown -- that is what the weekly report and the roadmap
 actually read from, independent of whether Teams Planner is current.
 
 Author: Bloodawn (KheivenD), 2026-09-06. Automation section added
-2026-09-15. Teams Planner population section added 2026-09-19.
+2026-09-15. Teams Planner population section added 2026-09-19. Power
+Automate flow (Option B) fully specified 2026-09-19, after FAU's tenant
+blocked Option A's `m365 setup`.

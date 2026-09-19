@@ -32,18 +32,39 @@ Check that the Markdown Status columns already agree with the CSV
 (exit code 1 on any mismatch -- wire this into a pre-commit hook or CI):
     python scripts/update_planner.py check
 
-Note: Microsoft Planner has no supported bulk CSV import/export for an
-existing plan, so a completed task still needs its checkbox ticked by
-hand in Teams. This script only keeps the two files *in this repo*
-honest with each other; treat the CSV as the thing you update first.
+Generate a ready-to-run PowerShell script that actually creates these
+tasks in the real MS Teams Planner, with the owner, due date, and
+priority already filled in, using CLI for Microsoft 365 (`m365`):
+    python scripts/update_planner.py export-m365 --week 3 -o week3.local.ps1
 
-Author: Bloodawn (KheivenD), 2026-09-15.
+Name the output *.local.ps1 (already in .gitignore) since a filled-in
+script carries real email addresses once scripts/team-emails.local.json
+exists -- see below.
+
+That script is a starting point, not a fire-and-forget one: it needs the
+plan's title/owner group filled in once at the top, and a name -> UPN
+(school email) mapping filled in once, because this repo has no access
+to your tenant's directory and should not guess anyone's email address.
+See the generated script's own header comments, and the "Populating the
+real Teams Planner" section of PLANNER-FALL-2026.md, for the one-time
+setup (installing the CLI, logging in, what to do if your tenant blocks
+it) before running it.
+
+Note: Microsoft Planner has no supported bulk CSV import/export for an
+existing plan through its own UI. `export-m365` works around that by
+driving the Microsoft Graph API through CLI for Microsoft 365 instead
+(see the docs it prints); this script's `set`/`sync-md`/`check` commands
+still only keep the two files *in this repo* honest with each other.
+Treat the CSV as the thing you update first, always.
+
+Author: Bloodawn (KheivenD), 2026-09-15. export-m365 added 2026-09-19.
 """
 from __future__ import annotations
 
 import argparse
 import csv
 import datetime
+import json
 import re
 import sys
 from pathlib import Path
@@ -51,6 +72,18 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CSV_PATH = REPO_ROOT / "docs" / "PLANNER-FALL-2026.csv"
 MD_PATH = REPO_ROOT / "docs" / "PLANNER-FALL-2026.md"
+
+# Real school emails for export-m365, kept in a gitignored local file --
+# never hardcoded here and never committed, since this repo is public.
+# Format: {"Full Name as it appears in the Assigned To column": "user@school.edu"}
+TEAM_EMAILS_PATH = REPO_ROOT / "scripts" / "team-emails.local.json"
+
+
+def load_email_map() -> dict[str, str]:
+    if TEAM_EMAILS_PATH.exists():
+        with TEAM_EMAILS_PATH.open(encoding="utf-8") as f:
+            return json.load(f)
+    return {}
 
 VALID_PROGRESS = ("Not started", "In progress", "Completed")
 
@@ -62,8 +95,13 @@ CSV_FIELDS = [
     "Due Date",
     "Progress",
     "Completed Date",
+    "Priority",
     "Notes",
 ]
+
+# Same four words CLI for Microsoft 365's `m365 planner task add --priority`
+# accepts directly, which is itself Planner's own UI vocabulary.
+VALID_PRIORITY = ("Urgent", "Important", "Medium", "Low")
 
 TASK_ID_RE = re.compile(r"^(\d+\.\d+)\s+(.*)$")
 
@@ -77,10 +115,11 @@ def read_csv_rows() -> list[dict]:
     with CSV_PATH.open(newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         rows = list(reader)
-    # Older copies of the CSV predate the "Completed Date" column; backfill
-    # it so DictWriter doesn't choke on a missing key.
+    # Older copies of the CSV predate the "Completed Date" and "Priority"
+    # columns; backfill them so DictWriter doesn't choke on a missing key.
     for row in rows:
         row.setdefault("Completed Date", "")
+        row.setdefault("Priority", "Medium")
     return rows
 
 
@@ -130,13 +169,17 @@ def cmd_list(args: argparse.Namespace) -> int:
             continue
         if args.week is not None and not tid.startswith(f"{args.week}."):
             continue
-        print(f"{tid:<6} {status_text(row):<16} {row['Assigned To']:<26} {row['Task Name']}")
+        priority = (row.get("Priority") or "Medium").strip() or "Medium"
+        print(f"{tid:<6} {status_text(row):<18} {priority:<10} {row['Assigned To']:<26} {row['Task Name']}")
     return 0
 
 
 def cmd_set(args: argparse.Namespace) -> int:
     if args.progress not in VALID_PROGRESS:
         print(f"error: Progress must be one of {VALID_PROGRESS}, got {args.progress!r}", file=sys.stderr)
+        return 2
+    if args.priority is not None and args.priority not in VALID_PRIORITY:
+        print(f"error: --priority must be one of {VALID_PRIORITY}, got {args.priority!r}", file=sys.stderr)
         return 2
 
     rows = read_csv_rows()
@@ -151,14 +194,20 @@ def cmd_set(args: argparse.Namespace) -> int:
             row["Completed Date"] = args.date or datetime.date.today().isoformat()
         else:
             row["Completed Date"] = ""
+        if args.priority is not None:
+            row["Priority"] = args.priority
         if args.note:
             existing = (row.get("Notes") or "").strip()
             row["Notes"] = f"{existing} {args.note}".strip() if (args.append and existing) else args.note
 
     write_csv_rows(rows)
     for row in matched:
-        print(f"updated {args.task_id}: Progress={row['Progress']!r}"
-              + (f", Completed Date={row['Completed Date']!r}" if row["Progress"] == "Completed" else ""))
+        msg = f"updated {args.task_id}: Progress={row['Progress']!r}"
+        if row["Progress"] == "Completed":
+            msg += f", Completed Date={row['Completed Date']!r}"
+        if args.priority is not None:
+            msg += f", Priority={row['Priority']!r}"
+        print(msg)
 
     return cmd_sync_md(args, quiet=True)
 
@@ -243,6 +292,122 @@ def cmd_check(args: argparse.Namespace) -> int:
     return 1
 
 
+PROGRESS_TO_PERCENT = {"Not started": 0, "In progress": 50, "Completed": 100}
+PROGRESS_TO_PERCENT = {"Not started": 0, "In progress": 50, "Completed": 100}
+
+
+def _export_header(plan_title: str, owner_group: str, names: list) -> list:
+    lines = []
+    lines.append("# Generated by scripts/update_planner.py export-m365 -- do not hand-edit,")
+    lines.append("# regenerate it instead. See docs/PLANNER-FALL-2026.md, section")
+    lines.append("# 'Populating the real Teams Planner', for the one-time setup this script")
+    lines.append("# assumes:")
+    lines.append("#   1. winget install PnP.CLIMicrosoft365   (or: npm i -g @pnp/cli-microsoft365)")
+    lines.append("#   2. m365 login                            (opens a browser; use your school account)")
+    lines.append("#      If this is refused with an admin-approval / AADSTS90094 error, your")
+    lines.append("#      tenant blocks user consent for this app -- see that doc section for")
+    lines.append("#      the Power Automate fallback, which needs no app consent at all.")
+    lines.append("#   3. Fill in $planTitle / $ownerGroup below. 'm365 planner plan list")
+    lines.append("#      --ownerGroupName <your team's M365 group/Team name>' finds the exact")
+    lines.append("#      title if you are not sure of it.")
+    lines.append("#   4. Fill in any TODO email left in $emailMap below -- entries already")
+    lines.append("#      filled came from scripts/team-emails.local.json (gitignored; never")
+    lines.append("#      committed, since this repo is public). A name with no entry there")
+    lines.append("#      falls back to a TODO placeholder instead of a guess.")
+    lines.append("#   5. Run this script. It is NOT safe to re-run as-is: re-running the bucket")
+    lines.append("#      section creates duplicate buckets, and re-running the task section")
+    lines.append("#      creates duplicate tasks, because Planner has no create-if-missing")
+    lines.append("#      operation. Comment out the buckets you already created before a second")
+    lines.append("#      run, the same way you would with any one-shot migration script.")
+    lines.append("")
+    lines.append('$planTitle  = "{}"'.format(plan_title))
+    lines.append('$ownerGroup = "{}"'.format(owner_group))
+    lines.append("")
+    known = load_email_map()
+    missing = [n for n in names if n not in known]
+    if missing:
+        lines.append("# Fill in the TODO email(s) below -- not found in team-emails.local.json.")
+    else:
+        lines.append("# Every address below came from scripts/team-emails.local.json.")
+    lines.append("$emailMap = @{")
+    for n in names:
+        email = known.get(n, "TODO@example.edu")
+        lines.append('    "{}" = "{}"'.format(n, email))
+    lines.append("}")
+    return lines
+
+
+def cmd_export_m365(args: argparse.Namespace) -> int:
+    rows = read_csv_rows()
+    if args.week is not None:
+        rows = [r for r in rows if (task_id_of(r["Task Name"]) or "").startswith("{}.".format(args.week))]
+    if args.pending_only:
+        rows = [r for r in rows if r.get("Progress", "Not started") != "Completed"]
+    if not rows:
+        print("error: no matching tasks (check --week / --pending-only)", file=sys.stderr)
+        return 1
+
+    plan_title = args.plan_title or "TODO-PLAN-TITLE"
+    owner_group = args.owner_group or "TODO-OWNER-GROUP-NAME"
+
+    # Preserve first-seen order for both, since Planner shows buckets in the
+    # order they were created and this should read the same as the week
+    # tables in PLANNER-FALL-2026.md.
+    buckets = []
+    names = []
+    for r in rows:
+        b = r["Bucket Name"].strip()
+        if b not in buckets:
+            buckets.append(b)
+        n = r["Assigned To"].strip()
+        if n not in names:
+            names.append(n)
+
+    lines = _export_header(plan_title, owner_group, names)
+    lines.append("")
+    lines.append("# --- buckets (one per week) -------------------------------------------")
+    for b in buckets:
+        safe_b = b.replace('"', '`"')
+        lines.append('m365 planner bucket add --name "{}" --planTitle $planTitle --ownerGroupName $ownerGroup'.format(safe_b))
+
+    lines.append("")
+    lines.append("# --- tasks --------------------------------------------------------------")
+    for r in rows:
+        title = r["Task Name"].strip().replace('"', '`"')
+        bucket = r["Bucket Name"].strip().replace('"', '`"')
+        owner = r["Assigned To"].strip()
+        priority = (r.get("Priority") or "Medium").strip() or "Medium"
+        if priority not in VALID_PRIORITY:
+            priority = "Medium"
+        percent = PROGRESS_TO_PERCENT.get(r.get("Progress", "Not started"), 0)
+        due = r.get("Due Date", "").strip()
+        start = r.get("Start Date", "").strip()
+
+        parts = [
+            "m365 planner task add",
+            '--title "{}"'.format(title),
+            "--planTitle $planTitle",
+            "--ownerGroupName $ownerGroup",
+            '--bucketName "{}"'.format(bucket),
+            '--assignedToUserNames $emailMap["{}"]'.format(owner),
+            "--priority {}".format(priority),
+            "--percentComplete {}".format(percent),
+        ]
+        if start:
+            parts.append('--startDateTime "{}"'.format(start))
+        if due:
+            parts.append('--dueDateTime "{}"'.format(due))
+        lines.append(" ".join(parts))
+
+    text = "\n".join(lines) + "\n"
+    if args.output:
+        Path(args.output).write_text(text, encoding="utf-8")
+        print("wrote {} task command(s) and {} bucket command(s) to {}".format(len(rows), len(buckets), args.output))
+    else:
+        sys.stdout.write(text)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -257,6 +422,7 @@ def main(argv: list[str] | None = None) -> int:
     p_set.add_argument("--date", default=None, help="Completion date (YYYY-MM-DD). Defaults to today when marking Completed.")
     p_set.add_argument("--note", default=None, help="Set (or append with --append) the Notes cell.")
     p_set.add_argument("--append", action="store_true", help="Append --note to the existing Notes instead of replacing it.")
+    p_set.add_argument("--priority", default=None, choices=VALID_PRIORITY, help="Optionally also set the task's Priority.")
     p_set.set_defaults(func=cmd_set)
 
     p_sync = sub.add_parser("sync-md", help="Regenerate the Markdown Status columns from the CSV.")
@@ -264,6 +430,17 @@ def main(argv: list[str] | None = None) -> int:
 
     p_check = sub.add_parser("check", help="Exit 1 if the Markdown Status columns disagree with the CSV.")
     p_check.set_defaults(func=cmd_check)
+
+    p_export = sub.add_parser(
+        "export-m365",
+        help="Generate a PowerShell script that creates these tasks in the real Teams Planner via CLI for Microsoft 365.",
+    )
+    p_export.add_argument("--week", type=int, default=None, help="Only export tasks NN.* for this week number.")
+    p_export.add_argument("--pending-only", action="store_true", help="Skip tasks already marked Completed.")
+    p_export.add_argument("--plan-title", default=None, help="Fill in the plan title now instead of leaving a TODO placeholder.")
+    p_export.add_argument("--owner-group", default=None, help="Fill in the owning M365 Group/Team name now instead of leaving a TODO placeholder.")
+    p_export.add_argument("-o", "--output", default=None, help="Write the script to this path instead of stdout.")
+    p_export.set_defaults(func=cmd_export_m365)
 
     args = parser.parse_args(argv)
     return args.func(args)

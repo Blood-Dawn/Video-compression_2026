@@ -318,12 +318,91 @@ directly anymore; the script overwrites it on the next sync.
 6. `python scripts/update_planner.py list` (optionally `--week N`) prints
    every task's current status without opening either file, useful while
    writing the "tasks completed" section of the weekly report.
-7. **This does not reach the real Teams Planner by itself.** Microsoft
-   Planner has no supported bulk import for updating an existing plan, so
-   after running `set`, still tick the matching task's checkbox in Teams by
-   hand (a few seconds per task). What this script guarantees is that the
-   CSV you are copying from, and the roadmap the team actually reads, always
-   agree with each other -- the thing the maintenance notes above call out
-   as the actual point-costing failure mode.
+7. **`set`/`sync-md`/`check` only keep the two files in this repo honest
+   with each other; they do not by themselves reach the real Teams
+   Planner.** What they guarantee is that the CSV you would copy from, and
+   the roadmap the team actually reads, always agree -- the thing the
+   maintenance notes above call out as the actual point-costing failure
+   mode. To push tasks into the real Planner with almost no manual re-typing,
+   see the next section.
 
-Author: Bloodawn (KheivenD), 2026-09-06. Automation section added 2026-09-15.
+## Populating the real Teams Planner
+
+Microsoft Planner itself has no supported bulk-import feature for an
+existing plan (confirmed against Microsoft's own docs and community
+answers as of September 2026) -- there is no "upload this CSV" button.
+Two ways around that, in order of how much setup they need:
+
+### Option A: CLI for Microsoft 365 (`m365`), scripted from this CSV
+
+This is what `python scripts/update_planner.py export-m365` generates a
+ready-to-run script for. It drives the same Microsoft Graph API endpoints
+Planner's own web UI uses (the `plannerTask` resource: `assignments`,
+`priority` 0-10 with Urgent/Important/Medium/Low as the named buckets,
+`dueDateTime`, `startDateTime`, `percentComplete`), through a community
+tool (CLI for Microsoft 365 / PnP) instead of raw HTTP calls.
+
+**One-time setup:**
+
+1. Install it: `winget install PnP.CLIMicrosoft365` (or, with Node
+   installed, `npm i -g @pnp/cli-microsoft365`).
+2. `m365 login` -- opens a browser, sign in with your school Microsoft
+   365 account. **This is the step that can fail on a university tenant**:
+   if you get an "admin approval required" / `AADSTS90094` error, FAU's
+   tenant is blocking user consent for third-party apps and no amount of
+   retrying fixes that from the student side -- skip to Option B instead
+   of waiting on IT.
+3. Find your team's exact plan name: `m365 planner plan list
+   --ownerGroupName "<your Team/Group name>"` prints each plan's `title`
+   and `id`.
+4. One-time only: create `scripts/team-emails.local.json` (gitignored,
+   already set up as of 2026-09-19 -- ask Kheiven for a copy rather than
+   retyping everyone's address, or see the format at the top of
+   `load_email_map()` in the script) mapping each full name to a real
+   school email. Never commit this file; it exists specifically so real
+   addresses do not end up in the public repo.
+5. Generate the script: `python scripts/update_planner.py export-m365
+   --week 3 --pending-only --plan-title "<title from step 3>"
+   --owner-group "<your Team/Group name>" -o week3.local.ps1` (name it
+   `*.local.ps1` -- already gitignored -- since it now carries real
+   emails once step 4 is done).
+6. Open the generated script, confirm every `$emailMap` entry looks right
+   (anyone missing from `team-emails.local.json` still shows as a TODO),
+   and run it. Every task lands in Planner already assigned to the right
+   person, with the same due date and priority as this document -- no
+   retyping five people's tasks by hand.
+7. It is a one-shot script, not idempotent: running it twice creates
+   duplicate buckets and duplicate tasks, because Planner has no
+   create-if-missing operation. Re-run only for tasks you have not
+   created yet (`--week` and `--pending-only` help scope that), or comment
+   out the lines for what already exists.
+
+### Option B: Power Automate (no app consent needed)
+
+If Option A's login step is blocked by tenant policy, Power Automate's
+Planner connector is a first-party Microsoft connector already trusted in
+any Microsoft 365 tenant that has Planner and Power Automate licensed
+(standard in an educational tenant), so it does not hit the same
+admin-consent wall:
+
+1. In Power Automate, build a flow with a manual trigger (or one reading
+   an Excel table you paste this CSV's rows into on OneDrive/SharePoint).
+2. Add "Apply to each" over the rows, then a Planner "Create a task"
+   action inside it, mapping Title / Bucket / Assigned to / Due date from
+   each row. Priority is not exposed in the basic action; add a follow-up
+   "Update task" (Planner) step, or a "Send an HTTP request" (Planner)
+   action, if you want priority set in the same flow.
+3. Run the flow once per week's batch of tasks.
+
+This needs more manual mapping in the flow designer than Option A, but
+needs zero command-line setup and works even where `m365 login` does not.
+
+### Neither option is required to keep this document itself honest
+
+Whichever option you use for the real Planner, or neither, keep using
+`set` / `sync-md` / `check` from the previous section for this repo's own
+CSV and Markdown -- that is what the weekly report and the roadmap
+actually read from, independent of whether Teams Planner is current.
+
+Author: Bloodawn (KheivenD), 2026-09-06. Automation section added
+2026-09-15. Teams Planner population section added 2026-09-19.

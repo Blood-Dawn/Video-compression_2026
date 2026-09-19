@@ -32,34 +32,35 @@ Check that the Markdown Status columns already agree with the CSV
 (exit code 1 on any mismatch -- wire this into a pre-commit hook or CI):
     python scripts/update_planner.py check
 
-Generate a ready-to-run PowerShell script that actually creates these
-tasks in the real MS Teams Planner, with the owner, due date, and
-priority already filled in, using CLI for Microsoft 365 (`m365`):
+Generate the JSON a Power Automate flow needs to create these tasks in
+the real MS Teams Planner, with the owner, due date, priority, and
+percent complete already filled in -- this is the path this team
+actually uses, since FAU's tenant blocks the alternative below:
+    python scripts/update_planner.py export-flow --week 3 --pending-only -o week3.local.json
+
+Name the output *.local.json (already in .gitignore) since it carries
+real email addresses once scripts/team-emails.local.json exists -- see
+below. It needs no app registration or command-line login at all -- see
+the "Populating the real Teams Planner" section of PLANNER-FALL-2026.md
+for the one-time flow build (every action it uses is Standard tier, free
+on any Microsoft 365 Education plan) and what to paste in each week.
+
+Generate a ready-to-run PowerShell script that does the same thing via
+CLI for Microsoft 365 (`m365`) instead, for a team whose tenant allows a
+student-run tool to register its own Entra app (FAU's does not --
+`m365 setup` fails there with a 403 after a successful sign-in, which is
+why export-flow above exists):
     python scripts/update_planner.py export-m365 --week 3 -o week3.local.ps1
 
 Name the output *.local.ps1 (already in .gitignore) since a filled-in
-script carries real email addresses once scripts/team-emails.local.json
-exists -- see below.
-
-That script is a starting point, not a fire-and-forget one: it needs the
-plan's title/owner group filled in once at the top, and a name -> UPN
-(school email) mapping filled in once, because this repo has no access
-to your tenant's directory and should not guess anyone's email address.
-See the generated script's own header comments, and the "Populating the
-real Teams Planner" section of PLANNER-FALL-2026.md, for the one-time
-setup (installing the CLI, logging in, what to do if your tenant blocks
-it) before running it.
-
-If your tenant blocks CLI for Microsoft 365 from registering its own
-Entra app (FAU's does -- `m365 setup` fails with a 403 after a
-successful sign-in), use the Power Automate flow instead. Generate the
-JSON it feeds into a Compose action:
-    python scripts/update_planner.py export-flow --week 3 --pending-only -o week3.local.json
-
-That command needs no app registration at all -- see "Populating the
-real Teams Planner", Option B, in PLANNER-FALL-2026.md for the full
-flow build (every action it uses is Standard tier, free on any
-Microsoft 365 Education plan).
+script carries real email addresses too. It is a starting point, not a
+fire-and-forget one: it needs the plan's title/owner group filled in once
+at the top, and a name -> UPN (school email) mapping filled in once,
+because this repo has no access to your tenant's directory and should
+not guess anyone's email address. See the generated script's own header
+comments, and the "Why not CLI for Microsoft 365" part of that same
+section of PLANNER-FALL-2026.md, for the one-time setup before running
+it.
 
 Note: Microsoft Planner has no supported bulk CSV import/export for an
 existing plan through its own UI. `export-m365` and `export-flow` work

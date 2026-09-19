@@ -253,13 +253,20 @@ Table 6. Risk register.
 
 ## Keeping this planner in sync (automated)
 
-Added September 15: this planner used to drift because the CSV (the source
-for the MS Teams Planner) and this Markdown file's per-week tables were
-hand-edited separately, and it is easy to update one and forget the other.
+This planner used to drift because the CSV (the source for the MS Teams
+Planner) and this Markdown file's per-week tables were hand-edited
+separately, and it is easy to update one and forget the other.
 `scripts/update_planner.py` fixes that by making the CSV the single source
 of truth for every task's status, and generating this file's `Status`
 column from it. Nobody should hand-edit a Status cell in this Markdown file
 directly anymore; the script overwrites it on the next sync.
+
+This CSV/Markdown sync (`set` / `sync-md` / `check`, below) has been in
+place since September 15 and has not changed since. What is new, most
+recently on September 19, is the section right after this one --
+"Populating the real Teams Planner" -- which covers actually pushing these
+tasks into the real Teams Planner, not just keeping this repo's own two
+files honest with each other.
 
 **Step by step, whenever a task finishes, slips, or starts:**
 
@@ -330,70 +337,27 @@ directly anymore; the script overwrites it on the next sync.
 
 Microsoft Planner itself has no supported bulk-import feature for an
 existing plan (confirmed against Microsoft's own docs and community
-answers as of September 2026) -- there is no "upload this CSV" button.
-Two ways around that, in order of how much setup they need:
+answers as of September 2026) -- there is no "upload this CSV" button. We
+push tasks into the real Planner with a Power Automate flow instead,
+built once and re-run every week against a JSON file this script
+generates. We tried CLI for Microsoft 365 first, since it needs no flow
+to build; FAU's tenant blocks it outright, so we do not use it -- see
+"Why not CLI for Microsoft 365" at the end of this section if you want
+the details, but there is no reason to attempt that path again on this
+team's account.
 
-### Option A: CLI for Microsoft 365 (`m365`), scripted from this CSV
-
-This is what `python scripts/update_planner.py export-m365` generates a
-ready-to-run script for. It drives the same Microsoft Graph API endpoints
-Planner's own web UI uses (the `plannerTask` resource: `assignments`,
-`priority` 0-10 with Urgent/Important/Medium/Low as the named buckets,
-`dueDateTime`, `startDateTime`, `percentComplete`), through a community
-tool (CLI for Microsoft 365 / PnP) instead of raw HTTP calls.
-
-**One-time setup:**
-
-1. Install it: `winget install PnP.CLIMicrosoft365` (or, with Node
-   installed, `npm i -g @pnp/cli-microsoft365`).
-2. `m365 login` -- opens a browser, sign in with your school Microsoft
-   365 account. **This is the step that can fail on a university tenant**:
-   if you get an "admin approval required" / `AADSTS90094` error, FAU's
-   tenant is blocking user consent for third-party apps and no amount of
-   retrying fixes that from the student side -- skip to Option B instead
-   of waiting on IT.
-3. Find your team's exact plan name: `m365 planner plan list
-   --ownerGroupName "<your Team/Group name>"` prints each plan's `title`
-   and `id`.
-4. One-time only: create `scripts/team-emails.local.json` (gitignored,
-   already set up as of 2026-09-19 -- ask Kheiven for a copy rather than
-   retyping everyone's address, or see the format at the top of
-   `load_email_map()` in the script) mapping each full name to a real
-   school email. Never commit this file; it exists specifically so real
-   addresses do not end up in the public repo.
-5. Generate the script: `python scripts/update_planner.py export-m365
-   --week 3 --pending-only --plan-title "<title from step 3>"
-   --owner-group "<your Team/Group name>" -o week3.local.ps1` (name it
-   `*.local.ps1` -- already gitignored -- since it now carries real
-   emails once step 4 is done).
-6. Open the generated script, confirm every `$emailMap` entry looks right
-   (anyone missing from `team-emails.local.json` still shows as a TODO),
-   and run it. Every task lands in Planner already assigned to the right
-   person, with the same due date and priority as this document -- no
-   retyping five people's tasks by hand.
-7. It is a one-shot script, not idempotent: running it twice creates
-   duplicate buckets and duplicate tasks, because Planner has no
-   create-if-missing operation. Re-run only for tasks you have not
-   created yet (`--week` and `--pending-only` help scope that), or comment
-   out the lines for what already exists.
-
-### Option B: Power Automate (no app registration needed)
-
-This is the option we ended up using, since FAU's tenant blocks Option A's
-`m365 setup` step (a 403 after a successful sign-in -- the tenant refuses
-to let a student-run tool register its own Entra app; confirmed against
-the real error, 2026-09-19). Power Automate's Planner connector sidesteps
-that wall completely: every action below is **Standard tier**, which
-means it ships free with Planner and Power Automate on any Microsoft 365
-Education license and needs no premium plan, no admin consent, and no app
-registration of any kind (verified against Microsoft's own connector
-reference, 2026-09-19). It also does not need anyone's Azure AD object
-ID -- Planner's task-creation action accepts a plain email address.
+Power Automate's Planner connector needs no workaround for that block:
+every action used below is **Standard tier**, which means it ships free
+with Planner and Power Automate on any Microsoft 365 Education license
+and needs no premium plan, no admin consent, and no app registration of
+any kind (verified against Microsoft's own connector reference,
+2026-09-19). It also does not need anyone's Azure AD object ID -- Planner's
+task-creation action accepts a plain email address directly.
 
 **Build this flow once. Re-run it, unedited, every week** by generating a
 new JSON file and pasting it into the one Compose action that changes.
 
-**One-time flow build (do this once, in Power Automate -- make.powerautomate.com):**
+### One-time flow build (do this once, in Power Automate -- make.powerautomate.com)
 
 1. Create a new **Instant cloud flow**, trigger **Manually trigger a flow**.
    Name it something like "SVCS Planner - Import Week's Tasks."
@@ -409,9 +373,7 @@ new JSON file and pasting it into the one Compose action that changes.
    name for the week you are about to run (e.g. `Week 3 (2026-09-14)`) --
    this is the one thing you also hand-edit each week, alongside the
    Compose JSON. (The bucket itself has to already exist in Planner --
-   create it once in the Planner UI, or with `m365 planner bucket add` if
-   Option A's login worked for at least that -- this flow does not create
-   buckets.)
+   create it once in the Planner UI; this flow does not create buckets.)
 6. **Set variable**: `BucketId` = `first(body('Filter_array'))?['id']`.
 7. Add **Apply to each**. **Select an output from previous steps** =
    `outputs('This_Weeks_Tasks')` (switch that field to "Enter custom
@@ -451,7 +413,7 @@ new JSON file and pasting it into the one Compose action that changes.
 
 11. Save the flow.
 
-**Every week after that:**
+### Every week after that
 
 1. `python scripts/update_planner.py export-flow --week 3 --pending-only
    -o week3.local.json` (name it `*.local.json` -- already gitignored --
@@ -467,23 +429,70 @@ new JSON file and pasting it into the one Compose action that changes.
 
 Two things worth knowing before you rely on this: Planner has no
 create-if-missing for tasks either, so re-running the same JSON through
-the flow creates duplicates -- scope `--pending-only` (and `--week`) the
-same way Option A's script does, and don't re-run a week you already
-imported. And unlike Option A, this flow was never actually run against
-FAU's tenant as of this writing (Option A's login failure is what
-surfaced this whole detour) -- the field mappings above come from
-Microsoft's own connector reference and community write-ups, not a
-live FAU test, so budget time for one trial run against a throwaway
-bucket before trusting it with a real week's tasks.
+the flow creates duplicates -- scope `--pending-only` (and `--week`) so
+you never re-run a week you already imported. And this flow was never
+actually run against FAU's tenant as of this writing (the CLI's login
+failure, below, is what surfaced this whole detour) -- the field mappings
+above come from Microsoft's own connector reference and community
+write-ups, not a live FAU test, so budget time for one trial run against
+a throwaway bucket before trusting it with a real week's tasks.
 
-### Neither option is required to keep this document itself honest
+### Why not CLI for Microsoft 365
 
-Whichever option you use for the real Planner, or neither, keep using
+We looked at this first, since it needs no flow to build and can be
+scripted end to end from a terminal. `python scripts/update_planner.py
+export-m365` still generates a working script for it, driving the same
+Microsoft Graph API endpoints Planner's own web UI uses (the
+`plannerTask` resource: `assignments`, `priority` 0-10 with
+Urgent/Important/Medium/Low as the named buckets, `dueDateTime`,
+`startDateTime`, `percentComplete`) through a community tool (CLI for
+Microsoft 365 / PnP) instead of raw HTTP calls. It fails on this team's
+account at the second step: `m365 login` opens a browser and signs in
+fine, but `m365 setup` -- needed because the CLI's own shared app was
+retired in v9+ -- then fails with `Error: AxiosError: Request failed with
+status code 403` while trying to register its own Entra app, because
+FAU's tenant blocks student-initiated app registration. That is not
+something retrying fixes from the student side, so we moved to the
+Power Automate flow above instead of waiting on IT.
+
+If your own team is on a tenant that does allow user-driven app
+registration, this path is simpler than building a flow and is worth
+using instead of the above:
+
+1. Install it: `winget install PnP.CLIMicrosoft365` (or, with Node
+   installed, `npm i -g @pnp/cli-microsoft365`).
+2. `m365 login`, then `m365 setup` if login prompts for an `appId` you do
+   not have. Choose "Create a new app registration," minimal
+   (`User.Read`) scope, Interactive mode.
+3. Find your team's exact plan name: `m365 planner plan list
+   --ownerGroupName "<your Team/Group name>"` prints each plan's `title`
+   and `id`.
+4. Create `scripts/team-emails.local.json` (gitignored; see the format at
+   the top of `load_email_map()` in the script) mapping each full name to
+   a real school email. Never commit this file.
+5. Generate the script: `python scripts/update_planner.py export-m365
+   --week 3 --pending-only --plan-title "<title from step 3>"
+   --owner-group "<your Team/Group name>" -o week3.local.ps1` (name it
+   `*.local.ps1` -- already gitignored -- since it now carries real
+   emails once step 4 is done).
+6. Open the generated script, confirm every `$emailMap` entry looks right
+   (anyone missing from `team-emails.local.json` still shows as a TODO),
+   and run it.
+7. It is a one-shot script, not idempotent: running it twice creates
+   duplicate buckets and duplicate tasks, because Planner has no
+   create-if-missing operation. Re-run only for tasks you have not
+   created yet (`--week` and `--pending-only` help scope that), or comment
+   out the lines for what already exists.
+
+### Neither of the above is required to keep this document itself honest
+
+Whichever path you use for the real Planner, or neither, keep using
 `set` / `sync-md` / `check` from the previous section for this repo's own
 CSV and Markdown -- that is what the weekly report and the roadmap
 actually read from, independent of whether Teams Planner is current.
 
-Author: Bloodawn (KheivenD), 2026-09-06. Automation section added
-2026-09-15. Teams Planner population section added 2026-09-19. Power
-Automate flow (Option B) fully specified 2026-09-19, after FAU's tenant
-blocked Option A's `m365 setup`.
+Author: Bloodawn (KheivenD), 2026-09-06. Automation section (CSV/Markdown
+sync) added 2026-09-15 and unchanged since. "Populating the real Teams
+Planner" section added 2026-09-19, then restructured the same day once
+Power Automate -- not the CLI, which FAU's tenant blocks -- became the
+path this team actually uses.

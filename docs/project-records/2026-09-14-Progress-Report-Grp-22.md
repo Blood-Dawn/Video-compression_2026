@@ -9,15 +9,6 @@
 **Report Period:** September 14, 2026 to September 20, 2026
 **Team Members:** Kheiven D'Haiti (CS, AI Minor) | Jorge Sanchez (CS) | Ashleyn Montano (CS) | Riley Roberts (CS) | Victor De Souza Teixeira (CS, Cybersecurity)
 
-> **NOTE FOR THE TEAM, DELETE THIS BOX BEFORE SUBMITTING.** This report is
-> being filed on September 21, one day after the Sunday deadline, for the same
-> reason as last period: the week's attention went to something more urgent
-> than the plan. Three things below need a human to fill them in before this
-> goes out: whether the team met this period and who attended, whether there
-> was a sponsor check-in, and confirmation that the week 3 task list has been
-> imported into Teams Planner (it has not, as of this writing; see Part 1).
-> Export to PDF named `2026-09-14-Progress-Report-Grp-22.pdf`.
-
 ---
 
 # Part 1: Team Section

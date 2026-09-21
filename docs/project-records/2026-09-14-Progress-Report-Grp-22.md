@@ -320,6 +320,3 @@ that is what happened.
   malformed media.
 * **Task 3.11 (carried over):** Fresh-install walkthrough, with the rest of
   the team.
-
-If this is still too much alongside the fresh-install walkthrough, 3.14 and
-3.15 should move to week 5 rather than compressing the security testing.

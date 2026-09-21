@@ -1,0 +1,211 @@
+[
+  {
+    "id": "3.2",
+    "title": "3.2 Add a debug build variant with HTTP logging",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "kdhaiti2024@fau.edu",
+    "priority": 3,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "Failing requests show a reason instead of a mystery on a minified build."
+  },
+  {
+    "id": "3.3",
+    "title": "3.3 Investigate WorkManager and draft the upload worker design",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "jorgesanchez2022@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "Move the chunked upload out of viewModelScope."
+  },
+  {
+    "id": "3.4",
+    "title": "3.4 Audit the resumable upload protocol for resume correctness",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "jorgesanchez2022@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "Confirm /api/upload/status returns a usable offset."
+  },
+  {
+    "id": "3.5",
+    "title": "3.5 Build the desktop EVENTS panel, read-only table",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "amontano2023@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "Newest-first from /api/events/recent. Spec D1."
+  },
+  {
+    "id": "3.6",
+    "title": "3.6 Add empty state and ten second auto-refresh to EVENTS panel",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "amontano2023@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "Refresh stops when the tab is hidden."
+  },
+  {
+    "id": "3.7",
+    "title": "3.7 Add GET /api/zones/frame returning a still frame",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "robertsr2022@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "JPEG or black placeholder. Update all three route guards."
+  },
+  {
+    "id": "3.8",
+    "title": "3.8 Draft the zone editor canvas layout",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "robertsr2022@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "Toolbar and canvas matching the phone editor. Spec D2."
+  },
+  {
+    "id": "3.9",
+    "title": "3.9 Specify the webhook emitter reusing is_safe_push_url",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "vdesouzateix2023@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "utils/event_webhook.py. Spec D4."
+  },
+  {
+    "id": "3.10",
+    "title": "3.10 Write the socket-server test harness for webhook delivery",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "vdesouzateix2023@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "Style of tests/test_push_notify.py."
+  },
+  {
+    "id": "3.11",
+    "title": "3.11 Fresh-install walkthrough: install, first-run Setup, one compression, no source code",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "kdhaiti2024@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "Written note of every point of confusion or friction; file the worst three."
+  },
+  {
+    "id": "3.11",
+    "title": "3.11 Fresh-install walkthrough: install, first-run Setup, one compression, no source code",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "jorgesanchez2022@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "Written note of every point of confusion or friction; file the worst three."
+  },
+  {
+    "id": "3.11",
+    "title": "3.11 Fresh-install walkthrough: install, first-run Setup, one compression, no source code",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "amontano2023@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "Written note of every point of confusion or friction; file the worst three."
+  },
+  {
+    "id": "3.11",
+    "title": "3.11 Fresh-install walkthrough: install, first-run Setup, one compression, no source code",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "robertsr2022@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "Written note of every point of confusion or friction; file the worst three."
+  },
+  {
+    "id": "3.11",
+    "title": "3.11 Fresh-install walkthrough: install, first-run Setup, one compression, no source code",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "vdesouzateix2023@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "Written note of every point of confusion or friction; file the worst three."
+  },
+  {
+    "id": "3.12",
+    "title": "3.12 Test the Compact install path with no FFmpeg on PATH",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "robertsr2022@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "Confirm whether Start warns or fails silently; fix if silent."
+  },
+  {
+    "id": "3.13",
+    "title": "3.13 Add a folder-browse button to the Setup destination field",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "amontano2023@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "Reuse the Library folder-browser modal."
+  },
+  {
+    "id": "3.14",
+    "title": "3.14 External network penetration test against a running instance",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "vdesouzateix2023@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "Findings against docs/SECURITY.md, severity-rated in docs/BLOCKERS.md."
+  },
+  {
+    "id": "3.15",
+    "title": "3.15 Fuzz the video-ingest and upload path with malformed media",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "vdesouzateix2023@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "Clean rejection or a filed crash report for each malformed file."
+  },
+  {
+    "id": "3.16",
+    "title": "3.16 Verify the Docker install path end to end and fix getting-started.md",
+    "bucketName": "Week 3 (2026-09-14)",
+    "assignedTo": "kdhaiti2024@fau.edu",
+    "priority": 5,
+    "percentComplete": 0,
+    "startDateTime": "2026-09-14T00:00:00Z",
+    "dueDateTime": "2026-09-20T23:59:00Z",
+    "notes": "yolov8n.onnx is gitignored and not auto-fetched; docker compose up --build may fail on a clean clone. Confirm and document or fix."
+  }
+]

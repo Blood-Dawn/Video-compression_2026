@@ -47,6 +47,12 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 UninstallDisplayIcon={app}\{#MyAppExeName}
 LicenseFile=..\LICENSE
+; Branding (installer aesthetic pass): SVCS brand kit built from the same
+; assets as the press release (amber/navy palette, camera-bracket mark).
+SetupIconFile=svcs.ico
+WizardImageFile=wizard_banner.bmp
+WizardSmallImageFile=wizard_small.bmp
+WizardImageStretch=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

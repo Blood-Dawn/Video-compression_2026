@@ -37,6 +37,8 @@ requiring a full port of a 20,000-line Python pipeline to a mobile runtime.
 SVCS accepts footage from cameras three ways. Which one applies depends on
 what the camera itself supports; there is no vendor-cloud scraping, ever.
 
+The camera compatibility table below is community-maintained (last updated 2026-09-21); if your camera model behaves differently than listed, open an issue with the make/model and firmware.
+
 | Path | Works for | How |
 |------|-----------|-----|
 | **Direct RTSP / ONVIF** | Cameras that expose an RTSP stream on the LAN (Reolink, Amcrest, Hikvision, Dahua, Axis, many Tapo/Wyze with RTSP firmware) | SVCS discovers the camera and pulls its live stream. |

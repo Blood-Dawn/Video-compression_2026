@@ -39,5 +39,5 @@ def test_installer_version_matches_pyproject():
 
 def test_release_docs_use_beta_tag():
     checklist = (ROOT / "docs" / "RELEASE-CHECKLIST.md").read_text(encoding="utf-8")
-    assert "v2.1.0-beta" in checklist
-    assert (ROOT / "docs" / "release-notes-v2.1.0-beta.md").is_file()
+    assert "v2.2.0-beta" in checklist
+    assert (ROOT / "docs" / "release-notes-v2.2.0-beta.md").is_file()

@@ -49,6 +49,26 @@ _MAX_SIZE = 8 * 1024 * 1024 * 1024  # 8 GB cap per upload
 CHUNK_HINT = 1024 * 1024
 
 
+def _safe_leaf_name(raw: str, fallback: str = "upload.mp4") -> str:
+    """Return just the filename component of an untrusted client-supplied
+    name, treating BOTH '/' and '\\' as directory separators regardless of
+    the host OS.
+
+    Path(...).name only strips the separator the *host* OS recognizes: on a
+    POSIX host (Linux/Docker/AppImage builds, which this project also ships)
+    a Windows-style payload like "..\\..\\escape\\clip.mp4" has no '/' in
+    it, so Path.name returns it unchanged (a literal, ugly filename - it does
+    not escape the upload dir, but it is not the clean, cross-platform-safe
+    behavior this endpoint is supposed to guarantee either). Normalizing the
+    separator first makes the check identical on every platform we ship.
+    """
+    normalized = str(raw).replace("\\", "/")
+    leaf = Path(normalized).name.strip()
+    # Path.name is empty for "", ".", "..", or a string that is all
+    # separators (e.g. "////"); fall back to a safe default in that case.
+    return leaf if leaf not in ("", ".", "..") else fallback
+
+
 def _tmp_dir() -> Path:
     d = data_dir() / "upload_tmp"
     d.mkdir(parents=True, exist_ok=True)
@@ -86,7 +106,7 @@ def _verify_video(path: Path) -> bool:
 @ingest_bp.route("/api/upload/begin", methods=["POST"])
 def api_upload_begin():
     data = request.get_json(silent=True) or {}
-    name = Path(str(data.get("name", ""))).name  # strip any path components
+    name = _safe_leaf_name(data.get("name", ""), fallback="")  # strip any path components, either separator style
     try:
         size = int(data.get("size", 0))
     except (TypeError, ValueError):
@@ -168,7 +188,7 @@ def api_upload_finish():
         _paths(upload_id)[1].unlink(missing_ok=True)
         return jsonify({"error": "not a decodable video; upload discarded"}), 400
     upload_dir = _upload_dir()
-    safe_name = Path(str(meta.get("name", "upload.mp4"))).name
+    safe_name = _safe_leaf_name(meta.get("name", "upload.mp4"))
     dest = upload_dir / safe_name
     counter = 1
     while dest.exists():

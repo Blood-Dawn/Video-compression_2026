@@ -17,7 +17,7 @@ import pytest
 
 DOCS = Path(__file__).parent.parent / "docs"
 CHECKLIST = DOCS / "RELEASE-CHECKLIST.md"
-NOTES = DOCS / "release-notes-v2.1.0-beta.md"
+NOTES = DOCS / "release-notes-v2.2.0-beta.md"
 BLOCKERS = DOCS / "BLOCKERS.md"
 
 

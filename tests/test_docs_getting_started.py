@@ -17,7 +17,11 @@ import pytest
 
 DOCS = Path(__file__).parent.parent / "docs"
 GETTING_STARTED = DOCS / "getting-started.md"
-CAMERA = DOCS / "camera-ingestion.md"
+CAMERA = DOCS / "SYSTEM-ARCHITECTURE.md"  # camera-ingestion content lives
+# in the "2. Camera ingestion" section of the architecture doc, not a
+# standalone file; this constant was pointed at a file that was never
+# created after that reorg, so the tests below silently errored instead
+# of testing anything. Fixed 2026-09-21.
 
 
 @pytest.fixture(scope="module")

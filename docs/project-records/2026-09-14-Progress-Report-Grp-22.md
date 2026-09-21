@@ -21,13 +21,12 @@ Kheiven is doing after this report goes out.
 
 ## 1. Team Meeting
 
-**Did the team meet this period?** [FILL IN: date, time, and who attended. If
-the team did not meet, say so and describe how coordination happened instead.]
+**Did the team meet this period?** No. The team did not hold a formal
+meeting; coordination happened mostly through the group chat.
 
 ## 2. Sponsor / Advisor Meeting
 
-**Did the team meet with the sponsor this period?** [FILL IN. State when the
-next sponsor check-in is planned.]
+**Did the team meet with the sponsor this period?** No.
 
 ## 3. Team Progress This Period
 

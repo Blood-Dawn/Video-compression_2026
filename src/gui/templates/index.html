@@ -3940,6 +3940,15 @@
             </span>
           </div>
           <div class="help-row">
+            <span class="help-term">App version</span>
+            <span class="help-def">Checks this install's version against the newest one published
+              on GitHub. New builds are a manual download + reinstall for now - this just tells
+              you when one exists.
+              <button class="btn btn-ghost" style="margin-left:6px;" onclick="checkForUpdate()">Check for updates</button>
+              <span id="help-update-result" style="display:block;margin-top:4px;font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);"></span>
+            </span>
+          </div>
+          <div class="help-row">
             <span class="help-term">Send feedback</span>
             <span class="help-def">Confused by something, or hit a bug? Opens your email app with
               a message already addressed and templated - just fill it in and hit send.

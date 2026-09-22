@@ -193,6 +193,61 @@ def test_probe_never_500s_when_version_lookup_fails(server_client, monkeypatch):
     assert r.get_json()["version"] == "unknown"
 
 
+def test_frozen_exe_scenario_still_reports_real_version(server_client, monkeypatch):
+    """Simulates a PyInstaller build: no package metadata, no pyproject.toml.
+
+    _server_version() used to try importlib.metadata then a pyproject.toml
+    read, in that order. Neither survives a PyInstaller freeze of the main
+    script - there is no installed-package metadata to find, and
+    installer/svcs.spec never bundles pyproject.toml as a data file - so the
+    real shipped exe fell through both on every release and reported
+    "unknown" here, which is exactly what the mobile app shows as the paired
+    server's version during pairing. utils.version.APP_VERSION is a plain
+    constant compiled into the exe's bytecode, so it survives the freeze; with
+    the other two sources forced to fail the way they would in a real frozen
+    build, the probe must still report the real version through it.
+    """
+    import importlib.metadata
+
+    def boom_metadata(name):
+        raise importlib.metadata.PackageNotFoundError(name)
+
+    def boom_open(*args, **kwargs):
+        raise FileNotFoundError("pyproject.toml not bundled in a frozen exe")
+
+    import gui.routes.capabilities_bp as cap
+    monkeypatch.setattr(cap, "open", boom_open, raising=False)
+    monkeypatch.setattr(importlib.metadata, "version", boom_metadata)
+
+    r = server_client.get("/api/capabilities")
+    assert r.status_code == 200, "the pairing probe must not 500"
+    v = r.get_json()["version"]
+    assert v != "unknown", "APP_VERSION should have carried the probe through"
+    assert v[0].isdigit(), f"version does not look like a version: {v!r}"
+
+
+def test_version_prefers_app_version_constant(server_client, monkeypatch):
+    """APP_VERSION is the primary source now, not just a last-resort fallback.
+
+    Makes importlib.metadata succeed with a DIFFERENT, clearly-fake version
+    rather than raising, so a future edit that reorders _server_version() back
+    to trying importlib.metadata first would make this test fail loudly (by
+    returning the fake version) instead of passing by accident through a
+    swallowed exception - which would silently reopen the frozen-exe bug this
+    fix closes.
+    """
+    from utils.version import APP_VERSION
+
+    import importlib.metadata
+    monkeypatch.setattr(
+        importlib.metadata, "version", lambda name: "999.999.999-fake"
+    )
+
+    v = server_client.get("/api/capabilities").get_json()["version"]
+    assert v == APP_VERSION
+    assert v != "999.999.999-fake"
+
+
 def test_reported_edition_cannot_contradict_the_feature_flags():
     """The label must match the surface that is actually registered.
 

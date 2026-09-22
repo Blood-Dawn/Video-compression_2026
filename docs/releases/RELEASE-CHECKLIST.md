@@ -12,7 +12,13 @@ drop is the **unsigned beta** `v2.1.0-beta`.
 ## 1. Pre-flight (clean checkout)
 
 - [ ] `git switch app && git pull` - release from `app`, working tree clean.
-- [ ] Confirm the version in `pyproject.toml` / installer matches the intended tag.
+- [ ] Confirm the version in `pyproject.toml`, `installer/svcs.iss`
+      (`MyAppVersion`), and `src/utils/version.py` (`APP_VERSION`) all match
+      the intended tag - three places now, since TASK 3.17 (Fall Week 3) added
+      `APP_VERSION` as the exe's own bundled version string for the in-app
+      update check. It also backs `/api/capabilities`'s `version` field, so a
+      mismatch there is what the mobile app shows during pairing, not just what
+      the update-check banner compares against.
 - [ ] `uv sync --extra enhance --extra crash-reporting` - env matches the lockfile.
 
 ## 2. Quality gate

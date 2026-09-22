@@ -143,7 +143,7 @@ independently discovering and reading Help.
 | 3.14 | External network penetration test against a running SVCS instance | Victor | Written findings against the threat model in `docs/SECURITY.md`; anything found gets a severity-rated entry in `docs/plans/BLOCKERS.md`, matching the pentest item already deferred there | Not started |
 | 3.15 | Fuzz the video-ingest and upload path with malformed media | Victor | A clean rejection or a filed crash report for each malformed file tried, closing the fuzzing item already deferred in `docs/plans/BLOCKERS.md` | Complete Sep 22 |
 | 3.16 | Verify the Docker install path end to end on a fresh clone, then fix `docs/getting-started.md` | Kheiven | `docker compose up --build` either succeeds from a clean checkout, or the missing `yolov8n.onnx` prerequisite is documented plainly (or the build fetches it automatically); the getting-started guide reflects whichever is true | Complete Sep 22 |
-| 3.17 | Add an in-app auto-update check for the desktop exe | Kheiven | Owner task, not delegated: dashboard checks a version endpoint and shows a Setup-page notice with a download link when a newer installer build exists | Not started |
+| 3.17 | Add an in-app auto-update check for the desktop exe | Kheiven | Owner task, not delegated: dashboard checks a version endpoint and shows a Setup-page notice with a download link when a newer installer build exists | Complete Sep 22 |
 
 Table 3a. Application testing pass, added to week 3.
 

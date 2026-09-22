@@ -17,6 +17,9 @@ The actual default-resolution change lives in gui.services.cloud_detection
 Author: Bloodawn (KheivenD), 2026-06-03 (FIX 1 - setup + destinations).
 """
 
+import json
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request
@@ -29,6 +32,7 @@ try:
     from gui.services.path_safety import _safe_output_dir
     from gui.state import _state_lock, _status
     from utils.paths import reset_state
+    from utils.version import APP_VERSION, is_newer
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.logging_setup import log
     from src.gui.services.cloud_detection import list_destinations, _default_output_dir
@@ -37,6 +41,16 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.services.path_safety import _safe_output_dir
     from src.gui.state import _state_lock, _status
     from src.utils.paths import reset_state
+    from src.utils.version import APP_VERSION, is_newer
+
+# Fall 3.17: desktop releases are tagged "vX.Y.Z[-stage]"; mobile releases use
+# a "mobile-" prefix specifically so they stay out of this sequence (see
+# docs/releases/RELEASE-CHECKLIST.md) - a mobile-only release must never look
+# like a newer desktop build to this check.
+_GITHUB_RELEASES_URL = (
+    "https://api.github.com/repos/Blood-Dawn/Video-compression_2026/releases"
+)
+_MOBILE_TAG_PREFIX = "mobile-"
 
 setup_bp = Blueprint("setup", __name__)
 
@@ -203,3 +217,74 @@ def api_setup_reset():
         _status["setup_complete"] = False
     log.info("Factory reset: removed %s; returning to first-run.", removed or "nothing")
     return jsonify({"ok": True, "removed": removed, "setup_complete": False})
+
+@setup_bp.route("/api/setup/update_check", methods=["GET"])
+def api_setup_update_check():
+    """Fall 3.17: check GitHub releases for a newer DESKTOP build.
+
+    Check + notify ONLY - this never downloads or installs anything itself,
+    just tells the dashboard whether something newer exists and where to get
+    it, so the Setup page can show a notice with a download link. New
+    installer exes currently require the user to manually download and
+    reinstall; this closes the "how would I even know" half of that gap.
+
+    Best effort and silent on failure: offline, GitHub unreachable, rate
+    limited, or an unexpected response shape all fall through to
+    update_available=False rather than a 5xx, since a flaky network check on
+    dashboard load must never itself look like an app error.
+    """
+    result = {
+        "current_version": APP_VERSION,
+        "latest_version": None,
+        "update_available": False,
+        "release_url": None,
+        "download_url": None,
+        "checked": False,
+    }
+
+    try:
+        req = urllib.request.Request(
+            _GITHUB_RELEASES_URL,
+            headers={
+                "Accept": "application/vnd.github+json",
+                # GitHub's API rejects requests with no User-Agent at all.
+                "User-Agent": "SVCS-dashboard-update-check",
+            },
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            releases = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, ValueError, OSError):
+        # No network, GitHub down/rate-limited, or an unparseable body.
+        return jsonify(result)
+
+    if not isinstance(releases, list):
+        return jsonify(result)
+
+    # Pick the newest non-draft, non-mobile release. Prereleases are NOT
+    # excluded on purpose: every release this project has published so far
+    # is marked prerelease on GitHub (it's a beta product), so excluding them
+    # would mean this check never finds anything to report.
+    best_tag = None
+    best_release = None
+    for rel in releases:
+        if not isinstance(rel, dict):
+            continue
+        tag = str(rel.get("tag_name") or "")
+        if not tag or rel.get("draft") or tag.startswith(_MOBILE_TAG_PREFIX):
+            continue
+        if best_tag is None or is_newer(tag, best_tag):
+            best_tag = tag
+            best_release = rel
+
+    if best_release is not None:
+        result["latest_version"] = best_tag
+        result["update_available"] = is_newer(best_tag, APP_VERSION)
+        result["release_url"] = best_release.get("html_url")
+        for asset in best_release.get("assets") or []:
+            name = str(asset.get("name") or "")
+            if name.lower().endswith(".exe"):
+                result["download_url"] = asset.get("browser_download_url")
+                break
+
+    result["checked"] = True
+    return jsonify(result)

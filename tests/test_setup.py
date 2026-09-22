@@ -144,3 +144,145 @@ def test_save_setup_choice_and_is_complete(tmp_path, restore_status, isolated_st
     with gui_state._state_lock:
         assert gui_state._status["config"]["output_dir"] == str(tmp_path / "o")
         assert gui_state._status["config"]["encrypted_dir"] == str(tmp_path / "e")
+
+
+# ── /api/setup/update_check (Fall 3.17) ──────────────────────────────────────
+
+class _FakeHTTPResponse:
+    """Minimal stand-in for what urllib.request.urlopen(...) returns, enough
+    for `with urllib.request.urlopen(req, timeout=5) as resp: resp.read()`."""
+
+    def __init__(self, body: bytes):
+        self._body = body
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def _releases_payload(*releases):
+    import json as _json
+    return _json.dumps(list(releases)).encode("utf-8")
+
+
+def _release(tag, html_url="https://example.invalid/releases/x",
+             draft=False, exe_asset=True):
+    assets = []
+    if exe_asset:
+        assets.append({
+            "name": f"SVCS-Setup-{tag.lstrip('v')}.exe",
+            "browser_download_url": f"https://example.invalid/dl/{tag}.exe",
+        })
+    return {"tag_name": tag, "html_url": html_url, "draft": draft, "assets": assets}
+
+
+class TestUpdateCheck:
+    def test_newer_release_reports_update_available(self, client, monkeypatch):
+        import gui.routes.setup_bp as setup_bp
+
+        payload = _releases_payload(_release("v999.0.0"))
+        monkeypatch.setattr(
+            setup_bp.urllib.request, "urlopen",
+            lambda req, timeout=5: _FakeHTTPResponse(payload),
+        )
+        r = client.get("/api/setup/update_check")
+        body = r.get_json()
+        assert r.status_code == 200
+        assert body["checked"] is True
+        assert body["update_available"] is True
+        assert body["latest_version"] == "v999.0.0"
+        assert body["download_url"] == "https://example.invalid/dl/v999.0.0.exe"
+        assert body["current_version"] == setup_bp.APP_VERSION
+
+    def test_older_release_reports_no_update(self, client, monkeypatch):
+        import gui.routes.setup_bp as setup_bp
+
+        payload = _releases_payload(_release("v0.0.1"))
+        monkeypatch.setattr(
+            setup_bp.urllib.request, "urlopen",
+            lambda req, timeout=5: _FakeHTTPResponse(payload),
+        )
+        body = client.get("/api/setup/update_check").get_json()
+        assert body["update_available"] is False
+        assert body["latest_version"] == "v0.0.1"
+
+    def test_mobile_tag_is_excluded(self, client, monkeypatch):
+        """A newer MOBILE release must never look like a newer desktop build."""
+        import gui.routes.setup_bp as setup_bp
+
+        payload = _releases_payload(_release("mobile-v999.0.0"))
+        monkeypatch.setattr(
+            setup_bp.urllib.request, "urlopen",
+            lambda req, timeout=5: _FakeHTTPResponse(payload),
+        )
+        body = client.get("/api/setup/update_check").get_json()
+        assert body["update_available"] is False
+        assert body["latest_version"] is None
+
+    def test_draft_release_is_excluded(self, client, monkeypatch):
+        import gui.routes.setup_bp as setup_bp
+
+        payload = _releases_payload(_release("v999.0.0", draft=True))
+        monkeypatch.setattr(
+            setup_bp.urllib.request, "urlopen",
+            lambda req, timeout=5: _FakeHTTPResponse(payload),
+        )
+        body = client.get("/api/setup/update_check").get_json()
+        assert body["update_available"] is False
+
+    def test_picks_the_newest_of_several_releases(self, client, monkeypatch):
+        import gui.routes.setup_bp as setup_bp
+
+        payload = _releases_payload(
+            _release("v2.0.0-beta"), _release("v999.0.0"), _release("v0.5.0"),
+        )
+        monkeypatch.setattr(
+            setup_bp.urllib.request, "urlopen",
+            lambda req, timeout=5: _FakeHTTPResponse(payload),
+        )
+        body = client.get("/api/setup/update_check").get_json()
+        assert body["latest_version"] == "v999.0.0"
+
+    def test_network_failure_is_silent_not_an_error(self, client, monkeypatch):
+        import urllib.error
+
+        import gui.routes.setup_bp as setup_bp
+
+        def _boom(req, timeout=5):
+            raise urllib.error.URLError("no network")
+
+        monkeypatch.setattr(setup_bp.urllib.request, "urlopen", _boom)
+        r = client.get("/api/setup/update_check")
+        body = r.get_json()
+        assert r.status_code == 200
+        assert body["checked"] is False
+        assert body["update_available"] is False
+
+    def test_malformed_json_is_silent_not_an_error(self, client, monkeypatch):
+        import gui.routes.setup_bp as setup_bp
+
+        monkeypatch.setattr(
+            setup_bp.urllib.request, "urlopen",
+            lambda req, timeout=5: _FakeHTTPResponse(b"not json"),
+        )
+        r = client.get("/api/setup/update_check")
+        assert r.status_code == 200
+        assert r.get_json()["checked"] is False
+
+    def test_no_exe_asset_leaves_download_url_none(self, client, monkeypatch):
+        import gui.routes.setup_bp as setup_bp
+
+        payload = _releases_payload(_release("v999.0.0", exe_asset=False))
+        monkeypatch.setattr(
+            setup_bp.urllib.request, "urlopen",
+            lambda req, timeout=5: _FakeHTTPResponse(payload),
+        )
+        body = client.get("/api/setup/update_check").get_json()
+        assert body["update_available"] is True
+        assert body["download_url"] is None
+        assert body["release_url"] == "https://example.invalid/releases/x"

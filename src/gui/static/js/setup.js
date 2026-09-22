@@ -195,6 +195,45 @@ async function checkDependencies() {
 }
 window.checkDependencies = checkDependencies;
 
+// In-app update check (Fall 3.17): check + notify only - never downloads or
+// installs anything itself. Runs once automatically on dashboard load (silent
+// unless something is actually newer, so it never nags on every reload when
+// you're already current); the Help > "Check for updates" button re-runs it
+// on demand and always reports its result, including "up to date".
+async function _checkForUpdate(showResult) {
+  const out = document.getElementById("help-update-result");
+  if (out && showResult) out.textContent = "Checking...";
+  let data;
+  try {
+    data = await (await fetch("/api/setup/update_check")).json();
+  } catch (e) {
+    if (out && showResult) out.textContent = "Could not check for updates.";
+    return;
+  }
+  if (out && showResult) {
+    if (!data.checked) {
+      out.textContent = "Could not reach GitHub to check.";
+    } else if (data.update_available) {
+      out.textContent = "Update available: " + data.latest_version
+        + " (you have " + data.current_version + ")";
+    } else {
+      out.textContent = "Up to date (" + data.current_version + ").";
+    }
+  }
+  if (data.update_available && typeof pushNotif === "function") {
+    const href = data.download_url || data.release_url;
+    pushNotif(
+      "Update available",
+      "SVCS " + data.latest_version + " is out - you're on " + data.current_version + ".",
+      "info",
+      href ? [{ label: "Download", fn: () => window.open(href, "_blank") }] : null,
+      0,
+    );
+  }
+}
+window.checkForUpdate = () => _checkForUpdate(true);
+window.addEventListener("DOMContentLoaded", () => _checkForUpdate(false));
+
 // Send feedback (fresh-install walkthrough / general bug reports): opens the
 // user's own default mail client, pre-addressed and pre-filled. No network
 // call, no credentials in the app - the person still has to hit Send

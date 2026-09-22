@@ -38,10 +38,26 @@ CAPABILITIES_VERSION = 1
 def _server_version() -> str:
     """The running version, or "unknown" rather than raising.
 
-    importlib.metadata works for an installed package; the pyproject fallback
-    covers a source checkout. A capabilities probe must never 500, since it is
-    the first call a client makes and a failure here looks like a bad address.
+    utils.version.APP_VERSION is tried first: it is a plain Python constant,
+    so PyInstaller compiles it straight into the frozen exe's bytecode. The
+    other two sources do not survive that freeze - importlib.metadata has no
+    installed-package metadata to find for a frozen main script, and
+    pyproject.toml is a data file installer/svcs.spec never bundles - which
+    meant a real shipped exe fell through both and reported "unknown" here on
+    every release to date. They stay as fallbacks for a source checkout or an
+    actually-installed wheel, where they still work fine. A capabilities probe
+    must never 500, since it is the first call a client makes and a failure
+    here looks like a bad address.
     """
+    try:
+        try:
+            from utils.version import APP_VERSION
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.utils.version import APP_VERSION
+        if APP_VERSION:
+            return APP_VERSION
+    except Exception:  # noqa: BLE001 - never break the probe
+        pass
     try:
         from importlib.metadata import PackageNotFoundError, version
         try:

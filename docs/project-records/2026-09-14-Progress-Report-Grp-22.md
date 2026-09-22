@@ -92,10 +92,9 @@ yet reconvened to say why, which is one of the two open items above.
   scheduled for weeks 3 and 4, is currently unbuildable from the branch the
   team treats as the source of truth. This is now milestone 0 of
   `AUTOBUILD-ROADMAP.md` and needs to be resolved before mobile work resumes.
-* **The planner import is still manual and still not done.** The written task
-  list for week 3 existed on time; it was never pushed into Teams Planner.
-  This is a process gap, not a content gap, and it is the next thing Kheiven
-  is doing.
+* **The planner import, flagged as not done earlier this period, is now
+  complete.** All 19 week 3 tasks were pushed into the Teams Planner board
+  before this report was submitted, closing that process gap.
 * **The MediaMTX downloader's zip-slip and missing-checksum gap
   (`src/utils/rtsp_server.py`) is confirmed in code but was never written down
   in `docs/BLOCKERS.md`.** It has been added there and is scheduled in the new

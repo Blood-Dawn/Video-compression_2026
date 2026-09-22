@@ -34,6 +34,18 @@
 # --- Stage 1: export yolov8n.onnx (discarded after the copy below) ---------
 FROM python:3.11-slim AS onnx-builder
 WORKDIR /export
+# ultralytics pulls in the full (non-headless) opencv-python as a transitive
+# dependency, which dynamic-links against a handful of X11/GL shared libs at
+# IMPORT time even though this throwaway stage never opens a display or a
+# window. python:3.11-slim has none of them, so `import ultralytics` failed
+# with "ImportError: libxcb.so.1: cannot open shared object file" - caught by
+# the SAME clean-clone verification (TASK 3.16) that found the missing-onnx
+# bug this stage exists to fix, one layer further in. The standard fix for
+# "opencv-python on a headless minimal image" is these five packages.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        libgl1 libglib2.0-0 libsm6 libxext6 libxrender1 \
+    && rm -rf /var/lib/apt/lists/*
 # CPU-only torch wheel keeps this throwaway stage from pulling a multi-GB CUDA
 # build; only used to run the export, never shipped in the final image.
 RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu \

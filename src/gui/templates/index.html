@@ -2182,6 +2182,14 @@
         <span class="pill-dot"></span>
         <span id="status-text">OFFLINE</span>
       </div>
+      <button onclick="sendFeedback()" title="Send feedback"
+              style="background:none;border:1px solid var(--border);border-radius:50%;
+                     width:26px;height:26px;color:var(--text-dim);font-family:var(--mono);
+                     font-size:0.85rem;cursor:pointer;display:flex;align-items:center;
+                     justify-content:center;flex-shrink:0;transition:border-color 0.15s,color 0.15s;
+                     margin-right:6px;"
+              onmouseover="this.style.borderColor='var(--amber)';this.style.color='var(--amber)'"
+              onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">&#9993;</button>
       <button onclick="openHelp()" title="Help"
               style="background:none;border:1px solid var(--border);border-radius:50%;
                      width:26px;height:26px;color:var(--text-dim);font-family:var(--mono);
@@ -3784,6 +3792,13 @@
               detection model are found (in the bundle, your app-data tools folder, or on PATH).
               <button class="btn btn-ghost" style="margin-left:6px;" onclick="checkDependencies()">Check dependencies</button>
               <span id="help-deps-result" style="display:block;margin-top:4px;font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);"></span>
+            </span>
+          </div>
+          <div class="help-row">
+            <span class="help-term">Send feedback</span>
+            <span class="help-def">Confused by something, or hit a bug? Opens your email app with
+              a message already addressed and templated - just fill it in and hit send.
+              <button class="btn btn-ghost" style="margin-left:6px;" onclick="sendFeedback()">Send feedback</button>
             </span>
           </div>
         </div>

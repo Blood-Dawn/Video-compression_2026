@@ -41,10 +41,30 @@ data class SizePreset(
 
 object SizePresets {
     val DISCORD_FREE = SizePreset("Discord (10 MB)", 10L * 1_000_000, maxShortSidePx = 720)
-    val DISCORD_NITRO = SizePreset("Discord Nitro (25 MB)", 25L * 1_000_000)
+    // Nitro's real upload ceiling is 500 MB, not the old 25 MB placeholder.
+    val DISCORD_NITRO = SizePreset("Discord Nitro (500 MB)", 500L * 1_000_000)
     val WHATSAPP = SizePreset("WhatsApp (16 MB)", 16L * 1_000_000, maxShortSidePx = 720)
     val INSTAGRAM = SizePreset("Instagram (100 MB)", 100L * 1_000_000)
-    val ALL = listOf(DISCORD_FREE, DISCORD_NITRO, WHATSAPP, INSTAGRAM)
+    val TWITTER_X = SizePreset("X / Twitter (512 MB)", 512L * 1_000_000)
+    val EMAIL = SizePreset("Email (25 MB)", 25L * 1_000_000, maxShortSidePx = 720)
+    val ALL = listOf(DISCORD_FREE, DISCORD_NITRO, WHATSAPP, INSTAGRAM, TWITTER_X, EMAIL)
+
+    /**
+     * A user-typed target size, for anything not covered by the presets
+     * above. No hardcoded list can keep up with every app's limit (or a
+     * limit someone was just told over text), so this is the actual fix
+     * for "I need a size that isn't in the list" rather than adding
+     * presets forever.
+     */
+    fun custom(megabytes: Double): SizePreset {
+        val mb = megabytes.coerceAtLeast(0.1)
+        val label = if (mb == mb.toLong().toDouble()) {
+            "Custom (${mb.toLong()} MB)"
+        } else {
+            "Custom (%.1f MB)".format(mb)
+        }
+        return SizePreset(label, (mb * 1_000_000).toLong())
+    }
 }
 
 /**

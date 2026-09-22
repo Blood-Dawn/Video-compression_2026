@@ -213,6 +213,59 @@ on top of a pipeline nobody's validated yet.
 Exit criteria: compress a video, entirely offline, with a result
 competitive on speed and size with Compressor's on the same device.
 
+### Phase 1.5 - A library for what's already been compressed
+
+Added after real device testing surfaced the gap directly: once someone
+has compressed a handful of clips, there's no way to look back at them
+inside the app, only in the phone's own gallery, with none of the
+compression-specific facts (original size, ratio, which preset, whether
+the fallback path triggered) attached anywhere. This sits between Phase 1
+and Phase 2 on purpose - it's a real gap in the MVP experience, but it
+needs no ML and no OEM-fragmented hardware feature, so it's a much
+smaller, lower-risk unit of work than Smart Compress and is worth
+closing first.
+
+This is a separate screen from the existing (server-mode) LIBRARY tab,
+which lists the desktop's remote catalog over the network; this one
+lists what THIS phone has compressed, entirely offline, and needs no
+pairing to work.
+
+- **Index what MediaStore can't tell us.** `MediaStore.Video.Media` in
+  `Movies/SVCS` gives us the output file, its size, and its date, but not
+  the source size, the ratio, which preset was used, the codec, or
+  whether the encoder fallback path fired. Persist that alongside each
+  job in a small local Room table keyed by the output `MediaStore` URI,
+  written by `CompressionWorker` right after it flips `IS_PENDING` to 0.
+  Reconcile against MediaStore on screen load (a row whose URI no longer
+  resolves means the user deleted the file from Photos/Files outside the
+  app - drop it rather than showing a dead entry).
+- **List view:** newest first by default, thumbnail (via `Coil`, already
+  a dependency), filename, original size -> output size with the ratio,
+  duration, and a small badge when the fallback path was used.
+- **Search:** a text field over filename, matching what the OutlinedTextField pattern
+  already established for the custom-size input in Phase 1.
+- **Advanced filters, not just search:**
+  - date range (this week / this month / custom range)
+  - size range (output bytes, min/max)
+  - codec (H.265 / H.264)
+  - mode used (quality preset vs target-size preset), and which specific
+    preset
+  - "fallback used" toggle, so someone chasing a quality complaint can
+    isolate exactly the jobs where the encoder had to compromise
+- **Sort options:** newest, biggest space saved (ratio), largest output.
+- **Per-item actions:** play (hand off to a system video viewer via
+  `ACTION_VIEW`), share (`ACTION_SEND`), delete (MediaStore delete + drop
+  the Room row, behind a confirm dialog since it's permanent), and
+  "compress again" (re-opens the Compress tab pre-filled with the same
+  source video, different settings - useful when the first attempt at a
+  size target came out over or under).
+
+Exit criteria: every job run through Phase 1's compressor shows up here
+automatically with accurate metadata, is findable by at least the filters
+listed above, and survives an app reinstall's worth of MediaStore-only
+persistence gracefully (no crashes on orphaned rows, just quietly dropped
+entries).
+
 ### Phase 2 - Smart Compress (the actual differentiator)
 
 This is the part that's genuinely novel: the research found **no existing

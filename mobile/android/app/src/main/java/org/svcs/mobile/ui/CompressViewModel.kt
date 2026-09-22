@@ -37,6 +37,7 @@ data class CompressState(
     val pickedSizeBytes: Long = -1,
     val durationMs: Long = 0,
     val mode: CompressionMode = CompressionMode.Quality(QualityPresets.MEDIUM),
+    val customSizeText: String = "",
     val codec: VideoCodecChoice = VideoCodecChoice.H265,
     val phase: JobPhase = JobPhase.IDLE,
     val progressPercent: Int = 0,
@@ -96,7 +97,27 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun setSizePreset(preset: SizePreset) {
-        _state.update { it.copy(mode = CompressionMode.TargetSize(preset)) }
+        _state.update { it.copy(mode = CompressionMode.TargetSize(preset), customSizeText = "") }
+    }
+
+    /**
+     * Any target size the presets don't cover - a platform we didn't list,
+     * or a limit someone was just told directly ("keep it under 8MB").
+     * Keeps the raw text around too so the field doesn't clear itself
+     * while the user is still typing a decimal.
+     */
+    fun setCustomSizeText(text: String) {
+        val mb = text.toDoubleOrNull()
+        _state.update {
+            it.copy(
+                customSizeText = text,
+                mode = if (mb != null && mb > 0) {
+                    CompressionMode.TargetSize(SizePresets.custom(mb))
+                } else {
+                    it.mode
+                },
+            )
+        }
     }
 
     fun setCodec(codec: VideoCodecChoice) {

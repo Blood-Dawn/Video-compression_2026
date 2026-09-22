@@ -155,8 +155,8 @@ work) to week 4 rather than rushing the security testing.
 
 | ID | Task | Owner | Outcome | Status |
 | --- | --- | --- | --- | --- |
-| 4.1 | Diagnose the mobile pairing persistence defect | Kheiven | Root cause proven by a failing unit test, not by inspection | Not started |
-| 4.2 | Fix pairing persistence and prove it with an instrumented test | Kheiven | A phone that pairs once stays paired across restarts and app updates | Not started |
+| 4.1 | Diagnose the mobile pairing persistence defect | Kheiven | Root cause proven by a failing unit test, not by inspection | Complete Sep 22 |
+| 4.2 | Fix pairing persistence and prove it with an instrumented test | Kheiven | A phone that pairs once stays paired across restarts and app updates | Complete Sep 22 |
 | 4.3 | Implement the upload `CoroutineWorker` with a foreground notification | Jorge | Upload runs outside the view model scope with visible progress | Not started |
 | 4.4 | Test upload survival: force-stop mid-transfer and confirm resume | Jorge | Transfer resumes from the server-reported offset and completes | Not started |
 | 4.5 | Wire desktop event toasts to the existing SSE stream | Ashleyn | An `EVENT` line raises exactly one toast; other log lines raise none | Not started |

@@ -99,7 +99,7 @@ each, per the course guidance.
 
 | ID | Task | Owner | Outcome | Status |
 | --- | --- | --- | --- | --- |
-| 3.1 | Make `SvcsApi` fakeable and add JVM unit tests for the view models | Kheiven | `gradlew testDebugUnitTest` covers pairing, library, events, and home view models | Complete Sep 14 |
+| 3.1 | Make `SvcsApi` fakeable and add JVM unit tests for the view models | Kheiven | `gradlew testDebugUnitTest` covers pairing, library, events, and home view models | Complete Sep 22 |
 | 3.2 | Add a debug build variant with HTTP logging for diagnosis | Kheiven | A failing request shows its reason in logcat instead of being a mystery on a minified build | Complete Sep 22 |
 | 3.3 | Investigate the WorkManager API and draft the upload worker design | Jorge | Written design for moving the chunked upload out of `viewModelScope` | Complete Sep 22 |
 | 3.4 | Audit the resumable upload protocol for resume correctness | Jorge | Confirmation that `/api/upload/status` returns an offset a worker can resume from | Complete Sep 22 |

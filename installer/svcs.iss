@@ -17,7 +17,7 @@
 
 #define MyAppName "SVCS"
 #define MyAppFullName "SVCS - Selective Video Compression System"
-#define MyAppVersion "2.2.0.dev0"
+#define MyAppVersion "2.2.0.dev1"
 #define MyAppPublisher "SVCS Project"
 #define MyAppURL "https://github.com/Blood-Dawn/Video-compression_2026"
 #define MyAppExeName "SVCS.exe"
@@ -47,6 +47,12 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
 UninstallDisplayIcon={app}\{#MyAppExeName}
 LicenseFile=..\LICENSE
+; Branding (installer aesthetic pass): SVCS brand kit built from the same
+; assets as the press release (amber/navy palette, camera-bracket mark).
+SetupIconFile=svcs.ico
+WizardImageFile=wizard_banner.bmp
+WizardSmallImageFile=wizard_small.bmp
+WizardImageStretch=no
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"

@@ -10,11 +10,11 @@ This is the active roadmap for the current semester. For what the team already
 finished in Spring 2026, see `docs/archive/ROADMAP-SPRING-2026.md`. For the
 week-by-week source this roadmap is drawn from, including the full 14-week
 outline and the task IDs used in the MS Teams Planner, see
-`docs/PLANNER-FALL-2026.md` and its companion import file
-`docs/PLANNER-FALL-2026.csv`. The planner is filled in about four to six weeks
-ahead on a rolling basis, so this roadmap will get more detailed on weeks 7
-through 14 as the semester goes on. This file is the one to read first; the
-planner is the one to keep current week to week.
+`docs/project-records/PLANNER-FALL-2026.md` and its companion import file
+`docs/project-records/PLANNER-FALL-2026.csv`. The planner is filled in about
+four to six weeks ahead on a rolling basis, so this roadmap will get more
+detailed on weeks 7 through 14 as the semester goes on. This file is the one
+to read first; the planner is the one to keep current week to week.
 
 ---
 
@@ -82,7 +82,7 @@ nobody is starting cold on an unfamiliar part of the codebase:
 ## A documentation accuracy check worth knowing about
 
 While building this roadmap, `docs/getting-started.md`'s Docker section was
-checked against `docs/BUILD-AND-RELEASE.md`, `docs/deployment_packaging.md`,
+checked against `docs/BUILD-AND-RELEASE.md`, `docs/build/deployment_packaging.md`,
 the actual `Dockerfile`, and `docker-compose.yml`. The command itself is
 right: `SVCS_DASHBOARD_PASSWORD='a-long-passphrase' docker compose up --build`
 does build and serve the dashboard on `http://localhost:5000` with the
@@ -92,7 +92,7 @@ What none of the docs say is that the build will fail on a clean checkout
 without an extra step first. The `Dockerfile` does `COPY yolov8n.onnx ./`, but
 `yolov8n.onnx` is gitignored and is not fetched automatically anywhere in the
 build. It only exists after someone runs the one-time export command in
-`docs/onnx-models.md` (`uv sync --extra onnx-export` then the ultralytics
+`docs/build/onnx-models.md` (`uv sync --extra onnx-export` then the ultralytics
 export command) and drops the resulting file at the repo root. Nobody on the
 team has actually run `docker compose up --build` from a fresh clone since
 that gitignore rule and the model export step were written, so this has never
@@ -251,7 +251,7 @@ desktop UI, then extend search past exact tag matching.
 
 | ID | Task | Outcome |
 |---|---|---|
-| 6.5 | Write the semantic search research document | `docs/RESEARCH-SEMANTIC-SEARCH.md` covering model choice, storage, offline story |
+| 6.5 | Write the semantic search research document | `docs/research/RESEARCH-SEMANTIC-SEARCH.md` covering model choice, storage, offline story |
 | 6.6 | Build the semantic search skeleton with a stub embedder | Opt-in extra; no model downloaded in CI |
 
 ### Weeks 7 to 14 (outline)
@@ -334,7 +334,7 @@ week 4 rather than rushing the security testing below.
 |---|---|---|
 | 3.9 | Read `push_notify.is_safe_push_url` and specify the webhook emitter | Written specification for `utils/event_webhook.py` reusing the existing guard |
 | 3.10 | Write the socket-server test harness for webhook delivery | Test fixture in the style of `tests/test_push_notify.py` |
-| 3.14 | External network penetration test against a running SVCS instance | Written findings against the threat model in `docs/SECURITY.md`; anything found gets a severity-rated entry in `docs/BLOCKERS.md` |
+| 3.14 | External network penetration test against a running SVCS instance | Written findings against the threat model in `docs/SECURITY.md`; anything found gets a severity-rated entry in `docs/plans/BLOCKERS.md` |
 | 3.15 | Fuzz the video-ingest and upload path with malformed media | A clean rejection or a filed crash report for each malformed file tried |
 
 ### Week 4 (Sep 21 to Sep 27)
@@ -394,14 +394,15 @@ week 4 rather than rushing the security testing below.
 ## Keeping this roadmap and the planner in sync
 
 This file gives each person their own section for the whole semester as it is
-currently known. `docs/PLANNER-FALL-2026.md` and `docs/PLANNER-FALL-2026.csv`
-are the week-by-week detail that actually gets imported into MS Teams and
-updated as weeks are completed or tasks slip. When a task here changes owner,
-scope, or week, update the planner first (it is the one graded against the
-weekly report) and then bring this file back in sync, rather than the other
-way around. Weeks 7 through 14 stay at outline level here until the planner
-fills them in on its rolling four-to-six-week window; expand this roadmap's
-outline sections to full tables at that point rather than leaving them thin.
+currently known. `docs/project-records/PLANNER-FALL-2026.md` and
+`docs/project-records/PLANNER-FALL-2026.csv` are the week-by-week detail that
+actually gets imported into MS Teams and updated as weeks are completed or
+tasks slip. When a task here changes owner, scope, or week, update the
+planner first (it is the one graded against the weekly report) and then
+bring this file back in sync, rather than the other way around. Weeks 7
+through 14 stay at outline level here until the planner fills them in on its
+rolling four-to-six-week window; expand this roadmap's outline sections to
+full tables at that point rather than leaving them thin.
 
 ---
 

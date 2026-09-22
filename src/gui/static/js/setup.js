@@ -176,6 +176,27 @@ async function checkDependencies() {
 }
 window.checkDependencies = checkDependencies;
 
+// Send feedback (fresh-install walkthrough / general bug reports): opens the
+// user's own default mail client, pre-addressed and pre-filled. No network
+// call, no credentials in the app - the person still has to hit Send
+// themselves, this just removes the "what do I even write" friction.
+function sendFeedback() {
+  const to = "kdhaiti2024@fau.edu";
+  const subject = "SVCS feedback";
+  const body =
+    "What were you doing:\n\n\n" +
+    "What happened:\n\n\n" +
+    "What did you expect instead:\n\n\n" +
+    "---\n" +
+    "App: SVCS desktop\n" +
+    "Browser/OS info: " + navigator.userAgent;
+  const href = "mailto:" + to
+    + "?subject=" + encodeURIComponent(subject)
+    + "&body=" + encodeURIComponent(body);
+  window.location.href = href;
+}
+window.sendFeedback = sendFeedback;
+
 async function initSetup() {
   let st;
   try {

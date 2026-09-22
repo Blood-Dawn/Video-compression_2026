@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- API 30 and below. Same reasoning as data_extraction_rules.xml: the token
-     ciphertext is useless off-device and should not reach a cloud backup. -->
-<full-backup-content>
-    <exclude domain="sharedpref" path="." />
-    <exclude domain="file" path="datastore" />
-</full-backup-content>

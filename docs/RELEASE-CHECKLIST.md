@@ -1,80 +1,69 @@
-# SVCS release checklist
+# Release checklist
 
-A repeatable checklist for cutting a public release. The build/verify steps are
-done by whoever prepares the release; **tagging and publishing the GitHub Release
-is the owner's action** (it's a gated step - see `docs/BLOCKERS.md`).
+A repeatable, step-by-step process for cutting a desktop beta build. Every
+step here is something the agent (or any contributor) can run; the actual
+publish/tag is the last step and is explicitly gated to the repo owner.
 
-Versions follow the installer name: `SVCS-Setup-<version>.exe`. The first public
-drop is the **unsigned beta** `v2.1.0-beta`.
+The current published beta tag is `v2.2.0-beta`; the next release bumps this.
 
----
+## Steps
 
-## 1. Pre-flight (clean checkout)
+1. **run_tests** - from the repo root, with the project venv active:
+   `pytest -q`. All tests must pass (or have a documented, reviewed skip) on
+   both the Linux and Windows CI matrix before continuing. `tests/security/`
+   in particular must be green; it is the guard against auth, CSRF, SQLi,
+   XSS, SSRF, path-traversal, and crypto regressions.
+2. **build** - `installer\build.ps1` from the repo root with the venv
+   active. Use `-Edition server` for the desktop/server build (the default)
+   or `-Edition field` for the offline field kit. Add `-Installer` to also
+   package `dist\SVCS` into an Inno Setup `SVCS-Setup-*.exe`. Add `-Sign` to
+   Authenticode-sign the bundle and the installer (see "Code signing"
+   below); without a cert configured, signing degrades to a warning and the
+   build still completes unsigned.
+3. **smoke** - `build.ps1` launches the freshly built exe and confirms it
+   answers on `http://127.0.0.1:5000` within `-SmokeTimeoutSec` (default 60s)
+   unless `-SkipSmoke` was passed. Do not skip this for a release build: a
+   build that produces an exe that never binds its port is a silent failure.
+4. **checksum / sha256** - after the build, compute SHA-256 for every
+   artifact you are about to publish (the installer exe and the mobile APK)
+   and write them to `dist/SHA256SUMS.txt`, one `<hash>  <filename>` line per
+   artifact:
+   `Get-FileHash dist\SVCS-Setup-<version>.exe -Algorithm SHA256`.
+   These are what let a user verify their download was not tampered with in
+   transit, and what the release notes point to.
+5. **draft** - write (or update) `docs/release-notes-v<version>-beta.md`
+   before touching GitHub. It must say plainly that the build is an unsigned
+   beta, explain the Windows SmartScreen warning users will hit and how to
+   proceed past it, list the SHA-256 checksums from the step above, and
+   state the license (AGPL-3.0). Draft it as a normal file in this repo, not
+   directly in the GitHub release editor, so it goes through the same
+   review as everything else.
+6. **owner / publish / tag** - tagging the commit (`git tag vX.Y.Z-beta`),
+   pushing the tag, and publishing the GitHub Release with the built
+   artifacts attached is the repo owner's action alone. Nothing before this
+   step should touch the public `origin` remote's tags or releases. The
+   owner reviews the draft notes and checksums from steps 4-5, then
+   publishes.
 
-- [ ] `git switch app && git pull` - release from `app`, working tree clean.
-- [ ] Confirm the version in `pyproject.toml` / installer matches the intended tag.
-- [ ] `uv sync --extra enhance --extra crash-reporting` - env matches the lockfile.
+## Code signing
 
-## 2. Quality gate
+`installer\build.ps1 -Sign` signs both the bundle exe and the installer exe
+via `signtool`, SHA-256 file digest, RFC3161 timestamp (`/fd SHA256 /tr ...`)
+so the signature stays valid after the cert expires. The certificate is read
+from the environment (`SVCS_SIGN_CERT` or `SVCS_SIGN_THUMBPRINT`, plus
+`SVCS_SIGN_PASSWORD` for a `.pfx`) and is never committed to the repo. With
+no cert configured, `-Sign` prints a warning and the build still produces an
+unsigned exe rather than failing outright - see `docs/BLOCKERS.md` for the
+current status of getting a real cert.
 
-- [ ] `pwsh scripts/run_tests.ps1` → **green** (≥513 passed, 0 failed, 3 webcam skips).
-- [ ] No `[ ]` non-gated tasks remain for this milestone in `docs/CLAUDE-CODE-MASTER-PLAN.md`.
+## Notes
 
-## 3. Build the installer
+- This checklist governs the desktop/server exe and the Inno Setup
+  installer. The mobile APK has its own build step under `mobile/android`
+  and is versioned independently (see `mobile/CHANGES-SUMMER-2026.md`-style
+  per-round notes).
+- If a step here stops matching how a release actually gets made, fix the
+  checklist in the same PR that changes the process. A checklist nobody
+  follows is worse than no checklist.
 
-- [ ] `pwsh installer/build.ps1 -Installer` (vendors FFmpeg, runs PyInstaller, then `iscc`).
-- [ ] Output present: `installer/dist/SVCS-Setup-<version>.exe`.
-- [ ] Note the unpacked size and the installer size for the release notes.
-
-## 4. Smoke-test the installer
-
-- [ ] On a clean Windows VM (no Python, no FFmpeg): install → launch → dashboard opens.
-- [ ] Run a short clip through a preset; confirm a compressed `.mp4` is produced
-      and plays. Validate with `ffprobe`, not `cv2`.
-- [ ] ONNX object detection works (no torch present).
-- [ ] Uninstall leaves `%APPDATA%` user data intact.
-
-## 5. Checksums
-
-- [ ] Generate `SHA256SUMS.txt` next to the installer:
-      ```powershell
-      Get-FileHash .\SVCS-Setup-<version>.exe -Algorithm SHA256 |
-        ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
-        Out-File -Encoding ascii SHA256SUMS.txt
-      ```
-- [ ] Verify the printed hash matches what the download page tells users to check.
-
-## 6. Draft the GitHub Release  🚦 *owner publishes*
-
-- [ ] Draft a release from the **draft notes** (`docs/release-notes-v2.1.0-beta.md`).
-- [ ] Attach `SVCS-Setup-<version>.exe` and `SHA256SUMS.txt`.
-- [ ] Mark it a **pre-release**; the title/notes state clearly it is an
-      **unsigned beta** and SmartScreen will warn.
-- [ ] **Owner action:** create the tag (`v2.1.0-beta`) and click *Publish*.
-      The agent does not tag or publish (gated - `docs/BLOCKERS.md`).
-
-## 6b. Code signing (GA - TASK 5b.1)  🚦 *needs a cert*
-
-The signing step is wired into `installer/build.ps1` (`-Sign`); it signs the
-bundle exe *and* the installer with `signtool`. It needs a Windows code-signing
-certificate, which is the **owner's to obtain** - investigate
-[SignPath.io's free OSS program](https://signpath.io/) before buying an EV cert.
-The unsigned **beta** ships without this; a **GA** build should be signed.
-
-- [ ] Provide the cert via env (never commit it):
-      `SVCS_SIGN_CERT` (path to `.pfx`) + `SVCS_SIGN_PASSWORD`, **or**
-      `SVCS_SIGN_THUMBPRINT` (cert already in the store).
-- [ ] Build signed: `pwsh installer/build.ps1 -Installer -Sign`.
-- [ ] Verify both binaries: `signtool verify /pa /v dist\SVCS-Setup-<version>.exe`
-      (and `dist\SVCS\SVCS.exe`).
-- [ ] Confirm SmartScreen no longer warns on a clean machine after some reputation builds.
-
-## 7. Post-publish
-
-- [ ] Confirm the download page link (`docs/site/index.html` → Releases/latest) resolves to the new asset.
-- [ ] Spot-check the published `SHA256SUMS.txt` against a fresh download.
-- [ ] Open a tracking issue for the next milestone (signing - TASK 5b.1).
-
----
-
-*Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5.4 - release checklist).*
+Author: Bloodawn (KheivenD), 2026-09-21.

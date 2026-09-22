@@ -24,6 +24,12 @@ first compressed clip in a few minutes.
 SVCS_DASHBOARD_PASSWORD='a-long-passphrase' docker compose up --build
 # then open http://localhost:5000  (log in: operator / your-password)
 ```
+This works from a genuinely clean `git clone`, no extra setup needed. The
+first build is slower than later ones: it runs a one-time internal step that
+produces the ONNX detector weights, which are not committed to the repo (see
+`docs/build/onnx-models.md`). Rebuilds after that are fast again since Docker
+caches that step.
+
 See [`BUILD-AND-RELEASE.md`](BUILD-AND-RELEASE.md).
 
 **From source**

@@ -437,6 +437,16 @@ parallel with Milestones 1–3.
   its filed fixes are sized individually.
 
 ### 4.d — Docker install path: fix or document the `yolov8n.onnx` gitignore gap (planner 3.16)
+- **STATUS (2026-09-22): fix (a) implemented, pending clean-clone verification.**
+  `Dockerfile` now has a throwaway builder stage that installs CPU-only torch +
+  ultralytics + onnx/onnxslim, lets ultralytics auto-download `yolov8n.pt`
+  (it isn't committed either — also gitignored), exports to ONNX, and copies
+  only the resulting `yolov8n.onnx` into the final slim image. `docs/getting-
+  started.md` and `docs/build/onnx-models.md` were updated to describe it.
+  Not yet marked done in the planner: per this task's own definition of done
+  below, it needs to be verified by actually running `git clone` into a
+  scratch directory and building from there, not by inspection. That
+  verification is scheduled as the next step.
 - **Files:** `Dockerfile` (does `COPY yolov8n.onnx ./`), `.gitignore`,
   `docs/getting-started.md`, `docs/build/onnx-models.md`.
 - **Root cause already identified in `ROADMAP.md`**: `yolov8n.onnx` is

@@ -204,6 +204,26 @@ class TestEncodeSegmentErrors:
         with pytest.raises(ValueError, match="empty"):
             encoder.encode_segment([], camera_id="cam_err", fps=10.0)
 
+    def test_missing_ffmpeg_raises_actionable_error(self, encoder, monkeypatch):
+        """Fall 3.12: a "Compact" install (installer/svcs.iss does not bundle
+        FFmpeg there) with no FFmpeg on PATH used to surface a bare
+        "[WinError 2]/[Errno 2] ... file specified/directory" from
+        begin_segment() with no indication FFmpeg was the problem. Confirmed
+        by simulation (hid the bundled tools/ffmpeg dir + stripped PATH on a
+        real machine: the pipeline thread's broad except already caught it
+        and /api/status already reported it - not silent - but the message
+        named no culprit). Now begin_segment() raises a RuntimeError that
+        says FFmpeg specifically and names both fixes (install it / use the
+        Full installer)."""
+        import subprocess as _subprocess
+
+        def _boom(*a, **kw):
+            raise FileNotFoundError(2, "No such file or directory")
+
+        monkeypatch.setattr(_subprocess, "Popen", _boom)
+        with pytest.raises(RuntimeError, match="FFmpeg was not found"):
+            encoder.begin_segment((16, 16, 3), fps=10.0, camera_id="cam_no_ffmpeg")
+
     def test_inconsistent_shape_raises(self, encoder):
         rng = np.random.default_rng(0)
         frames = [

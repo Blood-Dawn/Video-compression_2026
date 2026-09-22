@@ -50,12 +50,31 @@ def _ffmpeg_pipe_process(args: list) -> subprocess.Popen:
     Fix: pass stdout=DEVNULL, stderr=DEVNULL so FFmpeg can always write without
     blocking, while we still get stdin as a pipe for frame input.
     """
-    return subprocess.Popen(
-        args,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    try:
+        return subprocess.Popen(
+            args,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError as exc:
+        # Fall 3.12: on a "Compact" install (installer/svcs.iss's "compact"
+        # component explicitly skips bundling FFmpeg and expects it on
+        # PATH), a machine with no system FFmpeg used to fail here with a
+        # bare "[WinError 2] The system cannot find the file specified" (or
+        # "[Errno 2] No such file or directory" on Linux/macOS) - technically
+        # surfaced to the dashboard (the pipeline thread's broad except
+        # catches it and /api/status reports it), but the message named no
+        # culprit, so a non-technical user had no idea what to actually do
+        # about it. Re-raise with the actual problem and the two fixes.
+        raise RuntimeError(
+            "FFmpeg was not found (looked for it bundled with this install, "
+            "then on PATH). This SVCS install does not bundle FFmpeg -- "
+            "either install FFmpeg and add it to PATH, or reinstall using "
+            "the Full installer option, which bundles FFmpeg for you. "
+            "Setup > Help > Check dependencies shows exactly what is "
+            "missing."
+        ) from exc
 
 # Import from sibling modules
 import sys

@@ -1,6 +1,8 @@
 package org.svcs.mobile.ui
 
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -26,18 +28,25 @@ import org.svcs.mobile.net.Savings
  * test with a StandardTestDispatcher standing in for Dispatchers.Main --
  * no Robolectric, no real network.
  *
- * Verification status: built and run against a real AGP/Kotlin toolchain
- * (JDK 17, Android SDK 35) in a sandboxed dev VM. "with no api, start
- * reports not paired and never polls" is confirmed PASSING via the JUnit
- * XML report. The other four methods in this class could not be driven to
- * completion in that sandbox -- a 2 vCPU / 4 GB VM with a hard ~110s ceiling
- * per command was not enough to get Gradle through dependency-artifact
- * transforms (Robolectric/AndroidX AARs, the mockable android.jar) and the
- * test run itself in one pass, even with --no-daemon and a cleared daemon
- * registry. No failing assertion or hang was ever observed once a run got
- * far enough to execute a test method. Run `./gradlew testDebugUnitTest`
- * on a normal dev machine (Android Studio's JDK/SDK) to get a full,
- * fast confirmation.
+ * `vm.viewModelScope.cancel()` after the last scheduler-drain call in the
+ * four methods below that call `start()` with a real fake api is
+ * load-bearing, not cleanup theater: `start()`'s `while (isActive) { ...;
+ * delay(POLL_MS) }` loop never finishes on its own, so its next `delay` is
+ * always a pending task on the shared `testDispatcher` scheduler. `runTest
+ * {}` tries to drain that scheduler to idle when the test body returns,
+ * which never terminates while that task is still pending -- confirmed by
+ * an actual hang (a `Test worker` thread stuck inside `advanceUntilIdleOr`,
+ * tens of millions of iterations deep) the first time this file's full
+ * suite was ever run end-to-end on a real machine. "with no api, start
+ * reports not paired and never polls" never hit this: `start()` returns
+ * before launching anything when `api` is null, so there's no loop to
+ * clean up there. Cancelling the scope before each of the other four tests
+ * returns removes the pending task so `runTest` can finish normally.
+ *
+ * Verification status: confirmed passing (all five methods) on a real
+ * AGP/Kotlin toolchain (JDK 21, Android SDK 35) once the cancel calls above
+ * were added. See the matching note in EventsViewModelTest.kt for the same
+ * defect pattern in that class's `init`-driven polling loop.
  *
  * Author: Bloodawn (KheivenD), 2026-09-14 (Fall 3.1).
  */
@@ -92,6 +101,7 @@ class HomeViewModelTest {
 
         vm.start()
         testDispatcher.scheduler.runCurrent()
+        vm.viewModelScope.cancel()  // stop the poll loop before runTest drains the scheduler
 
         val s = vm.state.value
         assertEquals(true, s.running)
@@ -114,6 +124,7 @@ class HomeViewModelTest {
 
         vm.start()
         testDispatcher.scheduler.runCurrent()
+        vm.viewModelScope.cancel()  // stop the poll loop before runTest drains the scheduler
 
         assertEquals(
             "The server rejected this device's token. Re-pair under MORE.",
@@ -130,6 +141,7 @@ class HomeViewModelTest {
 
         vm.start()
         testDispatcher.scheduler.runCurrent()
+        vm.viewModelScope.cancel()  // stop the poll loop before runTest drains the scheduler
 
         assertEquals(
             "Could not reach the server. connection refused",
@@ -146,6 +158,7 @@ class HomeViewModelTest {
         testDispatcher.scheduler.runCurrent()
         vm.start()
         testDispatcher.scheduler.runCurrent()
+        vm.viewModelScope.cancel()  // stop the poll loop before runTest drains the scheduler
 
         assertEquals(1, fake.pipelineStatusCount)
     }

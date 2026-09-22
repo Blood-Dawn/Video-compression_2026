@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SVCS logomark, simplified for an adaptive icon: the 2x2 quad-feed tile (the
+  iconic 4-camera CCTV view) with a center crosshair and a REC dot in the
+  top-right cell. Amber on the dark surface, per the design system.
+
+  Vector rather than PNG on purpose: no binary assets in the repo, and it
+  scales to every density without a generator step.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Quad-feed frame (safe zone is the middle 72x72 of the 108 canvas). -->
+    <path
+        android:strokeColor="#FFB900"
+        android:strokeWidth="3"
+        android:fillColor="#00000000"
+        android:pathData="M22,22 h64 v64 h-64 z" />
+    <!-- Divider lines making the 2x2 split. -->
+    <path
+        android:strokeColor="#FFB900"
+        android:strokeWidth="2"
+        android:pathData="M54,22 V86" />
+    <path
+        android:strokeColor="#FFB900"
+        android:strokeWidth="2"
+        android:pathData="M22,54 H86" />
+    <!-- Center crosshair tick. -->
+    <path
+        android:strokeColor="#FFB900"
+        android:strokeWidth="2"
+        android:pathData="M50,54 h8 M54,50 v8" />
+    <!-- REC dot, top-right feed. -->
+    <path
+        android:fillColor="#FF5555"
+        android:pathData="M76,30 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
+</vector>

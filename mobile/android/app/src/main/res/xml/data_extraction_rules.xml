@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android 12+ backup/transfer rules.
+
+  Both cloud-backup and device-transfer EXCLUDE the settings store. It holds the
+  encrypted device token, and the key that decrypts it lives in this device's
+  Keystore and cannot leave it, so a restored copy would be undecryptable
+  ciphertext regardless. Excluding it makes that explicit rather than shipping a
+  useless blob to Google's servers, and keeps a credential for a surveillance
+  system out of a cloud backup on principle.
+
+  Re-pairing on a new device is the intended flow: mint a token for it, and
+  revoke the old device's token from the dashboard.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="file" path="datastore" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="." />
+        <exclude domain="file" path="datastore" />
+    </device-transfer>
+</data-extraction-rules>

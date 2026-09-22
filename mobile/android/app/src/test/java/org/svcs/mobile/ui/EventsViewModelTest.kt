@@ -1,6 +1,8 @@
 package org.svcs.mobile.ui
 
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -26,7 +28,20 @@ import org.svcs.mobile.net.ZonesConfigResponse
  * in place before construction; `runCurrent()` then lets that first poll
  * execute without advancing into the next 10s cycle.
  *
- * Verification status: see the note at the top of HomeViewModelTest.kt.
+ * `vm.viewModelScope.cancel()` after the last `runCurrent()` in every test
+ * below is load-bearing, not cleanup theater: the init loop's `delay(10_000)`
+ * is a real pending task on the shared `testDispatcher` scheduler for as
+ * long as it's alive, and `runTest {}` tries to drain that scheduler to
+ * idle when the test body returns. Since this loop never finishes on its
+ * own, that drain never terminates -- confirmed by an actual hang (a
+ * `Test worker` thread stuck inside `advanceUntilIdleOr`, tens of millions
+ * of iterations deep, never returning) the first time this file's full
+ * suite was ever run end-to-end. Cancelling the scope before the test
+ * returns removes the pending task so `runTest` can finish normally.
+ *
+ * Verification status: confirmed passing (all methods) once the cancel
+ * above was added; see the matching note in HomeViewModelTest.kt for the
+ * same defect in that class's `start()`-driven polling loop.
  *
  * Author: Bloodawn (KheivenD), 2026-09-14 (Fall 3.1).
  */
@@ -59,6 +74,7 @@ class EventsViewModelTest {
         }
         val vm = EventsViewModel(fake, ioDispatcher = testDispatcher)
         testDispatcher.scheduler.runCurrent()
+        vm.viewModelScope.cancel()  // stop the init loop before runTest drains the scheduler
 
         val s = vm.state.value
         assertEquals(1, s.events.size)
@@ -71,6 +87,7 @@ class EventsViewModelTest {
         val fake = FakeSvcsApi().apply { eventsRecentResult = Fetched.Unauthorized }
         val vm = EventsViewModel(fake, ioDispatcher = testDispatcher)
         testDispatcher.scheduler.runCurrent()
+        vm.viewModelScope.cancel()  // stop the init loop before runTest drains the scheduler
 
         assertEquals(
             "The server rejected this device's token. Re-pair under MORE.",
@@ -122,6 +139,7 @@ class EventsViewModelTest {
         vm.onCameraChanged("cam_00")
         vm.loadZones()
         testDispatcher.scheduler.runCurrent()
+        vm.viewModelScope.cancel()  // stop the init loop before runTest drains the scheduler
 
         assertEquals(1, vm.state.value.editorLines.size)
         assertTrue(vm.state.value.editorMessage!!.contains("Loaded"))
@@ -138,6 +156,7 @@ class EventsViewModelTest {
         vm.addGeometry(0.0f, 0.0f, 1.0f, 1.0f)
         vm.saveZones()
         testDispatcher.scheduler.runCurrent()
+        vm.viewModelScope.cancel()  // stop the init loop before runTest drains the scheduler
 
         assertEquals(1, fake.saveZonesCalls.size)
         val (cam, cfg) = fake.saveZonesCalls.first()

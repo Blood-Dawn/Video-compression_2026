@@ -265,40 +265,52 @@ security/handheld footage (more bits where the detector fires, fewer where
 it doesn't) on at least Android 15 devices with `FEATURE_Roi`, with a
 documented, tested fallback everywhere else.
 
-### Phase 3 - Store-ready
+### Phase 3 - Ship it open source (no store gate required)
 
-- **Play Console foreground-service declaration:** for `mediaProcessing`,
-  Play now requires a written functionality description, a "what breaks if
-  deferred" justification, and a short screen-recording of a user
-  triggering the feature - budget real time for this, it's a submission
-  gate, not paperwork.
-- **Closed testing gate:** new personal developer accounts (created after
-  Nov 2023) must run a closed test with **12 continuously-opted-in testers
-  for 14 uninterrupted days** before applying for production access
-  (~7-day review after). This is time-bound and can't be compressed -
-  start the developer account and recruit testers (teammates, classmates)
-  as soon as there's any installable Phase 1 build, so the 14 days run in
-  parallel with Phase 2 work instead of blocking launch at the end.
-- **August 2026 developer verification:** Google is rolling out mandatory
-  identity verification for apps to install normally on certified devices.
-  A free "limited distribution" tier exists for students/hobbyists (up to
-  20 devices, no ID/fee) - track this as a hard external deadline either
-  way.
-- **Distribution:** Play Store as primary (reach, trust, update mechanics).
-  F-Droid/IzzyOnDroid is realistic as a secondary channel specifically
-  *because* Phase 1/2 are FFmpeg-free - a bundled FFmpeg would mean
-  maintaining a from-source build in F-Droid's pipeline (doable, NewPipe
-  does it, but real ongoing work a MediaCodec-only app skips entirely).
-- **Monetization:** given the "started for fun, capstone already shipped"
-  framing, the donation-only model (Buy Me a Coffee / GitHub Sponsors, no
-  ads, no IAP) matches both the project's actual motivation and is the
-  fastest path through Play policy review - no ads/IAP review surface, no
-  subscription-cancellation complaints like the ad-heavy competitors draw
-  in their own reviews. Also worth flagging concretely: **going full GPL
-  FFmpeg later would obligate open-sourcing the whole app** under GPL and
-  complicates bundling any ad/analytics SDK - another point in favor of
-  staying on the native MediaCodec/Media3 path if a paid tier is ever
-  considered down the line.
+This is a complete open-source app, full stop - not a commercial product
+that happens to publish its code. That changes the whole shape of this
+phase: none of Google Play's submission machinery is a requirement to
+actually ship. It's an optional, separate distribution channel to consider
+later, not the launch path.
+
+- **License it permissively and say so loudly.** MIT (matching Compressor,
+  the app this roadmap benchmarks against) or GPL if the project ever does
+  pull in copyleft code - either way, the license file, a clear README, and
+  public source from day one are the actual "release requirements" here,
+  not a store listing.
+- **Primary distribution: GitHub Releases.** Tag a build, attach the APK
+  and a `SHA256SUMS.txt` (same pattern already used for the desktop and
+  the mobile-remote APK releases in `docs/releases/RELEASE-CHECKLIST.md`),
+  publish. No review queue, no closed-testing window, no waiting on
+  anyone. This alone is a complete, legitimate way to ship a real app to
+  real users, and it's available the moment Phase 1 has a working build.
+- **Secondary distribution: F-Droid / IzzyOnDroid.** Because Phase 1/2
+  are Media3-only with zero bundled native binaries (no FFmpeg, no GPL
+  entanglement), this is a genuinely easy submission compared to an
+  FFmpeg-based app - F-Droid can build the whole thing from source on its
+  own infrastructure with no prebuilt-binary exception needed, which is
+  exactly the trivial case their inclusion policy is built for. This is
+  the channel that reaches the exact audience (self-hosters, F-Droid
+  users, the HN/GitHub crowd) that already responds well to a fast,
+  private, no-telemetry compressor - worth doing before Play, not after.
+- **Google Play: optional, later, only if wider reach is ever actually
+  wanted.** Nothing about being a real, independent app depends on it.
+  If it happens eventually, the mechanics researched still apply and are
+  worth keeping on file rather than re-researching then: a written
+  foreground-service justification for `mediaProcessing`, a closed test
+  with 12 testers for 14 continuous days before production access, and
+  (from August 2026) Android's mandatory developer-identity verification
+  for normal installs on certified devices - though its free
+  "limited distribution" tier (up to 20 devices, no ID/fee) exists
+  specifically for a hobbyist project like this one if a small, known
+  group of people just want it on their phones without going through
+  GitHub/F-Droid at all.
+- **No monetization.** Free, ad-free, IAP-free, matching the project's
+  actual motivation ("started for fun") and the exact positioning that
+  makes the benchmark app stand out from the ad-heavy incumbents. Optional
+  donation links (Buy Me a Coffee / GitHub Sponsors) are fine to add later
+  if people want to throw money at it, but there's no monetization design
+  work to do here - that's the point of it being open source.
 
 ### Phase 4 - Live capture (explicit stretch, not v1)
 

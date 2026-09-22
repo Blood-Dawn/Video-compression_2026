@@ -359,6 +359,32 @@ isn't what any of the competitive set actually ships. Revisit after Phase
   SDK) - worth a periodic APK Analyzer check at each milestone so nothing
   sneaks in via a transitive dependency.
 
+## Phase 1 field verification (Sep 22 2026)
+
+Built, installed, and tested on a real Android device (not just an
+emulator or a compile check). Published as a GitHub Release:
+github.com/Blood-Dawn/Video-compression_2026/releases/tag/v1-beta.
+
+Two real clips run through the app, picked from the phone's own camera
+roll and downloaded videos, not synthetic test files:
+
+- A 107-second landscape clip, compressed with a target-size preset,
+  went from roughly 67 MB down to 7.98 MB (h264, 720x406, ~594 kbps).
+  The output bitrate lands within about 1% of what
+  `bitrateForTargetSize()` predicts for that duration, so the target-size
+  math is holding up against a real encoder, not just in the formula.
+- A 14.5-second clip, compressed with a quality preset, produced a
+  14.12 MB HEVC file at 1024x576, roughly 7.66 Mbps. Both outputs decode
+  and play back correctly.
+
+Net result: Phase 1's core promise, on-device compression with no
+desktop server involved, works end to end on real hardware with real
+footage. Remaining Phase 1 follow-ups are polish rather than open
+questions: confirming behavior on portrait-orientation source video
+(the resolution-capping effect specifically), and checking a couple of
+other target-size presets (WhatsApp, Instagram) the same way these two
+were checked.
+
 ## Sources
 
 Research conducted via a parallel multi-agent sweep (competitor landscape,

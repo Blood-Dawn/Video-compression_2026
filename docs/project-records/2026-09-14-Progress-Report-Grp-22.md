@@ -13,11 +13,11 @@
 
 # Part 1: Team Section
 
-**All team members have detailed tasks listed on Teams Planner:** NO. The week
-3 task list exists as `week3.local.json` and matches
-`docs/project-records/PLANNER-FALL-2026.md`, but it has not yet been imported
-into the actual Microsoft Teams Planner board. That import is the next thing
-Kheiven is doing after this report goes out.
+**All team members have detailed tasks listed on Teams Planner:** YES. All 19
+week 3 tasks (3.2 through 3.16, five of them the shared fresh-install
+walkthrough) are now cards in the "Week 3 (2026-09-14)" bucket on the actual
+Microsoft Teams Planner board, matching `docs/project-records/PLANNER-FALL-2026.md`,
+with the correct assignee and due date on each.
 
 ## 1. Team Meeting
 

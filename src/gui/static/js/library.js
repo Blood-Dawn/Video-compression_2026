@@ -209,6 +209,8 @@ window.loadLibrary = loadLibrary;
 // A server-side navigator (works in the frozen app + remotely, unlike a native
 // OS dialog). Walks directories via /api/library/list_dirs.
 window._lbPath = "";
+window._lbTargetInputId = "library-folder";
+window._lbOnUse = null;
 
 function _showBrowseModal(show) {
   const m = document.getElementById("library-browse-modal");
@@ -253,27 +255,48 @@ async function _lbNavigate(path) {
   }
 }
 
-async function browseLibraryFolder() {
-  // Open the host's NATIVE folder picker (Windows Explorer folder dialog), then
-  // load the chosen folder. Only fall back to the in-app browser if the native
-  // picker is unreachable (e.g. a remote/headless server).
+async function browseFolderInto(inputId, onUse) {
+  // Generic version of the picker below: lands the chosen path in whatever
+  // <input> the caller names and, optionally, runs a callback afterward.
+  // Added for Setup's output/encrypted-folder fields (Week 3 TASK 3.13),
+  // which need this exact picker but must not trigger a Library reload.
+  //
+  // Same order as before: try the host's NATIVE folder picker (Windows
+  // Explorer folder dialog) first, and only fall back to the in-app
+  // server-side browser if that is unreachable (e.g. a remote/headless
+  // server).
   try {
     const data = await (await fetch("/api/library/browse_folder")).json();
     if (data && data.path) {
-      const el = document.getElementById("library-folder");
-      if (el) el.value = data.path;
-      loadLibrary();
+      const el = document.getElementById(inputId);
+      if (el) {
+        el.value = data.path;
+        // Fields like setup-output-dir keep another field in sync via an
+        // 'input' listener; a value set from JS doesn't fire that on its
+        // own, so dispatch one explicitly.
+        el.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      if (typeof onUse === "function") onUse(data.path);
     }
     // An empty path means the user cancelled the dialog: do nothing.
     return;
   } catch (e) {
     // Native picker unavailable: fall back to the in-app folder browser so a
     // remote user is never stuck.
+    window._lbTargetInputId = inputId;
+    window._lbOnUse = onUse || null;
     _showBrowseModal(true);
-    const folderEl = document.getElementById("library-folder");
-    const start = (folderEl && folderEl.value.trim()) || "";
+    const el = document.getElementById(inputId);
+    const start = (el && el.value.trim()) || "";
     await _lbNavigate(start);
   }
+}
+window.browseFolderInto = browseFolderInto;
+
+async function browseLibraryFolder() {
+  // The Library tab's own folder field: unchanged behavior, now expressed
+  // as a call into the generic picker above.
+  await browseFolderInto("library-folder", () => loadLibrary());
 }
 window.browseLibraryFolder = browseLibraryFolder;
 
@@ -290,10 +313,18 @@ window.lbUp = lbUp;
 
 function lbUseFolder() {
   if (!window._lbPath) return;
-  const folderEl = document.getElementById("library-folder");
-  if (folderEl) folderEl.value = window._lbPath;
+  const inputId = window._lbTargetInputId || "library-folder";
+  const folderEl = document.getElementById(inputId);
+  if (folderEl) {
+    folderEl.value = window._lbPath;
+    folderEl.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+  const onUse = window._lbOnUse;
+  const path = window._lbPath;
+  window._lbTargetInputId = "library-folder";
+  window._lbOnUse = null;
   closeBrowseModal();
-  loadLibrary();
+  if (typeof onUse === "function") onUse(path);
 }
 window.lbUseFolder = lbUseFolder;
 

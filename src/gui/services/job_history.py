@@ -120,6 +120,15 @@ def record_job(
             _publish_job(entry)
         except Exception:  # noqa: BLE001 - best effort, always
             pass
+        # Week 3 TASK 3.9: generic webhook, same best-effort contract.
+        try:
+            from utils.event_webhook import publish_job as _publish_job_hook
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.utils.event_webhook import publish_job as _publish_job_hook
+        try:
+            _publish_job_hook(entry)
+        except Exception:  # noqa: BLE001 - best effort, always
+            pass
         return entry
     except Exception:  # noqa: BLE001 - history must never break a run
         return None

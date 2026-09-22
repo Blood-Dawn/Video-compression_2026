@@ -302,6 +302,15 @@ def run_pipeline(
         log.warning("Zones/events config unavailable: %s", _zexc)
         _zone_cfg = None
         _event_engine = None
+
+    # Week 3 TASK 3.7: throttled "last seen" still for the zone editor's
+    # background image. Best effort like the event engine above; a camera
+    # id that fails validation just means no cached still, never a crash.
+    try:
+        from utils.camera_frame_cache import ThrottledFrameWriter as _FrameCacheWriter
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.utils.camera_frame_cache import ThrottledFrameWriter as _FrameCacheWriter
+    _frame_cache = _FrameCacheWriter(camera_id)
     log.info(f"Segment length: {segment_seconds}s ({frames_per_segment} frames)")
     log.info(f"Mode: {mode}")
     warmup_secs = (effective_warmup / fps) if fps > 0 else 0.0
@@ -634,6 +643,11 @@ def run_pipeline(
                 break
 
             source_frame_index += 1
+
+            try:
+                _frame_cache.maybe_save(frame)
+            except Exception:  # noqa: BLE001 - a thumbnail must never stall a run
+                pass
 
             mask             = subtractor.apply(frame)
             raw_regions      = subtractor.get_foreground_regions(mask)

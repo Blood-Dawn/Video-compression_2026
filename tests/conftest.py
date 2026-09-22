@@ -24,6 +24,7 @@ if str(SRC) not in sys.path:
 
 from utils.db import initialize_database, insert_segment  # noqa: E402
 from utils import push_notify as _push_notify  # noqa: E402
+from utils import event_webhook as _event_webhook  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -55,6 +56,27 @@ def _isolate_push_config(_push_config_dir, monkeypatch):
     if path.exists():
         path.unlink()
     monkeypatch.setattr(_push_notify, "config_path", lambda: path)
+    yield
+
+
+@pytest.fixture(scope="session")
+def _webhook_config_dir(tmp_path_factory):
+    """Same reasoning as _push_config_dir: one session-scoped directory."""
+    return tmp_path_factory.mktemp("webhook_state")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_webhook_config(_webhook_config_dir, monkeypatch):
+    """No test may read the developer's real webhook config or post to it.
+
+    Same contract as _isolate_push_config: event_webhook.py is wired into
+    event_log.append_events and job_history's recorder, off by default, but
+    every test starts from an empty config and must opt in explicitly.
+    """
+    path = _webhook_config_dir / _event_webhook.CONFIG_FILENAME
+    if path.exists():
+        path.unlink()
+    monkeypatch.setattr(_event_webhook, "config_path", lambda: path)
     yield
 
 

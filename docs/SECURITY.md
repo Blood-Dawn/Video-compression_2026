@@ -9,6 +9,11 @@ Audit performed 2026-06-21 on branch `app`. Sources merged here:
 `docs/security/SECURITY-AUDIT.md` and `docs/security/SECURITY-MANUAL-VERIFY.md`.
 Deferred owner actions are also summarized here from `docs/plans/BLOCKERS.md`.
 
+For a hands-on, beginner-level walkthrough of testing these findings against
+a REAL running instance over a real network (Wireshark, nmap, a Kali VM, and
+the fuzzing script from Week 3 TASK 3.15) rather than just the code and its
+regression tests, see `docs/security/KALI-PENTEST-GUIDE.md`.
+
 ---
 
 ## Threat model

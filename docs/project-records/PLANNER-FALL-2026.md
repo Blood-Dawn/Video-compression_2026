@@ -87,10 +87,10 @@ each, per the course guidance.
 | --- | --- | --- | --- | --- |
 | 2.1 | Write the summer changes document for the team | Kheiven | `docs/CHANGES-SUMMER-2026.md` committed and pushed | Complete Sep 13 |
 | 2.2 | Verify push status on all branches and commit stranded documentation | Kheiven | Zero unpushed commits; `RESEARCH.md`, `SECURITY.md`, `PROJECT-HISTORY.md` committed | Complete Sep 13 |
-| 2.3 | Revised proposal: update system design section and functional diagrams | Kheiven | Current architecture diagram including the mobile client, in red per the assignment | Carried to week 3 |
-| 2.4 | Revised proposal: update the requirements list with mobile requirements | Jorge | Requirements covering the phone client, added in red | Carried to week 3 |
-| 2.5 | Revised proposal: update the literature survey and reference list | Ashleyn | Citations formatted consistently, new sources from the summer research documents | Carried to week 3 |
-| 2.6 | Revised proposal: build the Gantt chart from this planner | Riley | Gantt covering all 14 weeks with owners, dependencies, and milestones | Carried to week 3 |
+| 2.3 | Revised proposal: update system design section and functional diagrams | Kheiven | Current architecture diagram including the mobile client, in red per the assignment | Complete |
+| 2.4 | Revised proposal: update the requirements list with mobile requirements | Jorge | Requirements covering the phone client, added in red | Complete |
+| 2.5 | Revised proposal: update the literature survey and reference list | Ashleyn | Citations formatted consistently, new sources from the summer research documents | Complete |
+| 2.6 | Revised proposal: build the Gantt chart from this planner | Riley | Gantt covering all 14 weeks with owners, dependencies, and milestones | Complete |
 | 2.7 | Revised proposal: organizational chart and completed-tasks list | Victor | Org chart naming the team leader; list of tasks completed to date | Complete Sep 12 |
 
 ### Week 3: September 14 to September 20
@@ -103,12 +103,12 @@ each, per the course guidance.
 | 3.2 | Add a debug build variant with HTTP logging for diagnosis | Kheiven | A failing request shows its reason in logcat instead of being a mystery on a minified build | Not started |
 | 3.3 | Investigate the WorkManager API and draft the upload worker design | Jorge | Written design for moving the chunked upload out of `viewModelScope` | Not started |
 | 3.4 | Audit the resumable upload protocol for resume correctness | Jorge | Confirmation that `/api/upload/status` returns an offset a worker can resume from | Not started |
-| 3.5 | Build the desktop EVENTS panel, read-only table | Ashleyn | Newest-first table on the TOOLS tab from `/api/events/recent` | Not started |
-| 3.6 | Add the empty state and ten second auto-refresh to the EVENTS panel | Ashleyn | Panel refreshes while visible, stops when hidden, tells the operator to draw zones first | Not started |
-| 3.7 | Add the `GET /api/zones/frame` route returning a still frame | Riley | JPEG still for a camera, black placeholder when no thumbnail exists, all three route guards updated | Not started |
-| 3.8 | Draft the zone editor canvas layout | Riley | Toolbar and canvas markup matching the phone editor | Not started |
-| 3.9 | Read `push_notify.is_safe_push_url` and specify the webhook emitter | Victor | Written specification for `utils/event_webhook.py` reusing the existing guard | Not started |
-| 3.10 | Write the socket-server test harness for webhook delivery | Victor | Test fixture in the style of `tests/test_push_notify.py` | Not started |
+| 3.5 | Build the desktop EVENTS panel, read-only table | Ashleyn | Newest-first table on the TOOLS tab from `/api/events/recent` | Complete Sep 22 |
+| 3.6 | Add the empty state and ten second auto-refresh to the EVENTS panel | Ashleyn | Panel refreshes while visible, stops when hidden, tells the operator to draw zones first | Complete Sep 22 |
+| 3.7 | Add the `GET /api/zones/frame` route returning a still frame | Riley | JPEG still for a camera, black placeholder when no thumbnail exists, all three route guards updated | Complete Sep 22 |
+| 3.8 | Draft the zone editor canvas layout | Riley | Toolbar and canvas markup matching the phone editor | Complete Sep 22 |
+| 3.9 | Read `push_notify.is_safe_push_url` and specify the webhook emitter | Victor | Written specification for `utils/event_webhook.py` reusing the existing guard | Complete Sep 22 |
+| 3.10 | Write the socket-server test harness for webhook delivery | Victor | Test fixture in the style of `tests/test_push_notify.py` | Complete Sep 22 |
 
 ### Week 3 addendum: application testing pass
 
@@ -139,10 +139,10 @@ independently discovering and reading Help.
 | --- | --- | --- | --- | --- |
 | 3.11 | Fresh-install walkthrough on a clean machine: install `SVCS-Setup.exe`, complete first-run Setup, run one compression, all without opening the source code | All, each on their own machine | A written note per person of every point of confusion or friction, with the worst three filed as fixes | Not started |
 | 3.12 | Test the Compact install path with no FFmpeg on PATH | Riley | Confirmation of whether the app warns before Start is clickable, or fails silently on the first compression, plus a fix if it is silent | Not started |
-| 3.13 | Add a folder-browse button to the Setup destination field, reusing the Library folder-browser modal | Ashleyn | Setup no longer requires typing a raw folder path from memory | Not started |
+| 3.13 | Add a folder-browse button to the Setup destination field, reusing the Library folder-browser modal | Ashleyn | Setup no longer requires typing a raw folder path from memory | Complete Sep 22 |
 | 3.14 | External network penetration test against a running SVCS instance | Victor | Written findings against the threat model in `docs/SECURITY.md`; anything found gets a severity-rated entry in `docs/plans/BLOCKERS.md`, matching the pentest item already deferred there | Not started |
-| 3.15 | Fuzz the video-ingest and upload path with malformed media | Victor | A clean rejection or a filed crash report for each malformed file tried, closing the fuzzing item already deferred in `docs/plans/BLOCKERS.md` | Not started |
-| 3.16 | Verify the Docker install path end to end on a fresh clone, then fix `docs/getting-started.md` | Kheiven | `docker compose up --build` either succeeds from a clean checkout, or the missing `yolov8n.onnx` prerequisite is documented plainly (or the build fetches it automatically); the getting-started guide reflects whichever is true | In progress - fix implemented 2026-09-22 (multi-stage Docker build auto-exports yolov8n.onnx), clean-clone verification still pending |
+| 3.15 | Fuzz the video-ingest and upload path with malformed media | Victor | A clean rejection or a filed crash report for each malformed file tried, closing the fuzzing item already deferred in `docs/plans/BLOCKERS.md` | Complete Sep 22 |
+| 3.16 | Verify the Docker install path end to end on a fresh clone, then fix `docs/getting-started.md` | Kheiven | `docker compose up --build` either succeeds from a clean checkout, or the missing `yolov8n.onnx` prerequisite is documented plainly (or the build fetches it automatically); the getting-started guide reflects whichever is true | In progress |
 | 3.17 | Add an in-app auto-update check for the desktop exe | Kheiven | Owner task, not delegated: dashboard checks a version endpoint and shows a Setup-page notice with a download link when a newer installer build exists | Not started |
 
 Table 3a. Application testing pass, added to week 3.

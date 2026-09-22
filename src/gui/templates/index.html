@@ -2924,6 +2924,151 @@
               </div>
             </div>
           </details>
+
+          <!-- Outbound webhook for jobs and events (Week 3 TASK 3.9). Same
+               shape as the ntfy panel above, over utils/event_webhook.py,
+               for a plain JSON POST to any URL (a self-hosted server,
+               Discord/Slack incoming webhook, a SIEM ingest endpoint). -->
+          <details class="source-advanced" id="webhook-panel" style="margin-bottom:0.8rem;" ontoggle="if(this.open)webhookCfgRefresh()">
+            <summary style="cursor:pointer;font-family:var(--display);font-size:0.95rem;letter-spacing:0.08em;color:var(--text-dim);">
+              OUTBOUND WEBHOOK
+            </summary>
+            <div style="padding:0.5rem 0 0;">
+              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
+                Posts a plain JSON message to any URL you point it at: your own server, a
+                Discord/Slack incoming webhook, a SIEM ingest endpoint. Same URL rules as the
+                phone-alerts panel above, loopback and LAN addresses are accepted, cloud
+                metadata endpoints are refused. Optional signing secret so the receiver can
+                verify the delivery came from this SVCS instance.
+              </div>
+              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.64rem;cursor:pointer;margin-bottom:0.5rem;">
+                <input type="checkbox" id="webhook-enabled" />
+                Send job and event deliveries to my webhook
+              </label>
+              <div class="config-field">
+                <label class="config-label" for="webhook-url">Webhook URL</label>
+                <input type="text" id="webhook-url" placeholder="https://your-server/svcs-webhook"
+                       style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
+              </div>
+              <div class="config-field" style="margin-top:0.4rem;">
+                <label class="config-label" for="webhook-secret">Signing secret</label>
+                <input type="password" id="webhook-secret" autocomplete="new-password"
+                       placeholder="optional, adds an X-SVCS-Signature header"
+                       style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
+              </div>
+              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.64rem;cursor:pointer;margin-top:0.5rem;">
+                <input type="checkbox" id="webhook-on-jobs" checked />
+                Tell it when a compression finishes or fails
+              </label>
+              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.64rem;cursor:pointer;margin-top:0.3rem;">
+                <input type="checkbox" id="webhook-on-events" checked />
+                Tell it about line crossings and loitering
+              </label>
+              <div style="margin-top:0.6rem;display:flex;gap:0.4rem;flex-wrap:wrap;">
+                <button class="btn btn-ghost" id="webhook-test-btn" onclick="webhookCfgTest()">Send test</button>
+                <button class="btn btn-primary" id="webhook-save-btn" onclick="webhookCfgSave()">Save</button>
+              </div>
+              <div id="webhook-status" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
+            </div>
+          </details>
+
+          <!-- Recent behavior events (Week 3 TASKS 3.5/3.6). Read-only: the
+               zone editor (above, once built) is where events get configured,
+               this panel is just "what fired". Backed by the existing
+               GET /api/events/recent (R5 TASK 5.7). Auto-refreshes only while
+               open, so a closed panel never polls in the background. -->
+          <details class="source-advanced" id="events-panel" style="margin-bottom:0.8rem;"
+                    ontoggle="if(this.open){eventsRefresh();eventsAutoStart();}else{eventsAutoStop();}">
+            <summary style="cursor:pointer;font-family:var(--display);font-size:0.95rem;letter-spacing:0.08em;color:var(--text-dim);">
+              RECENT EVENTS
+            </summary>
+            <div style="padding:0.5rem 0 0;">
+              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
+                Line crossings and loitering from the configured output folder's
+                <code>events.jsonl</code>, newest first. Refreshes every 10 seconds while this
+                panel is open.
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.4rem;">
+                <button class="btn btn-ghost" id="events-refresh-btn" onclick="eventsRefresh()">Refresh</button>
+                <span id="events-updated" style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);"></span>
+              </div>
+              <div id="events-empty" style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);padding:0.6rem 0;display:none;">
+                No events yet. Draw a zone or crossing line for a camera, then trigger it, and it
+                will show up here within a few seconds of the next run.
+              </div>
+              <div style="max-height:260px;overflow-y:auto;">
+                <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:0.6rem;">
+                  <thead>
+                    <tr style="text-align:left;color:var(--text-dim);border-bottom:1px solid var(--border);">
+                      <th style="padding:0.25rem 0.4rem;">Time</th>
+                      <th style="padding:0.25rem 0.4rem;">Camera</th>
+                      <th style="padding:0.25rem 0.4rem;">Kind</th>
+                      <th style="padding:0.25rem 0.4rem;">Object</th>
+                      <th style="padding:0.25rem 0.4rem;">Detail</th>
+                    </tr>
+                  </thead>
+                  <tbody id="events-rows"></tbody>
+                </table>
+              </div>
+            </div>
+          </details>
+
+          <!-- Zone editor draft (Week 3 TASK 3.8). Draws over the still from
+               GET /api/zones/frame and reads/writes the existing
+               GET/POST /api/zones contract (R5 TASKS 5.6/5.7). Geometry is
+               normalized 0..1 client-side to match zones_config.py exactly,
+               so nothing server-side needs to change to accept it. -->
+          <details class="source-advanced" id="zone-editor-panel" style="margin-bottom:0.8rem;"
+                    ontoggle="if(this.open)zoneEditorLoad();">
+            <summary style="cursor:pointer;font-family:var(--display);font-size:0.95rem;letter-spacing:0.08em;color:var(--text-dim);">
+              ZONE EDITOR (DRAFT)
+            </summary>
+            <div style="padding:0.5rem 0 0;">
+              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
+                Draw exclude regions, crossing lines, and loiter zones for one camera. A saved
+                change applies to that camera's <b>next</b> run, not one already in progress.
+              </div>
+
+              <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;margin-bottom:0.5rem;">
+                <input type="text" id="zone-camera-id" placeholder="camera id, e.g. cam_00"
+                       style="width:160px;font-family:var(--mono);font-size:0.65rem;" />
+                <button class="btn btn-ghost" onclick="zoneEditorLoad()">Load</button>
+                <span style="flex:1;"></span>
+                <label style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);">Draw:</label>
+                <select id="zone-draw-mode" style="font-family:var(--mono);font-size:0.65rem;">
+                  <option value="exclude">Exclude region</option>
+                  <option value="line">Crossing line</option>
+                  <option value="zone">Loiter zone</option>
+                </select>
+                <input type="text" id="zone-shape-id" placeholder="id (line/zone only)"
+                       style="width:120px;font-family:var(--mono);font-size:0.65rem;" />
+              </div>
+
+              <div style="border:1px solid var(--border);display:inline-block;line-height:0;">
+                <canvas id="zone-canvas" width="640" height="360" style="max-width:100%;cursor:crosshair;display:block;"></canvas>
+              </div>
+
+              <div style="margin-top:0.5rem;display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;">
+                <button class="btn btn-ghost" onclick="zoneEditorUndo()">Undo last</button>
+                <button class="btn btn-ghost" onclick="zoneEditorClear()">Clear all</button>
+                <div class="config-field" style="margin:0;">
+                  <label class="config-label" for="zone-loiter-s" style="font-size:0.55rem;">Loiter (s)</label>
+                  <input type="number" id="zone-loiter-s" value="30" min="1" max="3600"
+                         style="width:70px;font-family:var(--mono);font-size:0.65rem;" />
+                </div>
+                <div class="config-field" style="margin:0;flex:1;min-width:180px;">
+                  <label class="config-label" for="zone-class-filter" style="font-size:0.55rem;">Class filter (comma separated, blank = all)</label>
+                  <input type="text" id="zone-class-filter" placeholder="person, car"
+                         style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
+                </div>
+                <button class="btn btn-primary" onclick="zoneEditorSave()">Save</button>
+              </div>
+              <div id="zone-editor-status" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:0.5rem;"></div>
+              <div style="font-size:0.55rem;color:var(--text-dim);margin-top:0.4rem;font-family:var(--mono);">
+                Red = exclude region. Yellow = crossing line. Cyan = loiter zone. Click-drag to draw.
+              </div>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -4118,9 +4263,15 @@
       <label class="config-label" for="setup-dest-select">Destination</label>
       <select id="setup-dest-select" style="width:100%;margin-bottom:10px;font-family:var(--mono);font-size:0.72rem;"></select>
       <label class="config-label" for="setup-output-dir">Output folder</label>
-      <input type="text" id="setup-output-dir" style="width:100%;margin-bottom:10px;" placeholder="folder where compressed videos are saved" />
+      <div style="display:flex;gap:6px;margin-bottom:10px;">
+        <input type="text" id="setup-output-dir" style="flex:1;" placeholder="folder where compressed videos are saved" />
+        <button type="button" class="btn btn-ghost" onclick="setupBrowseOutputDir()" title="Browse for a folder">Browse</button>
+      </div>
       <label class="config-label" for="setup-encrypted-dir">Encrypted output folder</label>
-      <input type="text" id="setup-encrypted-dir" style="width:100%;margin-bottom:6px;" placeholder="defaults to an Encrypted subfolder of the output" />
+      <div style="display:flex;gap:6px;margin-bottom:6px;">
+        <input type="text" id="setup-encrypted-dir" style="flex:1;" placeholder="defaults to an Encrypted subfolder of the output" />
+        <button type="button" class="btn btn-ghost" onclick="setupBrowseEncryptedDir()" title="Browse for a folder">Browse</button>
+      </div>
       <div id="setup-error" style="color:var(--red,#ff5555);font-size:0.7rem;min-height:1em;margin-bottom:8px;"></div>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
         <button class="btn btn-ghost" onclick="saveSetup(true)">Skip (use local folder)</button>
@@ -4172,6 +4323,9 @@
   <script src="{{ url_for('static', filename='js/cameras.js') }}"></script>
   <script src="{{ url_for('static', filename='js/usage.js') }}"></script>
   <script src="{{ url_for('static', filename='js/push.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/events.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/zone_editor.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/webhook.js') }}"></script>
 
 <!-- AI Plate Reader modal - Bloodawn (KheivenD), 2026-05-02 -->
 <div id="plate-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center;">

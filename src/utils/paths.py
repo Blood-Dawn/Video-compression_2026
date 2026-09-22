@@ -126,6 +126,19 @@ def thumbs_dir() -> Path:
     return d
 
 
+def camera_frames_dir() -> Path:
+    """Return the writable cache directory for per-camera zone-editor stills.
+
+    Same regenerable-cache reasoning as thumbs_dir(): a live run writes its
+    latest frame here (throttled, not every frame) so the zone editor has a
+    real background to draw over; losing this directory just means the next
+    run repopulates it. (Week 3 TASK 3.7.)
+    """
+    d = cache_dir() / "camera_frames"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def state_file(name: str) -> Path:
     """Return the full path to a named state file in the data dir.
 

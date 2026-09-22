@@ -57,6 +57,16 @@ def append_events(output_dir, events: list, camera_id: str = "") -> int:
         _publish(events, camera_id=camera_id)
     except Exception:  # noqa: BLE001 - best effort, always
         pass
+    # Week 3 TASK 3.9: the generic webhook is a separate opt-in sibling of
+    # the ntfy push above, same best-effort contract.
+    try:
+        from utils.event_webhook import publish_events as _publish_hook
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.utils.event_webhook import publish_events as _publish_hook
+    try:
+        _publish_hook(events, camera_id=camera_id)
+    except Exception:  # noqa: BLE001 - best effort, always
+        pass
     return written
 
 

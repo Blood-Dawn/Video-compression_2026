@@ -4,6 +4,9 @@ src/gui/routes/events_bp.py - zones config + behavior events API
 
 * GET  /api/zones?camera_id=X   - the stored zones/lines/loiter config
 * POST /api/zones               - {"camera_id": X, ...config} validate + save
+* GET  /api/zones/frame?camera_id=X - a JPEG still for the zone editor's
+                                  background, black placeholder if nothing has
+                                  been captured for this camera yet (3.7)
 * GET  /api/events/recent       - newest-first behavior events from the
                                   configured output folder's events.jsonl
 
@@ -16,14 +19,14 @@ Author: Bloodawn (KheivenD), 2026-08-17 (R5 TASKS 5.6/5.7).
 
 import re as _re
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
 try:
     from gui.services.cloud_detection import _default_output_dir
-    from utils import event_log, zones_config
+    from utils import event_log, zones_config, camera_frame_cache
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.services.cloud_detection import _default_output_dir
-    from src.utils import event_log, zones_config
+    from src.utils import event_log, zones_config, camera_frame_cache
 
 events_bp = Blueprint("events", __name__)
 
@@ -50,6 +53,26 @@ def api_zones():
     stored = zones_config.save_camera_config(camera_id, data)
     return jsonify({"ok": True, "camera_id": camera_id, "config": stored,
                     "applies": "next run"})
+
+
+@events_bp.route("/api/zones/frame", methods=["GET"])
+def api_zones_frame():
+    """A JPEG still for one camera: the zone editor's background image.
+
+    Serves whatever a live run last cached (throttled writes, see
+    camera_frame_cache.py + pipeline.py's main loop) or a solid black
+    placeholder of the same nominal size when nothing has been captured
+    for this camera_id yet. Same camera_id guard as the other zones routes.
+    """
+    camera_id = (request.args.get("camera_id", "") or "").strip()
+    if not _CAM_RE.match(camera_id):
+        return jsonify({"error": "camera_id must be 1-64 alphanumeric/dash/underscore chars"}), 400
+    data = camera_frame_cache.load_frame_bytes(camera_id)
+    if data is None:
+        data = camera_frame_cache.placeholder_jpeg_bytes()
+    resp = Response(data, mimetype="image/jpeg")
+    resp.headers["Cache-Control"] = "no-store"  # this camera's newest frame, never stale
+    return resp
 
 
 @events_bp.route("/api/events/recent", methods=["GET"])

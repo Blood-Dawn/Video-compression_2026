@@ -129,6 +129,25 @@ async function _saveSetup(skip) {
 }
 window.saveSetup = _saveSetup;
 
+// Folder-browse buttons (Week 3 TASK 3.13): reuses the Library tab's own
+// folder picker (native OS dialog first, in-app server-side browser as the
+// remote/headless fallback) rather than standing up a second one just for
+// Setup. See library.js's browseFolderInto() for the shared implementation.
+function setupBrowseOutputDir() {
+  browseFolderInto("setup-output-dir");
+}
+window.setupBrowseOutputDir = setupBrowseOutputDir;
+
+function setupBrowseEncryptedDir() {
+  browseFolderInto("setup-encrypted-dir", () => {
+    // A path chosen explicitly here is a deliberate override, same as
+    // typing one: stop re-deriving it from the output folder.
+    const encEl = document.getElementById("setup-encrypted-dir");
+    if (encEl) encEl.dataset.touched = "1";
+  });
+}
+window.setupBrowseEncryptedDir = setupBrowseEncryptedDir;
+
 async function openSetup() {
   await _populateDestinations();
   _showSetupOverlay(true);

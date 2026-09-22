@@ -71,8 +71,8 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-CSV_PATH = REPO_ROOT / "docs" / "PLANNER-FALL-2026.csv"
-MD_PATH = REPO_ROOT / "docs" / "PLANNER-FALL-2026.md"
+CSV_PATH = REPO_ROOT / "docs" / "project-records" / "PLANNER-FALL-2026.csv"
+MD_PATH = REPO_ROOT / "docs" / "project-records" / "PLANNER-FALL-2026.md"
 
 # Real school emails for export-flow, kept in a gitignored local file --
 # never hardcoded here and never committed, since this repo is public.

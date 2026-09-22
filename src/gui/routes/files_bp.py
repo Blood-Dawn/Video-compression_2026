@@ -599,14 +599,34 @@ def api_upload():
     upload_dir = _upload_dir()
     # Sanitize filename: strip any path components the client might inject
     safe_name = Path(f.filename).name
-    dest = upload_dir / safe_name
-    # Avoid clobbering existing files by appending a counter
-    counter = 1
-    while dest.exists():
-        dest = upload_dir / f"{Path(safe_name).stem}_{counter}{suffix}"
-        counter += 1
 
-    f.save(str(dest))
+    # Week 3 TASK 3.15 (fuzzing) found that a filename long enough to blow
+    # past the filesystem's per-component limit (255 bytes on ext4, similar
+    # on NTFS) crashed this route with an unhandled OSError -> HTTP 500,
+    # from an attacker-controlled string nobody had validated the length of.
+    # Trim well under that limit, keeping the extension intact, rather than
+    # trusting whatever length a client's multipart form sends.
+    _MAX_STEM_LEN = 150
+    stem = Path(safe_name).stem[:_MAX_STEM_LEN] or "upload"
+    safe_name = f"{stem}{suffix}"
+
+    dest = upload_dir / safe_name
+    try:
+        # Avoid clobbering existing files by appending a counter.
+        counter = 1
+        while dest.exists():
+            dest = upload_dir / f"{stem}_{counter}{suffix}"
+            counter += 1
+        f.save(str(dest))
+    except OSError as exc:
+        # Same fuzzing pass: a filesystem-level failure here (illegal
+        # characters on Windows, a path-length limit even after the trim
+        # above, a full disk) must come back as a clean 400, not a 500 that
+        # leaks a stack trace and looks like the server is broken.
+        log.warning("Upload rejected: could not save %r: %s", f.filename, exc)
+        return jsonify({"error": "Could not save that file (invalid or "
+                                 "unsupported filename)."}), 400
+
     log.info("Uploaded video saved: %s (%d bytes)", dest.name, dest.stat().st_size)
     return jsonify({"path": str(dest), "filename": dest.name,
                     "in_cloud": _is_cloud_path(dest),

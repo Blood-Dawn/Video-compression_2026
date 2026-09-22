@@ -109,6 +109,20 @@ using an Android emulator (a virtual phone that runs on this same PC),
 including the one gotcha specific to this app: pairing against a server
 running on your own machine needs `10.0.2.2`, not `127.0.0.1`.
 
+Debugging a request failure that only happens on a minified build (release)?
+`./gradlew assembleQa` builds a third variant, `qa`, that is minified and
+shrunk exactly like `release` (so it hits the same R8 stripping bugs) but
+keeps HTTP logging on (`app-qa.apk`, installs side-by-side with `debug`/
+`release` via its own `.qa` application-id suffix). `release` itself never
+logs, even with an unset keystore. This is a local/testing build only; it
+is never attached to a GitHub release.
+
+Working on moving the resumable chunked upload off `viewModelScope` (so it
+survives process death, not just a tab switch)? See
+`UPLOAD-WORKER-DESIGN.md` for the WorkManager migration design before
+starting — it covers the `content://` Uri lifetime pitfall specifically,
+which will bite first if skipped.
+
 `gradlew` and `gradlew.bat` are committed; the wrapper JAR is not (it is a
 binary). Regenerate it with `gradle wrapper --gradle-version 8.11.1`, or just
 open the folder in Android Studio.

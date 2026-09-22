@@ -100,9 +100,9 @@ each, per the course guidance.
 | ID | Task | Owner | Outcome | Status |
 | --- | --- | --- | --- | --- |
 | 3.1 | Make `SvcsApi` fakeable and add JVM unit tests for the view models | Kheiven | `gradlew testDebugUnitTest` covers pairing, library, events, and home view models | Complete Sep 14 |
-| 3.2 | Add a debug build variant with HTTP logging for diagnosis | Kheiven | A failing request shows its reason in logcat instead of being a mystery on a minified build | Not started |
-| 3.3 | Investigate the WorkManager API and draft the upload worker design | Jorge | Written design for moving the chunked upload out of `viewModelScope` | Not started |
-| 3.4 | Audit the resumable upload protocol for resume correctness | Jorge | Confirmation that `/api/upload/status` returns an offset a worker can resume from | Not started |
+| 3.2 | Add a debug build variant with HTTP logging for diagnosis | Kheiven | A failing request shows its reason in logcat instead of being a mystery on a minified build | Complete Sep 22 |
+| 3.3 | Investigate the WorkManager API and draft the upload worker design | Jorge | Written design for moving the chunked upload out of `viewModelScope` | Complete Sep 22 |
+| 3.4 | Audit the resumable upload protocol for resume correctness | Jorge | Confirmation that `/api/upload/status` returns an offset a worker can resume from | Complete Sep 22 |
 | 3.5 | Build the desktop EVENTS panel, read-only table | Ashleyn | Newest-first table on the TOOLS tab from `/api/events/recent` | Complete Sep 22 |
 | 3.6 | Add the empty state and ten second auto-refresh to the EVENTS panel | Ashleyn | Panel refreshes while visible, stops when hidden, tells the operator to draw zones first | Complete Sep 22 |
 | 3.7 | Add the `GET /api/zones/frame` route returning a still frame | Riley | JPEG still for a camera, black placeholder when no thumbnail exists, all three route guards updated | Complete Sep 22 |

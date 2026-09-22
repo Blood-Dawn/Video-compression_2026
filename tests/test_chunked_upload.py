@@ -11,6 +11,8 @@ Author: Bloodawn (KheivenD), 2026-08-17 (R6 Track B).
 
 import hashlib
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -122,3 +124,67 @@ def test_unverified_video_rejected(client, monkeypatch):
         "upload_id": uid, "sha256": hashlib.sha256(PAYLOAD).hexdigest()})
     assert fin.status_code == 400
     assert "decodable" in fin.get_json()["error"]
+
+
+def test_concurrent_chunk_requests_do_not_desync_the_offset(client):
+    """Fall 3.4 audit: two threads race to append the SAME next chunk for one
+    upload_id (both believing offset=0 is the next position). Before the
+    per-upload_id lock, both could pass the offset check and both append,
+    leaving the file larger than either response reported. With the lock,
+    exactly one wins the race and the other must see the real, updated
+    offset via 409 - never two 200s for the same bytes.
+
+    Flask's test client keeps request context in a contextvar tied to the
+    thread/context that opened it, so this uses one client per thread
+    (both hit the same monkeypatched tmp/upload dirs via the shared app,
+    which is what actually matters for the race) rather than sharing the
+    `client` fixture across threads."""
+    uid = _begin(client, size=len(PAYLOAD))
+    half = len(PAYLOAD) // 2
+    results = []
+    barrier = threading.Barrier(2)
+
+    def send():
+        barrier.wait(timeout=5)
+        with flask_app.test_client() as c:
+            r = c.post(f"/api/upload/chunk?upload_id={uid}&offset=0",
+                       data=PAYLOAD[:half])
+            results.append(r)
+
+    threads = [threading.Thread(target=send) for _ in range(2)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=5)
+
+    assert len(results) == 2
+    oks = [r for r in results if r.status_code == 200]
+    conflicts = [r for r in results if r.status_code == 409]
+    # Exactly one request wrote; the other found the offset already moved.
+    assert len(oks) == 1 and len(conflicts) == 1
+    assert oks[0].get_json()["offset"] == half
+    assert conflicts[0].get_json()["offset"] == half
+    # The part file itself has exactly one copy of the chunk, not two.
+    part = ing._paths(uid)[0]
+    assert part.stat().st_size == half
+
+
+def test_stale_upload_is_swept_after_ttl(client, monkeypatch, tmp_path):
+    uid = _begin(client)
+    part, meta = ing._paths(uid)
+    assert part.exists() and meta.exists()
+    # Back-date the sidecar past the TTL instead of waiting two days.
+    old = time.time() - ing._UPLOAD_TTL_SECONDS - 60
+    import os
+    os.utime(meta, (old, old))
+    # The sweep runs at the top of every /begin.
+    _begin(client, name="another.mp4")
+    assert not part.exists()
+    assert not meta.exists()
+
+
+def test_sweep_leaves_fresh_uploads_alone(client):
+    uid = _begin(client)
+    part, meta = ing._paths(uid)
+    _begin(client, name="another.mp4")
+    assert part.exists() and meta.exists()

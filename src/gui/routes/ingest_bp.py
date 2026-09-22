@@ -24,8 +24,11 @@ path. Author: Bloodawn (KheivenD), 2026-08-17 (R6 Track B).
 
 import hashlib
 import json
+import os
 import re as _re
 import subprocess
+import threading
+import time
 import uuid
 from pathlib import Path
 
@@ -47,6 +50,70 @@ ingest_bp = Blueprint("ingest", __name__)
 _ID_RE = _re.compile(r"^[a-f0-9]{16,32}$")
 _MAX_SIZE = 8 * 1024 * 1024 * 1024  # 8 GB cap per upload
 CHUNK_HINT = 1024 * 1024
+
+# Fall 3.4 audit (2026-09-22) found two real gaps here, both closed below:
+#
+# 1. No locking: two concurrent /api/upload/chunk requests for the SAME
+#    upload_id both read current=stat().st_size before either had written,
+#    both passed the offset check, and both appended - the file ends up
+#    larger than either response reported, silently desyncing the client's
+#    notion of its next offset (and letting two chunks jointly exceed the
+#    declared size, defeating the overflow guard at write time). A
+#    per-upload_id lock serializes the whole read-check-write section.
+#
+# 2. No cleanup for abandoned uploads: a client that calls /begin and never
+#    follows up (killed app, picker cancelled after mint, network gone for
+#    good) left its empty-or-partial .part/.json pair on disk forever - a
+#    slow, unbounded disk leak. _sweep_stale_uploads() is called, best
+#    effort, at the top of every /begin so the leak self-heals over time
+#    without needing a background scheduler thread.
+_UPLOAD_TTL_SECONDS = 48 * 60 * 60  # an abandoned upload is stale after 2 days
+_locks_guard = threading.Lock()
+_upload_locks: dict[str, threading.Lock] = {}
+
+
+def _lock_for(upload_id: str) -> threading.Lock:
+    """One lock per upload_id, created on first use. The dict itself is
+    guarded by _locks_guard so two requests minting the same new id's lock
+    at once can't each get a different Lock object."""
+    with _locks_guard:
+        lock = _upload_locks.get(upload_id)
+        if lock is None:
+            lock = threading.Lock()
+            _upload_locks[upload_id] = lock
+        return lock
+
+
+def _forget_lock(upload_id: str) -> None:
+    """Drop a finished/discarded upload's lock so the dict doesn't grow
+    forever. Safe to call even if nothing is waiting on it - the lock
+    object itself stays alive for anyone still holding a reference."""
+    with _locks_guard:
+        _upload_locks.pop(upload_id, None)
+
+
+def _sweep_stale_uploads() -> None:
+    """Best-effort cleanup of .part/.json pairs from uploads nobody ever
+    finished. Never raises: a cleanup bug must not break a real upload."""
+    try:
+        tmp_dir = _tmp_dir()
+        if not tmp_dir.exists():
+            return
+        cutoff = time.time() - _UPLOAD_TTL_SECONDS
+        for meta_path in tmp_dir.glob("*.json"):
+            try:
+                if meta_path.stat().st_mtime >= cutoff:
+                    continue
+                upload_id = meta_path.stem
+                part_path = meta_path.with_suffix(".part")
+                part_path.unlink(missing_ok=True)
+                meta_path.unlink(missing_ok=True)
+                _forget_lock(upload_id)
+                log.info("Swept stale upload: id=%s (older than %ds)", upload_id, _UPLOAD_TTL_SECONDS)
+            except OSError:
+                continue  # one bad entry does not stop the sweep
+    except OSError:
+        pass
 
 
 def _safe_leaf_name(raw: str, fallback: str = "upload.mp4") -> str:
@@ -105,6 +172,7 @@ def _verify_video(path: Path) -> bool:
 
 @ingest_bp.route("/api/upload/begin", methods=["POST"])
 def api_upload_begin():
+    _sweep_stale_uploads()
     data = request.get_json(silent=True) or {}
     name = _safe_leaf_name(data.get("name", ""), fallback="")  # strip any path components, either separator style
     try:
@@ -135,7 +203,8 @@ def api_upload_status():
 
 @ingest_bp.route("/api/upload/chunk", methods=["POST"])
 def api_upload_chunk():
-    got = _load_meta(request.args.get("upload_id", ""))
+    upload_id = request.args.get("upload_id", "")
+    got = _load_meta(upload_id)
     if got is None:
         return jsonify({"error": "unknown upload_id"}), 404
     meta, part = got
@@ -143,19 +212,28 @@ def api_upload_chunk():
         offset = int(request.args.get("offset", "-1"))
     except (TypeError, ValueError):
         offset = -1
-    current = part.stat().st_size if part.exists() else 0
-    if offset != current:
-        # Stale offset after a dropped connection. Telling the client where we
-        # actually are IS the resume protocol; it reseeks and continues.
-        return jsonify({"offset": current}), 409
     blob = request.get_data(cache=False)
     if not blob:
         return jsonify({"error": "empty chunk"}), 400
-    if current + len(blob) > int(meta.get("size", 0)):
-        return jsonify({"error": "more bytes than declared at begin"}), 413
-    with open(part, "ab") as fh:
-        fh.write(blob)
-    return jsonify({"offset": current + len(blob)})
+    # The whole read-check-write sequence is the critical section: without
+    # this lock, two concurrent requests for the same upload_id can both
+    # read the same current offset, both pass the check, and both append,
+    # leaving the file larger than either response reported. See the Fall
+    # 3.4 audit note above _lock_for's definition.
+    with _lock_for(upload_id):
+        current = part.stat().st_size if part.exists() else 0
+        if offset != current:
+            # Stale offset after a dropped connection. Telling the client
+            # where we actually are IS the resume protocol; it reseeks and
+            # continues.
+            return jsonify({"offset": current}), 409
+        if current + len(blob) > int(meta.get("size", 0)):
+            return jsonify({"error": "more bytes than declared at begin"}), 413
+        with open(part, "ab") as fh:
+            fh.write(blob)
+            fh.flush()
+            os.fsync(fh.fileno())
+        return jsonify({"offset": current + len(blob)})
 
 
 @ingest_bp.route("/api/upload/finish", methods=["POST"])
@@ -182,10 +260,12 @@ def api_upload_finish():
         # for a resume that would preserve the corruption.
         part.unlink(missing_ok=True)
         _paths(upload_id)[1].unlink(missing_ok=True)
+        _forget_lock(upload_id)
         return jsonify({"error": "sha256 mismatch; upload discarded, start over"}), 400
     if not _verify_video(part):
         part.unlink(missing_ok=True)
         _paths(upload_id)[1].unlink(missing_ok=True)
+        _forget_lock(upload_id)
         return jsonify({"error": "not a decodable video; upload discarded"}), 400
     upload_dir = _upload_dir()
     safe_name = _safe_leaf_name(meta.get("name", "upload.mp4"))
@@ -196,5 +276,6 @@ def api_upload_finish():
         counter += 1
     part.replace(dest)
     _paths(upload_id)[1].unlink(missing_ok=True)
+    _forget_lock(upload_id)
     log.info("Chunked upload finished: %s (%d bytes)", dest.name, declared)
     return jsonify({"ok": True, "path": str(dest), "filename": dest.name})

@@ -74,6 +74,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
+            buildConfigField("boolean", "ENABLE_HTTP_LOG", "true")
         }
         release {
             // Minification back ON (0.5.0): the 0.3.0 black screen was the
@@ -93,6 +94,24 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+            buildConfigField("boolean", "ENABLE_HTTP_LOG", "false")
+        }
+        // FALL 3.2: a build that behaves like release for R8/minification
+        // purposes (so it actually catches the same stripping bugs a real
+        // release build would), but keeps HTTP logging on. Point of this:
+        // a failing request on a minified build used to just be a mystery
+        // (Level.NONE, nothing to look at); "qa" gives a tester or teammate
+        // a build they can sideload next to release and read logcat on.
+        // Never ships as a GitHub release asset; it is a local/testing
+        // build type only.
+        // Author: Bloodawn (KheivenD), 2026-09-22 (Fall 3.2).
+        create("qa") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".qa"
+            versionNameSuffix = "-qa"
+            isDebuggable = true
+            matchingFallbacks += listOf("release")
+            buildConfigField("boolean", "ENABLE_HTTP_LOG", "true")
         }
     }
 

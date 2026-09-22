@@ -91,12 +91,18 @@ class SvcsApi(
         .readTimeout(15, TimeUnit.SECONDS)
         .addInterceptor(AuthInterceptor(token))
         .apply {
-            // HTTP logging is compiled in for debug builds ONLY, and even
-            // there the Authorization header is redacted. A release build that
+            // HTTP logging is gated by ENABLE_HTTP_LOG (Fall 3.2), not
+            // BuildConfig.DEBUG directly: debug sets it true, release sets it
+            // false, and the "qa" build type (minified/shrunk like release,
+            // but ENABLE_HTTP_LOG = true) exists specifically so a failing
+            // request on a minified build shows a reason in logcat instead
+            // of being a mystery, without shipping logging in the real
+            // release build. The Authorization header is always redacted
+            // regardless of which of these built it: a release build that
             // logged headers would write a bearer credential for a
             // surveillance system into logcat, readable by anything with
             // READ_LOGS on a rooted device.
-            if (BuildConfig.DEBUG) {
+            if (BuildConfig.ENABLE_HTTP_LOG) {
                 addInterceptor(
                     HttpLoggingInterceptor().apply {
                         level = HttpLoggingInterceptor.Level.BASIC

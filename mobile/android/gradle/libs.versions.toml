@@ -33,6 +33,7 @@ androidxJunit = "1.2.1"
 espresso = "3.6.1"
 robolectric = "4.14.1"
 kotlinxCoroutines = "1.9.0"
+work = "2.10.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -66,6 +67,15 @@ media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "medi
 # alike, instead of setting headers by hand on the media item and having the
 # segment fetches silently 401 into a spinner.
 media3-datasource-okhttp = { group = "androidx.media3", name = "media3-datasource-okhttp", version.ref = "media3" }
+# Standalone compressor (Fall roadmap Phase 1): the on-device hardware-encode
+# path via MediaCodec. Deliberately NOT FFmpeg - see STANDALONE-COMPRESSOR-
+# ROADMAP.md section 1 for why FFmpeg-on-Android is the wrong engine in 2026.
+media3-transformer = { group = "androidx.media3", name = "media3-transformer", version.ref = "media3" }
+media3-effect = { group = "androidx.media3", name = "media3-effect", version.ref = "media3" }
+# WorkManager: the compression job survives process death/rotation and can be
+# promoted to a mediaProcessing foreground service (Android 15) the same way
+# UPLOAD-WORKER-DESIGN.md already designed for the chunked upload.
+androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 # Reserved for M2 (LIBRARY tab).
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 

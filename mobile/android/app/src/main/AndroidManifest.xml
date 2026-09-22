@@ -11,13 +11,23 @@
 
   Author: Bloodawn (KheivenD), 2026-07-18 (M1.1).
 -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- M5 slice: a system notification when a server job finishes. Runtime
          permission on Android 13+; declining simply means no notifications. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Fall roadmap Phase 1: the standalone on-device compressor runs as a
+         mediaProcessing foreground service (Android 14+) so the OS does not
+         kill a multi-minute encode the moment the app backgrounds. See
+         STANDALONE-COMPRESSOR-ROADMAP.md section 4, Phase 1 - this is the
+         one Play-relevant permission a fully open-source, no-store-required
+         app still needs at the OS level, independent of any store. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
 
     <application
         android:name=".SvcsApplication"
@@ -41,5 +51,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Merge the mediaProcessing foreground-service type onto WorkManager's
+             own service, which is what actually runs CompressionWorker's
+             setForeground() call. Declaring it here AND at runtime (see
+             CompressionWorker.buildForegroundInfo) is what the platform
+             requires - the manifest declaration alone is not enough. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="mediaProcessing"
+            tools:node="merge" />
     </application>
 </manifest>

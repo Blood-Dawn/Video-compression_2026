@@ -39,6 +39,12 @@ import org.svcs.mobile.net.SvcsApiClient
  * appear and 404 on every request. /api/capabilities is what tells us.
  */
 enum class Tab(val label: String) {
+    // Fall roadmap Phase 1: the standalone, server-free compressor. Always
+    // visible and the default landing tab - unlike every tab below it, it
+    // needs no paired desktop and no network at all. See
+    // STANDALONE-COMPRESSOR-ROADMAP.md section 3: everything below COMPRESS
+    // is "Server Mode", a secondary feature now rather than the whole app.
+    COMPRESS("COMPRESS"),
     HOME("HOME"),
     LIBRARY("LIBRARY"),
     LIVE("LIVE"),
@@ -73,7 +79,7 @@ fun SvcsApp() {
     var api by remember { mutableStateOf<SvcsApiClient?>(null) }
     var caps by remember { mutableStateOf<Capabilities?>(null) }
     var checked by remember { mutableStateOf(false) }
-    var tab by remember { mutableStateOf(Tab.HOME) }
+    var tab by remember { mutableStateOf(Tab.COMPRESS) }
 
     /**
      * Bumped whenever credentials are saved (a real save, not a replay; the
@@ -171,13 +177,17 @@ fun SvcsApp() {
         return
     }
 
-    if (api == null) {
-        // Not paired. The pairing screen is the whole app until it is.
-        ServerSettingsScreen(onCredentialsSaved = { sessionEpoch++ })
-        return
+    // Fall roadmap Phase 1: COMPRESS and MORE are always available - COMPRESS
+    // needs no server at all, and MORE is how you pair one in the first
+    // place. Everything else ("Server Mode") only appears once paired.
+    // Previously an unpaired phone showed nothing but the pairing screen;
+    // that's no longer true now that the app does something useful on its
+    // own. See STANDALONE-COMPRESSOR-ROADMAP.md section 3.
+    val visibleTabs = if (api == null) {
+        listOf(Tab.COMPRESS, Tab.MORE)
+    } else {
+        Tab.entries.filter { it != Tab.LIVE || caps?.hasLive == true }
     }
-
-    val visibleTabs = Tab.entries.filter { it != Tab.LIVE || caps?.hasLive == true }
 
     Scaffold(
         bottomBar = {
@@ -197,30 +207,46 @@ fun SvcsApp() {
             // The ViewModel keys carry sessionEpoch so re-pairing discards the
             // cached ones. They hold an SvcsApi bound to the token that was in
             // force when they were created, and a stale one would keep 401ing
-            // against a credential the user has already replaced.
+            // against a credential the user has already replaced. COMPRESS is
+            // deliberately NOT keyed on sessionEpoch - it has nothing to do
+            // with pairing, and a re-pair should not interrupt a running
+            // on-device compression job.
             when (tab) {
-                Tab.LIBRARY -> LibraryScreen(
-                    vm = viewModel(key = "lib-$sessionEpoch") {
-                        LibraryViewModel(api,
-                            autoCompress = { store.autoCompressUpload() })
-                    })
-                Tab.METRICS -> MetricsScreen(
-                    vm = viewModel(key = "metrics-$sessionEpoch") { MetricsViewModel(api) })
+                Tab.COMPRESS -> CompressScreen(vm = viewModel(key = "compress"))
                 Tab.MORE -> ServerSettingsScreen(
                     onCredentialsSaved = { sessionEpoch++ })
-                Tab.HOME -> HomeScreen(
-                    vm = viewModel(key = "home-$sessionEpoch") { HomeViewModel(api) })
-                Tab.EVENTS -> EventsScreen(
-                    vm = viewModel(key = "events-$sessionEpoch") { EventsViewModel(api) })
-                Tab.LIVE -> LiveScreen(
-                    vm = viewModel(key = "live-$sessionEpoch") {
-                        LiveViewModel(
-                            api = api,
-                            lastSourceProvider = { store.lastLiveSource() },
-                            lastSourceSaver = { store.setLastLiveSource(it) },
-                        )
-                    },
-                )
+                else -> {
+                    // Everything below here is Server Mode and needs a live
+                    // client; `client` gives Kotlin the smart-cast the tabs'
+                    // ViewModel constructors want, without changing their
+                    // (pre-existing) non-nullable `api` signatures.
+                    val client = api
+                    if (client != null) {
+                        when (tab) {
+                            Tab.LIBRARY -> LibraryScreen(
+                                vm = viewModel(key = "lib-$sessionEpoch") {
+                                    LibraryViewModel(client,
+                                        autoCompress = { store.autoCompressUpload() })
+                                })
+                            Tab.METRICS -> MetricsScreen(
+                                vm = viewModel(key = "metrics-$sessionEpoch") { MetricsViewModel(client) })
+                            Tab.HOME -> HomeScreen(
+                                vm = viewModel(key = "home-$sessionEpoch") { HomeViewModel(client) })
+                            Tab.EVENTS -> EventsScreen(
+                                vm = viewModel(key = "events-$sessionEpoch") { EventsViewModel(client) })
+                            Tab.LIVE -> LiveScreen(
+                                vm = viewModel(key = "live-$sessionEpoch") {
+                                    LiveViewModel(
+                                        api = client,
+                                        lastSourceProvider = { store.lastLiveSource() },
+                                        lastSourceSaver = { store.setLastLiveSource(it) },
+                                    )
+                                },
+                            )
+                            else -> Unit
+                        }
+                    }
+                }
             }
         }
     }

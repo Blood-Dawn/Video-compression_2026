@@ -170,6 +170,12 @@ dependencies {
     implementation(libs.media3.ui)
     implementation(libs.media3.datasource.okhttp)
 
+    // Standalone compressor (Fall roadmap Phase 1): hardware-accelerated
+    // transcode via Media3 Transformer/MediaCodec, no bundled FFmpeg.
+    implementation(libs.media3.transformer)
+    implementation(libs.media3.effect)
+    implementation(libs.androidx.work.runtime.ktx)
+
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)

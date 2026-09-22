@@ -6,8 +6,8 @@ __pycache__/
 .Python
 *.egg
 *.egg-info/
-dist/
-build/
+/dist/
+/build/
 .eggs/
 .env
 .venv
@@ -57,9 +57,11 @@ logs/
 .pytest_tmp/
 .pytest_cache/
 
-# PyInstaller build artifacts (installer/build.ps1 output)
-build/
-dist/
+# PyInstaller build artifacts (installer/build.ps1 output). Anchored to repo
+# root (leading slash) - an earlier unanchored `build/`/`dist/` pattern was
+# silently swallowing docs/build/*.md (found + fixed 2026-09-22, planner 3.16).
+/build/
+/dist/
 *.spec.bak
 
 # R4 Phase 4: a stray edition marker at the repo root must never be committed
@@ -220,3 +222,10 @@ svcs_mobile_test/
 # Local drop folder the Claude desktop app saves chat file deliveries into;
 # never meant to be committed, files get filed into their real location.
 /Claude outputs/
+
+# Android / Gradle build output (mobile/android). NOTE: mobile/android/.gradle/
+# is already tracked in git (pre-existing, not touched here) - this only
+# covers untracked build artifacts and local machine config going forward.
+mobile/android/**/build/
+mobile/android/local.properties
+mobile/android/**/*.iml

@@ -39,6 +39,10 @@ data class CompressState(
     val mode: CompressionMode = CompressionMode.Quality(QualityPresets.MEDIUM),
     val customSizeText: String = "",
     val codec: VideoCodecChoice = VideoCodecChoice.H265,
+    // Fall roadmap Phase 2, opt-in: off by default since it costs a real
+    // (bounded) detection pass before the encode even starts.
+    val smartCompress: Boolean = false,
+    val smartCompressActivityDetected: Boolean? = null,
     val phase: JobPhase = JobPhase.IDLE,
     val progressPercent: Int = 0,
     val outputUri: Uri? = null,
@@ -124,6 +128,10 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
         _state.update { it.copy(codec = codec) }
     }
 
+    fun setSmartCompress(enabled: Boolean) {
+        _state.update { it.copy(smartCompress = enabled) }
+    }
+
     fun startCompress() {
         val s = _state.value
         val uri = s.pickedUri ?: return
@@ -149,6 +157,7 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
             durationMs = s.durationMs,
             modeType = modeType,
             presetLabel = presetLabel,
+            smartCompress = s.smartCompress,
         )
         activeWorkId = request.id
         _state.update { it.copy(phase = JobPhase.RUNNING, progressPercent = 0, error = null) }
@@ -185,6 +194,7 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
             WorkInfo.State.SUCCEEDED -> {
                 val data = info.outputData
                 val outUri = data.getString(CompressionWorker.KEY_OUTPUT_URI)?.let(Uri::parse)
+                val smartUsed = data.getBoolean(CompressionWorker.KEY_SMART_COMPRESS_USED, false)
                 _state.update {
                     it.copy(
                         phase = JobPhase.DONE,
@@ -192,6 +202,11 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
                         outputUri = outUri,
                         outputBytes = data.getLong(CompressionWorker.KEY_OUTPUT_BYTES, -1),
                         usedFallback = data.getBoolean(CompressionWorker.KEY_USED_FALLBACK, false),
+                        smartCompressActivityDetected = if (smartUsed) {
+                            data.getBoolean(CompressionWorker.KEY_SMART_COMPRESS_ACTIVITY, true)
+                        } else {
+                            null
+                        },
                     )
                 }
             }

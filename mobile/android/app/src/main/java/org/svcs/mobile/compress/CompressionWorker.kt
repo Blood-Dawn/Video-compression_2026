@@ -38,6 +38,7 @@ import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import org.svcs.mobile.detect.SmartCompressAnalyzer
 
 /**
  * Standalone (server-free) compression job. Fall roadmap Phase 1.
@@ -77,6 +78,18 @@ class CompressionWorker(
         const val KEY_DURATION_MS = "duration_ms"
         const val KEY_MODE_TYPE = "mode_type"
         const val KEY_PRESET_LABEL = "preset_label"
+        // Fall roadmap Phase 2: opt-in on-device detection pass that
+        // decides whether this clip can shed bitrate rather than driving
+        // true per-region ROI (that needs raw MediaCodec access Media3
+        // Transformer does not expose yet - see SmartCompressAnalyzer).
+        const val KEY_SMART_COMPRESS = "smart_compress"
+        const val KEY_SMART_COMPRESS_USED = "smart_compress_used"
+        const val KEY_SMART_COMPRESS_ACTIVITY = "smart_compress_activity_detected"
+        /** Applied to the requested bitrate only when Smart Compress found
+         *  nothing worth protecting anywhere in the sampled frames. Never
+         *  applied upward on a hit - see doWork() for why. */
+        private const val NO_ACTIVITY_BITRATE_SCALE = 0.65
+        private const val MIN_SMART_COMPRESS_BITRATE_BPS = 300_000
 
         const val KEY_OUTPUT_URI = "output_uri"
         const val KEY_OUTPUT_BYTES = "output_bytes"
@@ -99,6 +112,7 @@ class CompressionWorker(
             durationMs: Long = 0L,
             modeType: String = "QUALITY",
             presetLabel: String = "",
+            smartCompress: Boolean = false,
         ): OneTimeWorkRequest {
             val data = Data.Builder()
                 .putString(KEY_INPUT_URI, inputUri.toString())
@@ -110,6 +124,7 @@ class CompressionWorker(
                 .putLong(KEY_DURATION_MS, durationMs)
                 .putString(KEY_MODE_TYPE, modeType)
                 .putString(KEY_PRESET_LABEL, presetLabel)
+                .putBoolean(KEY_SMART_COMPRESS, smartCompress)
                 .build()
             return OneTimeWorkRequest.Builder(CompressionWorker::class.java)
                 .setInputData(data)
@@ -169,12 +184,33 @@ class CompressionWorker(
             ?: return Result.failure(workDataOf(KEY_ERROR to "No input video was provided."))
         val inputUri = Uri.parse(inputUriStr)
         val outputDisplayName = inputData.getString(KEY_OUTPUT_DISPLAY_NAME) ?: "compressed_video"
-        val requestedBitrate = inputData.getInt(KEY_TARGET_BITRATE_BPS, 4_000_000)
+        var requestedBitrate = inputData.getInt(KEY_TARGET_BITRATE_BPS, 4_000_000)
         val requestedMaxEdge = inputData.getInt(KEY_MAX_SHORT_SIDE_PX, -1).let { if (it <= 0) null else it }
         val requestedCodec = inputData.getString(KEY_CODEC_MIME) ?: MimeTypes.VIDEO_H265
+        val durationMs = inputData.getLong(KEY_DURATION_MS, 0L)
+        val smartCompressRequested = inputData.getBoolean(KEY_SMART_COMPRESS, false)
 
         val inputBytes = sizeOfUri(inputUri)
         val tempOutputFile = File(applicationContext.cacheDir, "compress_${id}.mp4")
+
+        // Fall roadmap Phase 2, coarse fallback path: sample a bounded set
+        // of frames and only ever REDUCE the bitrate, never raise it above
+        // what the user's preset already promised - raising it would break
+        // a target-size job's whole point. True per-region redistribution
+        // (more bits where the detector fires, fewer where it doesn't,
+        // same total budget) needs raw MediaCodec QP-offset access that
+        // Media3 Transformer doesn't expose yet; this is the documented
+        // stepping stone toward that, not a stand-in for it.
+        var smartCompressActivityDetected: Boolean? = null
+        if (smartCompressRequested) {
+            val analysis = SmartCompressAnalyzer.analyze(applicationContext, inputUri, durationMs)
+            smartCompressActivityDetected = analysis.hasActivity
+            if (!analysis.hasActivity) {
+                requestedBitrate = (requestedBitrate * NO_ACTIVITY_BITRATE_SCALE)
+                    .toInt()
+                    .coerceAtLeast(MIN_SMART_COMPRESS_BITRATE_BPS)
+            }
+        }
 
         var usedFallback = false
         try {
@@ -206,12 +242,14 @@ class CompressionWorker(
                     originalName = inputData.getString(KEY_ORIGINAL_NAME),
                     originalSizeBytes = inputBytes,
                     outputSizeBytes = outputBytes,
-                    durationMs = inputData.getLong(KEY_DURATION_MS, 0L),
+                    durationMs = durationMs,
                     timestampMs = System.currentTimeMillis(),
                     codecMime = requestedCodec,
                     modeType = inputData.getString(KEY_MODE_TYPE) ?: "QUALITY",
                     presetLabel = inputData.getString(KEY_PRESET_LABEL) ?: "",
                     usedFallback = usedFallback,
+                    smartCompressUsed = smartCompressRequested,
+                    smartCompressActivityDetected = smartCompressActivityDetected,
                 ),
             )
 
@@ -221,6 +259,8 @@ class CompressionWorker(
                     KEY_OUTPUT_BYTES to outputBytes,
                     KEY_INPUT_BYTES to inputBytes,
                     KEY_USED_FALLBACK to usedFallback,
+                    KEY_SMART_COMPRESS_USED to smartCompressRequested,
+                    KEY_SMART_COMPRESS_ACTIVITY to (smartCompressActivityDetected ?: true),
                 ),
             )
         } catch (e: TransformFailure) {

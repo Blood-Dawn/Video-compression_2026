@@ -318,6 +318,46 @@ security/handheld footage (more bits where the detector fires, fewer where
 it doesn't) on at least Android 15 devices with `FEATURE_Roi`, with a
 documented, tested fallback everywhere else.
 
+#### Phase 2 progress (Sep 22 2026): the fallback path is real, ROI is not
+
+The first slice of this landed rather than staying a plan:
+
+- `yolov8n.pt` was actually exported through Ultralytics to TFLite, INT8
+  (dynamic-range) quantized, 320x320 input:
+  `yolo export model=yolov8n.pt format=tflite imgsz=320 int8=True`.
+  The export target is still named `tflite` in the installed Ultralytics
+  version rather than `litert`, but it runs through the same `ai-edge-
+  litert` conversion tooling under the hood and produces a file the LiteRT
+  runtime loads directly - the file format didn't change, only the name of
+  the runtime around it. Result: a 3.3 MB `yolov8n_int8.tflite`, bundled as
+  an app asset.
+- `ObjectDetector` (new `detect` package) loads that model via LiteRT
+  (`com.google.ai.edge.litert:litert`, pinned to 1.4.2 rather than the
+  current 2.x line - litert-api 2.2.0's Kotlin metadata needs Kotlin 2.3.0,
+  and this project pins 2.1.0) and answers one question per frame: did
+  anything cross a confidence threshold. Not full detection with labeled
+  boxes - presence only, which is all the fallback strategy below needs.
+- `SmartCompressAnalyzer` samples a bounded set of frames (roughly 1-2/sec,
+  3 to 16 total regardless of clip length) and stops as soon as one frame
+  has a hit, so a busy clip's check is cheap and only a genuinely static
+  one pays for the full sweep.
+- Wired into `CompressionWorker` as an opt-in "Smart Compress" toggle: if
+  the sweep finds nothing anywhere in the clip, the requested bitrate is
+  cut by 35% (floor 300 kbps); if it finds anything, the bitrate is left
+  exactly as requested. Deliberately one-directional - boosting bitrate on
+  a hit would break a target-size job's whole promise of fitting under a
+  limit, so this only ever gives bits back, never spends more than the
+  user asked for.
+
+What this is NOT: true per-region ROI. The bitrate adjustment above is a
+single scalar for the whole clip, not "more bits on the region with a
+person, fewer on the empty background" within one frame - that needs
+`MediaCodec.PARAMETER_KEY_QP_OFFSET_MAP`/`_RECTS` and Android 15's
+`FEATURE_Roi`, which means configuring the encoder directly rather than
+through Media3 Transformer's `Composition`/`Effects` API, which does not
+expose per-frame codec parameters today. That remains the real next
+increment for this phase, not something already quietly done.
+
 ### Phase 3 - Ship it open source (no store gate required)
 
 This is a complete open-source app, full stop - not a commercial product

@@ -20,6 +20,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -153,6 +154,25 @@ fun CompressScreen(vm: CompressViewModel) {
                 }
             }
 
+            // Fall roadmap Phase 2, opt-in: costs a real (bounded) on-device
+            // detection pass before the encode starts, so it defaults off
+            // rather than silently adding time to every job.
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Smart Compress (beta)", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        "Checks the video for activity first. Static stretches with " +
+                            "nothing happening get compressed harder automatically.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SvcsTextDim,
+                    )
+                }
+                Switch(checked = s.smartCompress, onCheckedChange = vm::setSmartCompress)
+            }
+
             Button(
                 onClick = vm::startCompress,
                 modifier = Modifier.fillMaxWidth(),
@@ -190,6 +210,17 @@ fun CompressScreen(vm: CompressViewModel) {
                     Text(
                         "This device's encoder needed a safer resolution/codec " +
                             "to finish, so quality may be lower than requested.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SvcsTextDim,
+                    )
+                }
+                s.smartCompressActivityDetected?.let { hadActivity ->
+                    Text(
+                        if (hadActivity) {
+                            "Smart Compress found activity throughout - used the full bitrate."
+                        } else {
+                            "Smart Compress found nothing happening - compressed harder."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = SvcsTextDim,
                     )

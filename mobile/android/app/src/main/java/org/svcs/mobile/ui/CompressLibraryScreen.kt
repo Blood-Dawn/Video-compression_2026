@@ -111,6 +111,11 @@ fun CompressLibraryScreen(vm: CompressLibraryViewModel) {
                 onClick = { vm.setFallbackOnly(!filters.fallbackOnly) },
                 label = { Text("Used fallback") },
             )
+            FilterChip(
+                selected = filters.smartCompressOnly,
+                onClick = { vm.setSmartCompressOnly(!filters.smartCompressOnly) },
+                label = { Text("Smart Compress") },
+            )
         }
 
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -208,6 +213,17 @@ private fun LibraryRow(
                     "Used the compatibility fallback",
                     style = MaterialTheme.typography.bodySmall,
                     color = SvcsRed,
+                )
+            }
+            if (record.smartCompressUsed) {
+                Text(
+                    if (record.smartCompressActivityDetected == false) {
+                        "Smart Compress: no activity found, compressed harder"
+                    } else {
+                        "Smart Compress: activity found, full bitrate used"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SvcsTextDim,
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

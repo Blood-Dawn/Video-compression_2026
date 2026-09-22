@@ -24,6 +24,10 @@ data class CompressionRecord(
     val modeType: String, // "QUALITY" or "TARGET_SIZE"
     val presetLabel: String,
     val usedFallback: Boolean,
+    // Fall roadmap Phase 2. smartCompressActivityDetected is null when
+    // smartCompressUsed is false - there was no analysis pass to report.
+    val smartCompressUsed: Boolean = false,
+    val smartCompressActivityDetected: Boolean? = null,
 )
 
 /**
@@ -82,6 +86,8 @@ class CompressionHistoryStore(context: Context) {
         put("modeType", r.modeType)
         put("presetLabel", r.presetLabel)
         put("usedFallback", r.usedFallback)
+        put("smartCompressUsed", r.smartCompressUsed)
+        put("smartCompressActivityDetected", r.smartCompressActivityDetected ?: JSONObject.NULL)
     }
 
     private fun toRecord(o: JSONObject): CompressionRecord = CompressionRecord(
@@ -96,5 +102,11 @@ class CompressionHistoryStore(context: Context) {
         modeType = o.optString("modeType", "QUALITY"),
         presetLabel = o.optString("presetLabel", ""),
         usedFallback = o.optBoolean("usedFallback", false),
+        smartCompressUsed = o.optBoolean("smartCompressUsed", false),
+        smartCompressActivityDetected = if (o.isNull("smartCompressActivityDetected")) {
+            null
+        } else {
+            o.optBoolean("smartCompressActivityDetected")
+        },
     )
 }

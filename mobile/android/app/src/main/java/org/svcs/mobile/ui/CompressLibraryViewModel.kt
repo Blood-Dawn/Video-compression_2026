@@ -29,6 +29,7 @@ data class LibraryFilters(
     val codecFilter: Set<String> = emptySet(), // empty = all codecs
     val modeFilter: Set<String> = emptySet(), // empty = all modes
     val fallbackOnly: Boolean = false,
+    val smartCompressOnly: Boolean = false,
     val minSizeMb: Double? = null,
     val maxSizeMb: Double? = null,
     val sort: LibrarySort = LibrarySort.NEWEST,
@@ -112,6 +113,11 @@ class CompressLibraryViewModel(application: Application) : AndroidViewModel(appl
         recompute()
     }
 
+    fun setSmartCompressOnly(v: Boolean) {
+        _filters.update { it.copy(smartCompressOnly = v) }
+        recompute()
+    }
+
     fun setSort(sort: LibrarySort) {
         _filters.update { it.copy(sort = sort) }
         recompute()
@@ -150,6 +156,7 @@ class CompressLibraryViewModel(application: Application) : AndroidViewModel(appl
                 (f.codecFilter.isEmpty() || r.codecMime in f.codecFilter) &&
                 (f.modeFilter.isEmpty() || r.modeType in f.modeFilter) &&
                 (!f.fallbackOnly || r.usedFallback) &&
+                (!f.smartCompressOnly || r.smartCompressUsed) &&
                 matchesSize
         }
         list = when (f.sort) {

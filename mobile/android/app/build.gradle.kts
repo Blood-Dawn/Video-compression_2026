@@ -176,6 +176,9 @@ dependencies {
     implementation(libs.media3.effect)
     implementation(libs.androidx.work.runtime.ktx)
 
+    // Fall roadmap Phase 2: on-device detection for "Smart Compress".
+    implementation(libs.litert)
+
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)

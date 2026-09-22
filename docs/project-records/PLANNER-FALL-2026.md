@@ -165,7 +165,7 @@ work) to week 4 rather than rushing the security testing.
 | 4.8 | Implement loiter zones and the SAVE and CLEAR actions | Riley | Full toolbar working, banner states that changes apply to the next run | Not started |
 | 4.9 | Implement `utils/event_webhook.py` with the SSRF guard | Victor | Events post to a configured URL, fire and forget, two second timeout | Not started |
 | 4.10 | Add the webhook configuration UI next to the push panel | Victor | Off by default, write-only secret field, refuses metadata endpoints | Not started |
-| 4.11 | Cut a mobile-only GitHub release: build and publish just the APK | Kheiven | A new GitHub Release exists tagged separately from desktop releases (e.g. `mobile-v0.9.0-beta`), carrying only the built `.apk` as its asset, no desktop installer | In progress |
+| 4.11 | Cut a mobile-only GitHub release: build and publish just the APK | Kheiven | A new GitHub Release exists tagged separately from desktop releases (e.g. `mobile-v0.9.0-beta`), carrying only the built `.apk` as its asset, no desktop installer | Complete Sep 22 |
 
 ### Week 5: September 28 to October 4
 
@@ -328,6 +328,49 @@ files honest with each other.
 6. `python scripts/update_planner.py list` (optionally `--week N`) prints
    every task's current status without opening either file, useful while
    writing the "tasks completed" section of the weekly report.
+
+**Adding a brand-new task (not on the script):** `set` only edits a row
+that already exists in both files, and `sync-md` only rewrites `Status`
+cells for rows already present in this Markdown -- neither one creates a
+new row, in either file. Adding a task is a manual two-file edit. Do both,
+in this order, then run `check` to confirm they still agree:
+
+1. Append one row to `docs/PLANNER-FALL-2026.csv`, matching the nine
+   existing columns exactly (`Task Name,Bucket Name,Assigned To,Start
+   Date,Due Date,Progress,Completed Date,Priority,Notes`):
+
+   ```csv
+   <N>.<M> <short task name>,Week <N> (<week-start-date>),<Assignee full name>,<start YYYY-MM-DD>,<due YYYY-MM-DD>,Not started,,<Urgent|Important|Medium|Low>,<optional notes -- quote the whole field if it contains a comma>
+   ```
+
+   Example, a new task 4.12 for the same week as everything above:
+
+   ```csv
+   4.12 Write a short demo script for the sponsor walkthrough,Week 4 (2026-09-21),Kheiven D'Haiti,2026-09-24,2026-09-27,Not started,,Medium,Owner task.
+   ```
+
+2. Add the matching row to this file's table for that week, matching the
+   five columns shown in its header (`| ID | Task | Owner | Outcome |
+   Status |`) -- `Owner` here is first name only, and `Status` starts as
+   `Not started` to match the CSV:
+
+   ```markdown
+   | 4.12 | Write a short demo script for the sponsor walkthrough | Kheiven | A five-minute script covering pairing, LIVE, and the compression demo | Not started |
+   ```
+
+   Keep rows in ID order within their week's table; put the new row where
+   its number sorts.
+3. Run the check so a mismatched new row is caught immediately rather than
+   at report time:
+
+   ```
+   python scripts/update_planner.py check
+   ```
+
+   From then on, that task's status updates the normal way, with `set`
+   (step 2 above) -- the manual two-file step is only needed once, when the
+   task is first created.
+
 7. **`set`/`sync-md`/`check` only keep the two files in this repo honest
    with each other; they do not by themselves reach the real Teams
    Planner.** What they guarantee is that the CSV you would copy from, and

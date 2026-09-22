@@ -45,6 +45,11 @@ enum class Tab(val label: String) {
     // STANDALONE-COMPRESSOR-ROADMAP.md section 3: everything below COMPRESS
     // is "Server Mode", a secondary feature now rather than the whole app.
     COMPRESS("COMPRESS"),
+    // Fall roadmap Phase 1.5: local library of on-device compression jobs.
+    // Always visible alongside COMPRESS for the same reason - no pairing,
+    // no network. Distinct from LIBRARY below, which is the server's
+    // remote catalog.
+    SAVED("SAVED"),
     HOME("HOME"),
     LIBRARY("LIBRARY"),
     LIVE("LIVE"),
@@ -184,7 +189,7 @@ fun SvcsApp() {
     // that's no longer true now that the app does something useful on its
     // own. See STANDALONE-COMPRESSOR-ROADMAP.md section 3.
     val visibleTabs = if (api == null) {
-        listOf(Tab.COMPRESS, Tab.MORE)
+        listOf(Tab.COMPRESS, Tab.SAVED, Tab.MORE)
     } else {
         Tab.entries.filter { it != Tab.LIVE || caps?.hasLive == true }
     }
@@ -213,6 +218,7 @@ fun SvcsApp() {
             // on-device compression job.
             when (tab) {
                 Tab.COMPRESS -> CompressScreen(vm = viewModel(key = "compress"))
+                Tab.SAVED -> CompressLibraryScreen(vm = viewModel(key = "saved"))
                 Tab.MORE -> ServerSettingsScreen(
                     onCredentialsSaved = { sessionEpoch++ })
                 else -> {

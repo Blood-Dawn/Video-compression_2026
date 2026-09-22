@@ -135,12 +135,20 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
         val outputName = "SVCS_${s.pickedName?.substringBeforeLast('.') ?: "compressed"}_" +
             "${System.currentTimeMillis()}.mp4"
 
+        val (modeType, presetLabel) = when (val mode = s.mode) {
+            is CompressionMode.Quality -> "QUALITY" to mode.preset.label
+            is CompressionMode.TargetSize -> "TARGET_SIZE" to mode.preset.label
+        }
         val request = CompressionWorker.buildRequest(
             inputUri = uri,
             outputDisplayName = outputName,
             targetBitrateBps = bitrateBps,
             maxShortSidePx = shortSidePx,
             codec = s.codec,
+            originalName = s.pickedName,
+            durationMs = s.durationMs,
+            modeType = modeType,
+            presetLabel = presetLabel,
         )
         activeWorkId = request.id
         _state.update { it.copy(phase = JobPhase.RUNNING, progressPercent = 0, error = null) }

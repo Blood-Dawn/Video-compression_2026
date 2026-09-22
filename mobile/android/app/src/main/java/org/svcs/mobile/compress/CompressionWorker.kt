@@ -71,6 +71,12 @@ class CompressionWorker(
         const val KEY_TARGET_BITRATE_BPS = "target_bitrate_bps"
         const val KEY_MAX_SHORT_SIDE_PX = "max_short_side_px" // -1 = no cap
         const val KEY_CODEC_MIME = "codec_mime"
+        // Phase 1.5 library metadata - not used by the encoder, just carried
+        // through so doWork() can record a CompressionRecord on success.
+        const val KEY_ORIGINAL_NAME = "original_name"
+        const val KEY_DURATION_MS = "duration_ms"
+        const val KEY_MODE_TYPE = "mode_type"
+        const val KEY_PRESET_LABEL = "preset_label"
 
         const val KEY_OUTPUT_URI = "output_uri"
         const val KEY_OUTPUT_BYTES = "output_bytes"
@@ -89,6 +95,10 @@ class CompressionWorker(
             targetBitrateBps: Int,
             maxShortSidePx: Int?,
             codec: VideoCodecChoice,
+            originalName: String? = null,
+            durationMs: Long = 0L,
+            modeType: String = "QUALITY",
+            presetLabel: String = "",
         ): OneTimeWorkRequest {
             val data = Data.Builder()
                 .putString(KEY_INPUT_URI, inputUri.toString())
@@ -96,6 +106,10 @@ class CompressionWorker(
                 .putInt(KEY_TARGET_BITRATE_BPS, targetBitrateBps)
                 .putInt(KEY_MAX_SHORT_SIDE_PX, maxShortSidePx ?: -1)
                 .putString(KEY_CODEC_MIME, codec.mimeType)
+                .putString(KEY_ORIGINAL_NAME, originalName)
+                .putLong(KEY_DURATION_MS, durationMs)
+                .putString(KEY_MODE_TYPE, modeType)
+                .putString(KEY_PRESET_LABEL, presetLabel)
                 .build()
             return OneTimeWorkRequest.Builder(CompressionWorker::class.java)
                 .setInputData(data)
@@ -184,6 +198,22 @@ class CompressionWorker(
             val outputUri = writeToMediaStore(tempOutputFile, outputDisplayName)
             val outputBytes = tempOutputFile.length()
             tempOutputFile.delete()
+
+            CompressionHistoryStore(applicationContext).append(
+                CompressionRecord(
+                    outputUri = outputUri.toString(),
+                    outputDisplayName = outputDisplayName,
+                    originalName = inputData.getString(KEY_ORIGINAL_NAME),
+                    originalSizeBytes = inputBytes,
+                    outputSizeBytes = outputBytes,
+                    durationMs = inputData.getLong(KEY_DURATION_MS, 0L),
+                    timestampMs = System.currentTimeMillis(),
+                    codecMime = requestedCodec,
+                    modeType = inputData.getString(KEY_MODE_TYPE) ?: "QUALITY",
+                    presetLabel = inputData.getString(KEY_PRESET_LABEL) ?: "",
+                    usedFallback = usedFallback,
+                ),
+            )
 
             return Result.success(
                 workDataOf(

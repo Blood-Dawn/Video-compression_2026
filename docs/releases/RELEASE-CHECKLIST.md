@@ -78,3 +78,63 @@ The unsigned **beta** ships without this; a **GA** build should be signed.
 ---
 
 *Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5.4 - release checklist).*
+
+
+---
+
+## Mobile-only release (TASK 4.11)
+
+A separate, smaller checklist for cutting a **mobile-only** release: just the
+Android APK, tagged apart from the desktop installer's `vX.Y.Z` tags so the
+two release trains never collide. Earlier APKs shipped bundled inside a
+combined desktop-plus-mobile tag (see `release-notes-v2.2.0-beta.md`); this
+path is for shipping the phone app on its own, e.g. between desktop cuts.
+
+Same gate as above applies: **tagging and publishing is the owner's action.**
+The agent prepares everything up to that point.
+
+### 1. Build
+
+```powershell
+cd mobile/android
+.\gradlew.bat assembleRelease
+```
+
+Output: `app/build/outputs/apk/release/app-release.apk`. The build falls back
+to debug signing when the `SVCS_ANDROID_KEYSTORE` env vars are not set (see
+the comment above `signingConfigs` in `app/build.gradle.kts`), which is fine
+for a sideloaded beta - a self-signed key is the normal, correct thing here.
+
+- [ ] Confirm `versionCode`/`versionName` in `app/build.gradle.kts` match the
+      intended tag. Bump both first if this release contains new commits
+      since the last one; if not (a same-day catch-up release), leave them.
+- [ ] Rename/copy to `SVCS-Mobile-<versionName>.apk` next to the original.
+
+### 2. Smoke-test
+
+- [ ] `adb install -r SVCS-Mobile-<versionName>.apk` on an emulator or device.
+- [ ] `adb shell am start -n org.svcs.mobile/.MainActivity`, confirm the
+      process stays alive (`adb shell pidof org.svcs.mobile`) and
+      `adb logcat -d | grep -E "FATAL|AndroidRuntime"` shows nothing - this is
+      the release variant, so it is the first real exercise of the R8/ProGuard
+      keep rules, not just the debug build.
+
+### 3. Checksum
+
+```powershell
+Get-FileHash .\SVCS-Mobile-<versionName>.apk -Algorithm SHA256 |
+  ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
+  Out-File -Encoding ascii SHA256SUMS.txt
+```
+
+### 4. Draft the GitHub Release 🚦 *owner publishes*
+
+- [ ] Draft notes: `docs/releases/release-notes-mobile-<tag>.md` (see the
+      `v0.9.0-beta` one for the template).
+- [ ] Attach the renamed APK and `SHA256SUMS.txt`.
+- [ ] Mark it a **pre-release** while the app is still beta.
+- [ ] **Owner action:** create the tag (e.g. `mobile-v0.9.0-beta` - the
+      `mobile-` prefix keeps it out of the desktop tag sequence) and click
+      *Publish*. The agent does not tag or publish, same as the desktop flow.
+
+*Added 2026-09-22 (TASK 4.11, Week 4).*

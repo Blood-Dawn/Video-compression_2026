@@ -103,6 +103,12 @@ you run it in is usually the one that predates the install.
 Pass `-WriteLocalProperties` to generate `local.properties` (gitignored,
 machine-specific).
 
+No physical phone handy, or new to Android tooling entirely? See
+`EMULATOR-GUIDE.md` for a plain-language walkthrough of setting up and
+using an Android emulator (a virtual phone that runs on this same PC),
+including the one gotcha specific to this app: pairing against a server
+running on your own machine needs `10.0.2.2`, not `127.0.0.1`.
+
 `gradlew` and `gradlew.bat` are committed; the wrapper JAR is not (it is a
 binary). Regenerate it with `gradle wrapper --gradle-version 8.11.1`, or just
 open the folder in Android Studio.

@@ -11,6 +11,27 @@ Author: Bloodawn (KheivenD), 2026-06-02 (autonomous v2 build).
 
 ## Open items
 
+### TASK 4.11 - mobile-only GitHub release, prep complete, awaiting owner (2026-09-22)
+
+Week 4's owner task: cut a release carrying just the Android APK, tagged
+apart from the desktop `vX.Y.Z` sequence. Same gate as every other release
+in this file - **the agent does not tag or publish** - so this is prep only.
+
+| Item | Status |
+|------|--------|
+| Release APK build | Done: `./gradlew assembleRelease` on `mobile/android`, BUILD SUCCESSFUL, R8/ProGuard minification exercised (not just debug). |
+| Smoke test | Done: installed on a fresh android-35 `google_apis` x86_64 emulator, launched, stayed alive, no `FATAL`/`AndroidRuntime` in logcat. |
+| Renamed artifact + checksum | Done: `SVCS-Mobile-0.9.0-beta.apk` + `SHA256SUMS.txt`, both next to the build output on the release machine (`app/build/outputs/apk/release/`). |
+| Draft release notes | Done: `docs/releases/release-notes-mobile-v0.9.0-beta.md`. |
+| Checklist | Done: `docs/releases/RELEASE-CHECKLIST.md` gained a "Mobile-only release" section so this is repeatable next time. |
+
+**Owner action:** attach `SVCS-Mobile-0.9.0-beta.apk` and `SHA256SUMS.txt` to
+a new GitHub Release, tag it `mobile-v0.9.0-beta`, mark it a pre-release, and
+publish. Nothing here is blocked on code - only on the human publish action,
+same as TASK 5.4 below.
+
+
+
 ### R4 Phase 5 - ONNX plate reader: install recipe + maintenance (2026-07-04)
 
 The plate reader now defaults to the ONNX ALPR stack (fast-plate-ocr +

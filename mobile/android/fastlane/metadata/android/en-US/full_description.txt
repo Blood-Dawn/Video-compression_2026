@@ -1,0 +1,22 @@
+SVCS shrinks videos on your phone, entirely offline. Nothing is uploaded, there is no account, and the app has no ads, analytics or trackers.
+
+<b>Compress</b>
+<ul>
+<li>Quality presets (High, Medium, Low) or fit under a size limit: Discord, Discord Nitro, WhatsApp, Instagram, X, email, or any exact size you type.</li>
+<li>H.265 for the smallest files, or H.264 for the widest compatibility.</li>
+<li>Portrait and landscape video keep their shape, and small videos are never upscaled.</li>
+<li>Optional audio removal. With a size limit, the space it frees goes to picture quality.</li>
+<li>Share a video to SVCS from your gallery or any app, and share the result straight back out.</li>
+<li>Runs in the background with a progress notification, using the phone's hardware video encoder.</li>
+</ul>
+
+<b>Smart Compress (beta)</b>
+An on-device detector (YOLOv8n, running locally through LiteRT) checks the video for people, vehicles and animals first. Footage where nothing is happening gets compressed harder automatically. Anything with activity keeps the full quality you asked for. Nothing leaves the phone.
+
+<b>Saved</b>
+A searchable history of everything you have compressed, with filters for date, codec, mode and Smart Compress, sorting by biggest saving, and play, share and delete.
+
+<b>Server Mode</b>
+SVCS is also the mobile companion to the SVCS desktop surveillance compression system. Pairing with a desktop server is optional and unlocks its library, live view, events and metrics.
+
+Source code: https://github.com/Blood-Dawn/Video-compression_2026 (AGPL-3.0)

@@ -1,0 +1,7 @@
+1.0.0-beta: SVCS now compresses video on the phone itself, no server needed.
+- Quality presets, size limits (Discord, WhatsApp, Instagram, X, email, custom)
+- H.265 or H.264, optional audio removal
+- Smart Compress (beta): on-device detection squeezes footage where nothing happens
+- Saved tab: searchable, filterable history of compressed videos
+- Share in from any app, share results out
+- Portrait videos keep their full resolution

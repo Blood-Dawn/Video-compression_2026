@@ -358,6 +358,29 @@ through Media3 Transformer's `Composition`/`Effects` API, which does not
 expose per-frame codec parameters today. That remains the real next
 increment for this phase, not something already quietly done.
 
+#### Phase 2 progress (Sep 23 2026): verified, and narrowed to what matters
+
+- The bundled INT8 model was run on real COCO photos and synthetic empty
+  frames before trusting it: people and animals scored 0.39 to 0.93, blank,
+  black and noise frames 0.000 to 0.005, and the scores track the float
+  PyTorch weights closely, so quantization isn't what limits it; the nano
+  model at 320 px is.
+- "Activity" now means the same target classes the desktop gates on in
+  `src/detection/object_filter.py` (people, vehicles, animals, carried
+  items). Counting any COCO class meant a static living room full of
+  furniture registered as "activity", which is exactly the footage Smart
+  Compress exists to squeeze.
+- Threshold lowered from 0.35 to 0.25 on purpose. A missed person costs the
+  user 35% of their bitrate on footage that mattered; a false hit only
+  forgoes a saving. The empty-frame scores leave plenty of room.
+- Emulator end to end with the minified build: a test pattern with nobody in
+  it came out at 70% of the size of the same job without Smart Compress; a
+  real clip with a person kept its full bitrate.
+- Licensing note for Phase 3: Ultralytics' YOLOv8 weights are AGPL-3.0, the
+  same license as this repo, so bundling the exported model is compatible.
+  The export command is recorded in `ObjectDetector.kt` so the asset can be
+  regenerated from `yolov8n.pt`, which F-Droid reviewers may ask about.
+
 ### Phase 3 - Ship it open source (no store gate required)
 
 This is a complete open-source app, full stop - not a commercial product
@@ -404,6 +427,31 @@ later, not the launch path.
   donation links (Buy Me a Coffee / GitHub Sponsors) are fine to add later
   if people want to throw money at it, but there's no monetization design
   work to do here - that's the point of it being open source.
+
+#### Phase 3 progress (Sep 23 2026)
+
+Done:
+- 1.0.0-beta (versionCode 13) cut as a minified release build instead of
+  the debug build the first v1-beta upload used. Per-ABI APK splits plus a
+  universal APK: 12.3 MB for arm64-v8a against 61 MB for the old debug APK.
+  R8 keep rules added for LiteRT (called from JNI) and the worker's
+  reflective constructor, then verified on the emulator.
+- GitHub Release `v1-beta` carries the arm64 APK, the universal APK and
+  `SHA256SUMS.txt`, per `docs/releases/RELEASE-CHECKLIST.md`; notes in
+  `docs/releases/release-notes-mobile-v1-beta.md`.
+- Fastlane metadata for F-Droid / IzzyOnDroid at
+  `mobile/android/fastlane/metadata/android/en-US/` (title, short and full
+  description, changelog for versionCode 13).
+
+Left, all owner decisions or needing a real phone:
+- A real release keystore. Builds fall back to this machine's debug key when
+  `SVCS_ANDROID_KEYSTORE` isn't set, same as every earlier mobile release.
+  Fine for sideloading, but it must be created and backed up before
+  submitting anywhere, because every future update has to be signed with the
+  same key.
+- Phone screenshots for the store listings (`FLAG_SECURE` blocks
+  screenshots of the app window, so these need a deliberate capture path).
+- The actual IzzyOnDroid request and F-Droid merge request.
 
 ### Phase 4 - Live capture (explicit stretch, not v1)
 
@@ -477,6 +525,26 @@ questions: confirming behavior on portrait-orientation source video
 (the resolution-capping effect specifically), and checking a couple of
 other target-size presets (WhatsApp, Instagram) the same way these two
 were checked.
+
+### Follow-ups resolved (Sep 23 2026)
+
+- **Portrait capping was a real bug, and the field test already hit it.**
+  Re-probing the 67 MB -> 7.98 MB clip from Sep 22 showed 720x406 stored
+  with a -90 degree rotation: a portrait clip displayed at 406x720 on a
+  preset meant to cap the short side at 720. `Presentation.createForHeight`
+  caps the literal height, and Media3 hands effects upright frames, so
+  portrait video (most phone video) lost far more resolution than intended.
+  It also upscaled sources already under the cap. `scaledFrameSize()` now
+  computes the true short side from width, height and rotation and never
+  upscales; unit-tested, then confirmed on the API 35 emulator (1920x1080
+  with 270 degree rotation on Low -> 1280x720 + rotation = 720x1280 on
+  screen).
+- **Other size presets:** X, email and a free-typed custom size were added;
+  Discord Nitro corrected to 500 MB. Size-target math has unit tests pinned
+  to the field-test numbers.
+- **Still open:** target-size jobs undershoot (8 MB on a 10 MB target in
+  the field). Safe, but a calibration pass or a second encode when the
+  first lands far under would recover quality.
 
 ## Sources
 

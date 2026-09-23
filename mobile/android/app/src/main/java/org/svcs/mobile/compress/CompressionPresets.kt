@@ -85,6 +85,11 @@ sealed interface CompressionMode {
 }
 
 
+/** What a target-size job budgets for the AAC track. Pass 0 to
+ *  [bitrateForTargetSize] when the output will have no audio (source has
+ *  none, or the user removed it) so those bits go to the picture instead. */
+const val AUDIO_RESERVE_BPS = 128_000
+
 /**
  * Resolve a [SizePreset] to a concrete video bitrate for a source of the
  * given duration. Reserves a flat 128 kbps for the audio track and leaves a
@@ -93,10 +98,37 @@ sealed interface CompressionMode {
  * section 2), so a bitrate*duration estimate is the best available control
  * over the final file size, not a guarantee.
  */
-fun bitrateForTargetSize(preset: SizePreset, durationMs: Long): Int {
+fun bitrateForTargetSize(preset: SizePreset, durationMs: Long, audioBps: Int = AUDIO_RESERVE_BPS): Int {
     val durationSec = (durationMs / 1000.0).coerceAtLeast(1.0)
-    val audioBps = 128_000
     val totalBps = (preset.maxBytes * 8.0 / durationSec).toInt()
     val videoBps = (totalBps - audioBps).coerceAtLeast(300_000)
     return (videoBps * 0.95).toInt()
+}
+
+/**
+ * The output frame size for a resolution cap, in display orientation, or
+ * null when the source should be left at its own resolution.
+ *
+ * "1080p"/"720p" name the SHORT side, and phone video is mostly portrait,
+ * so capping the literal height (what Phase 1 shipped) shrank a 1080x1920
+ * portrait clip to 405x720 on the Low preset instead of 720x1280. It also
+ * upscaled sources already smaller than the cap, spending bits on
+ * interpolated pixels. This caps the true short side and never upscales.
+ *
+ * [rotationDegrees] is the container rotation (MediaMetadataRetriever's
+ * METADATA_KEY_VIDEO_ROTATION): Media3 hands effects upright frames, so a
+ * stored-landscape clip with 90/270 rotation is portrait by the time the
+ * Presentation effect sees it. Dimensions are rounded to even numbers,
+ * which hardware encoders require.
+ */
+fun scaledFrameSize(width: Int, height: Int, rotationDegrees: Int, maxShortSidePx: Int?): Pair<Int, Int>? {
+    if (maxShortSidePx == null || maxShortSidePx <= 0 || width <= 0 || height <= 0) return null
+    val sideways = Math.floorMod(rotationDegrees, 180) != 0
+    val displayW = if (sideways) height else width
+    val displayH = if (sideways) width else height
+    val shortSide = minOf(displayW, displayH)
+    if (shortSide <= maxShortSidePx) return null
+    val scale = maxShortSidePx.toDouble() / shortSide
+    fun even(v: Double): Int = (Math.round(v / 2.0) * 2).toInt().coerceAtLeast(2)
+    return even(displayW * scale) to even(displayH * scale)
 }

@@ -38,10 +38,31 @@ class ObjectDetector(context: Context) : AutoCloseable {
         private const val NUM_CLASSES = 80
         private const val NUM_ANCHORS = 2100
 
-        /** Anything above this confidence counts as "something was there".
-         *  Deliberately loose: this only gates a bitrate choice, never a
-         *  labeled overlay the user would scrutinize box-by-box. */
-        private const val CONFIDENCE_THRESHOLD = 0.35f
+        /**
+         * Deliberately looser than the desktop's 0.35. Measured on the
+         * bundled INT8 model: real COCO photos with people/animals score
+         * 0.39-0.93 on these classes, while blank, black and pure-noise
+         * frames score 0.000-0.005, so 0.25 still separates "empty" from
+         * "something there" cleanly. The asymmetry is the point: a false
+         * "nothing here" costs the user 35% of their bitrate on a clip that
+         * had a person in it, while a false "activity" only forgoes a
+         * saving. Err toward detecting.
+         */
+        private const val CONFIDENCE_THRESHOLD = 0.25f
+
+        /**
+         * COCO indices for the same target set the desktop pipeline gates
+         * on in src/detection/object_filter.py: people, vehicles, animals,
+         * and carried items. Anything else (couch, tv, dining table...) is
+         * scenery - a static living room full of furniture is exactly the
+         * "nothing happening" footage Smart Compress should squeeze.
+         */
+        private val TARGET_CLASSES = intArrayOf(
+            0, // person
+            1, 2, 3, 4, 5, 6, 7, 8, // bicycle car motorcycle airplane bus train truck boat
+            14, 15, 16, 17, 18, 19, 20, 21, 22, 23, // bird cat dog horse sheep cow elephant bear zebra giraffe
+            24, 26, 28, // backpack handbag suitcase
+        )
     }
 
     private val interpreter: Interpreter = Interpreter(loadModel(context))
@@ -62,8 +83,8 @@ class ObjectDetector(context: Context) : AutoCloseable {
         }
     }
 
-    /** True if the model found anything above [CONFIDENCE_THRESHOLD] in
-     *  this single frame. The caller owns sampling frequency and cadence -
+    /** True if the model found a person, vehicle, animal or carried item
+     *  above [CONFIDENCE_THRESHOLD] in this single frame. The caller owns sampling frequency and cadence -
      *  this only ever looks at the one bitmap it's handed. */
     fun detectsAnything(bitmap: Bitmap): Boolean {
         val resized = if (bitmap.width == INPUT_SIZE && bitmap.height == INPUT_SIZE) {
@@ -83,11 +104,13 @@ class ObjectDetector(context: Context) : AutoCloseable {
 
         interpreter.run(inputBuffer, outputBuffer)
 
-        // Output layout: [1, 84, 2100].
+        // Output layout: [1, 84, 2100]; class scores are already
+        // sigmoid-activated in the Ultralytics export.
         val scores = outputBuffer[0]
-        for (anchor in 0 until NUM_ANCHORS) {
-            for (cls in 0 until NUM_CLASSES) {
-                if (scores[4 + cls][anchor] > CONFIDENCE_THRESHOLD) return true
+        for (cls in TARGET_CLASSES) {
+            val row = scores[4 + cls]
+            for (anchor in 0 until NUM_ANCHORS) {
+                if (row[anchor] > CONFIDENCE_THRESHOLD) return true
             }
         }
         return false

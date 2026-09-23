@@ -2,6 +2,19 @@ package org.svcs.mobile.ui
 
 import android.content.Intent
 import android.net.Uri
+import android.util.Size
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.runtime.produceState
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -144,7 +157,9 @@ fun CompressLibraryScreen(vm: CompressLibraryViewModel) {
                                 setDataAndType(Uri.parse(record.outputUri), "video/mp4")
                                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                             }
-                            context.startActivity(intent)
+                            // No video player installed is rare but real on
+                            // stripped-down ROMs; don't crash over it.
+                            runCatching { context.startActivity(intent) }
                         },
                         onShare = {
                             val intent = Intent(Intent.ACTION_SEND).apply {
@@ -186,51 +201,89 @@ private fun LibraryRow(
     onDelete: () -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                record.outputDisplayName,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-            )
-            val ratioText = if (record.originalSizeBytes > 0 && record.outputSizeBytes > 0) {
-                val ratio = record.originalSizeBytes.toDouble() / record.outputSizeBytes.toDouble()
-                "${humanBytes(record.originalSizeBytes)} -> ${humanBytes(record.outputSizeBytes)} " +
-                    "(%.1fx smaller)".format(ratio)
-            } else {
-                humanBytes(record.outputSizeBytes)
-            }
-            Text(ratioText, style = MaterialTheme.typography.bodySmall, color = SvcsTextDim)
-            val dateText = SimpleDateFormat("MMM d, yyyy - h:mm a", Locale.getDefault())
-                .format(Date(record.timestampMs))
-            val codecLabel = if (record.codecMime == "video/hevc") "H.265" else "H.264"
-            Text(
-                "$dateText - $codecLabel - ${record.presetLabel}",
-                style = MaterialTheme.typography.bodySmall,
-                color = SvcsTextDim,
-            )
-            if (record.usedFallback) {
+        Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            VideoThumbnail(record.outputUri)
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    "Used the compatibility fallback",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = SvcsRed,
+                    record.outputDisplayName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
                 )
-            }
-            if (record.smartCompressUsed) {
+                val ratioText = if (record.originalSizeBytes > 0 && record.outputSizeBytes > 0) {
+                    val ratio = record.originalSizeBytes.toDouble() / record.outputSizeBytes.toDouble()
+                    "${humanBytes(record.originalSizeBytes)} -> ${humanBytes(record.outputSizeBytes)} " +
+                        "(%.1fx smaller)".format(ratio)
+                } else {
+                    humanBytes(record.outputSizeBytes)
+                }
+                Text(ratioText, style = MaterialTheme.typography.bodySmall, color = SvcsTextDim)
+                val dateText = SimpleDateFormat("MMM d, yyyy - h:mm a", Locale.getDefault())
+                    .format(Date(record.timestampMs))
+                val codecLabel = if (record.codecMime == "video/hevc") "H.265" else "H.264"
                 Text(
-                    if (record.smartCompressActivityDetected == false) {
-                        "Smart Compress: no activity found, compressed harder"
-                    } else {
-                        "Smart Compress: activity found, full bitrate used"
-                    },
+                    "$dateText - $codecLabel - ${record.presetLabel}",
                     style = MaterialTheme.typography.bodySmall,
                     color = SvcsTextDim,
                 )
+                if (record.usedFallback) {
+                    Text(
+                        "Used the compatibility fallback",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SvcsRed,
+                    )
+                }
+                if (record.smartCompressUsed) {
+                    Text(
+                        if (record.smartCompressActivityDetected == false) {
+                            "Smart Compress: no activity found, compressed harder"
+                        } else {
+                            "Smart Compress: activity found, full bitrate used"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SvcsTextDim,
+                    )
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onPlay) { Text("Play") }
+                    TextButton(onClick = onShare) { Text("Share") }
+                    TextButton(onClick = onDelete) { Text("Delete", color = SvcsRed) }
+                }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = onPlay) { Text("Play") }
-                TextButton(onClick = onShare) { Text("Share") }
-                TextButton(onClick = onDelete) { Text("Delete", color = SvcsRed) }
-            }
+        }
+    }
+}
+
+/**
+ * A frame from the compressed file, via MediaStore's own thumbnail cache
+ * (ContentResolver.loadThumbnail, API 29 = this app's minSdk), so no image
+ * library or frame-extraction code is needed. Blank placeholder while it
+ * loads or if the platform can't produce one.
+ */
+@Composable
+private fun VideoThumbnail(outputUri: String) {
+    val context = LocalContext.current
+    val thumb by produceState<ImageBitmap?>(initialValue = null, outputUri) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                context.contentResolver
+                    .loadThumbnail(Uri.parse(outputUri), Size(256, 256), null)
+                    .asImageBitmap()
+            }.getOrNull()
+        }
+    }
+    Box(
+        Modifier
+            .size(72.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+        thumb?.let {
+            Image(
+                bitmap = it,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(72.dp),
+            )
         }
     }
 }

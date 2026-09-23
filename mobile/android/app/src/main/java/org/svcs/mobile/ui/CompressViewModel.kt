@@ -27,6 +27,7 @@ import org.svcs.mobile.compress.QualityPresets
 import org.svcs.mobile.compress.SizePreset
 import org.svcs.mobile.compress.SizePresets
 import org.svcs.mobile.compress.VideoCodecChoice
+import org.svcs.mobile.compress.AUDIO_RESERVE_BPS
 import org.svcs.mobile.compress.bitrateForTargetSize
 
 enum class JobPhase { IDLE, RUNNING, DONE, FAILED }
@@ -43,6 +44,11 @@ data class CompressState(
     // (bounded) detection pass before the encode even starts.
     val smartCompress: Boolean = false,
     val smartCompressActivityDetected: Boolean? = null,
+    /** False when the picked source has no audio track at all. */
+    val sourceHasAudio: Boolean = true,
+    val removeAudio: Boolean = false,
+    /** True while Smart Compress is sampling frames, before encoding. */
+    val analyzing: Boolean = false,
     val phase: JobPhase = JobPhase.IDLE,
     val progressPercent: Int = 0,
     val outputUri: Uri? = null,
@@ -79,15 +85,16 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
             // just wouldn't survive a process restart mid-pick, which is fine.
         }
         viewModelScope.launch {
-            val (name, size, durationMs) = withContext(Dispatchers.IO) {
-                Triple(displayNameOf(resolver, uri), sizeOf(resolver, uri), durationOf(uri))
+            val (name, size, probe) = withContext(Dispatchers.IO) {
+                Triple(displayNameOf(resolver, uri), sizeOf(resolver, uri), probe(uri))
             }
             _state.update {
                 it.copy(
                     pickedUri = uri,
                     pickedName = name,
                     pickedSizeBytes = size,
-                    durationMs = durationMs,
+                    durationMs = probe.durationMs,
+                    sourceHasAudio = probe.hasAudio,
                     phase = JobPhase.IDLE,
                     outputUri = null,
                     error = null,
@@ -132,13 +139,22 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
         _state.update { it.copy(smartCompress = enabled) }
     }
 
+    fun setRemoveAudio(enabled: Boolean) {
+        _state.update { it.copy(removeAudio = enabled) }
+    }
+
     fun startCompress() {
         val s = _state.value
         val uri = s.pickedUri ?: return
         val (bitrateBps, shortSidePx) = when (val mode = s.mode) {
             is CompressionMode.Quality -> mode.preset.targetBitrateBps to mode.preset.maxShortSidePx
-            is CompressionMode.TargetSize ->
-                bitrateForTargetSize(mode.preset, s.durationMs) to mode.preset.maxShortSidePx
+            // No audio in the output means no audio budget: those bits go
+            // to the picture instead of an AAC track that won't exist.
+            is CompressionMode.TargetSize -> bitrateForTargetSize(
+                mode.preset,
+                s.durationMs,
+                audioBps = if (s.sourceHasAudio && !s.removeAudio) AUDIO_RESERVE_BPS else 0,
+            ) to mode.preset.maxShortSidePx
         }
         val outputName = "SVCS_${s.pickedName?.substringBeforeLast('.') ?: "compressed"}_" +
             "${System.currentTimeMillis()}.mp4"
@@ -158,9 +174,18 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
             modeType = modeType,
             presetLabel = presetLabel,
             smartCompress = s.smartCompress,
+            removeAudio = s.removeAudio,
         )
         activeWorkId = request.id
-        _state.update { it.copy(phase = JobPhase.RUNNING, progressPercent = 0, error = null) }
+        _state.update {
+            it.copy(
+                phase = JobPhase.RUNNING,
+                progressPercent = 0,
+                error = null,
+                analyzing = it.smartCompress,
+                smartCompressActivityDetected = null,
+            )
+        }
 
         val workManager = WorkManager.getInstance(getApplication())
         workManager.enqueueUniqueWork(
@@ -187,8 +212,17 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
         when (info.state) {
             WorkInfo.State.RUNNING -> {
                 val pct = info.progress.getInt(CompressionWorker.KEY_PROGRESS_PERCENT, -1)
+                val stage = info.progress.getString(CompressionWorker.KEY_STAGE)
                 _state.update {
-                    it.copy(phase = JobPhase.RUNNING, progressPercent = if (pct >= 0) pct else it.progressPercent)
+                    it.copy(
+                        phase = JobPhase.RUNNING,
+                        progressPercent = if (pct >= 0) pct else it.progressPercent,
+                        analyzing = when (stage) {
+                            CompressionWorker.STAGE_ANALYZING -> true
+                            CompressionWorker.STAGE_ENCODING -> false
+                            else -> it.analyzing
+                        },
+                    )
                 }
             }
             WorkInfo.State.SUCCEEDED -> {
@@ -199,6 +233,7 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
                     it.copy(
                         phase = JobPhase.DONE,
                         progressPercent = 100,
+                        analyzing = false,
                         outputUri = outUri,
                         outputBytes = data.getLong(CompressionWorker.KEY_OUTPUT_BYTES, -1),
                         usedFallback = data.getBoolean(CompressionWorker.KEY_USED_FALLBACK, false),
@@ -213,10 +248,10 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
             WorkInfo.State.FAILED -> {
                 val msg = info.outputData.getString(CompressionWorker.KEY_ERROR)
                     ?: "Compression failed."
-                _state.update { it.copy(phase = JobPhase.FAILED, error = msg) }
+                _state.update { it.copy(phase = JobPhase.FAILED, error = msg, analyzing = false) }
             }
             WorkInfo.State.CANCELLED -> {
-                _state.update { it.copy(phase = JobPhase.IDLE, progressPercent = 0) }
+                _state.update { it.copy(phase = JobPhase.IDLE, progressPercent = 0, analyzing = false) }
             }
             else -> Unit
         }
@@ -236,14 +271,22 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
         } ?: -1L
     }
 
-    private fun durationOf(uri: Uri): Long {
+    private data class SourceProbe(val durationMs: Long, val hasAudio: Boolean)
+
+    private fun probe(uri: Uri): SourceProbe {
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(getApplication(), uri)
-            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                ?.toLongOrNull() ?: 0L
+            SourceProbe(
+                durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+                    ?.toLongOrNull() ?: 0L,
+                // Returns "yes" when an audio track exists, null otherwise.
+                hasAudio = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) != null,
+            )
         } catch (_: Exception) {
-            0L
+            // Unreadable counts as "has audio": over-reserving 128 kbps is a
+            // small miss, under-reserving can overshoot a size limit.
+            SourceProbe(durationMs = 0L, hasAudio = true)
         } finally {
             retriever.release()
         }

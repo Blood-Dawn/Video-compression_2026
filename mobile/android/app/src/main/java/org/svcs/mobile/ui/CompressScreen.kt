@@ -1,5 +1,6 @@
 package org.svcs.mobile.ui
 
+import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -52,6 +54,7 @@ import org.svcs.mobile.ui.theme.SvcsTextDim
 @Composable
 fun CompressScreen(vm: CompressViewModel) {
     val s by vm.state.collectAsState()
+    val context = LocalContext.current
 
     val pickVideo = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -173,6 +176,26 @@ fun CompressScreen(vm: CompressViewModel) {
                 Switch(checked = s.smartCompress, onCheckedChange = vm::setSmartCompress)
             }
 
+            // Only offered when there's something to remove. In size-target
+            // mode, removing audio also frees its bit budget for the picture.
+            if (s.sourceHasAudio) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Remove audio", style = MaterialTheme.typography.labelLarge)
+                        Text(
+                            "Silent output. Smaller file, and with a size limit " +
+                                "the saved space goes to picture quality.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = SvcsTextDim,
+                        )
+                    }
+                    Switch(checked = s.removeAudio, onCheckedChange = vm::setRemoveAudio)
+                }
+            }
+
             Button(
                 onClick = vm::startCompress,
                 modifier = Modifier.fillMaxWidth(),
@@ -184,11 +207,16 @@ fun CompressScreen(vm: CompressViewModel) {
 
         if (s.phase == org.svcs.mobile.ui.JobPhase.RUNNING) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Compressing... ${s.progressPercent}%", style = MaterialTheme.typography.bodyMedium)
-                LinearProgressIndicator(
-                    progress = { s.progressPercent / 100f },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                if (s.analyzing) {
+                    Text("Checking the video for activity...", style = MaterialTheme.typography.bodyMedium)
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                } else {
+                    Text("Compressing... ${s.progressPercent}%", style = MaterialTheme.typography.bodyMedium)
+                    LinearProgressIndicator(
+                        progress = { s.progressPercent / 100f },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
                 OutlinedButton(onClick = vm::cancel, modifier = Modifier.fillMaxWidth()) {
                     Text("Cancel")
                 }
@@ -226,6 +254,34 @@ fun CompressScreen(vm: CompressViewModel) {
                     )
                 }
                 Text("Saved to Movies/SVCS.", style = MaterialTheme.typography.bodySmall, color = SvcsTextDim)
+                s.outputUri?.let { out ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Button(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_SEND).apply {
+                                    type = "video/mp4"
+                                    putExtra(Intent.EXTRA_STREAM, out)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                context.startActivity(Intent.createChooser(intent, "Share compressed video"))
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Share") }
+                        OutlinedButton(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW).apply {
+                                    setDataAndType(out, "video/mp4")
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                                runCatching { context.startActivity(intent) }
+                            },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Play") }
+                    }
+                }
                 OutlinedButton(onClick = vm::reset, modifier = Modifier.fillMaxWidth()) {
                     Text("Compress another")
                 }

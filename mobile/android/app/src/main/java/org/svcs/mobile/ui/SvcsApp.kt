@@ -77,7 +77,10 @@ enum class Tab(val label: String) {
  * Author: Bloodawn (KheivenD), 2026-07-19 (M2); reworked 2026-08-16.
  */
 @Composable
-fun SvcsApp() {
+fun SvcsApp(
+    sharedVideo: android.net.Uri? = null,
+    onSharedVideoConsumed: () -> Unit = {},
+) {
     val context = LocalContext.current
     val store = remember { TokenStore(context) }
 
@@ -93,6 +96,18 @@ fun SvcsApp() {
      * effect without a force-quit.
      */
     var sessionEpoch by remember { mutableStateOf(0) }
+
+    // Same key as the COMPRESS tab below, so this is the same instance: a
+    // video shared in from another app lands there even before the pairing
+    // probe finishes.
+    val compressVm: CompressViewModel = viewModel(key = "compress")
+    LaunchedEffect(sharedVideo) {
+        if (sharedVideo != null) {
+            compressVm.onVideoPicked(sharedVideo)
+            tab = Tab.COMPRESS
+            onSharedVideoConsumed()
+        }
+    }
 
     // Restore the saved pairing and ask the server what it can do. Re-runs on
     // re-pair so the new token is picked up in place. The previous session
@@ -217,7 +232,7 @@ fun SvcsApp() {
             // with pairing, and a re-pair should not interrupt a running
             // on-device compression job.
             when (tab) {
-                Tab.COMPRESS -> CompressScreen(vm = viewModel(key = "compress"))
+                Tab.COMPRESS -> CompressScreen(vm = compressVm)
                 Tab.SAVED -> CompressLibraryScreen(vm = viewModel(key = "saved"))
                 Tab.MORE -> ServerSettingsScreen(
                     onCredentialsSaved = { sessionEpoch++ })

@@ -138,38 +138,48 @@ class CompressLibraryViewModel(application: Application) : AndroidViewModel(appl
     }
 
     private fun recompute() {
-        val f = _filters.value
-        val now = System.currentTimeMillis()
-        val cutoff = when (f.dateFilter) {
-            DateFilter.ALL -> 0L
-            DateFilter.WEEK -> now - TimeUnit.DAYS.toMillis(7)
-            DateFilter.MONTH -> now - TimeUnit.DAYS.toMillis(30)
-        }
-        var list = _all.value.filter { r ->
-            val matchesQuery = f.query.isBlank() ||
-                r.outputDisplayName.contains(f.query, ignoreCase = true) ||
-                (r.originalName?.contains(f.query, ignoreCase = true) == true)
-            val matchesSize = (f.minSizeMb == null || r.outputSizeBytes >= f.minSizeMb!! * 1_000_000) &&
-                (f.maxSizeMb == null || r.outputSizeBytes <= f.maxSizeMb!! * 1_000_000)
-            matchesQuery &&
-                r.timestampMs >= cutoff &&
-                (f.codecFilter.isEmpty() || r.codecMime in f.codecFilter) &&
-                (f.modeFilter.isEmpty() || r.modeType in f.modeFilter) &&
-                (!f.fallbackOnly || r.usedFallback) &&
-                (!f.smartCompressOnly || r.smartCompressUsed) &&
-                matchesSize
-        }
-        list = when (f.sort) {
-            LibrarySort.NEWEST -> list.sortedByDescending { it.timestampMs }
-            LibrarySort.LARGEST -> list.sortedByDescending { it.outputSizeBytes }
-            LibrarySort.BEST_RATIO -> list.sortedByDescending {
-                if (it.outputSizeBytes > 0 && it.originalSizeBytes > 0) {
-                    it.originalSizeBytes.toDouble() / it.outputSizeBytes.toDouble()
-                } else {
-                    0.0
-                }
+        _visible.value = filterAndSortRecords(_all.value, _filters.value, System.currentTimeMillis())
+    }
+}
+
+/**
+ * The SAVED tab's search, filters and sort as one pure function, so it's
+ * unit-testable without an Application or a ContentResolver.
+ */
+internal fun filterAndSortRecords(
+    records: List<CompressionRecord>,
+    f: LibraryFilters,
+    nowMs: Long,
+): List<CompressionRecord> {
+    val cutoff = when (f.dateFilter) {
+        DateFilter.ALL -> Long.MIN_VALUE
+        DateFilter.WEEK -> nowMs - TimeUnit.DAYS.toMillis(7)
+        DateFilter.MONTH -> nowMs - TimeUnit.DAYS.toMillis(30)
+    }
+    val minBytes = f.minSizeMb?.let { it * 1_000_000 }
+    val maxBytes = f.maxSizeMb?.let { it * 1_000_000 }
+    val filtered = records.filter { r ->
+        val matchesQuery = f.query.isBlank() ||
+            r.outputDisplayName.contains(f.query, ignoreCase = true) ||
+            (r.originalName?.contains(f.query, ignoreCase = true) == true)
+        matchesQuery &&
+            r.timestampMs >= cutoff &&
+            (f.codecFilter.isEmpty() || r.codecMime in f.codecFilter) &&
+            (f.modeFilter.isEmpty() || r.modeType in f.modeFilter) &&
+            (!f.fallbackOnly || r.usedFallback) &&
+            (!f.smartCompressOnly || r.smartCompressUsed) &&
+            (minBytes == null || r.outputSizeBytes >= minBytes) &&
+            (maxBytes == null || r.outputSizeBytes <= maxBytes)
+    }
+    return when (f.sort) {
+        LibrarySort.NEWEST -> filtered.sortedByDescending { it.timestampMs }
+        LibrarySort.LARGEST -> filtered.sortedByDescending { it.outputSizeBytes }
+        LibrarySort.BEST_RATIO -> filtered.sortedByDescending {
+            if (it.outputSizeBytes > 0 && it.originalSizeBytes > 0) {
+                it.originalSizeBytes.toDouble() / it.outputSizeBytes.toDouble()
+            } else {
+                0.0
             }
         }
-        _visible.value = list
     }
 }

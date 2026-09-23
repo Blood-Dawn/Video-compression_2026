@@ -50,6 +50,15 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Fall roadmap Phase 1: "Share -> SVCS" from the gallery or any
+                 app that hands out a video, straight into the COMPRESS tab.
+                 The sender's read grant covers this app while the receiving
+                 task is alive, which spans the compression job. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="video/*" />
+            </intent-filter>
         </activity>
 
         <!-- Merge the mediaProcessing foreground-service type onto WorkManager's

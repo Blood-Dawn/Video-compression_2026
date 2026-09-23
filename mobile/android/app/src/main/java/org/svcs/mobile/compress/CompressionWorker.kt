@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.pm.ServiceInfo
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -82,6 +83,12 @@ class CompressionWorker(
         // decides whether this clip can shed bitrate rather than driving
         // true per-region ROI (that needs raw MediaCodec access Media3
         // Transformer does not expose yet - see SmartCompressAnalyzer).
+        const val KEY_REMOVE_AUDIO = "remove_audio"
+        /** Progress Data key: "analyzing" while Smart Compress samples
+         *  frames, "encoding" once Transformer is running. */
+        const val KEY_STAGE = "stage"
+        const val STAGE_ANALYZING = "analyzing"
+        const val STAGE_ENCODING = "encoding"
         const val KEY_SMART_COMPRESS = "smart_compress"
         const val KEY_SMART_COMPRESS_USED = "smart_compress_used"
         const val KEY_SMART_COMPRESS_ACTIVITY = "smart_compress_activity_detected"
@@ -113,6 +120,7 @@ class CompressionWorker(
             modeType: String = "QUALITY",
             presetLabel: String = "",
             smartCompress: Boolean = false,
+            removeAudio: Boolean = false,
         ): OneTimeWorkRequest {
             val data = Data.Builder()
                 .putString(KEY_INPUT_URI, inputUri.toString())
@@ -125,6 +133,7 @@ class CompressionWorker(
                 .putString(KEY_MODE_TYPE, modeType)
                 .putString(KEY_PRESET_LABEL, presetLabel)
                 .putBoolean(KEY_SMART_COMPRESS, smartCompress)
+                .putBoolean(KEY_REMOVE_AUDIO, removeAudio)
                 .build()
             return OneTimeWorkRequest.Builder(CompressionWorker::class.java)
                 .setInputData(data)
@@ -139,14 +148,18 @@ class CompressionWorker(
 
     override suspend fun getForegroundInfo(): ForegroundInfo = buildForegroundInfo(0)
 
-    private fun buildForegroundInfo(progressPercent: Int): ForegroundInfo {
+    private fun buildForegroundInfo(progressPercent: Int, analyzing: Boolean = false): ForegroundInfo {
         ensureChannel()
         val cancelIntent = WorkManager.getInstance(applicationContext)
             .createCancelPendingIntent(id)
         val notification: Notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setContentTitle("Compressing video")
             .setContentText(
-                if (progressPercent in 0..100) "$progressPercent% done" else "Working...",
+                when {
+                    analyzing -> "Checking the video for activity..."
+                    progressPercent in 0..100 -> "$progressPercent% done"
+                    else -> "Working..."
+                },
             )
             .setSmallIcon(android.R.drawable.stat_sys_upload)
             .setOngoing(true)
@@ -189,6 +202,7 @@ class CompressionWorker(
         val requestedCodec = inputData.getString(KEY_CODEC_MIME) ?: MimeTypes.VIDEO_H265
         val durationMs = inputData.getLong(KEY_DURATION_MS, 0L)
         val smartCompressRequested = inputData.getBoolean(KEY_SMART_COMPRESS, false)
+        val removeAudio = inputData.getBoolean(KEY_REMOVE_AUDIO, false)
 
         val inputBytes = sizeOfUri(inputUri)
         val tempOutputFile = File(applicationContext.cacheDir, "compress_${id}.mp4")
@@ -203,6 +217,8 @@ class CompressionWorker(
         // stepping stone toward that, not a stand-in for it.
         var smartCompressActivityDetected: Boolean? = null
         if (smartCompressRequested) {
+            setProgress(workDataOf(KEY_STAGE to STAGE_ANALYZING))
+            setForeground(buildForegroundInfo(-1, analyzing = true))
             val analysis = SmartCompressAnalyzer.analyze(applicationContext, inputUri, durationMs)
             smartCompressActivityDetected = analysis.hasActivity
             if (!analysis.hasActivity) {
@@ -215,7 +231,7 @@ class CompressionWorker(
         var usedFallback = false
         try {
             try {
-                runTransform(inputUri, tempOutputFile, requestedBitrate, requestedMaxEdge, requestedCodec)
+                runTransform(inputUri, tempOutputFile, requestedBitrate, requestedMaxEdge, requestedCodec, removeAudio)
             } catch (first: TransformFailure) {
                 // Decode-failure fallback (roadmap section 2): a real, documented
                 // failure mode is a decoder rejecting an odd resolution/framerate
@@ -228,6 +244,7 @@ class CompressionWorker(
                     targetBitrateBps = minOf(requestedBitrate, 2_500_000),
                     maxShortSidePx = 720,
                     codecMime = MimeTypes.VIDEO_H264,
+                    removeAudio = removeAudio,
                 )
             }
 
@@ -282,7 +299,12 @@ class CompressionWorker(
         targetBitrateBps: Int,
         maxShortSidePx: Int?,
         codecMime: String,
+        removeAudio: Boolean,
     ) {
+        // Read the source geometry off the main thread, before hopping to it
+        // for Transformer. See scaledFrameSize() for why this replaced a
+        // plain height cap.
+        val frameSize = if (maxShortSidePx != null) sourceFrameSize(inputUri, maxShortSidePx) else null
         withContext(Dispatchers.Main) {
             suspendCancellableCoroutine<Unit> { cont ->
                 val encoderFactory = DefaultEncoderFactory.Builder(applicationContext)
@@ -313,21 +335,27 @@ class CompressionWorker(
                     .build()
 
                 val mediaItem = MediaItem.fromUri(inputUri)
-                // Presentation.createForShortSide() does not exist in the
-                // media3 1.5.1 line this project pins (it landed in a later
-                // release, per androidx/media issue #2478); createForHeight()
-                // is the available equivalent. It is height-literal rather
-                // than orientation-aware, so a portrait clip's actual short
-                // side is its WIDTH, not its height - an acceptable Phase 1
-                // approximation (matches what most Android compression
-                // tutorials do), not a precise "cap the short side" guarantee.
-                val videoEffects = if (maxShortSidePx != null) {
-                    listOf(Presentation.createForHeight(maxShortSidePx))
-                } else {
-                    emptyList()
+                // Presentation.createForShortSide() isn't in the media3 1.5.1
+                // line this project pins, so the short-side cap is computed
+                // here from the source's own width/height/rotation and passed
+                // as an exact size. Aspect ratio matches the source, so
+                // LAYOUT_SCALE_TO_FIT adds no bars. No effect at all when the
+                // source is already at or under the cap: never upscale.
+                val videoEffects = when {
+                    frameSize is FrameSize.Exact -> listOf(
+                        Presentation.createForWidthAndHeight(
+                            frameSize.width, frameSize.height, Presentation.LAYOUT_SCALE_TO_FIT,
+                        ),
+                    )
+                    // Geometry unreadable: the old height cap beats leaving a
+                    // 4K frame to starve at a size-target bitrate.
+                    frameSize is FrameSize.Unknown && maxShortSidePx != null ->
+                        listOf(Presentation.createForHeight(maxShortSidePx))
+                    else -> emptyList()
                 }
                 val editedMediaItem = EditedMediaItem.Builder(mediaItem)
                     .setEffects(Effects(emptyList(), videoEffects))
+                    .setRemoveAudio(removeAudio)
                     .build()
 
                 transformer.start(editedMediaItem, outputFile.absolutePath)
@@ -342,7 +370,7 @@ class CompressionWorker(
                         val state = transformer.getProgress(progressHolder)
                         if (state == Transformer.PROGRESS_STATE_AVAILABLE) {
                             val pct = progressHolder.progress
-                            setProgressAsync(workDataOf(KEY_PROGRESS_PERCENT to pct))
+                            setProgressAsync(workDataOf(KEY_PROGRESS_PERCENT to pct, KEY_STAGE to STAGE_ENCODING))
                             setForegroundAsync(buildForegroundInfo(pct))
                         }
                         if (state != Transformer.PROGRESS_STATE_NOT_STARTED && cont.isActive) {
@@ -380,6 +408,32 @@ class CompressionWorker(
         values.put(MediaStore.Video.Media.IS_PENDING, 0)
         resolver.update(itemUri, values, null, null)
         return itemUri
+    }
+
+    private sealed interface FrameSize {
+        data class Exact(val width: Int, val height: Int) : FrameSize
+        data object Unknown : FrameSize
+    }
+
+    /** null = the source is already within the cap, leave it alone. */
+    private fun sourceFrameSize(uri: Uri, maxShortSidePx: Int): FrameSize? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(applicationContext, uri)
+            fun meta(key: Int) = retriever.extractMetadata(key)?.toIntOrNull()
+            val w = meta(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+            val h = meta(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+            val rotation = meta(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION) ?: 0
+            if (w == null || h == null) {
+                FrameSize.Unknown
+            } else {
+                scaledFrameSize(w, h, rotation, maxShortSidePx)?.let { (sw, sh) -> FrameSize.Exact(sw, sh) }
+            }
+        } catch (_: Exception) {
+            FrameSize.Unknown
+        } finally {
+            retriever.release()
+        }
     }
 
     private fun sizeOfUri(uri: Uri): Long {

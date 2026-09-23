@@ -1,0 +1,6 @@
+1.1.0-beta: a redesign.
+- The SVCS look throughout: bundled fonts, real icons, no more stray purples
+- Compress screen: pick quality or a size limit, see an estimate first, the Compress button is always in reach
+- A live progress screen with time left, and a result screen that leads with how much you saved
+- Warns when a preset can't shrink a video that's already lean
+- Saved: totals, search, and filters that stay out of the way

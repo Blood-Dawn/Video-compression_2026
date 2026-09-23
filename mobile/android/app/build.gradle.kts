@@ -46,8 +46,11 @@ android {
         //      searchable history of on-device jobs, and opt-in Smart
         //      Compress runs YOLOv8n on-device via LiteRT. Server Mode tabs
         //      are unchanged. Published as the v1-beta GitHub release.
-        versionCode = 13
-        versionName = "1.0.0-beta"
+        // 14 = 1.1.0-beta: UI pass. The SVCS design system applied to the
+        //      compressor (bundled fonts, full color scheme, components,
+        //      icons), one layout per job state, honest size estimates.
+        versionCode = 14
+        versionName = "1.1.0-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // FLAG_SECURE stays on in every normal build (see MainActivity). This

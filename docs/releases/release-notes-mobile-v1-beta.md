@@ -1,4 +1,4 @@
-# SVCS Mobile v1-beta (1.0.0-beta) - release notes
+# SVCS Mobile v1-beta (1.1.0-beta) - release notes
 
 The first build where the phone does the compressing itself. Earlier mobile
 releases were a remote for the desktop server and encoded nothing on the
@@ -6,12 +6,34 @@ phone; this one works with no server, no network and no account. Server
 Mode (pairing, LIBRARY, LIVE, EVENTS, METRICS) is unchanged and still
 optional. Plan and reasoning: `mobile/android/STANDALONE-COMPRESSOR-ROADMAP.md`.
 
+## 1.1.0-beta (2026-09-23): UI refresh
+
+Same features, rebuilt interface. The compressor now follows the SVCS
+design system it was always meant to (the fonts were never bundled and
+the color scheme was incomplete, so it had been rendering in system fonts
+with stray Material purples). Full write-up, with the research behind it:
+`mobile/android/UI-REVIEW.md`.
+
+- COMPRESS has a layout per step: pick, configure, running, done. Choose
+  QUALITY or SIZE LIMIT and only those options show; the COMPRESS button
+  stays pinned at the bottom.
+- An estimated result before you start, worded as an upper bound, and a
+  warning when the source is already lean enough that a preset can't
+  shrink it (it compares against the video's own bitrate).
+- Running shows percent, stage, elapsed and time left. Done leads with the
+  saving, original vs compressed bars, and Share.
+- SAVED: totals, search, filters behind a toggle, rows with savings badges.
+- Real icons in the bottom bar; MORE explains that Server Mode is optional
+  and credits the open-source pieces and their licenses.
+
+Installs over 1.0.0-beta (versionCode 14).
+
 ## Which APK
 
 | File | For |
 |---|---|
-| `svcs-mobile-v1-beta.apk` | arm64-v8a. Almost every Android phone from the last several years. 12.3 MB. |
-| `svcs-mobile-v1-beta-universal.apk` | Every CPU type, including 32-bit phones and x86_64 emulators. 27 MB. |
+| `svcs-mobile-v1-beta.apk` | arm64-v8a. Almost every Android phone from the last several years. 12.6 MB. |
+| `svcs-mobile-v1-beta-universal.apk` | Every CPU type, including 32-bit phones and x86_64 emulators. 27.5 MB. |
 | `SHA256SUMS.txt` | Checksums for both. |
 
 minSdk 29 (Android 10). Release build (R8-minified), self-signed, sideload

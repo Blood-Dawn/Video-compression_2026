@@ -29,6 +29,8 @@ import org.svcs.mobile.compress.SizePresets
 import org.svcs.mobile.compress.VideoCodecChoice
 import org.svcs.mobile.compress.AUDIO_RESERVE_BPS
 import org.svcs.mobile.compress.bitrateForTargetSize
+import org.svcs.mobile.compress.CompressionHistoryStore
+import org.svcs.mobile.compress.estimateOutputBytes
 
 enum class JobPhase { IDLE, RUNNING, DONE, FAILED }
 
@@ -49,6 +51,11 @@ data class CompressState(
     val removeAudio: Boolean = false,
     /** True while Smart Compress is sampling frames, before encoding. */
     val analyzing: Boolean = false,
+    /** Source frame size in display orientation (rotation applied); 0 = unknown. */
+    val sourceWidth: Int = 0,
+    val sourceHeight: Int = 0,
+    /** When the current job was started, for the elapsed/ETA readout. */
+    val startedAtMs: Long = 0L,
     val phase: JobPhase = JobPhase.IDLE,
     val progressPercent: Int = 0,
     val outputUri: Uri? = null,
@@ -108,6 +115,8 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
                     pickedSizeBytes = size,
                     durationMs = probe.durationMs,
                     sourceHasAudio = probe.hasAudio,
+                    sourceWidth = probe.width,
+                    sourceHeight = probe.height,
                     phase = JobPhase.IDLE,
                     outputUri = null,
                     error = null,
@@ -148,6 +157,80 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
         _state.update { it.copy(codec = codec) }
     }
 
+    private var lastQuality: QualityPreset = QualityPresets.MEDIUM
+    private var lastSize: SizePreset = SizePresets.DISCORD_FREE
+
+    /** Quality presets vs. a size limit. Switching back restores the last
+     *  choice made on that side instead of resetting it. */
+    fun setGoal(sizeLimit: Boolean) {
+        _state.update {
+            when {
+                sizeLimit && it.mode is CompressionMode.Quality -> {
+                    lastQuality = it.mode.preset
+                    it.copy(mode = CompressionMode.TargetSize(lastSize))
+                }
+                !sizeLimit && it.mode is CompressionMode.TargetSize -> {
+                    lastSize = it.mode.preset
+                    it.copy(mode = CompressionMode.Quality(lastQuality), customSizeText = "")
+                }
+                else -> it
+            }
+        }
+    }
+
+    /** Estimated output size for the current settings, or null without a
+     *  known duration. With Smart Compress on this is the upper bound: a
+     *  clip with nothing happening comes out around a third smaller. */
+    fun estimatedBytes(s: CompressState = _state.value): Long? {
+        if (s.durationMs <= 0) return null
+        val (videoBps, _, audioBps) = plan(s)
+        return estimateOutputBytes(videoBps, audioBps, s.durationMs)
+    }
+
+    private data class Plan(val videoBps: Int, val maxShortSidePx: Int?, val audioBps: Int)
+
+    private fun plan(s: CompressState): Plan {
+        val audioBps = if (s.sourceHasAudio && !s.removeAudio) AUDIO_RESERVE_BPS else 0
+        return when (val mode = s.mode) {
+            is CompressionMode.Quality -> Plan(mode.preset.targetBitrateBps, mode.preset.maxShortSidePx, audioBps)
+            // No audio in the output means no audio budget: those bits go
+            // to the picture instead of an AAC track that won't exist.
+            is CompressionMode.TargetSize -> Plan(
+                bitrateForTargetSize(mode.preset, s.durationMs, audioBps = audioBps),
+                mode.preset.maxShortSidePx,
+                audioBps,
+            )
+        }
+    }
+
+    data class Lifetime(val videos: Int = 0, val bytesSaved: Long = 0L)
+
+    private val _lifetime = MutableStateFlow(Lifetime())
+    /** Totals across every on-device job, for the COMPRESS home stats. */
+    val lifetime: StateFlow<Lifetime> = _lifetime.asStateFlow()
+
+    fun refreshLifetime() {
+        viewModelScope.launch {
+            _lifetime.value = withContext(Dispatchers.IO) {
+                val all = CompressionHistoryStore(getApplication()).readAll()
+                Lifetime(
+                    videos = all.size,
+                    bytesSaved = all.sumOf {
+                        if (it.originalSizeBytes > 0 && it.outputSizeBytes > 0) {
+                            (it.originalSizeBytes - it.outputSizeBytes).coerceAtLeast(0)
+                        } else {
+                            0L
+                        }
+                    },
+                )
+            }
+        }
+    }
+
+    init {
+        refreshLifetime()
+    }
+
     fun setSmartCompress(enabled: Boolean) {
         _state.update { it.copy(smartCompress = enabled) }
     }
@@ -159,16 +242,7 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
     fun startCompress() {
         val s = _state.value
         val uri = s.pickedUri ?: return
-        val (bitrateBps, shortSidePx) = when (val mode = s.mode) {
-            is CompressionMode.Quality -> mode.preset.targetBitrateBps to mode.preset.maxShortSidePx
-            // No audio in the output means no audio budget: those bits go
-            // to the picture instead of an AAC track that won't exist.
-            is CompressionMode.TargetSize -> bitrateForTargetSize(
-                mode.preset,
-                s.durationMs,
-                audioBps = if (s.sourceHasAudio && !s.removeAudio) AUDIO_RESERVE_BPS else 0,
-            ) to mode.preset.maxShortSidePx
-        }
+        val (bitrateBps, shortSidePx) = plan(s)
         val outputName = "SVCS_${s.pickedName?.substringBeforeLast('.') ?: "compressed"}_" +
             "${System.currentTimeMillis()}.mp4"
 
@@ -197,6 +271,7 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
                 error = null,
                 analyzing = it.smartCompress,
                 smartCompressActivityDetected = null,
+                startedAtMs = System.currentTimeMillis(),
             )
         }
 
@@ -257,6 +332,7 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
                         },
                     )
                 }
+                refreshLifetime()
             }
             WorkInfo.State.FAILED -> {
                 val msg = info.outputData.getString(CompressionWorker.KEY_ERROR)
@@ -294,17 +370,28 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
         }.getOrNull() ?: -1L
     }
 
-    private data class SourceProbe(val durationMs: Long, val hasAudio: Boolean)
+    private data class SourceProbe(
+        val durationMs: Long,
+        val hasAudio: Boolean,
+        val width: Int = 0,
+        val height: Int = 0,
+    )
 
     private fun probe(uri: Uri): SourceProbe {
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(getApplication(), uri)
+            fun meta(key: Int) = retriever.extractMetadata(key)?.toIntOrNull() ?: 0
+            val w = meta(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
+            val h = meta(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
+            val sideways = Math.floorMod(meta(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION), 180) != 0
             SourceProbe(
                 durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
                     ?.toLongOrNull() ?: 0L,
                 // Returns "yes" when an audio track exists, null otherwise.
                 hasAudio = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) != null,
+                width = if (sideways) h else w,
+                height = if (sideways) w else h,
             )
         } catch (_: Exception) {
             // Unreadable counts as "has audio": over-reserving 128 kbps is a

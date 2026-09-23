@@ -91,6 +91,23 @@ fun ServerSettingsScreen(
                 color = SvcsTextDim,
             )
 
+            // Since 1.0.0-beta most people never pair a server, and this tab
+            // used to open straight onto SERVER ADDRESS / ACCESS TOKEN with no
+            // word on why. Say what it's for, and that it's optional.
+            org.svcs.mobile.ui.components.SvcsPanel(
+                modifier = Modifier.fillMaxWidth(),
+                accent = org.svcs.mobile.ui.theme.SvcsTeal,
+                contentPadding = 12.dp,
+            ) {
+                Text("SERVER MODE - OPTIONAL", style = MaterialTheme.typography.labelSmall, color = org.svcs.mobile.ui.theme.SvcsTeal)
+                Text(
+                    "Compressing needs none of this. Pair with an SVCS desktop server only " +
+                        "if you have one, to also browse its library, watch live cameras and " +
+                        "get event alerts.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
             OutlinedTextField(
                 value = state.serverUrl,
                 onValueChange = vm::onServerUrlChanged,
@@ -308,12 +325,30 @@ fun ServerSettingsScreen(
             }
 
             // The phone app's own version, so nobody mistakes the server
-            // version shown on the CONNECTED card for the app's.
-            Text(
-                "SVCS Mobile app " + org.svcs.mobile.BuildConfig.VERSION_NAME,
-                style = MaterialTheme.typography.labelSmall,
-                color = SvcsTextDim,
-            )
+            // version shown on the CONNECTED card for the app's. Now inside an
+            // About panel that also carries the licenses the app ships under
+            // and bundles (fonts, detection model), which F-Droid reviewers
+            // and the OFL/AGPL terms both expect to be findable in the app.
+            org.svcs.mobile.ui.components.SvcsPanel(modifier = Modifier.fillMaxWidth(), contentPadding = 12.dp) {
+                Text("ABOUT", style = MaterialTheme.typography.labelSmall, color = SvcsTextDim)
+                Text(
+                    "SVCS Mobile app " + org.svcs.mobile.BuildConfig.VERSION_NAME,
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    "Free and open source under AGPL-3.0. No ads, no analytics, no account.\n" +
+                        "github.com/Blood-Dawn/Video-compression_2026",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SvcsTextDim,
+                )
+                Text(
+                    "Built with Jetpack Media3 and LiteRT (Apache-2.0). Smart Compress uses " +
+                        "YOLOv8n by Ultralytics (AGPL-3.0). Fonts: Bebas Neue, Space Mono and " +
+                        "Outfit (SIL Open Font License 1.1; license texts ship inside the app).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SvcsTextDim,
+                )
+            }
         }
     }
 }

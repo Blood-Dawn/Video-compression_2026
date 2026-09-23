@@ -132,3 +132,12 @@ fun scaledFrameSize(width: Int, height: Int, rotationDegrees: Int, maxShortSideP
     fun even(v: Double): Int = (Math.round(v / 2.0) * 2).toInt().coerceAtLeast(2)
     return even(displayW * scale) to even(displayH * scale)
 }
+
+/**
+ * Rough output size for a video bitrate plus audio over a duration: what
+ * the COMPRESS screen shows as the estimated result before encoding. It's
+ * an estimate, not a promise; single-pass hardware encoders usually land
+ * somewhat under their target on calm footage.
+ */
+fun estimateOutputBytes(videoBps: Int, audioBps: Int, durationMs: Long): Long =
+    ((videoBps.toLong() + audioBps.toLong()) * (durationMs.coerceAtLeast(0) / 1000.0) / 8.0).toLong()

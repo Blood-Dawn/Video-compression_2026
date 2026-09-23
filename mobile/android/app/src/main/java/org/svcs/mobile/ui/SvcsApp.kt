@@ -1,6 +1,18 @@
 package org.svcs.mobile.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.ui.graphics.Color
+import org.svcs.mobile.ui.components.SvcsIcons
+import org.svcs.mobile.ui.theme.SvcsAmber
+import org.svcs.mobile.ui.theme.SvcsBorder
+import org.svcs.mobile.ui.theme.SvcsSurface
+import org.svcs.mobile.ui.theme.SvcsTextDim
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -38,24 +50,24 @@ import org.svcs.mobile.net.SvcsApiClient
  * no HLS blueprint at all, so on that build the tab must not exist rather than
  * appear and 404 on every request. /api/capabilities is what tells us.
  */
-enum class Tab(val label: String) {
+enum class Tab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     // Fall roadmap Phase 1: the standalone, server-free compressor. Always
     // visible and the default landing tab - unlike every tab below it, it
     // needs no paired desktop and no network at all. See
     // STANDALONE-COMPRESSOR-ROADMAP.md section 3: everything below COMPRESS
     // is "Server Mode", a secondary feature now rather than the whole app.
-    COMPRESS("COMPRESS"),
+    COMPRESS("COMPRESS", SvcsIcons.Compress),
     // Fall roadmap Phase 1.5: local library of on-device compression jobs.
     // Always visible alongside COMPRESS for the same reason - no pairing,
     // no network. Distinct from LIBRARY below, which is the server's
     // remote catalog.
-    SAVED("SAVED"),
-    HOME("HOME"),
-    LIBRARY("LIBRARY"),
-    LIVE("LIVE"),
-    EVENTS("EVENTS"),
-    METRICS("METRICS"),
-    MORE("MORE"),
+    SAVED("SAVED", SvcsIcons.Saved),
+    HOME("HOME", SvcsIcons.Home),
+    LIBRARY("LIBRARY", SvcsIcons.Library),
+    LIVE("LIVE", SvcsIcons.Live),
+    EVENTS("EVENTS", SvcsIcons.Events),
+    METRICS("METRICS", SvcsIcons.Metrics),
+    MORE("MORE", SvcsIcons.More),
 }
 
 /**
@@ -211,14 +223,30 @@ fun SvcsApp(
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
-                visibleTabs.forEach { t ->
-                    NavigationBarItem(
-                        selected = tab == t,
-                        onClick = { tab = t },
-                        icon = {},
-                        label = { Text(t.label, style = MaterialTheme.typography.labelSmall) },
-                    )
+            // Icons from the design mockup's bottom bar (SvcsIcons). Before the
+            // 2026-09-23 UI pass this passed icon = {} and showed an empty
+            // indicator pill over bare labels. With a server paired there are
+            // eight tabs, past Material's five-item guidance, so labels show on
+            // the selected tab only once the bar gets that crowded.
+            Column {
+                Box(Modifier.fillMaxWidth().height(1.dp).background(SvcsBorder))
+                NavigationBar(containerColor = SvcsSurface, tonalElevation = 0.dp) {
+                    visibleTabs.forEach { t ->
+                        NavigationBarItem(
+                            selected = tab == t,
+                            onClick = { tab = t },
+                            icon = { Icon(t.icon, contentDescription = t.label, modifier = Modifier.size(22.dp)) },
+                            label = { Text(t.label, style = MaterialTheme.typography.labelSmall, maxLines = 1) },
+                            alwaysShowLabel = visibleTabs.size <= 5,
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = SvcsAmber,
+                                selectedTextColor = SvcsAmber,
+                                indicatorColor = Color(0xFF2B2410),
+                                unselectedIconColor = SvcsTextDim,
+                                unselectedTextColor = SvcsTextDim,
+                            ),
+                        )
+                    }
                 }
             }
         },

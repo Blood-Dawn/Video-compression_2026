@@ -41,10 +41,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_SECURE,
-            WindowManager.LayoutParams.FLAG_SECURE,
-        )
+        if (!BuildConfig.ALLOW_SCREENSHOTS) {
+            window.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE,
+            )
+        }
         enableEdgeToEdge()
         JobNotifier.ensureChannel(this)
         if (Build.VERSION.SDK_INT >= 33 && !JobNotifier.canNotify(this)) {

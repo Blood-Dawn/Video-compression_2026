@@ -97,4 +97,24 @@ class CompressionPresetsTest {
         assertEquals(0, h % 2)
         assertEquals(720, h)
     }
+
+    // ── estimateOutputBytes: the COMPRESS screen's "up to" figure ────────
+
+    @Test
+    fun estimate_isBitrateTimesDuration() {
+        // 6 Mbps video + 128 kbps audio for 10 s = 7.66 MB.
+        assertEquals(7_660_000L, estimateOutputBytes(6_000_000, 128_000, 10_000))
+    }
+
+    @Test
+    fun estimate_ofASizeTargetStaysUnderTheTarget() {
+        val video = bitrateForTargetSize(SizePresets.DISCORD_FREE, durationMs = 107_267)
+        val est = estimateOutputBytes(video, AUDIO_RESERVE_BPS, 107_267)
+        assertTrue("estimate $est should be under 10 MB", est < SizePresets.DISCORD_FREE.maxBytes)
+    }
+
+    @Test
+    fun estimate_negativeDurationIsZero() {
+        assertEquals(0L, estimateOutputBytes(6_000_000, 128_000, -5))
+    }
 }

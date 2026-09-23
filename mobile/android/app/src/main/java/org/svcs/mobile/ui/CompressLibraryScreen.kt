@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -69,109 +70,130 @@ fun CompressLibraryScreen(vm: CompressLibraryViewModel) {
 
     LaunchedEffect(Unit) { vm.reload() }
 
-    Column(
-        Modifier.fillMaxSize().padding(16.dp),
+    // One LazyColumn for the whole screen, header and filters included, so
+    // the filters scroll away with the list. With them pinned above a
+    // separate list (the first version), the list got a window about one
+    // and a half rows tall on a normal phone - found in the 1.0.0-beta
+    // emulator run, where it made jobs look missing.
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("SAVED", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text(
-            "Everything you've compressed on this phone. No server needed here either.",
-            style = MaterialTheme.typography.bodySmall,
-            color = SvcsTextDim,
-        )
-
-        OutlinedTextField(
-            value = filters.query,
-            onValueChange = vm::setQuery,
-            label = { Text("Search by filename") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            DateFilter.entries.forEach { d ->
+        item {
+            Text("SAVED", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+        item {
+            Text(
+                "Everything you've compressed on this phone. No server needed here either.",
+                style = MaterialTheme.typography.bodySmall,
+                color = SvcsTextDim,
+            )
+        }
+        item {
+            OutlinedTextField(
+                value = filters.query,
+                onValueChange = vm::setQuery,
+                label = { Text("Search by filename") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        item {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                DateFilter.entries.forEach { d ->
+                    FilterChip(
+                        selected = filters.dateFilter == d,
+                        onClick = { vm.setDateFilter(d) },
+                        label = { Text(d.label) },
+                    )
+                }
+            }
+        }
+        item {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
-                    selected = filters.dateFilter == d,
-                    onClick = { vm.setDateFilter(d) },
-                    label = { Text(d.label) },
+                    selected = "video/hevc" in filters.codecFilter,
+                    onClick = { vm.toggleCodec("video/hevc") },
+                    label = { Text("H.265") },
+                )
+                FilterChip(
+                    selected = "video/avc" in filters.codecFilter,
+                    onClick = { vm.toggleCodec("video/avc") },
+                    label = { Text("H.264") },
+                )
+                FilterChip(
+                    selected = "QUALITY" in filters.modeFilter,
+                    onClick = { vm.toggleMode("QUALITY") },
+                    label = { Text("Quality mode") },
+                )
+                FilterChip(
+                    selected = "TARGET_SIZE" in filters.modeFilter,
+                    onClick = { vm.toggleMode("TARGET_SIZE") },
+                    label = { Text("Size target") },
+                )
+                FilterChip(
+                    selected = filters.fallbackOnly,
+                    onClick = { vm.setFallbackOnly(!filters.fallbackOnly) },
+                    label = { Text("Used fallback") },
+                )
+                FilterChip(
+                    selected = filters.smartCompressOnly,
+                    onClick = { vm.setSmartCompressOnly(!filters.smartCompressOnly) },
+                    label = { Text("Smart Compress") },
                 )
             }
         }
-
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = "video/hevc" in filters.codecFilter,
-                onClick = { vm.toggleCodec("video/hevc") },
-                label = { Text("H.265") },
-            )
-            FilterChip(
-                selected = "video/avc" in filters.codecFilter,
-                onClick = { vm.toggleCodec("video/avc") },
-                label = { Text("H.264") },
-            )
-            FilterChip(
-                selected = "QUALITY" in filters.modeFilter,
-                onClick = { vm.toggleMode("QUALITY") },
-                label = { Text("Quality mode") },
-            )
-            FilterChip(
-                selected = "TARGET_SIZE" in filters.modeFilter,
-                onClick = { vm.toggleMode("TARGET_SIZE") },
-                label = { Text("Size target") },
-            )
-            FilterChip(
-                selected = filters.fallbackOnly,
-                onClick = { vm.setFallbackOnly(!filters.fallbackOnly) },
-                label = { Text("Used fallback") },
-            )
-            FilterChip(
-                selected = filters.smartCompressOnly,
-                onClick = { vm.setSmartCompressOnly(!filters.smartCompressOnly) },
-                label = { Text("Smart Compress") },
-            )
-        }
-
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            LibrarySort.entries.forEach { s ->
-                FilterChip(
-                    selected = filters.sort == s,
-                    onClick = { vm.setSort(s) },
-                    label = { Text(s.label) },
-                )
+        item {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                LibrarySort.entries.forEach { s ->
+                    FilterChip(
+                        selected = filters.sort == s,
+                        onClick = { vm.setSort(s) },
+                        label = { Text(s.label) },
+                    )
+                }
             }
         }
 
         if (records.isEmpty()) {
-            Text(
-                "Nothing here yet, or nothing matches these filters.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = SvcsTextDim,
-            )
+            item {
+                Text(
+                    "Nothing here yet, or nothing matches these filters.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = SvcsTextDim,
+                )
+            }
         } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(records, key = { it.outputUri }) { record ->
-                    LibraryRow(
-                        record = record,
-                        onPlay = {
-                            val intent = Intent(Intent.ACTION_VIEW).apply {
-                                setDataAndType(Uri.parse(record.outputUri), "video/mp4")
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            }
-                            // No video player installed is rare but real on
-                            // stripped-down ROMs; don't crash over it.
-                            runCatching { context.startActivity(intent) }
-                        },
-                        onShare = {
-                            val intent = Intent(Intent.ACTION_SEND).apply {
-                                type = "video/mp4"
-                                putExtra(Intent.EXTRA_STREAM, Uri.parse(record.outputUri))
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            }
-                            context.startActivity(Intent.createChooser(intent, "Share compressed video"))
-                        },
-                        onDelete = { pendingDelete = record },
-                    )
-                }
+            item {
+                Text(
+                    if (records.size == 1) "1 video" else "${records.size} videos",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = SvcsTextDim,
+                )
+            }
+            items(records, key = { it.outputUri }) { record ->
+                LibraryRow(
+                    record = record,
+                    onPlay = {
+                        val intent = Intent(Intent.ACTION_VIEW).apply {
+                            setDataAndType(Uri.parse(record.outputUri), "video/mp4")
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        // No video player installed is rare but real on
+                        // stripped-down ROMs; don't crash over it.
+                        runCatching { context.startActivity(intent) }
+                    },
+                    onShare = {
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "video/mp4"
+                            putExtra(Intent.EXTRA_STREAM, Uri.parse(record.outputUri))
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(intent, "Share compressed video"))
+                    },
+                    onDelete = { pendingDelete = record },
+                )
             }
         }
     }

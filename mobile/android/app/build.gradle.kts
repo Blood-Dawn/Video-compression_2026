@@ -41,8 +41,13 @@ android {
         // 12 = 0.9.0 (R6 Track C): closed-app push. MORE gains a remote control
         //      for the server's ntfy settings, so an alert reaches the phone
         //      through the ntfy app even when Android has stopped SVCS.
-        versionCode = 12
-        versionName = "0.9.0-beta"
+        // 13 = 1.0.0-beta (Fall roadmap Phase 1-2): the standalone on-device
+        //      compressor. COMPRESS works with no server at all, SAVED is a
+        //      searchable history of on-device jobs, and opt-in Smart
+        //      Compress runs YOLOv8n on-device via LiteRT. Server Mode tabs
+        //      are unchanged. Published as the v1-beta GitHub release.
+        versionCode = 13
+        versionName = "1.0.0-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -135,6 +140,22 @@ android {
     }
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    }
+
+    // 1.0.0-beta: LiteRT (Smart Compress) ships a native .so per CPU
+    // architecture, and one APK carrying all four roughly doubled the
+    // download. Splitting gives phones a much smaller arm64-v8a APK (every
+    // 64-bit Android phone from the last several years) while the universal
+    // APK stays available for 32-bit phones and x86_64 emulators. Same
+    // versionCode on every split is fine for sideloading and for F-Droid,
+    // which builds from source itself; Play would need distinct codes.
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = true
+        }
     }
 }
 

@@ -55,6 +55,11 @@ object SmartCompressAnalyzer {
             // rate. "Unknown" defaults to "assume activity", never to a
             // silent quality cut nobody asked for.
             return Result(hasActivity = true, framesSampled = sampled)
+        } catch (_: LinkageError) {
+            // No LiteRT native library for this CPU (e.g. an ABI split
+            // installed on the wrong device). Same answer as above: skip the
+            // adjustment rather than crash the compression job.
+            return Result(hasActivity = true, framesSampled = sampled)
         } finally {
             detector?.close()
             retriever.release()

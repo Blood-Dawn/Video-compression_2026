@@ -31,3 +31,17 @@
 -dontwarn org.conscrypt.**
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
+
+# Fall roadmap Phase 2 (Smart Compress): LiteRT's Java classes are reached
+# from native code over JNI (libtensorflowlite_jni.so), which R8 can't see,
+# so a minified build would strip what the .so calls back into and fail at
+# the first Interpreter construction. Keep the whole runtime package.
+# Author: Bloodawn (KheivenD), 2026-09-23 (1.0.0-beta release build).
+-keep class org.tensorflow.lite.** { *; }
+-dontwarn org.tensorflow.lite.**
+
+# CompressionWorker is instantiated reflectively by WorkManager's default
+# WorkerFactory via its (Context, WorkerParameters) constructor.
+-keep class org.svcs.mobile.compress.CompressionWorker {
+    public <init>(android.content.Context, androidx.work.WorkerParameters);
+}

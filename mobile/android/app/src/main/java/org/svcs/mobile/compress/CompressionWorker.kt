@@ -288,6 +288,18 @@ class CompressionWorker(
         } catch (e: IOException) {
             tempOutputFile.delete()
             return Result.failure(workDataOf(KEY_ERROR to (e.message ?: "Could not read or write the video file.")))
+        } catch (e: SecurityException) {
+            // The read grant from whoever shared the video is gone (the
+            // sharing app's task ended, or it never granted one). Found in
+            // the 1.0.0-beta emulator run: this used to escape as an uncaught
+            // exception and fail the job with no message at all.
+            tempOutputFile.delete()
+            return Result.failure(
+                workDataOf(
+                    KEY_ERROR to "SVCS no longer has permission to read this video. " +
+                        "Open it again with Choose a video.",
+                ),
+            )
         }
     }
 
@@ -440,6 +452,8 @@ class CompressionWorker(
         return try {
             applicationContext.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length } ?: -1L
         } catch (e: IOException) {
+            -1L
+        } catch (e: SecurityException) {
             -1L
         }
     }

@@ -85,6 +85,19 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
             // just wouldn't survive a process restart mid-pick, which is fine.
         }
         viewModelScope.launch {
+            val readable = withContext(Dispatchers.IO) { canRead(resolver, uri) }
+            if (!readable) {
+                // Say so now, not after the user has picked presets and hit
+                // Compress (which is how the 1.0.0-beta emulator run found it).
+                _state.update {
+                    CompressState(
+                        phase = JobPhase.FAILED,
+                        error = "SVCS can't read that video. The app that shared it didn't " +
+                            "grant access. Try Choose a video instead.",
+                    )
+                }
+                return@launch
+            }
             val (name, size, probe) = withContext(Dispatchers.IO) {
                 Triple(displayNameOf(resolver, uri), sizeOf(resolver, uri), probe(uri))
             }
@@ -257,18 +270,28 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    private fun canRead(resolver: ContentResolver, uri: Uri): Boolean = try {
+        resolver.openAssetFileDescriptor(uri, "r")?.use { true } ?: false
+    } catch (_: Exception) {
+        false
+    }
+
     private fun displayNameOf(resolver: ContentResolver, uri: Uri): String? {
-        return resolver.query(uri, null, null, null, null)?.use { cursor ->
-            val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (idx >= 0 && cursor.moveToFirst()) cursor.getString(idx) else null
-        }
+        return runCatching {
+            resolver.query(uri, null, null, null, null)?.use { cursor ->
+                val idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (idx >= 0 && cursor.moveToFirst()) cursor.getString(idx) else null
+            }
+        }.getOrNull()
     }
 
     private fun sizeOf(resolver: ContentResolver, uri: Uri): Long {
-        return resolver.query(uri, null, null, null, null)?.use { cursor ->
-            val idx = cursor.getColumnIndex(OpenableColumns.SIZE)
-            if (idx >= 0 && cursor.moveToFirst()) cursor.getLong(idx) else -1L
-        } ?: -1L
+        return runCatching {
+            resolver.query(uri, null, null, null, null)?.use { cursor ->
+                val idx = cursor.getColumnIndex(OpenableColumns.SIZE)
+                if (idx >= 0 && cursor.moveToFirst()) cursor.getLong(idx) else -1L
+            }
+        }.getOrNull() ?: -1L
     }
 
     private data class SourceProbe(val durationMs: Long, val hasAudio: Boolean)

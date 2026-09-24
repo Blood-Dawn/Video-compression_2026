@@ -73,7 +73,7 @@ The `corridor`, `lakeSide`, and `park` clips in our dataset are directly applica
 
 Run:
 ```bash
-python demo_detection.py --input data/dataset/thermal/corridor/ --all-methods --sample-rate 20
+python scripts/demo_detection.py --input data/dataset/thermal/corridor/ --all-methods --sample-rate 20
 ```
 
 ### 4. SuBSENSE / LOBSTER Algorithms (Milestone 2 stretch goal)

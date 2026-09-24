@@ -1,4 +1,11 @@
-# SVCS v2 Roadmap
+# SVCS v2 Roadmap (archived)
+
+> Archived 2026-09-24 from the repo root. This was the June 2026 v2 product
+> plan (commercial toolkit, Rust core, Flutter UI). Most of it was dropped or
+> replaced: the shipped stack is Python/Flask on desktop and Kotlin/Compose on
+> Android, and the project stays AGPL-3.0 open source with no paid edition.
+> Current plans: `ROADMAP.md` (team semester plan), `docs/PROJECT-PLAN.md`
+> (desktop) and `mobile/android/STANDALONE-COMPRESSOR-ROADMAP.md` (Android).
 
 The v2 product is a consumer / commercial video compression toolkit. It
 keeps the AI-aware compression engine from v1 but expands beyond

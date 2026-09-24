@@ -8,9 +8,9 @@ Generates a side-by-side comparison grid showing:
   - Column 3: Annotated frame (original + bounding boxes + coverage %)
 
 Supports two input formats:
-  - Video files:   python demo_detection.py --input data/clip.mp4
-  - CDnet scenes:  python demo_detection.py --input data/dataset/baseline/highway/
-  - CDnet input/:  python demo_detection.py --input data/dataset/baseline/highway/input/
+  - Video files:   python scripts/demo_detection.py --input data/clip.mp4
+  - CDnet scenes:  python scripts/demo_detection.py --input data/dataset/baseline/highway/
+  - CDnet input/:  python scripts/demo_detection.py --input data/dataset/baseline/highway/input/
 
 For CDnet scenes, warmup_frames is automatically set from temporalROI.txt
 (the CDnet-standard initialization range) so results match the benchmark spec.
@@ -25,16 +25,16 @@ Author: Bloodawn (KheivenD)
 
 Usage:
     # CDnet baseline scene (recommended starting point):
-    python demo_detection.py --input data/dataset/baseline/highway/
+    python scripts/demo_detection.py --input data/dataset/baseline/highway/
 
     # CDnet night scene:
-    python demo_detection.py --input data/dataset/nightVideos/bridgeEntry/ --all-methods
+    python scripts/demo_detection.py --input data/dataset/nightVideos/bridgeEntry/ --all-methods
 
     # Standard video file:
-    python demo_detection.py --input data/clip.mp4
+    python scripts/demo_detection.py --input data/clip.mp4
 
     # Sample every 30th frame (faster on long clips):
-    python demo_detection.py --input data/dataset/baseline/highway/ --sample-rate 30
+    python scripts/demo_detection.py --input data/dataset/baseline/highway/ --sample-rate 30
 """
 
 import cv2
@@ -45,7 +45,7 @@ from pathlib import Path
 
 # Add the src directory to sys.path so we can import our own modules
 import sys
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 from background_subtraction.background_subtraction import BackgroundSubtractor
 from utils.metrics import foreground_coverage
 from utils.frame_source import FrameSource

@@ -5,10 +5,10 @@
 # a live preview of the foreground mask alongside the original feed.
 #
 # Usage:
-#   bash demo.sh                          # default: test clip, mode0
-#   bash demo.sh --mode mode1             # frame gating mode
-#   bash demo.sh --input 0               # live webcam
-#   bash demo.sh --input /path/to/my.mp4 # custom clip
+#   bash scripts/demo.sh                          # default: test clip, mode0
+#   bash scripts/demo.sh --mode mode1             # frame gating mode
+#   bash scripts/demo.sh --input 0               # live webcam
+#   bash scripts/demo.sh --input /path/to/my.mp4 # custom clip
 #
 # Author: Bloodawn (KheivenD)
 # EGN 4950C Capstone - Group 16 - Spring 2026
@@ -56,8 +56,9 @@ fi
 
 # ─── Pre-flight checks ────────────────────────────────────────────────────────
 
+# Lives in scripts/ since 2026-09-24; paths below are relative to the repo root.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+cd "$SCRIPT_DIR/.."
 
 echo ""
 echo "╔══════════════════════════════════════════════════════════╗"
@@ -66,14 +67,19 @@ echo "║   EGN 4950C Capstone · Group 16 · FAU Spring 2026        ║"
 echo "╚══════════════════════════════════════════════════════════╝"
 echo ""
 
-# Check Python
-if ! command -v python3 &> /dev/null; then
-  echo "ERROR: python3 not found. Install Python 3.9+ and try again."
+# Python: the uv-managed environment from uv.lock when uv is installed (the
+# supported setup, see DEV.md), otherwise whatever python3 is on PATH.
+if command -v uv &> /dev/null; then
+  PY=(uv run --frozen python)
+elif command -v python3 &> /dev/null; then
+  PY=(python3)
+else
+  echo "ERROR: neither uv nor python3 found. Install uv: https://docs.astral.sh/uv/"
   exit 1
 fi
 
-PYTHON_VERSION=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-echo "  Python   : $PYTHON_VERSION"
+PYTHON_VERSION=$("${PY[@]}" -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+echo "  Python   : $PYTHON_VERSION (${PY[*]})"
 
 # Check FFmpeg
 if ! command -v ffmpeg &> /dev/null; then
@@ -106,7 +112,7 @@ if [[ "$INPUT" != "0" && ! -f "$INPUT" ]]; then
   echo ""
   echo "WARNING: Input file not found: $INPUT"
   echo "  Place a test .mp4 clip at $DEFAULT_INPUT, or pass a custom path:"
-  echo "    bash demo.sh --input /path/to/your/clip.mp4"
+  echo "    bash scripts/demo.sh --input /path/to/your/clip.mp4"
   echo ""
 fi
 
@@ -132,7 +138,7 @@ echo "  Press Ctrl+C to stop."
 echo "  Press Q in the preview window to stop."
 echo ""
 
-python3 src/pipeline/pipeline.py \
+"${PY[@]}" src/pipeline/pipeline.py \
   --input     "$INPUT" \
   --camera-id "$CAMERA_ID" \
   --output    "$OUTPUT" \

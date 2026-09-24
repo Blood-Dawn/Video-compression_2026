@@ -702,7 +702,7 @@ blob while the vehicle body is lost in the dark background.
    lighting. The `corridor`, `lakeSide`, and `park` clips are directly applicable.
 
    ```bash
-   python demo_detection.py --input data/dataset/thermal/corridor/ --all-methods --sample-rate 20
+   python scripts/demo_detection.py --input data/dataset/thermal/corridor/ --all-methods --sample-rate 20
    ```
 
 4. **SuBSENSE / LOBSTER algorithms (Milestone 2 stretch).** Pixel-level background subtraction

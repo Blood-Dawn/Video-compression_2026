@@ -1,11 +1,12 @@
-# SVCS Mobile 1.2.0-beta (versionCode 15) - draft release notes
+# SVCS Mobile 1.2.0-beta (versionCode 15) - release notes
 
-**Draft, not published.** Prepared on 2026-09-24 on the `mobile` branch.
-The owner builds, tests on a phone, tags and publishes, following the
-Mobile section of `docs/RELEASE-CHECKLIST.md`. Build it on the same machine
-as the earlier APKs so it installs over 1.1.0-beta (see the signing note
-there). The tag name is the owner's choice; `v1.2-beta` would continue the
-`v1-beta` pattern.
+**Released 2026-09-24 on `mobile`, tag `v1.2-beta`.**
+
+**Known issue, fixed in 1.2.1-beta.** The compressor could ask the encoder
+for more bitrate than the source video actually had, so a small file could
+come out bigger than it went in instead of smaller. See
+[release-notes-mobile-1.2.1-beta.md](release-notes-mobile-1.2.1-beta.md)
+for the fix; anyone on 1.2.0-beta should update.
 
 ## What's new
 

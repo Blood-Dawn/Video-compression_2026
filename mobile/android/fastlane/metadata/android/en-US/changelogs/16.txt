@@ -1,0 +1,3 @@
+1.2.1-beta:
+- Fixed: compressing a video could make the file bigger instead of smaller
+- Quality and size-limit presets now never ask for more bitrate than the source video already has

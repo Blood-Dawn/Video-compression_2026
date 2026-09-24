@@ -10,9 +10,10 @@ publishing the GitHub Release is the repo owner's action alone**; nothing
 before that step touches the public remote's tags or releases. Open gates
 (signing cert, release keystore) are tracked in [BLOCKERS.md](BLOCKERS.md).
 
-Current tags: desktop `v2.2.0-beta`, mobile `v1-beta` (app 1.1.0-beta,
-versionCode 14). Prepared but unreleased: mobile 1.2.0-beta (versionCode 15),
-notes drafted in `docs/releases/release-notes-mobile-1.2.0-beta.md`.
+Current tags: desktop `v2.2.0-beta`, mobile `v1.2-beta` (app 1.2.0-beta,
+versionCode 15). Prepared but unreleased: mobile 1.2.1-beta (versionCode 16),
+a hotfix for a compression bitrate bug found in 1.2.0-beta; notes drafted in
+`docs/releases/release-notes-mobile-1.2.1-beta.md`.
 
 ## Desktop (Windows installer)
 

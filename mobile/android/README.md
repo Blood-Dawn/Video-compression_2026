@@ -9,8 +9,10 @@ One app, two jobs:
 - **Server Mode** (optional). Pair with a desktop SVCS install to browse its
   library, watch live cameras, see events and metrics.
 
-Current release: **1.1.0-beta** (versionCode 14), GitHub tag `v1-beta`.
-Prepared on `mobile`, not yet released: **1.2.0-beta** (versionCode 15).
+Current release: **1.2.0-beta** (versionCode 15), GitHub tag `v1.2-beta`.
+Prepared on `mobile`, not yet released: **1.2.1-beta** (versionCode 16) - a
+hotfix for a bug where compressing a video could make the file bigger
+instead of smaller.
 AGPL-3.0, like the rest of the repo.
 
 | Read | For |

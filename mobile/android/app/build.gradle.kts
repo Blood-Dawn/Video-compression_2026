@@ -49,12 +49,19 @@ android {
         // 14 = 1.1.0-beta: UI pass. The SVCS design system applied to the
         //      compressor (bundled fonts, full color scheme, components,
         //      icons), one layout per job state, honest size estimates.
-        // 15 = 1.2.0-beta (prepared 2026-09-24, not yet released): Smart
-        //      Compress region-of-interest encoding on FEATURE_Roi phones,
-        //      per-phone size-limit calibration, encoder-fallback notices,
-        //      one SERVER tab for Server Mode, the cleanup sweep.
-        versionCode = 15
-        versionName = "1.2.0-beta"
+        // 15 = 1.2.0-beta (released 2026-09-24): Smart Compress
+        //      region-of-interest encoding on FEATURE_Roi phones, per-phone
+        //      size-limit calibration, encoder-fallback notices, one SERVER
+        //      tab for Server Mode, the cleanup sweep, and screenshots
+        //      un-blocked (FLAG_SECURE removed).
+        // 16 = 1.2.1-beta (2026-09-24 hotfix): the standalone compressor's
+        //      Quality/size-limit presets could ask the encoder for a
+        //      higher bitrate than the source video actually used, growing
+        //      the file instead of shrinking it (reported: a 3.5 MB clip
+        //      came back over 30 MB). Compression is now capped at the
+        //      source's own bitrate whenever no explicit limit is set.
+        versionCode = 16
+        versionName = "1.2.1-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

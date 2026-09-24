@@ -43,13 +43,21 @@ then the Android app turned from a remote control into a real compressor:
   links and one-line installer work again, the Android `ui/` package is
   organized by feature, and the flaky Android settings test is fixed.
 
-- **Roadmap work, 1.2.0-beta prepared** (Sep 24, not released yet):
+- **1.2.0-beta released** (Sep 24, tag `v1.2-beta`):
   Smart Compress region-of-interest encoding on phones whose encoder
   supports Android 15's FEATURE_Roi (built and unit-tested, not yet seen on
   such a phone), per-phone calibration so size-limit jobs land closer to
   the limit without going over, a notice when the encoder quietly lowers
   the resolution or switches codec, and one SERVER tab for Server Mode.
-  Draft notes: [docs/releases/release-notes-mobile-1.2.0-beta.md](docs/releases/release-notes-mobile-1.2.0-beta.md).
+  Notes: [docs/releases/release-notes-mobile-1.2.0-beta.md](docs/releases/release-notes-mobile-1.2.0-beta.md).
+
+- **1.2.1-beta prepared** (Sep 24, not released yet): a hotfix for a
+  compression bug found right after 1.2.0-beta shipped. Flat quality and
+  size-limit presets could ask an encoder for more bitrate than the source
+  video actually had, so a small clip could come out larger than it went
+  in; both the Android compressor and the desktop pipeline now cap the
+  requested bitrate to the source's own rate. See
+  [docs/releases/release-notes-mobile-1.2.1-beta.md](docs/releases/release-notes-mobile-1.2.1-beta.md).
 
 The Android plan and progress notes live in
 [mobile/android/STANDALONE-COMPRESSOR-ROADMAP.md](mobile/android/STANDALONE-COMPRESSOR-ROADMAP.md);
@@ -60,7 +68,7 @@ open UI work is ranked in [mobile/android/UI-REVIEW.md](mobile/android/UI-REVIEW
 | Product | Tech | Where | Status |
 |---|---|---|---|
 | Desktop app: web dashboard + selective compression pipeline for camera footage | Python 3.11, Flask, OpenCV (contrib), ONNX Runtime (YOLOv8n), FFmpeg | `src/`, `run_gui.py`, `installer/` | v2.2.0-beta (Windows installer), `2.2.0.dev1` on `main` |
-| Android standalone compressor | Kotlin, Jetpack Compose, Media3 Transformer, WorkManager, LiteRT | `mobile/android/` | 1.1.0-beta released (tag `v1-beta`); 1.2.0-beta (versionCode 15) prepared on `mobile` |
+| Android standalone compressor | Kotlin, Jetpack Compose, Media3 Transformer, WorkManager, LiteRT | `mobile/android/` | 1.2.0-beta released (tag `v1.2-beta`); 1.2.1-beta (versionCode 16) prepared on `mobile` |
 | Android Server Mode: pair with a desktop install for library, live view, events, metrics | Kotlin, OkHttp, ExoPlayer (HLS) | `mobile/android/` (`net/`, `ui/server/`) | Same APK, optional |
 
 The desktop pipeline in one paragraph: background subtraction (MOG2, KNN or

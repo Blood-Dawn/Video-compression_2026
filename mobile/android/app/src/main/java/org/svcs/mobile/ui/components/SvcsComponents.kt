@@ -44,12 +44,15 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.svcs.mobile.ui.theme.SvcsAmber
+import org.svcs.mobile.ui.theme.SvcsAmberContainer
 import org.svcs.mobile.ui.theme.SvcsBg
 import org.svcs.mobile.ui.theme.SvcsBorder
 import org.svcs.mobile.ui.theme.SvcsBorderBright
 import org.svcs.mobile.ui.theme.SvcsDisplay
 import org.svcs.mobile.ui.theme.SvcsMono
+import org.svcs.mobile.ui.theme.SvcsOnAmber
 import org.svcs.mobile.ui.theme.SvcsRed
+import org.svcs.mobile.ui.theme.SvcsRedContainer
 import org.svcs.mobile.ui.theme.SvcsSurface2
 import org.svcs.mobile.ui.theme.SvcsSurface3
 import org.svcs.mobile.ui.theme.SvcsText
@@ -70,8 +73,6 @@ import org.svcs.mobile.ui.theme.SvcsTextDim
  */
 
 private val Sharp = RoundedCornerShape(2.dp)
-private val AmberFill = Color(0xFF2B2410)
-private val RedFill = Color(0xFF34161C)
 
 /** Surface-2 panel with a 1px border and an optional 2px accent rule. */
 @Composable
@@ -145,7 +146,7 @@ fun SvcsPrimaryButton(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val fg = if (enabled) Color(0xFF0A0800) else SvcsTextDim
+        val fg = if (enabled) SvcsOnAmber else SvcsTextDim
         if (icon != null) {
             Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(10.dp))
@@ -168,7 +169,7 @@ fun SvcsSecondaryButton(
         modifier
             .height(48.dp)
             .clip(Sharp)
-            .background(if (danger) RedFill else Color.Transparent)
+            .background(if (danger) SvcsRedContainer else Color.Transparent)
             .border(1.dp, if (danger) SvcsRed else SvcsBorderBright, Sharp)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 14.dp),
@@ -196,7 +197,7 @@ fun SvcsChip(
         modifier
             .heightIn(min = 40.dp)
             .clip(shape)
-            .background(if (selected) AmberFill else Color.Transparent)
+            .background(if (selected) SvcsAmberContainer else Color.Transparent)
             .border(1.dp, if (selected) SvcsAmber else SvcsBorder, shape)
             .clickable(role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
@@ -234,7 +235,7 @@ fun SvcsSegmented(
                     .weight(1f)
                     .fillMaxWidth()
                     .height(46.dp)
-                    .background(if (selected) AmberFill else Color.Transparent)
+                    .background(if (selected) SvcsAmberContainer else Color.Transparent)
                     .clickable(role = Role.Tab) { onSelect(i) },
                 contentAlignment = Alignment.Center,
             ) {

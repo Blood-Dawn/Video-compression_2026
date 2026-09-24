@@ -8,6 +8,9 @@ import androidx.compose.ui.graphics.Color
  * GENERATED from mobile/design/tokens/colors.css, which was imported from the
  * Claude Design project. Do not hand-edit: re-import the design and re-generate,
  * so the app and the design system cannot drift apart by transcription error.
+ * The design folder is no longer on this branch; recover it with
+ * `git show 4558c5e:mobile/design/tokens/colors.css`. Fills computed from these
+ * tokens (container colors, on-amber) are in DerivedColors.kt, not here.
  *
  * Author: Bloodawn (KheivenD), 2026-07-18 (M1.1).
  */

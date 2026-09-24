@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.content.ContentValues
 import android.content.Context
 import android.content.pm.ServiceInfo
-import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -429,23 +428,10 @@ class CompressionWorker(
 
     /** null = the source is already within the cap, leave it alone. */
     private fun sourceFrameSize(uri: Uri, maxShortSidePx: Int): FrameSize? {
-        val retriever = MediaMetadataRetriever()
-        return try {
-            retriever.setDataSource(applicationContext, uri)
-            fun meta(key: Int) = retriever.extractMetadata(key)?.toIntOrNull()
-            val w = meta(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
-            val h = meta(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
-            val rotation = meta(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION) ?: 0
-            if (w == null || h == null) {
-                FrameSize.Unknown
-            } else {
-                scaledFrameSize(w, h, rotation, maxShortSidePx)?.let { (sw, sh) -> FrameSize.Exact(sw, sh) }
-            }
-        } catch (_: Exception) {
-            FrameSize.Unknown
-        } finally {
-            retriever.release()
-        }
+        val probe = MediaProbe.probe(applicationContext, uri)
+        if (!probe.hasFrameSize) return FrameSize.Unknown
+        return scaledFrameSize(probe.width, probe.height, probe.rotationDegrees, maxShortSidePx)
+            ?.let { (sw, sh) -> FrameSize.Exact(sw, sh) }
     }
 
     private fun sizeOfUri(uri: Uri): Long {

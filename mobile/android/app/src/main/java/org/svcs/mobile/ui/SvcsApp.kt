@@ -7,9 +7,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.ui.graphics.Color
 import org.svcs.mobile.ui.components.SvcsIcons
 import org.svcs.mobile.ui.theme.SvcsAmber
+import org.svcs.mobile.ui.theme.SvcsAmberContainer
 import org.svcs.mobile.ui.theme.SvcsBorder
 import org.svcs.mobile.ui.theme.SvcsSurface
 import org.svcs.mobile.ui.theme.SvcsTextDim
@@ -241,7 +241,7 @@ fun SvcsApp(
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = SvcsAmber,
                                 selectedTextColor = SvcsAmber,
-                                indicatorColor = Color(0xFF2B2410),
+                                indicatorColor = SvcsAmberContainer,
                                 unselectedIconColor = SvcsTextDim,
                                 unselectedTextColor = SvcsTextDim,
                             ),

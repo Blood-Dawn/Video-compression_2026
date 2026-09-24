@@ -20,7 +20,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import org.svcs.mobile.net.humanBytes
 import org.svcs.mobile.ui.theme.SvcsAmber
 import org.svcs.mobile.ui.theme.SvcsBorder
 import org.svcs.mobile.ui.theme.SvcsGreen

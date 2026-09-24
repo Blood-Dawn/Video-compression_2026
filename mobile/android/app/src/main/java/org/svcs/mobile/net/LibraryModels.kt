@@ -325,14 +325,6 @@ sealed interface HlsStartResult {
     data class Failed(val detail: String) : HlsStartResult
 }
 
-/** "1.66 GB". Shared by the screens so units never disagree. */
-fun humanBytes(b: Long): String = when {
-    b >= 1_073_741_824 -> String.format("%.2f GB", b / 1_073_741_824.0)
-    b >= 1_048_576 -> String.format("%.1f MB", b / 1_048_576.0)
-    b >= 1024 -> String.format("%.0f KB", b / 1024.0)
-    else -> "$b B"
-}
-
 /**
  * GET and POST /api/push/config (R6 Track C: closed-app push).
  *

@@ -53,16 +53,11 @@ val SvcsBody = FontFamily(
     Font(R.font.outfit_bold, FontWeight.Bold),
 )
 
-// Amber at ~15% over the surfaces: the design's "amber glow" fill, made
-// opaque so it composites the same on every surface level.
-private val SvcsAmberContainer = Color(0xFF2B2410)
-private val SvcsTealContainer = Color(0xFF0F2B33)
-private val SvcsPurpleContainer = Color(0xFF261F3A)
-private val SvcsRedContainer = Color(0xFF34161C)
+// Container fills (SvcsAmberContainer and friends) are in DerivedColors.kt.
 
 private val SvcsColorScheme = darkColorScheme(
     primary = SvcsAmber,
-    onPrimary = Color(0xFF0A0800),
+    onPrimary = SvcsOnAmber,
     primaryContainer = SvcsAmberContainer,
     onPrimaryContainer = SvcsAmber,
     inversePrimary = SvcsAmberDim,

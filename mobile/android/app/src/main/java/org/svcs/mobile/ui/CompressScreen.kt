@@ -1,8 +1,5 @@
 package org.svcs.mobile.ui
 
-import android.content.Intent
-import android.media.MediaMetadataRetriever
-import android.net.Uri
 import android.util.Size
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -11,7 +8,6 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -43,7 +39,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -51,23 +46,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import org.svcs.mobile.compress.CompressionMode
 import org.svcs.mobile.compress.QualityPreset
 import org.svcs.mobile.compress.QualityPresets
 import org.svcs.mobile.compress.SizePresets
 import org.svcs.mobile.compress.VideoCodecChoice
-import org.svcs.mobile.net.humanBytes
 import org.svcs.mobile.ui.components.SvcsChip
 import org.svcs.mobile.ui.components.SvcsIcons
 import org.svcs.mobile.ui.components.SvcsPanel
@@ -79,7 +68,9 @@ import org.svcs.mobile.ui.components.SvcsSegmented
 import org.svcs.mobile.ui.components.SvcsStat
 import org.svcs.mobile.ui.components.SvcsStatusPill
 import org.svcs.mobile.ui.components.SvcsSwitchRow
+import org.svcs.mobile.ui.components.VideoThumbnail
 import org.svcs.mobile.ui.theme.SvcsAmber
+import org.svcs.mobile.ui.theme.SvcsAmberContainer
 import org.svcs.mobile.ui.theme.SvcsBg
 import org.svcs.mobile.ui.theme.SvcsBorder
 import org.svcs.mobile.ui.theme.SvcsBorderBright
@@ -88,7 +79,6 @@ import org.svcs.mobile.ui.theme.SvcsGreen
 import org.svcs.mobile.ui.theme.SvcsMono
 import org.svcs.mobile.ui.theme.SvcsOrange
 import org.svcs.mobile.ui.theme.SvcsRed
-import org.svcs.mobile.ui.theme.SvcsSurface3
 import org.svcs.mobile.ui.theme.SvcsTeal
 import org.svcs.mobile.ui.theme.SvcsText
 import org.svcs.mobile.ui.theme.SvcsTextBright
@@ -177,7 +167,7 @@ private fun EmptyView(lifetime: CompressViewModel.Lifetime, onPick: () -> Unit) 
                     Modifier
                         .size(76.dp)
                         .clip(RoundedCornerShape(50))
-                        .background(Color(0xFF2B2410))
+                        .background(SvcsAmberContainer)
                         .border(1.dp, SvcsAmber, RoundedCornerShape(50)),
                     contentAlignment = Alignment.Center,
                 ) {
@@ -368,7 +358,7 @@ private fun ConfigureView(s: CompressState, vm: CompressViewModel, onPick: () ->
 private fun SourceCard(s: CompressState, onChange: () -> Unit) {
     SvcsPanel(modifier = Modifier.fillMaxWidth(), contentPadding = 10.dp) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            SourceThumbnail(s.pickedUri, Modifier.size(width = 84.dp, height = 64.dp))
+            VideoThumbnail(s.pickedUri, Modifier.size(width = 84.dp, height = 64.dp))
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
@@ -380,10 +370,7 @@ private fun SourceCard(s: CompressState, onChange: () -> Unit) {
                 )
                 val line1 = buildList {
                     if (s.pickedSizeBytes >= 0) add(humanBytes(s.pickedSizeBytes))
-                    if (s.durationMs > 0) {
-                        val t = s.durationMs / 1000
-                        add("%d:%02d".format(t / 60, t % 60))
-                    }
+                    if (s.durationMs > 0) add(clock(s.durationMs))
                 }
                 Text(line1.joinToString(" · "), style = MaterialTheme.typography.labelSmall, color = SvcsTextDim)
                 if (s.sourceWidth > 0 && s.sourceHeight > 0) {
@@ -402,13 +389,6 @@ private fun SourceCard(s: CompressState, onChange: () -> Unit) {
             )
         }
     }
-}
-
-/** Platform limits are quoted in decimal megabytes ("Discord 10 MB"), so
- *  show them that way; humanBytes() is 1024-based and would say 9.5 MB. */
-private fun decimalMb(bytes: Long): String {
-    val mb = bytes / 1_000_000.0
-    return if (mb == Math.floor(mb)) "${mb.toLong()} MB" else "%.1f MB".format(mb)
 }
 
 @Composable
@@ -466,47 +446,7 @@ private fun EstimatePanel(s: CompressState, vm: CompressViewModel) {
     }
 }
 
-/** A frame of the picked source: MediaStore/Documents thumbnail if the
- *  provider has one, otherwise a decoded frame near the start. */
-@Composable
-private fun SourceThumbnail(uri: Uri?, modifier: Modifier) {
-    val context = LocalContext.current
-    val thumb by produceState<ImageBitmap?>(initialValue = null, uri) {
-        value = if (uri == null) {
-            null
-        } else {
-            withContext(Dispatchers.IO) {
-                runCatching {
-                    context.contentResolver.loadThumbnail(uri, Size(320, 240), null).asImageBitmap()
-                }.getOrNull() ?: runCatching {
-                    val r = MediaMetadataRetriever()
-                    try {
-                        r.setDataSource(context, uri)
-                        r.getScaledFrameAtTime(500_000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 320, 240)
-                            ?.asImageBitmap()
-                    } finally {
-                        r.release()
-                    }
-                }.getOrNull()
-            }
-        }
-    }
-    Box(modifier.clip(RoundedCornerShape(2.dp)).background(SvcsSurface3), contentAlignment = Alignment.Center) {
-        val t = thumb
-        if (t != null) {
-            Image(t, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-        } else {
-            Icon(SvcsIcons.Video, contentDescription = null, tint = SvcsTextDim, modifier = Modifier.size(22.dp))
-        }
-    }
-}
-
 // ── RUNNING ───────────────────────────────────────────────────────────────
-
-private fun clock(ms: Long): String {
-    val t = (ms / 1000).coerceAtLeast(0)
-    return "%d:%02d".format(t / 60, t % 60)
-}
 
 @Composable
 private fun RunningView(s: CompressState, vm: CompressViewModel) {
@@ -630,27 +570,14 @@ private fun DoneView(s: CompressState, vm: CompressViewModel) {
             SvcsPrimaryButton(
                 "Share",
                 icon = SvcsIcons.Share,
-                onClick = {
-                    val intent = Intent(Intent.ACTION_SEND).apply {
-                        type = "video/mp4"
-                        putExtra(Intent.EXTRA_STREAM, out)
-                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    }
-                    context.startActivity(Intent.createChooser(intent, "Share compressed video"))
-                },
+                onClick = { VideoIntents.share(context, out) },
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 SvcsSecondaryButton(
                     "Play",
                     icon = SvcsIcons.Play,
                     modifier = Modifier.weight(1f),
-                    onClick = {
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(out, "video/mp4")
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        runCatching { context.startActivity(intent) }
-                    },
+                    onClick = { VideoIntents.play(context, out) },
                 )
                 SvcsSecondaryButton("New video", icon = SvcsIcons.Video, modifier = Modifier.weight(1f), onClick = vm::reset)
             }

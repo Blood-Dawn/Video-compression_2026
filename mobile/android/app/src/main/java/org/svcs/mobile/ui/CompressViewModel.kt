@@ -2,7 +2,6 @@ package org.svcs.mobile.ui
 
 import android.app.Application
 import android.content.ContentResolver
-import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
@@ -22,6 +21,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.svcs.mobile.compress.CompressionMode
 import org.svcs.mobile.compress.CompressionWorker
+import org.svcs.mobile.compress.MediaProbe
 import org.svcs.mobile.compress.QualityPreset
 import org.svcs.mobile.compress.QualityPresets
 import org.svcs.mobile.compress.SizePreset
@@ -106,7 +106,7 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
                 return@launch
             }
             val (name, size, probe) = withContext(Dispatchers.IO) {
-                Triple(displayNameOf(resolver, uri), sizeOf(resolver, uri), probe(uri))
+                Triple(displayNameOf(resolver, uri), sizeOf(resolver, uri), MediaProbe.probe(getApplication(), uri))
             }
             _state.update {
                 it.copy(
@@ -115,8 +115,8 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
                     pickedSizeBytes = size,
                     durationMs = probe.durationMs,
                     sourceHasAudio = probe.hasAudio,
-                    sourceWidth = probe.width,
-                    sourceHeight = probe.height,
+                    sourceWidth = probe.displayWidth,
+                    sourceHeight = probe.displayHeight,
                     phase = JobPhase.IDLE,
                     outputUri = null,
                     error = null,
@@ -368,37 +368,5 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
                 if (idx >= 0 && cursor.moveToFirst()) cursor.getLong(idx) else -1L
             }
         }.getOrNull() ?: -1L
-    }
-
-    private data class SourceProbe(
-        val durationMs: Long,
-        val hasAudio: Boolean,
-        val width: Int = 0,
-        val height: Int = 0,
-    )
-
-    private fun probe(uri: Uri): SourceProbe {
-        val retriever = MediaMetadataRetriever()
-        return try {
-            retriever.setDataSource(getApplication(), uri)
-            fun meta(key: Int) = retriever.extractMetadata(key)?.toIntOrNull() ?: 0
-            val w = meta(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)
-            val h = meta(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)
-            val sideways = Math.floorMod(meta(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION), 180) != 0
-            SourceProbe(
-                durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                    ?.toLongOrNull() ?: 0L,
-                // Returns "yes" when an audio track exists, null otherwise.
-                hasAudio = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_HAS_AUDIO) != null,
-                width = if (sideways) h else w,
-                height = if (sideways) w else h,
-            )
-        } catch (_: Exception) {
-            // Unreadable counts as "has audio": over-reserving 128 kbps is a
-            // small miss, under-reserving can overshoot a size limit.
-            SourceProbe(durationMs = 0L, hasAudio = true)
-        } finally {
-            retriever.release()
-        }
     }
 }

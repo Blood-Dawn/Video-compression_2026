@@ -1,6 +1,5 @@
 package org.svcs.mobile.ui
 
-import android.content.Intent
 import android.net.Uri
 import android.util.Size
 import androidx.compose.animation.AnimatedVisibility
@@ -8,7 +7,6 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,17 +39,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -60,16 +54,14 @@ import androidx.compose.ui.unit.sp
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.svcs.mobile.compress.CompressionRecord
-import org.svcs.mobile.net.humanBytes
 import org.svcs.mobile.ui.components.SvcsChip
 import org.svcs.mobile.ui.components.SvcsIcons
 import org.svcs.mobile.ui.components.SvcsPanel
 import org.svcs.mobile.ui.components.SvcsSectionLabel
 import org.svcs.mobile.ui.components.SvcsStat
 import org.svcs.mobile.ui.components.SvcsTag
+import org.svcs.mobile.ui.components.VideoThumbnail
 import org.svcs.mobile.ui.theme.SvcsAmber
 import org.svcs.mobile.ui.theme.SvcsBorder
 import org.svcs.mobile.ui.theme.SvcsDisplay
@@ -77,7 +69,6 @@ import org.svcs.mobile.ui.theme.SvcsGreen
 import org.svcs.mobile.ui.theme.SvcsMono
 import org.svcs.mobile.ui.theme.SvcsOrange
 import org.svcs.mobile.ui.theme.SvcsRed
-import org.svcs.mobile.ui.theme.SvcsSurface3
 import org.svcs.mobile.ui.theme.SvcsTeal
 import org.svcs.mobile.ui.theme.SvcsText
 import org.svcs.mobile.ui.theme.SvcsTextBright
@@ -235,23 +226,8 @@ fun CompressLibraryScreen(vm: CompressLibraryViewModel) {
             items(records, key = { it.outputUri }) { record ->
                 LibraryRow(
                     record = record,
-                    onPlay = {
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(Uri.parse(record.outputUri), "video/mp4")
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        // No video player installed is rare but real on
-                        // stripped-down ROMs; don't crash over it.
-                        runCatching { context.startActivity(intent) }
-                    },
-                    onShare = {
-                        val intent = Intent(Intent.ACTION_SEND).apply {
-                            type = "video/mp4"
-                            putExtra(Intent.EXTRA_STREAM, Uri.parse(record.outputUri))
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        context.startActivity(Intent.createChooser(intent, "Share compressed video"))
-                    },
+                    onPlay = { VideoIntents.play(context, Uri.parse(record.outputUri)) },
+                    onShare = { VideoIntents.share(context, Uri.parse(record.outputUri)) },
                     onDelete = { pendingDelete = record },
                 )
             }
@@ -306,7 +282,7 @@ private fun LibraryRow(
     SvcsPanel(modifier = Modifier.fillMaxWidth(), contentPadding = 10.dp) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(Modifier.clickable(onClick = onPlay)) {
-                VideoThumbnail(record.outputUri)
+                VideoThumbnail(Uri.parse(record.outputUri), Modifier.size(84.dp))
                 Box(
                     Modifier.align(Alignment.Center).size(30.dp).clip(RoundedCornerShape(50)).background(Color(0x99000000)),
                     contentAlignment = Alignment.Center,
@@ -384,40 +360,5 @@ private fun RowAction(icon: ImageVector, label: String, color: Color, onClick: (
         Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
         Spacer(Modifier.width(6.dp))
         Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = color)
-    }
-}
-
-/**
- * A frame from the compressed file, via MediaStore's own thumbnail cache
- * (ContentResolver.loadThumbnail, API 29 = this app's minSdk), so no image
- * library or frame-extraction code is needed. Blank placeholder while it
- * loads or if the platform can't produce one.
- */
-@Composable
-private fun VideoThumbnail(outputUri: String) {
-    val context = LocalContext.current
-    val thumb by produceState<ImageBitmap?>(initialValue = null, outputUri) {
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                context.contentResolver
-                    .loadThumbnail(Uri.parse(outputUri), Size(256, 256), null)
-                    .asImageBitmap()
-            }.getOrNull()
-        }
-    }
-    Box(
-        Modifier
-            .size(84.dp)
-            .clip(RoundedCornerShape(2.dp))
-            .background(SvcsSurface3),
-    ) {
-        thumb?.let {
-            Image(
-                bitmap = it,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.size(84.dp),
-            )
-        }
     }
 }

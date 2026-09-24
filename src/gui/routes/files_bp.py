@@ -17,12 +17,14 @@ try:
     from gui.state import _state_lock, _status, _demo_lock, _demo_state, _ALLOWED_EXTENSIONS
     from gui.logging_setup import log
     from gui.services import path_safety as _ps
+    from gui.services.db_helpers import _is_empty_db_error
     from gui.services.cloud_detection import _detect_cloud_root  # noqa: F401 (test seam, see below)
     from utils.db import (get_connection)
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.state import (_state_lock, _status, _demo_lock, _demo_state, _ALLOWED_EXTENSIONS)
     from src.gui.logging_setup import log
     from src.gui.services import path_safety as _ps
+    from src.gui.services.db_helpers import _is_empty_db_error
     from src.gui.services.cloud_detection import _detect_cloud_root  # noqa: F401 (test seam, see below)
     from src.utils.db import (get_connection)
 
@@ -261,6 +263,8 @@ def api_storage():
                 """
             ).fetchone()
     except Exception as exc:
+        if _is_empty_db_error(exc):
+            return jsonify({"available": False})
         return jsonify({"error": str(exc)}), 500
 
     return jsonify({

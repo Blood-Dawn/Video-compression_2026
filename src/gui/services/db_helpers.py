@@ -29,6 +29,19 @@ except ModuleNotFoundError:                # pragma: no cover - import path shim
 _ROOT = Path(__file__).resolve().parents[3]
 
 
+def _is_empty_db_error(exc: Exception) -> bool:
+    """True when a query failed only because metadata.db has no tables yet.
+
+    sqlite3.connect() creates an empty file for any path whose folder exists,
+    so a metadata.db can exist before the pipeline has ever initialized it
+    (a fresh install whose output folder was made by Setup or a script). The
+    read-only stats routes used to answer that with a 500 "no such table:
+    segments"; it just means there is nothing recorded yet.
+    Author: Bloodawn (KheivenD), 2026-09-24 (cleanup sweep).
+    """
+    return "no such table" in str(exc).lower()
+
+
 def _get_db_path() -> Path:
     """Return the metadata.db path from the last-used config, or default."""
     with _state_lock:

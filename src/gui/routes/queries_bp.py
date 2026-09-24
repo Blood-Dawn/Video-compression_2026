@@ -10,11 +10,11 @@ from flask import Blueprint, jsonify, request
 
 try:
     from gui.services.gui_state_persist import _load_gui_state
-    from gui.services.db_helpers import _get_archive_db_path, _rows_to_segment_list
+    from gui.services.db_helpers import _get_archive_db_path, _is_empty_db_error, _rows_to_segment_list
     from utils.db import (query_by_type, query_daily_storage_summary, query_segments_by_target_count)
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.services.gui_state_persist import _load_gui_state
-    from src.gui.services.db_helpers import _get_archive_db_path, _rows_to_segment_list
+    from src.gui.services.db_helpers import _get_archive_db_path, _is_empty_db_error, _rows_to_segment_list
     from src.utils.db import (query_by_type, query_daily_storage_summary, query_segments_by_target_count)
 
 queries_bp = Blueprint("queries", __name__)
@@ -46,6 +46,8 @@ def api_query_segments():
             db_path=str(db_path),
         )
     except Exception as exc:
+        if _is_empty_db_error(exc):
+            return jsonify({"segments": [], "db_path": str(db_path)})
         return jsonify({"error": str(exc)}), 500
 
     return jsonify({"segments": _rows_to_segment_list(rows, db_path.parent), "db_path": str(db_path)})
@@ -94,6 +96,8 @@ def api_daily_summary():
     try:
         rows = query_daily_storage_summary(db_path=str(db_path))
     except Exception as exc:
+        if _is_empty_db_error(exc):
+            return jsonify({"rows": [], "db_path": str(db_path)})
         return jsonify({"error": str(exc)}), 500
 
     result = [
@@ -119,6 +123,8 @@ def api_busiest():
         limit = int(request.args.get("limit", 20))
         rows = query_segments_by_target_count(db_path=str(db_path), limit=limit)
     except Exception as exc:
+        if _is_empty_db_error(exc):
+            return jsonify({"segments": [], "db_path": str(db_path)})
         return jsonify({"error": str(exc)}), 500
 
     return jsonify({"segments": _rows_to_segment_list(rows, db_path.parent), "db_path": str(db_path)})

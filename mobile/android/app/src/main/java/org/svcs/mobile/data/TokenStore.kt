@@ -32,17 +32,20 @@ private val Context.settingsStore by preferencesDataStore(name = "svcs_settings"
  * leaves the user looking at their own server address rather than a blank
  * screen they cannot diagnose.
  *
- * Author: Bloodawn (KheivenD), 2026-07-18 (M1.1).
+ * [cipher] is the Keystore-backed AES-GCM implementation in every real use.
+ * It is a parameter only so JVM tests can run code that stores a token:
+ * Robolectric has no AndroidKeyStore, so ServerSettingsViewModelTest failed
+ * one or two of its cases per run depending on timing. The real cipher is
+ * covered on a device by androidTest/TokenStorePersistenceTest.
+ *
+ * Author: Bloodawn (KheivenD), 2026-07-18 (M1.1); cipher seam 2026-09-24.
  */
-class TokenStore(private val context: Context) {
+class TokenStore(
+    private val context: Context,
+    private val cipher: TokenCipher = KeystoreTokenCipher,
+) {
 
     private companion object {
-        const val KEY_ALIAS = "svcs_token_key_v1"
-        const val KEYSTORE = "AndroidKeyStore"
-        const val TRANSFORM = "AES/GCM/NoPadding"
-        const val GCM_TAG_BITS = 128
-        const val IV_BYTES = 12
-
         val SERVER_URL = stringPreferencesKey("server_url")
         val TOKEN_BLOB = stringPreferencesKey("token_blob")
         val LAST_LIVE_SOURCE = stringPreferencesKey("last_live_source")
@@ -98,22 +101,41 @@ class TokenStore(private val context: Context) {
     suspend fun token(): String? {
         val blob = context.settingsStore.data.first()[TOKEN_BLOB] ?: return null
         return try {
-            decrypt(blob)
+            cipher.decrypt(blob)
         } catch (e: Exception) {
             null
         }
     }
 
     suspend fun setToken(token: String) {
-        context.settingsStore.edit { it[TOKEN_BLOB] = encrypt(token) }
+        context.settingsStore.edit { it[TOKEN_BLOB] = cipher.encrypt(token) }
     }
 
     /** Forget the token. Used on unpair and after a failed decrypt. */
     suspend fun clearToken() {
         context.settingsStore.edit { it.remove(TOKEN_BLOB) }
     }
+}
 
-    // ── crypto ────────────────────────────────────────────────────────────
+/** Turns the device token into what is stored at rest, and back. */
+interface TokenCipher {
+    fun encrypt(plain: String): String
+
+    /** Throws when the blob cannot be decrypted (for example, key invalidated). */
+    fun decrypt(blob: String): String
+}
+
+/**
+ * AES-256-GCM under a key that is generated in, and never leaves, the Android
+ * Keystore. Stored form: base64(iv || ciphertext). This is the only cipher the
+ * app uses; the code moved here unchanged from TokenStore on 2026-09-24.
+ */
+object KeystoreTokenCipher : TokenCipher {
+    private const val KEY_ALIAS = "svcs_token_key_v1"
+    private const val KEYSTORE = "AndroidKeyStore"
+    private const val TRANSFORM = "AES/GCM/NoPadding"
+    private const val GCM_TAG_BITS = 128
+    private const val IV_BYTES = 12
 
     private fun secretKey(): SecretKey {
         val ks = KeyStore.getInstance(KEYSTORE).apply { load(null) }
@@ -140,7 +162,7 @@ class TokenStore(private val context: Context) {
         return gen.generateKey()
     }
 
-    private fun encrypt(plain: String): String {
+    override fun encrypt(plain: String): String {
         val cipher = Cipher.getInstance(TRANSFORM)
         cipher.init(Cipher.ENCRYPT_MODE, secretKey())
         val iv = cipher.iv
@@ -152,7 +174,7 @@ class TokenStore(private val context: Context) {
         )
     }
 
-    private fun decrypt(blob: String): String {
+    override fun decrypt(blob: String): String {
         val raw = android.util.Base64.decode(blob, android.util.Base64.NO_WRAP)
         require(raw.size > IV_BYTES) { "stored blob is too short to be valid" }
         val iv = raw.copyOfRange(0, IV_BYTES)

@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.svcs.mobile.data.KeystoreTokenCipher
+import org.svcs.mobile.data.TokenCipher
 import org.svcs.mobile.data.TokenStore
 import org.svcs.mobile.net.Capabilities
 import org.svcs.mobile.net.Fetched
@@ -21,6 +23,9 @@ import org.svcs.mobile.net.SvcsApiClient
 import java.net.URI
 
 data class ServerSettingsState(
+    /** True once init has read the saved pairing from TokenStore. Until then
+     *  serverUrl/token are placeholders that the load will overwrite. */
+    val settingsLoaded: Boolean = false,
     val serverUrl: String = "",
     val token: String = "",
     val busy: Boolean = false,
@@ -77,9 +82,12 @@ class ServerSettingsViewModel @JvmOverloads constructor(
     private val apiFactory: (String, String) -> SvcsApiClient = { url, tok -> SvcsApi(url, tok) },
     /** Overridden in tests so a fetch resolves on the test's virtual clock. */
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+    /** Always the Keystore cipher in the app. JVM tests pass an in-memory one
+     *  because Robolectric has no AndroidKeyStore (see TokenStore). */
+    tokenCipher: TokenCipher = KeystoreTokenCipher,
 ) : AndroidViewModel(app) {
 
-    private val store = TokenStore(app)
+    private val store = TokenStore(app, tokenCipher)
     private val _state = MutableStateFlow(ServerSettingsState())
     val state: StateFlow<ServerSettingsState> = _state.asStateFlow()
 
@@ -92,7 +100,7 @@ class ServerSettingsViewModel @JvmOverloads constructor(
             val tok = store.token().orEmpty()
             val auto = store.autoCompressUpload()
             _state.update {
-                it.copy(serverUrl = url, token = tok, autoCompressUpload = auto)
+                it.copy(serverUrl = url, token = tok, autoCompressUpload = auto, settingsLoaded = true)
             }
         }
     }

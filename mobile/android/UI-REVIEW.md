@@ -107,22 +107,36 @@ Minified release build runs on the emulator. Every text color passes WCAG
 AA on every surface it's used on; the lowest is secondary text on panels
 at 4.8:1.
 
+## Done since (2026-09-24)
+
+- **Too many tabs when paired** (was item 1). HOME, LIBRARY, LIVE, EVENTS
+  and METRICS now sit under one SERVER tab with a top tab strip
+  (`ui/server/ServerScreen.kt`); the bottom bar is COMPRESS, SAVED,
+  SERVER, MORE, all labeled. Built and unit-tested, not yet looked at on
+  a screen.
+- **The result screen explains encoder fallbacks** (a lower resolution or
+  a different codec than asked) and when Smart Compress used
+  region-of-interest encoding; SAVED tags both.
+- **MORE lists this phone's encoders** and whether they support
+  region-of-interest encoding.
+- The settings screen's JVM test is no longer flaky, so CI now gates the
+  Android build (67+ tests).
+
 ## Still open (ranked)
 
-1. **Too many tabs when paired.** Eight bottom-bar items is past Material's
-   three-to-five guidance. Recommended: fold HOME, LIBRARY, LIVE, EVENTS
-   and METRICS into one SERVER tab with its own top tabs, leaving COMPRESS,
-   SAVED, SERVER, MORE.
-2. **Compare original vs compressed** side by side (ExoPlayer is already a
+1. **Compare original vs compressed** side by side (ExoPlayer is already a
    dependency). The most-cited feature in the category after size estimates.
-3. **Batch queue:** pick several videos, one preset.
-4. **Trim before compressing:** cutting length is the biggest size lever.
-5. **Server Mode screens** (HOME, LIBRARY, LIVE, EVENTS, METRICS) got the
+   SAVED would need to keep the source URI (with its persisted read grant)
+   to offer this after the fact; the DONE screen has both today.
+2. **Batch queue:** pick several videos, one preset.
+3. **Trim before compressing:** cutting length is the biggest size lever.
+4. **Server Mode screens** (HOME, LIBRARY, LIVE, EVENTS, METRICS) got the
    new colors and fonts for free but still use their old layouts; move them
-   onto the shared components.
-6. **Material 3 Expressive** loading and progress indicators, once
+   onto the shared components. The new SERVER tab strip already uses the
+   design language, which makes the old layouts under it stand out more.
+5. **Material 3 Expressive** loading and progress indicators, once
    `compose-material3` 1.5 is stable.
-7. **Store screenshots:** now possible with the screenshot flag; still to be
+6. **Store screenshots:** now possible with the screenshot flag; still to be
    taken on a real phone.
 
 ## Sources

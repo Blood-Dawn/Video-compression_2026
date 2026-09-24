@@ -43,6 +43,14 @@ then the Android app turned from a remote control into a real compressor:
   links and one-line installer work again, the Android `ui/` package is
   organized by feature, and the flaky Android settings test is fixed.
 
+- **Roadmap work, 1.2.0-beta prepared** (Sep 24, not released yet):
+  Smart Compress region-of-interest encoding on phones whose encoder
+  supports Android 15's FEATURE_Roi (built and unit-tested, not yet seen on
+  such a phone), per-phone calibration so size-limit jobs land closer to
+  the limit without going over, a notice when the encoder quietly lowers
+  the resolution or switches codec, and one SERVER tab for Server Mode.
+  Draft notes: [docs/releases/release-notes-mobile-1.2.0-beta.md](docs/releases/release-notes-mobile-1.2.0-beta.md).
+
 The Android plan and progress notes live in
 [mobile/android/STANDALONE-COMPRESSOR-ROADMAP.md](mobile/android/STANDALONE-COMPRESSOR-ROADMAP.md);
 open UI work is ranked in [mobile/android/UI-REVIEW.md](mobile/android/UI-REVIEW.md).
@@ -52,7 +60,7 @@ open UI work is ranked in [mobile/android/UI-REVIEW.md](mobile/android/UI-REVIEW
 | Product | Tech | Where | Status |
 |---|---|---|---|
 | Desktop app: web dashboard + selective compression pipeline for camera footage | Python 3.11, Flask, OpenCV (contrib), ONNX Runtime (YOLOv8n), FFmpeg | `src/`, `run_gui.py`, `installer/` | v2.2.0-beta (Windows installer), `2.2.0.dev1` on `main` |
-| Android standalone compressor | Kotlin, Jetpack Compose, Media3 Transformer, WorkManager, LiteRT | `mobile/android/` | 1.1.0-beta (versionCode 14), tag `v1-beta` |
+| Android standalone compressor | Kotlin, Jetpack Compose, Media3 Transformer, WorkManager, LiteRT | `mobile/android/` | 1.1.0-beta released (tag `v1-beta`); 1.2.0-beta (versionCode 15) prepared on `mobile` |
 | Android Server Mode: pair with a desktop install for library, live view, events, metrics | Kotlin, OkHttp, ExoPlayer (HLS) | `mobile/android/` (`net/`, `ui/server/`) | Same APK, optional |
 
 The desktop pipeline in one paragraph: background subtraction (MOG2, KNN or
@@ -181,7 +189,7 @@ Full module guide: [mobile/android/README.md](mobile/android/README.md).
 
 ```bash
 cd mobile/android
-./gradlew testDebugUnitTest              # 67 JVM tests, all green
+./gradlew testDebugUnitTest              # ~100 JVM tests, all green
 ./gradlew assembleDebug                  # package org.svcs.mobile.debug
 ./gradlew assembleRelease                # R8, ABI splits + universal APK
 ./gradlew assembleQa                     # minified like release, HTTP logging on
@@ -201,7 +209,7 @@ cd mobile/android
   worker class names in its database and `proguard-rules.pro` keeps its
   constructor.
 - New pure logic gets a JVM unit test next to its package (see
-  `CompressionPresetsTest`, `LibraryFilterTest`, `VideoProbeTest`).
+  `CompressionPresetsTest`, `RoiPlannerTest`, `SizeCalibrationTest`).
 
 ## Releases
 

@@ -91,8 +91,8 @@ own repository, not a branch here.
 
 ## Tests
 
-About 1,660 Python tests (unit, integration, stress, `tests/security/`) and 67
-Android JVM tests. Don't break them; if you change behavior, update the
+About 1,670 Python tests (unit, integration, stress, `tests/security/`) and
+about 100 Android JVM tests. Don't break them; if you change behavior, update the
 affected tests in the same PR, and never weaken or skip one just to get green.
 
 ```

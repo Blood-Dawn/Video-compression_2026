@@ -381,6 +381,60 @@ increment for this phase, not something already quietly done.
   The export command is recorded in `ObjectDetector.kt` so the asset can be
   regenerated from `yolov8n.pt`, which F-Droid reviewers may ask about.
 
+#### Phase 2 progress (Sep 24 2026): region-of-interest encoding, built but unproven
+
+The per-region increment now exists in code, guarded so it can only help:
+
+- **Capability probe** (`compress/EncoderCapabilities.kt`). Lists this
+  phone's H.265 and H.264 encoders from MediaCodecList with hardware,
+  `FEATURE_Roi` and CQ-mode flags. MORE shows one line per format, for
+  example "H.265: no region-of-interest support (c2.x.hevc.encoder);
+  Smart Compress uses the whole-clip mode".
+- **Boxes, not just presence.** `ObjectDetector.detect()` decodes rows
+  0..3 of the `[1, 84, 2100]` output into normalized boxes (greedy NMS,
+  same target classes and 0.25 threshold). When an ROI-capable encoder
+  exists, `SmartCompressAnalyzer` samples every frame instead of stopping
+  at the first hit and keeps the boxes.
+- **Plan** (`compress/RoiPlanner.kt`, pure). Pads and merges boxes across
+  samples into at most 6 regions. It drops the plan when they cover more
+  than 60% of the frame (nothing left to call background). It maps upright
+  boxes into the encoder's frame using the same rotation rule as Media3
+  1.5.1's `VideoSampleExporter`: portrait output is encoded as landscape
+  turned 90 degrees, or at the source's own rotation when the parity
+  matches. It then emits `PARAMETER_KEY_QP_OFFSET_RECTS`: regions at QP
+  -6, then the whole frame at +3 (earlier rects win).
+- **Delivery** (`compress/RoiEncoderFactory.kt`). Wraps
+  `DefaultEncoderFactory`. After Media3 creates and starts the encoder,
+  and only if that exact encoder reports `FEATURE_Roi`, it sets the rects
+  once with `MediaCodec.setParameters()`; per the AOSP docs the key
+  "lasts throughout the encoding session". Media3 1.5.1 keeps the
+  `MediaCodec` private in `DefaultCodec` and has no hook for extra codec
+  parameters, so the field is found by type through reflection. The
+  release build's R8 mapping shows it survives (renamed, same type). Any
+  failure means a normal encode at the requested bitrate.
+- The bitrate is left as requested when ROI is used: this moves bits,
+  it does not add them, so size limits still hold.
+
+What works where, honestly:
+
+| Phone | What Smart Compress does |
+|---|---|
+| Encoder without `FEATURE_Roi` (most phones today, every emulator) | Unchanged whole-clip mode: nothing found cuts the bitrate 35%, anything found keeps it. |
+| Android 15+ with a `FEATURE_Roi` encoder | Region mode when activity is found: same bitrate, QP -6 on the regions, +3 elsewhere. The result screen and SAVED say so. |
+
+**Not yet verified on any device with `FEATURE_Roi`.** None was
+available, and the machine this was built on cannot run an emulator. The
+planning math, the box decoding and the capability summary are
+unit-tested, and the release build compiles and minifies. The first real
+test needs a Pixel or Snapdragon phone on Android 15+ whose MORE screen
+shows "region-of-interest encoding supported". Check three things there:
+the job reports regions, the file still lands at the requested size, and
+the regions are visibly sharper than a plain encode at the same size.
+Until that happens, treat this as a prototype. Later options once it has
+been seen working: per-segment rects for moving subjects (needs a
+per-frame hook Media3 does not have yet), and tuning the -6/+3 offsets
+with VMAF like the desktop did.
+
 ### Phase 3 - Ship it open source (no store gate required)
 
 This is a complete open-source app, full stop - not a commercial product
@@ -545,6 +599,27 @@ were checked.
 - **Still open:** target-size jobs undershoot (8 MB on a 10 MB target in
   the field). Safe, but a calibration pass or a second encode when the
   first lands far under would recover quality.
+
+### More follow-ups (Sep 24 2026)
+
+- **Size-limit undershoot: calibrated per phone.** `SizeCalibration`
+  learns, from this phone's own finished size-limit jobs, how far below
+  the requested bitrate its encoder lands. After 3 jobs it boosts the
+  next request by 0.97 / (highest recent actual/requested ratio), capped
+  at +25%. That way even the least-undershooting past clip would stay
+  under 97% of the original, already-margined bitrate. If a boosted job
+  still comes out over the limit, it is re-encoded once at the
+  uncalibrated bitrate, so the limit stays a limit. With the field test's
+  roughly 0.8 ratio, a 10 MB job should now land around 9.7 MB instead
+  of 8. Unit-tested; not yet measured on a phone. The history records
+  the requested and actual bitrates, so the effect can be checked from
+  SAVED data.
+- **Silent encoder fallbacks are now reported.** When Media3's
+  `ExportResult` shows a different codec, or a long side more than 10%
+  under what was asked, the result screen explains it in plain words and
+  SAVED tags the job "Encoder fallback" (the "Used fallback" filter
+  includes it). This is the "app doesn't tell you" item from the
+  v1-beta known limits.
 
 ## Sources
 

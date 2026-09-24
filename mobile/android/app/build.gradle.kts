@@ -49,8 +49,12 @@ android {
         // 14 = 1.1.0-beta: UI pass. The SVCS design system applied to the
         //      compressor (bundled fonts, full color scheme, components,
         //      icons), one layout per job state, honest size estimates.
-        versionCode = 14
-        versionName = "1.1.0-beta"
+        // 15 = 1.2.0-beta (prepared 2026-09-24, not yet released): Smart
+        //      Compress region-of-interest encoding on FEATURE_Roi phones,
+        //      per-phone size-limit calibration, encoder-fallback notices,
+        //      one SERVER tab for Server Mode, the cleanup sweep.
+        versionCode = 15
+        versionName = "1.2.0-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // FLAG_SECURE stays on in every normal build (see MainActivity). This

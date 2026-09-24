@@ -10,6 +10,7 @@ One app, two jobs:
   library, watch live cameras, see events and metrics.
 
 Current release: **1.1.0-beta** (versionCode 14), GitHub tag `v1-beta`.
+Prepared on `mobile`, not yet released: **1.2.0-beta** (versionCode 15).
 AGPL-3.0, like the rest of the repo.
 
 | Read | For |

@@ -68,3 +68,24 @@ def test_other_db_errors_still_surface(client, tmp_path, monkeypatch):
     monkeypatch.setitem(gui_module._status, "config", {"output_dir": str(out)})
     r = client.get("/api/storage")
     assert r.status_code == 500
+
+
+def test_encrypting_before_any_job_does_not_create_an_empty_db(client, tmp_path, monkeypatch):
+    """The encrypt route's DB bookkeeping used to open metadata.db in the output
+    folder unconditionally, which is what created the empty database above
+    (found through tests/security/test_encrypt_confinement.py, which left one
+    in the repo's own outputs/ folder)."""
+    import gui.routes.encryption_bp as eb
+    if not eb._CRYPTO_AVAILABLE:
+        pytest.skip("cryptography not installed")
+    allowed = tmp_path / "allowed"
+    allowed.mkdir()
+    out = tmp_path / "out"
+    out.mkdir()
+    monkeypatch.setattr(eb, "_safe_segment_roots", lambda: [allowed.resolve()])
+    monkeypatch.setitem(gui_module._status, "config", {"output_dir": str(out)})
+    src = allowed / "clip.mp4"
+    src.write_bytes(b"z" * 256)
+    r = client.post("/api/encrypt", json={"file_path": str(src), "password": "pw"})
+    assert r.status_code == 200, r.get_json()
+    assert not (out / "metadata.db").exists()

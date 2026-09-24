@@ -420,8 +420,15 @@ def api_encrypt():
     # ── DB: ADD a new row for the .enc copy instead of replacing the original.
     # The metrics table will show both rows so the user can see "this
     # recording has been locked" without losing the unlocked entry.
+    # Only when a pipeline has already created the database: opening a path
+    # that does not exist makes sqlite create an empty file, and that empty
+    # metadata.db then turned the storage and search routes into 500s ("no such
+    # table: segments") on installs that had encrypted a file before ever
+    # running a job. Author: Bloodawn (KheivenD), 2026-09-24 (cleanup sweep).
     try:
         db_path = _get_db_path()
+        if not db_path.exists():
+            raise FileNotFoundError(f"no metadata database at {db_path} yet")
         with get_connection(str(db_path)) as conn:
             # Check the original row exists so we can clone its metadata
             row = conn.execute(

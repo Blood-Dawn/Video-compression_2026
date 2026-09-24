@@ -34,6 +34,12 @@ import org.svcs.mobile.ui.theme.SvcsGreen
 import org.svcs.mobile.ui.theme.SvcsRed
 import org.svcs.mobile.ui.theme.SvcsTextDim
 import org.svcs.mobile.ui.theme.SvcsYellow
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
+import org.svcs.mobile.update.UpdateChecker
+import org.svcs.mobile.update.UpdateManager
+import org.svcs.mobile.update.UpdatePhase
 
 /**
  * The pairing screen: server address, device token, Test, Save.
@@ -351,6 +357,11 @@ fun ServerSettingsScreen(
                 )
             }
 
+            // Fall 3.18: direct-APK-sideload auto-update. See
+            // org.svcs.mobile.update.UpdateManager for the F-Droid gating
+            // that keeps this a no-op notice on an F-Droid install.
+            AppUpdateSection()
+
             // Phase 2: whether this phone's encoders can do region-of-interest
             // encoding (Android 15 FEATURE_Roi). It decides which Smart
             // Compress strategy a job gets, so it is worth being able to see.
@@ -430,6 +441,123 @@ private fun CapabilitiesCard(caps: Capabilities) {
                     color = SvcsTextDim,
                 )
             }
+        }
+    }
+}
+
+/**
+ * Fall 3.18: the "check for updates" UI, living inside the ABOUT panel.
+ * Mirrors the desktop Help panel's update flow: check (auto, on open),
+ * then an explicit Download step, then an explicit Install step - never
+ * skipping straight from "checked" to "installed". An F-Droid install
+ * (see [UpdateManager.installedViaFDroid]) only ever reaches the first
+ * branch below: a plain text notice pointing at F-Droid's own updater,
+ * never a Download or Install button, per F-Droid's self-update policy.
+ */
+@Composable
+private fun AppUpdateSection() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val manager = remember { UpdateManager(context) }
+    val state by manager.state.collectAsState()
+    var checkResult by remember { mutableStateOf<UpdateChecker.UpdateCheckResult?>(null) }
+
+    LaunchedEffect(Unit) {
+        checkResult = manager.checkForUpdate()
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        val result = checkResult
+        when {
+            !state.selfUpdateAllowed && result?.updateAvailable == true -> {
+                Text(
+                    "Version " + (result.latestVersion ?: "?") + " is available. This copy " +
+                        "was installed via F-Droid, so update it from there instead of in-app.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SvcsYellow,
+                )
+            }
+            state.phase == UpdatePhase.CHECKING -> {
+                Text(
+                    "Checking for updates…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SvcsTextDim,
+                )
+            }
+            state.phase == UpdatePhase.ERROR -> {
+                Text(
+                    state.error ?: "Update failed.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SvcsRed,
+                )
+                TextButton(onClick = { scope.launch { checkResult = manager.checkForUpdate() } }) {
+                    Text("RETRY")
+                }
+            }
+            state.phase == UpdatePhase.DOWNLOADING -> {
+                val pct = if (state.totalBytes > 0) {
+                    (state.downloadedBytes * 100 / state.totalBytes).toInt()
+                } else null
+                Text(
+                    if (pct != null) "Downloading update… $pct%" else "Downloading update…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SvcsTextDim,
+                )
+            }
+            state.phase == UpdatePhase.VERIFYING -> {
+                Text(
+                    "Verifying download…",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SvcsTextDim,
+                )
+            }
+            state.phase == UpdatePhase.READY -> {
+                Text(
+                    "Update " + (state.latestVersion ?: "") + " downloaded and verified.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SvcsGreen,
+                )
+                Button(onClick = {
+                    if (manager.canRequestInstalls()) {
+                        manager.installReadyUpdate()
+                    } else {
+                        context.startActivity(manager.unknownSourcesSettingsIntent())
+                    }
+                }) {
+                    Text(if (manager.canRequestInstalls()) "INSTALL" else "ALLOW INSTALLS TO CONTINUE")
+                }
+            }
+            result?.updateAvailable == true -> {
+                Text(
+                    "Version " + (result.latestVersion ?: "?") + " is available (you have " +
+                        result.currentVersion + ").",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SvcsTextDim,
+                )
+                Button(onClick = { scope.launch { manager.downloadUpdate(result) } }) {
+                    Text("DOWNLOAD UPDATE")
+                }
+            }
+            result?.checked == true -> {
+                Text(
+                    "You're up to date.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SvcsTextDim,
+                )
+            }
+            else -> {
+                Text(
+                    "Tap to check for an update.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = SvcsTextDim,
+                )
+            }
+        }
+        TextButton(onClick = { scope.launch { checkResult = manager.checkForUpdate() } }) {
+            Text("CHECK FOR UPDATES")
         }
     }
 }

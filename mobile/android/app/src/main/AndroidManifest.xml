@@ -13,9 +13,18 @@
   - POST_NOTIFICATIONS: compression progress and server job alerts.
   - FOREGROUND_SERVICE(_MEDIA_PROCESSING): keeps an on-device encode alive
     when the app goes to the background.
+  - REQUEST_INSTALL_PACKAGES (Fall 3.18): lets the app hand a downloaded
+    update APK to the system package installer without a separate consent
+    dialog every time. This is ONLY ever exercised for a sideloaded install
+    that the user explicitly asked to update in-app (org.svcs.mobile.update);
+    it is a no-op for an F-Droid install, which never reaches that code path
+    at all (see UpdateManager's doc comment) since F-Droid manages its own
+    updates. The user still separately grants "install unknown apps" for
+    this app the first time (Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+    launched from the update UI, not silently).
 
   Author: Bloodawn (KheivenD), 2026-07-18 (M1.1); updated 2026-09-24 for the
-  standalone compressor.
+  standalone compressor and the Fall 3.18 auto-update pipeline.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
@@ -34,6 +43,10 @@
          app still needs at the OS level, independent of any store. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+
+    <!-- Fall 3.18: direct-APK-sideload auto-update (see the block comment
+         above and org.svcs.mobile.update.UpdateManager). -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".SvcsApplication"
@@ -76,5 +89,20 @@
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="mediaProcessing"
             tools:node="merge" />
+
+        <!-- Fall 3.18: exposes only getExternalFilesDir()/updates/ (where
+             UpdateManager downloads and verifies a new APK) as a content://
+             URI, so the system package installer can read it without this
+             app granting broader file access. See res/xml/file_paths.xml
+             and org.svcs.mobile.update.UpdateManager.installReadyUpdate. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

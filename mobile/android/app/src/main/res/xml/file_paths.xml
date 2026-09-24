@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  FileProvider path config for Fall 3.18 (mobile auto-update pipeline).
+
+  Exposes ONLY the app's own "updates" subfolder of its external files dir
+  (where UpdateManager.downloadAndVerify writes the downloaded APK) as a
+  content:// URI, for handing to the system package installer via
+  ACTION_VIEW. Nothing else the app can read or write is exposed through
+  this provider.
+
+  Author: Bloodawn (KheivenD), 2026-09-24 (Fall 3.18 - auto-update pipeline).
+-->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-files-path name="updates" path="updates/" />
+</paths>

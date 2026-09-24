@@ -121,6 +121,12 @@ EXPECTED = {
     # R6 Track C: closed-app push settings.
     "/api/push/config": "push",
     "/api/push/test": "push",
+    # Fall Week 3: zone-editor still (3.6), outbound webhook settings (3.9),
+    # desktop update check (3.17).
+    "/api/zones/frame": "events",
+    "/api/webhook/config": "webhook",
+    "/api/webhook/test": "webhook",
+    "/api/setup/update_check": "setup",
 }
 
 EXPECTED_BLUEPRINTS = {
@@ -133,6 +139,7 @@ EXPECTED_BLUEPRINTS = {
     "events",          # R5 5.6/5.7: zones config + behavior events
     "ingest",          # R6 Track B: chunked resumable upload
     "push",            # R6 Track C: closed-app push settings
+    "webhook",         # Fall Week 3 TASK 3.9: outbound webhook settings
 }
 
 
@@ -147,9 +154,11 @@ def test_route_count():
     # then +1 for /api/nl_search (R5 TASK 5.4, 2026-08-16), then +2 for
     # /api/zones (GET+POST, one rule) and /api/events/recent (R5 5.6/5.7),
     # then +4 for the R6 chunked-upload routes, then +2 for the R6 Track C
-    # push routes (/api/push/config carries GET+POST on one rule).
+    # push routes (/api/push/config carries GET+POST on one rule), then +4 for
+    # the Fall Week 3 routes (/api/zones/frame, /api/webhook/config with
+    # GET+POST on one rule, /api/webhook/test, /api/setup/update_check).
     rules = _rules()
-    assert len(rules) == 87, f"expected 87 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 91, f"expected 91 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_blueprints_registered():

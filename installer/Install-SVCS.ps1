@@ -5,7 +5,7 @@
 .DESCRIPTION
     Run from a fresh terminal:
 
-        irm https://raw.githubusercontent.com/Blood-Dawn/Video-compression_2026/app/installer/Install-SVCS.ps1 | iex
+        irm https://raw.githubusercontent.com/Blood-Dawn/Video-compression_2026/main/installer/Install-SVCS.ps1 | iex
 
     Presents a component-selection menu (a dark, amber-accented WPF window, or a
     text menu with -NoGui) and installs the selected pieces:
@@ -215,7 +215,7 @@ function Install-Samples {
     param([switch]$DryRun)
     Write-Status 'Sample clips' $Theme.Accent
     $videos = Get-VideosDir
-    $base = "https://media.githubusercontent.com/media/$Repo/app/data/samples/cdnet_mp4/baseline"
+    $base = "https://media.githubusercontent.com/media/$Repo/main/data/samples/cdnet_mp4/baseline"
     $clips = @('baseline_highway.mp4', 'baseline_pedestrians.mp4')
     if ($DryRun) {
         foreach ($c in $clips) {

@@ -11,7 +11,7 @@ installed it works with no extra dependencies. Pick whichever path you like.
 Open PowerShell and run:
 
 ```powershell
-irm https://raw.githubusercontent.com/Blood-Dawn/Video-compression_2026/app/installer/Install-SVCS.ps1 | iex
+irm https://raw.githubusercontent.com/Blood-Dawn/Video-compression_2026/main/installer/Install-SVCS.ps1 | iex
 ```
 
 This opens a small SVCS-themed menu (a dark, amber-accented window, or a text

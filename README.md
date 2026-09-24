@@ -102,7 +102,7 @@ compression, running on a normal PC with no GPU required.
 **Install it** with one line in PowerShell:
 
 ```powershell
-irm https://raw.githubusercontent.com/Blood-Dawn/Video-compression_2026/app/installer/Install-SVCS.ps1 | iex
+irm https://raw.githubusercontent.com/Blood-Dawn/Video-compression_2026/main/installer/Install-SVCS.ps1 | iex
 ```
 
 or [download the Windows installer directly](https://github.com/Blood-Dawn/Video-compression_2026/releases/latest)

@@ -15,13 +15,18 @@ import org.svcs.mobile.ui.SvcsApp
 import org.svcs.mobile.ui.theme.SvcsTheme
 
 /**
- * Single activity. M1.1 shows exactly one screen: pair with a server.
+ * Single activity hosting the whole Compose app (SvcsApp): the standalone
+ * compressor tabs, and Server Mode once paired. It also receives videos
+ * shared in from other apps (ACTION_SEND) and hands them to COMPRESS.
  *
  * FLAG_SECURE is set for the whole window. It keeps the app out of the
  * task-switcher thumbnail and blocks screenshots and screen recording. That
- * matters here for two reasons: this screen holds a bearer credential for a
- * surveillance system, and every later screen shows footage of real people.
- * Setting it once at the activity means a future screen cannot forget it.
+ * matters here for two reasons: the pairing screen holds a bearer credential
+ * for a surveillance system, and the Server Mode screens show footage of real
+ * people. Setting it once at the activity means a future screen cannot forget
+ * it. Whether the compressor screens need it too is an open owner decision
+ * (docs/BLOCKERS.md); screenshot builds turn it off with
+ * -PsvcsAllowScreenshots=true.
  *
  * The cost is real and deliberate: users cannot screenshot the app, including
  * to file a bug. That is the right trade for a camera system.

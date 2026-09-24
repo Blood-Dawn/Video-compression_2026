@@ -2,14 +2,20 @@
 <!--
   SVCS Mobile - manifest.
 
-  Permissions are deliberately minimal: INTERNET only. The app talks to one
-  server the user names and does nothing else. No location, no camera, no
-  storage, no contacts. ACCESS_NETWORK_STATE is included only so the pairing
-  screen can distinguish "you are offline" from "that address is wrong", which
-  is the difference between a user checking their Wi-Fi and a user
-  port-forwarding their router in frustration.
+  Permissions are deliberately minimal. No location, no camera, no contacts,
+  and no storage permission: the compressor reads only videos the user picks
+  or shares in (a per-file grant), and writes its output through MediaStore,
+  which needs no permission on API 29+.
 
-  Author: Bloodawn (KheivenD), 2026-07-18 (M1.1).
+  - INTERNET, ACCESS_NETWORK_STATE: Server Mode only. The app talks to the
+    one server the user names; the network-state check lets the pairing
+    screen tell "you are offline" from "that address is wrong".
+  - POST_NOTIFICATIONS: compression progress and server job alerts.
+  - FOREGROUND_SERVICE(_MEDIA_PROCESSING): keeps an on-device encode alive
+    when the app goes to the background.
+
+  Author: Bloodawn (KheivenD), 2026-07-18 (M1.1); updated 2026-09-24 for the
+  standalone compressor.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">

@@ -13,8 +13,10 @@
 #     F-Droid policy. Notification transport is an open owner decision.
 #   * Any crash reporter or analytics SDK - matches the server's
 #     send_default_pii=False posture.
-#   * Any FFmpeg binding - the client is a thin client and encodes nothing.
-#     FFmpegKit was retired 2025-01-06 in any case.
+#   * Any FFmpeg binding. The on-device compressor encodes through the phone's
+#     hardware codecs via Media3 Transformer instead (see
+#     STANDALONE-COMPRESSOR-ROADMAP.md section 1 for why), and FFmpegKit was
+#     retired 2025-01-06 in any case.
 
 [versions]
 agp = "8.7.3"
@@ -88,7 +90,9 @@ androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx"
 # that is a bigger, separate change touching the Compose compiler plugin
 # too). Revisit this pin whenever the project's Kotlin version moves.
 litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
-# Reserved for M2 (LIBRARY tab).
+# Server Mode LIBRARY thumbnails (LibraryScreen), fetched with the app's
+# authenticated OkHttp client. The compressor's own thumbnails use
+# ContentResolver.loadThumbnail instead (ui/components/VideoThumbnail.kt).
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 
 junit = { group = "junit", name = "junit", version.ref = "junit" }

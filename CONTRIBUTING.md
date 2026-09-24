@@ -37,27 +37,35 @@ before there's agreement on the problem.
 ### Submitting code
 
 1. Fork the repo
-2. Create a branch off `dev` (or off `app` for product work)
-3. Make your changes
-4. Run the test suite locally: `pytest tests/`
-5. Open a PR back to the upstream `dev` or `app` branch
+2. Create a branch off `mobile` (the active working branch)
+3. Make your changes. Setup, run and test instructions for the desktop app
+   and the Android app are in `DEV.md`.
+4. Run the tests for what you touched: `uv run pytest` for Python,
+   `./gradlew testDebugUnitTest` in `mobile/android` for Android. CI runs both.
+5. Open a PR into `main`
 
 PRs are reviewed within 7 days. Smaller PRs get merged faster.
 
 ## Coding conventions
 
-- Python 3.11+
-- Type hints on all new public functions
+- Python 3.11+, Kotlin 2.1 for the Android app
+- Type hints on all new public Python functions
 - Tests for new behavior (the bar is "if it broke, would I find out?")
-- Black for formatting, ruff for linting
-- No new dependencies without justification in the PR description
+- `uvx ruff check .` stays clean (pyflakes rules, configured in pyproject.toml)
+- ASCII hyphens only: no em or en dashes anywhere (a test enforces it)
+- Comments explain why, not what
+- No new dependencies without justification in the PR description. Python
+  dependencies go in pyproject.toml followed by `uv lock` and
+  `python scripts/export_requirements.py`; never edit requirements.txt by hand
 
 ## Branch layout
 
 | Branch | Purpose |
 |---|---|
-| `main` | Public, stable branch. Kept current with the full desktop feature set; excludes the in-progress mobile app. |
-| `app` / `mobile` | Internal working branches, currently identical. Everything lands here first, including the in-progress Android app under `mobile/android/`. |
+| `main` | Public, stable branch. PRs go here. |
+| `mobile` | Active working branch for the desktop app and the Android app under `mobile/android/`. Work lands here first. |
+
+The older `dev` and `app` branches no longer exist.
 
 ### One open-source edition
 
@@ -69,11 +77,12 @@ Real-ESRGAN enhancement, and the AI plate reader.
 Some features stay behind optional `pyproject.toml` extras only to keep the
 default install small, not to gate them behind payment:
 
-- `[plates]` - the AI plate reader (EasyOCR). Free; split out because
-  EasyOCR is heavy. The dashboard hides the plate-reader controls when the
-  backend isn't installed, so a base install shows no empty buttons.
-  (Note: install `[plates]` in a *separate* environment - see the warning
-  in `pyproject.toml`; easyocr's OpenCV conflicts with the core build.)
+- The AI plate reader. Recommended: the ONNX reader installed with
+  `scripts/install_plates.ps1` into the main environment. The legacy
+  `[plates]` extra (EasyOCR) must only go into a *separate* environment,
+  because its OpenCV replaces the core contrib build (see the warning in
+  `pyproject.toml`). The dashboard hides the plate-reader controls when no
+  backend is installed.
 - `[enhance]` - Real-ESRGAN super-resolution.
 - `[crash-reporting]` - opt-in Sentry (off by default).
 
@@ -82,13 +91,14 @@ own repository, not a branch here.
 
 ## Tests
 
-We have 274+ tests across unit, integration, and stress. Don't break
-them. If you change behavior, update the affected tests in the same PR.
+About 1,660 Python tests (unit, integration, stress, `tests/security/`) and 67
+Android JVM tests. Don't break them; if you change behavior, update the
+affected tests in the same PR, and never weaken or skip one just to get green.
 
 ```
-pytest tests/                # all tests
-pytest tests/test_pipeline.py # one file
-pytest -k encrypt            # match by keyword
+uv run pytest                          # all Python tests
+uv run pytest tests/test_pipeline.py   # one file
+cd mobile/android && ./gradlew testDebugUnitTest   # Android
 ```
 
 ## Questions

@@ -76,7 +76,7 @@ def _require_test_clips():
     if not CLIPS["pedestrians"].exists() and not CLIPS["parking"].exists():
         pytest.skip(
             "No CDnet sample MP4s found in data/samples/cdnet_mp4/. "
-            "See DEV.md for how to populate them."
+            "See docs/testing/TEST-DATA.md for how to populate them."
         )
 
 

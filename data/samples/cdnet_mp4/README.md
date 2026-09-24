@@ -2,7 +2,7 @@
 
 53 clips from the CDnet 2014 Change Detection Benchmark, organized by scene category.
 These files are gitignored - each team member builds them locally from the image frames.
-See **DEV.md Section 13** for step-by-step instructions.
+See [docs/testing/TEST-DATA.md](../../../docs/testing/TEST-DATA.md) for step-by-step instructions.
 
 > Citation: Y. Wang et al., "CDnet 2014: An Expanded Change Detection Benchmark Dataset," IEEE CVPR Workshops, 2014.
 > Source: http://www.changedetection.net

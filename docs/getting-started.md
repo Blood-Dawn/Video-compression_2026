@@ -9,8 +9,9 @@ first compressed clip in a few minutes.
 ## 1. Install
 
 **Windows (easiest)**
-1. Download the latest `SVCS-Setup-*.exe` from the
-   [Releases page](https://github.com/Blood-Dawn/Video-compression_2026/releases/latest).
+1. Download `SVCS-Setup-*.exe` from the
+   [current desktop release](https://github.com/Blood-Dawn/Video-compression_2026/releases/tag/v2.2.0-beta).
+   (GitHub's "latest" release is the Android app, which has APKs only.)
 2. (Recommended) verify the download - see the
    [download page](site/index.html) for the SHA-256 steps.
 3. Run the installer and launch **SVCS** from the Start menu. The dashboard opens

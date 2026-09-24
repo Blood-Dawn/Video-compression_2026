@@ -342,7 +342,11 @@ private fun LibraryRow(
                             SvcsAmber,
                         )
                     }
-                    if (record.usedFallback) SvcsTag("Fallback", SvcsOrange)
+                    if (record.usedFallback) {
+                        SvcsTag("Fallback", SvcsOrange)
+                    } else if (record.encoderNote != null) {
+                        SvcsTag("Encoder fallback", SvcsOrange)
+                    }
                 }
                 Spacer(Modifier.height(4.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {

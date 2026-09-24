@@ -96,6 +96,9 @@ class CompressionWorker(
          *  interest encoding was not used (unsupported phone, nothing found,
          *  or the encoder refused). */
         const val KEY_ROI_REGIONS = "roi_regions"
+        /** A sentence when the encoder delivered a lower resolution or a
+         *  different codec than requested (EncoderFallback); absent otherwise. */
+        const val KEY_ENCODER_NOTE = "encoder_note"
         /** Applied to the requested bitrate only when Smart Compress found
          *  nothing worth protecting anywhere in the sampled frames. Never
          *  applied upward on a hit - see doWork() for why. */
@@ -271,6 +274,7 @@ class CompressionWorker(
                 )
             }
             val roiRegions = (report.roi as? RoiOutcome.Applied)?.regions ?: 0
+            val encoderNote = report.encoderNote
 
             val outputUri = writeToMediaStore(tempOutputFile, outputDisplayName)
             val outputBytes = tempOutputFile.length()
@@ -293,6 +297,7 @@ class CompressionWorker(
                     smartCompressActivityDetected = smartCompressActivityDetected,
                     roiRegions = roiRegions,
                     encoderName = report.result.videoEncoderName,
+                    encoderNote = encoderNote,
                 ),
             )
 
@@ -305,6 +310,7 @@ class CompressionWorker(
                     KEY_SMART_COMPRESS_USED to smartCompressRequested,
                     KEY_SMART_COMPRESS_ACTIVITY to (smartCompressActivityDetected ?: true),
                     KEY_ROI_REGIONS to roiRegions,
+                    KEY_ENCODER_NOTE to encoderNote,
                 ),
             )
         } catch (e: TransformFailure) {
@@ -333,8 +339,21 @@ class CompressionWorker(
     /** Smart Compress's region-of-interest plan for one job. */
     private data class RoiRequest(val regions: List<NormBox>, val rotationDegrees: Int)
 
-    /** What one Transformer pass produced, as Media3 reports it. */
-    private data class TransformReport(val result: ExportResult, val roi: RoiOutcome?)
+    /** What one Transformer pass produced, as Media3 reports it, next to
+     *  what it was asked for (display-orientation size, codec). */
+    private data class TransformReport(
+        val result: ExportResult,
+        val roi: RoiOutcome?,
+        val requestedMime: String,
+        val requestedWidth: Int,
+        val requestedHeight: Int,
+    ) {
+        val encoderNote: String?
+            get() = EncoderFallback.describe(
+                requestedMime, result.videoMimeType,
+                requestedWidth, requestedHeight, result.width, result.height,
+            )
+    }
 
     /** Runs one Transformer pass. Transformer must be built/started/polled from
      *  a thread with a Looper (Media3 requirement), so this hops to Main. */
@@ -350,6 +369,10 @@ class CompressionWorker(
     ): TransformReport {
         // See scaledFrameSize() for why this replaced a plain height cap.
         val frameSize = if (maxShortSidePx != null) sourceFrameSize(probe, maxShortSidePx) else null
+        val (askedW, askedH) = when (frameSize) {
+            is FrameSize.Exact -> frameSize.width to frameSize.height
+            else -> probe.displayWidth to probe.displayHeight
+        }
         return withContext(Dispatchers.Main) {
             suspendCancellableCoroutine<TransformReport> { cont ->
                 val defaultFactory = DefaultEncoderFactory.Builder(applicationContext)
@@ -368,7 +391,9 @@ class CompressionWorker(
                     .setEncoderFactory(encoderFactory)
                     .addListener(object : Transformer.Listener {
                         override fun onCompleted(composition: Composition, result: ExportResult) {
-                            if (cont.isActive) cont.resume(TransformReport(result, roiFactory?.outcome))
+                            if (cont.isActive) {
+                                cont.resume(TransformReport(result, roiFactory?.outcome, codecMime, askedW, askedH))
+                            }
                         }
 
                         override fun onError(

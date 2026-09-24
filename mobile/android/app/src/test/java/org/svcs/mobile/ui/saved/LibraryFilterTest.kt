@@ -68,6 +68,9 @@ class LibraryFilterTest {
             listOf("b"),
             names(filterAndSortRecords(all, LibraryFilters(modeFilter = setOf("TARGET_SIZE"), codecFilter = setOf("video/hevc")), now)),
         )
+        // An encoder that silently lowered the resolution also counts as a fallback.
+        val lowered = rec("d").copy(encoderNote = "The encoder lowered the resolution to 512x288 (asked for 1280x720).")
+        assertEquals(setOf("a", "d"), names(filterAndSortRecords(all + lowered, LibraryFilters(fallbackOnly = true), now)).toSet())
     }
 
     @Test

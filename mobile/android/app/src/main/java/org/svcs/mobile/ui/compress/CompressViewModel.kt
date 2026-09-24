@@ -48,6 +48,8 @@ data class CompressState(
     val smartCompressActivityDetected: Boolean? = null,
     /** Regions Smart Compress encoded at higher quality (FEATURE_Roi phones). */
     val roiRegions: Int = 0,
+    /** The encoder delivered less than asked (lower resolution or codec). */
+    val encoderNote: String? = null,
     /** False when the picked source has no audio track at all. */
     val sourceHasAudio: Boolean = true,
     val removeAudio: Boolean = false,
@@ -274,6 +276,7 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
                 analyzing = it.smartCompress,
                 smartCompressActivityDetected = null,
                 roiRegions = 0,
+                encoderNote = null,
                 startedAtMs = System.currentTimeMillis(),
             )
         }
@@ -329,6 +332,7 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
                         outputBytes = data.getLong(CompressionWorker.KEY_OUTPUT_BYTES, -1),
                         usedFallback = data.getBoolean(CompressionWorker.KEY_USED_FALLBACK, false),
                         roiRegions = data.getInt(CompressionWorker.KEY_ROI_REGIONS, 0),
+                        encoderNote = data.getString(CompressionWorker.KEY_ENCODER_NOTE),
                         smartCompressActivityDetected = if (smartUsed) {
                             data.getBoolean(CompressionWorker.KEY_SMART_COMPRESS_ACTIVITY, true)
                         } else {

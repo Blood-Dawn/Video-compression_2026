@@ -166,7 +166,9 @@ internal fun filterAndSortRecords(
             r.timestampMs >= cutoff &&
             (f.codecFilter.isEmpty() || r.codecMime in f.codecFilter) &&
             (f.modeFilter.isEmpty() || r.modeType in f.modeFilter) &&
-            (!f.fallbackOnly || r.usedFallback) &&
+            // Either fallback counts: the retry path, or the encoder quietly
+            // lowering the resolution or codec (EncoderFallback).
+            (!f.fallbackOnly || r.usedFallback || r.encoderNote != null) &&
             (!f.smartCompressOnly || r.smartCompressUsed) &&
             (minBytes == null || r.outputSizeBytes >= minBytes) &&
             (maxBytes == null || r.outputSizeBytes <= maxBytes)

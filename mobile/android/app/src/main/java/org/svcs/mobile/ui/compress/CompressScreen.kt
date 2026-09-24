@@ -572,6 +572,10 @@ private fun DoneView(s: CompressState, vm: CompressViewModel) {
                     style = MaterialTheme.typography.bodySmall,
                     color = SvcsOrange,
                 )
+            } else if (s.encoderNote != null) {
+                // The encoder finished, but with less than was asked for.
+                Spacer(Modifier.height(8.dp))
+                Text(s.encoderNote, style = MaterialTheme.typography.bodySmall, color = SvcsOrange)
             }
         }
         s.outputUri?.let { out ->

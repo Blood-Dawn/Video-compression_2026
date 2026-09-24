@@ -32,6 +32,8 @@ data class CompressionRecord(
     val roiRegions: Int = 0,
     /** The video encoder Media3 used, e.g. "c2.qti.hevc.encoder". */
     val encoderName: String? = null,
+    /** Set when the encoder lowered the resolution or switched codec. */
+    val encoderNote: String? = null,
 )
 
 /**
@@ -94,6 +96,7 @@ class CompressionHistoryStore(context: Context) {
         put("smartCompressActivityDetected", r.smartCompressActivityDetected ?: JSONObject.NULL)
         put("roiRegions", r.roiRegions)
         put("encoderName", r.encoderName ?: JSONObject.NULL)
+        put("encoderNote", r.encoderNote ?: JSONObject.NULL)
     }
 
     private fun toRecord(o: JSONObject): CompressionRecord = CompressionRecord(
@@ -116,5 +119,6 @@ class CompressionHistoryStore(context: Context) {
         },
         roiRegions = o.optInt("roiRegions", 0),
         encoderName = if (o.isNull("encoderName")) null else o.optString("encoderName"),
+        encoderNote = if (o.isNull("encoderNote")) null else o.optString("encoderNote"),
     )
 }

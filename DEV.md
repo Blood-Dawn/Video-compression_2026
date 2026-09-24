@@ -67,7 +67,7 @@ open UI work is ranked in [mobile/android/UI-REVIEW.md](mobile/android/UI-REVIEW
 
 | Product | Tech | Where | Status |
 |---|---|---|---|
-| Desktop app: web dashboard + selective compression pipeline for camera footage | Python 3.11, Flask, OpenCV (contrib), ONNX Runtime (YOLOv8n), FFmpeg | `src/`, `run_gui.py`, `installer/` | v2.2.0-beta (Windows installer), `2.2.0.dev1` on `main` |
+| Desktop app: web dashboard + selective compression pipeline for camera footage | Python 3.11, Flask, OpenCV (contrib), ONNX Runtime (YOLOv8n), FFmpeg | `src/`, `run_gui.py`, `installer/` | v2.2.0-beta (Windows installer, released); `2.2.1.dev0` in active dev on `mobile` (82 commits ahead of `main`, not yet merged back) |
 | Android standalone compressor | Kotlin, Jetpack Compose, Media3 Transformer, WorkManager, LiteRT | `mobile/android/` | 1.2.0-beta released (tag `v1.2-beta`); 1.2.1-beta (versionCode 16) prepared on `mobile` |
 | Android Server Mode: pair with a desktop install for library, live view, events, metrics | Kotlin, OkHttp, ExoPlayer (HLS) | `mobile/android/` (`net/`, `ui/server/`) | Same APK, optional |
 

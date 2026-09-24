@@ -22,7 +22,20 @@ from typing import Optional
 
 # Keep this in sync with pyproject.toml's [project].version and
 # installer/svcs.iss's MyAppVersion. All three change together on release.
-APP_VERSION = "2.2.0.dev1"
+#
+# IMPORTANT (found 2026-09-24): this must be bumped PAST a release's own
+# tag number the moment that release is cut, not just re-labelled with the
+# same number. v2.2.0-beta was tagged while this stayed at "2.2.0.dev1" -
+# same major.minor.patch, lower stage - so is_newer() correctly and
+# permanently reported that release as newer than the running dev build,
+# no matter how many times the exact same installer was reinstalled. The
+# comparison logic isn't the bug (see test_beta_release_is_newer_than_
+# current_dev_build in test_version.py, which documents that a same-number
+# beta SHOULD outrank a same-number dev build); the fix is always to move
+# this to the NEXT version number in dev stage right after tagging, e.g.
+# 2.2.0-beta -> "2.2.1.dev0" here. tests/test_version_consistency.py pins
+# this file's value and includes a tripwire against the last published tag.
+APP_VERSION = "2.2.1.dev0"
 
 # Release-stage ordering for comparison purposes. Anything not recognized
 # (including a fully final release, no suffix at all) ranks highest, so

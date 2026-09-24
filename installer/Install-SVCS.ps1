@@ -32,7 +32,14 @@
     Preselect components (skips the menu), e.g. -Components core,mediamtx.
 
 .PARAMETER Tag
-    GitHub Release tag that hosts the installer asset. Default v2.1.0.dev0.
+    GitHub Release tag that hosts the installer asset. Default v2.2.0-beta,
+    the current desktop release. (Not "latest": the mobile v1-beta release is
+    GitHub's latest, and it carries APKs only.)
+
+.PARAMETER Version
+    Version in the installer's file name, SVCS-Setup-<Version>.exe. Separate
+    from -Tag because the two differ in practice: tag v2.2.0-beta ships
+    SVCS-Setup-2.2.0.dev0.exe. Default 2.2.0.dev0.
 
 .EXAMPLE
     pwsh installer/Install-SVCS.ps1
@@ -51,7 +58,8 @@ param(
     [Alias('WhatIf')]
     [switch]$DryRun,
     [string[]]$Components,
-    [string]$Tag = 'v2.1.0.dev0'
+    [string]$Tag = 'v2.2.0-beta',
+    [string]$Version = '2.2.0.dev0'
 )
 
 Set-StrictMode -Version Latest
@@ -69,7 +77,6 @@ $Theme = @{
 $Repo = 'Blood-Dawn/Video-compression_2026'
 $WingetId = 'Blood-Dawn.SVCS'
 $MediaMtxVersion = '1.9.3'
-$Version = $Tag.TrimStart('v')
 
 $AllComponents = @(
     [pscustomobject]@{ Key = 'core'; Name = 'SVCS core app';

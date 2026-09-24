@@ -32,8 +32,16 @@ def test_page_and_stylesheet_exist():
     assert CSS.is_file()
 
 
+# The download button pins the desktop release tag. It used to be
+# releases/latest, but the Android app now publishes its own non-prerelease
+# (v1-beta), which makes it GitHub's "latest", so that link sent Windows users
+# to a page with only APKs on it (found 2026-09-24).
+DESKTOP_RELEASE = "releases/tag/v2."
+
+
 def test_links_release_installer(html):
-    assert "releases/latest" in html
+    assert DESKTOP_RELEASE in html
+    assert "releases/latest" not in html
     assert "SVCS-Setup" in html
 
 
@@ -81,5 +89,5 @@ def test_no_competitor_comparisons(html):
 
 def test_readme_has_download_link():
     body = README.read_text(encoding="utf-8")
-    assert "releases/latest" in body
+    assert DESKTOP_RELEASE in body
     assert "## Download" in body

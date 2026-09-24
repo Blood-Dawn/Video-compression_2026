@@ -59,7 +59,8 @@ the GitHub Release instead. Maintainers: see
 ## Download the installer manually
 
 1. Go to the
-   [Releases page](https://github.com/Blood-Dawn/Video-compression_2026/releases/latest).
+   [current desktop release](https://github.com/Blood-Dawn/Video-compression_2026/releases/tag/v2.2.0-beta). (Not "latest": GitHub's latest release is
+   the Android app, which has APKs only.)
 2. Download `SVCS-Setup-<version>.exe`.
 3. (Recommended) Verify it against the published `SHA256SUMS.txt`:
 

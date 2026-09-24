@@ -54,13 +54,11 @@ addresses) were committed before commit ce6490f untracked them, so they are
 still readable in the public history. Removing them needs a history rewrite
 and a force push, which is the owner's call (and invalidates every clone).
 
-### FLAG_SECURE scope on the phone app
+### FLAG_SECURE scope on the phone app (decided 2026-09-24)
 
-The whole app window is FLAG_SECURE, which suits Server Mode (live camera
-footage, a bearer token) but also blocks screenshots of the standalone
-compressor, including for store listings and bug reports. Screenshot builds
-exist behind `-PsvcsAllowScreenshots=true`. Owner decision: keep it
-app-wide, or apply it only while Server Mode screens are showing.
+Decided: removed entirely. Screenshots and screen recording now work on
+every screen, including Server Mode. The `-PsvcsAllowScreenshots` build flag
+is gone with it. The pairing token is still encrypted at rest in TokenStore.
 
 ### Sample clips for the installer's `-Samples` option
 

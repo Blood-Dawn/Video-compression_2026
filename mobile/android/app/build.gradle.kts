@@ -56,17 +56,6 @@ android {
         versionCode = 15
         versionName = "1.2.0-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-
-        // FLAG_SECURE stays on in every normal build (see MainActivity). This
-        // switch exists only for store screenshots and UI review, and has to
-        // be asked for explicitly on the command line:
-        //   ./gradlew assembleDebug -PsvcsAllowScreenshots=true
-        // Nothing checked in or published ever sets it.
-        buildConfigField(
-            "boolean",
-            "ALLOW_SCREENSHOTS",
-            (project.findProperty("svcsAllowScreenshots") as String? ?: "false"),
-        )
     }
 
     // Release signing (first public APK, 2026-08-16). The keystore is NOT in

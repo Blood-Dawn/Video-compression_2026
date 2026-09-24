@@ -34,7 +34,6 @@ cd mobile/android
 ./gradlew assembleDebug         # app-<abi>-debug.apk, package org.svcs.mobile.debug
 ./gradlew assembleRelease       # R8-minified, ABI splits + universal APK
 ./gradlew assembleQa            # minified like release, HTTP logging on
-./gradlew assembleDebug -PsvcsAllowScreenshots=true   # FLAG_SECURE off
 ```
 
 - `local.properties` (gitignored) needs `sdk.dir=...` if `ANDROID_HOME` is not
@@ -44,8 +43,8 @@ cd mobile/android
   signs with the building machine's debug key. Phones only accept an update
   signed with the same key as the installed app, so releases are built on
   the owner's machine until a real keystore exists (docs/BLOCKERS.md).
-- **Screenshots:** the whole window is FLAG_SECURE, so screenshots come out
-  black unless you build with `-PsvcsAllowScreenshots=true`. Never ship that.
+- **Screenshots:** allowed on every screen. FLAG_SECURE was removed on
+  2026-09-24 (docs/BLOCKERS.md).
 - **Emulator notes:** the emulator's software HEVC encoder caps near 512 px,
   so use H.264 when checking resolution behavior there. To pair with a
   server on your own PC, use `10.0.2.2`, not `127.0.0.1`.
@@ -57,7 +56,7 @@ cd mobile/android
 Package by feature under `app/src/main/java/org/svcs/mobile/`:
 
 ```
-MainActivity.kt        the one activity: FLAG_SECURE, share-in (ACTION_SEND)
+MainActivity.kt        the one activity: share-in (ACTION_SEND)
 SvcsApplication.kt     empty on purpose: no analytics, no crash SDK
 JobNotifier.kt         Server Mode job and event notifications
 

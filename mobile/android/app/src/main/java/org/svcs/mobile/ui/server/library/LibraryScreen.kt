@@ -56,8 +56,6 @@ import org.svcs.mobile.ui.theme.SvcsYellow
  *    this app manages their lifetime. Coil's disk cache is disabled per request
  *    below. The cost is re-fetching on process death, which is cheap because
  *    the SERVER caches them (measured: 93 ms cold, 6 ms warm).
- *  * The screen inherits FLAG_SECURE from MainActivity, so this grid cannot be
- *    screenshotted or appear in the task switcher.
  *
  * Author: Bloodawn (KheivenD), 2026-07-19 (M2.1).
  */

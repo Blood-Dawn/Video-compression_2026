@@ -23,6 +23,8 @@ there). The tag name is the owner's choice; `v1.2-beta` would continue the
 - **Honest results.** If the phone quietly encoded at a lower resolution
   or switched H.265 to H.264, the result screen says so, and SAVED tags the
   job.
+- **Screenshots work.** The app no longer blocks screenshots or screen
+  recording, so you can capture results and bug reports.
 - **One SERVER tab.** With a desktop server paired, HOME, LIBRARY, LIVE,
   EVENTS and METRICS now sit under SERVER instead of crowding the bottom
   bar.

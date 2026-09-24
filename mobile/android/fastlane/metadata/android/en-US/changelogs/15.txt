@@ -3,3 +3,4 @@
 - Size limits land closer to the limit as the app learns your phone
 - Tells you when the phone lowered the resolution or changed codec
 - Server Mode now sits under one SERVER tab
+- Screenshots and screen recording are allowed again

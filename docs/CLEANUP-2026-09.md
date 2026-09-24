@@ -107,7 +107,7 @@ Also tracked in [BLOCKERS.md](BLOCKERS.md):
 2. **A real Android release keystore.** Until then, only APKs built on the
    owner's Windows machine can update installed copies, and F-Droid or
    IzzyOnDroid submission should wait.
-3. **FLAG_SECURE scope**: keep it app-wide, or only on Server Mode screens.
+3. **FLAG_SECURE scope**: decided 2026-09-24, removed entirely.
 4. **Publishing the next releases** from the owner's machine (a desktop build
    of `2.2.0.dev1` and a mobile build with this work), and whether to keep
    the mobile release marked "latest" on GitHub.

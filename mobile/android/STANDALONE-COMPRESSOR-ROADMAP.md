@@ -503,8 +503,8 @@ Left, all owner decisions or needing a real phone:
   Fine for sideloading, but it must be created and backed up before
   submitting anywhere, because every future update has to be signed with the
   same key.
-- Phone screenshots for the store listings (`FLAG_SECURE` blocks
-  screenshots of the app window, so these need a deliberate capture path).
+- Phone screenshots for the store listings (plain screenshots work now
+  that FLAG_SECURE is gone).
 - The actual IzzyOnDroid request and F-Droid merge request.
 
 ### Phase 4 - Live capture (explicit stretch, not v1)

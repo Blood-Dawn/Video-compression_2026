@@ -278,9 +278,8 @@ private fun Player(url: String, vm: LiveViewModel) {
                     PlayerView(ctx).apply {
                         this.player = player
                         useController = false
-                        // The frames are of real people. Keep them out of the
-                        // recents thumbnail and screenshots, matching the rest
-                        // of the app's FLAG_SECURE posture.
+                        // Drop the last frame when the player resets so a
+                        // stale picture of the camera does not linger.
                         setKeepContentOnPlayerReset(false)
                     }
                 },

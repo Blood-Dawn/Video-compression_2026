@@ -193,11 +193,10 @@ cd mobile/android
 ./gradlew assembleDebug                  # package org.svcs.mobile.debug
 ./gradlew assembleRelease                # R8, ABI splits + universal APK
 ./gradlew assembleQa                     # minified like release, HTTP logging on
-./gradlew assembleDebug -PsvcsAllowScreenshots=true   # turns FLAG_SECURE off
 ```
 
-- Screenshots of normal builds are black on purpose (FLAG_SECURE); use the
-  screenshot flag above, never in a release.
+- Screenshots and screen recording work in every build. FLAG_SECURE was
+  removed on 2026-09-24 by owner decision.
 - Release builds sign with the building machine's debug key unless
   `SVCS_ANDROID_KEYSTORE` is set, and phones only accept updates with the same
   key. Do not publish an APK built anywhere except the owner's release
@@ -243,7 +242,7 @@ Android keystore are in [docs/BLOCKERS.md](docs/BLOCKERS.md).
   `uv.lock`) and the Android `ui/theme/Color.kt` (from the design
   tokens, recoverable with `git show 4558c5e:mobile/design/tokens/colors.css`).
 - **Security-sensitive code** (dashboard auth and CSRF, device tokens, the
-  encryption code, the phone's TokenStore and FLAG_SECURE) changes only with a
+  encryption code, the phone's TokenStore) changes only with a
   test that shows why, and `tests/security/` must stay green.
 
 Organization choices behind the layout, for reference: docs are indexed by

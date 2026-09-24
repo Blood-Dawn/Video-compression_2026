@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -19,19 +18,13 @@ import org.svcs.mobile.ui.theme.SvcsTheme
  * compressor tabs, and Server Mode once paired. It also receives videos
  * shared in from other apps (ACTION_SEND) and hands them to COMPRESS.
  *
- * FLAG_SECURE is set for the whole window. It keeps the app out of the
- * task-switcher thumbnail and blocks screenshots and screen recording. That
- * matters here for two reasons: the pairing screen holds a bearer credential
- * for a surveillance system, and the Server Mode screens show footage of real
- * people. Setting it once at the activity means a future screen cannot forget
- * it. Whether the compressor screens need it too is an open owner decision
- * (docs/BLOCKERS.md); screenshot builds turn it off with
- * -PsvcsAllowScreenshots=true.
+ * Screenshots and screen recording are allowed. The window used to set
+ * FLAG_SECURE app-wide, which also blocked screenshots of the standalone
+ * compressor, bug reports and store listings. The owner removed it on
+ * 2026-09-24 (docs/BLOCKERS.md). The pairing token stays encrypted at rest in
+ * TokenStore and is never drawn in clear text.
  *
- * The cost is real and deliberate: users cannot screenshot the app, including
- * to file a bug. That is the right trade for a camera system.
- *
- * Author: Bloodawn (KheivenD), 2026-07-18 (M1.1).
+ * Author: Bloodawn (KheivenD), 2026-07-18 (M1.1); FLAG_SECURE removed 2026-09-24.
  */
 class MainActivity : ComponentActivity() {
 
@@ -46,12 +39,6 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (!BuildConfig.ALLOW_SCREENSHOTS) {
-            window.setFlags(
-                WindowManager.LayoutParams.FLAG_SECURE,
-                WindowManager.LayoutParams.FLAG_SECURE,
-            )
-        }
         enableEdgeToEdge()
         JobNotifier.ensureChannel(this)
         if (Build.VERSION.SDK_INT >= 33 && !JobNotifier.canNotify(this)) {

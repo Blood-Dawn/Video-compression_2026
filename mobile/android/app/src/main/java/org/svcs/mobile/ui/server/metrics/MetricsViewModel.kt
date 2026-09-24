@@ -1,4 +1,4 @@
-package org.svcs.mobile.ui
+package org.svcs.mobile.ui.server.metrics
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope

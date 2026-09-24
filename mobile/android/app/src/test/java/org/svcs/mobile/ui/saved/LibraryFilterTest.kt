@@ -1,4 +1,4 @@
-package org.svcs.mobile.ui
+package org.svcs.mobile.ui.saved
 
 import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals

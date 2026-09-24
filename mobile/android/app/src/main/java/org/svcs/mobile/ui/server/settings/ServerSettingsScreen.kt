@@ -1,4 +1,4 @@
-package org.svcs.mobile.ui
+package org.svcs.mobile.ui.server.settings
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column

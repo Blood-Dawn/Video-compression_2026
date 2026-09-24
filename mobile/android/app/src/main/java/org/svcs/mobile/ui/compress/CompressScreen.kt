@@ -1,4 +1,4 @@
-package org.svcs.mobile.ui
+package org.svcs.mobile.ui.compress
 
 import android.util.Size
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -83,6 +83,10 @@ import org.svcs.mobile.ui.theme.SvcsTeal
 import org.svcs.mobile.ui.theme.SvcsText
 import org.svcs.mobile.ui.theme.SvcsTextBright
 import org.svcs.mobile.ui.theme.SvcsTextDim
+import org.svcs.mobile.ui.VideoIntents
+import org.svcs.mobile.ui.clock
+import org.svcs.mobile.ui.decimalMb
+import org.svcs.mobile.ui.humanBytes
 
 /**
  * COMPRESS tab (Fall roadmap Phase 1): the standalone, server-free compressor.

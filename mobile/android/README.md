@@ -1,212 +1,124 @@
 # SVCS Mobile (Android)
 
-Thin client for a self-hosted SVCS server. It drives and monitors the server
-over its REST API; it does not encode video on the phone. See
-`docs/MOBILE-ARCHITECTURE.md` for why, and for the full milestone plan.
+One app, two jobs:
 
-Status: **M1.1, one screen (server pairing). Compiles, tests pass, APK builds.**
-AGPL-3.0 by inheritance from the repo root `LICENSE`.
+- **Standalone compressor** (the main use since 1.0.0-beta). Compresses
+  videos on the phone with its hardware encoder through Jetpack Media3
+  Transformer. No server, no network, no account. COMPRESS, SAVED and the
+  opt-in Smart Compress (YOLOv8n on LiteRT) all live here.
+- **Server Mode** (optional). Pair with a desktop SVCS install to browse its
+  library, watch live cameras, see events and metrics.
 
----
+Current release: **1.1.0-beta** (versionCode 14), GitHub tag `v1-beta`.
+AGPL-3.0, like the rest of the repo.
 
-## Build status
+| Read | For |
+|---|---|
+| [STANDALONE-COMPRESSOR-ROADMAP.md](STANDALONE-COMPRESSOR-ROADMAP.md) | Why Media3 and LiteRT, the phased plan, and progress notes. Start here. |
+| [UI-REVIEW.md](UI-REVIEW.md) | The design-system pass and the ranked list of open UI work. |
+| [EMULATOR-GUIDE.md](EMULATOR-GUIDE.md) | Running the app with no phone, step by step. |
+| [UPLOAD-WORKER-DESIGN.md](UPLOAD-WORKER-DESIGN.md) | Moving Server Mode uploads onto WorkManager. |
+| [../../docs/architecture/MOBILE-ARCHITECTURE.md](../../docs/architecture/MOBILE-ARCHITECTURE.md) | Server Mode's design: pairing, device tokens, push. |
+| [../../docs/RELEASE-CHECKLIST.md](../../docs/RELEASE-CHECKLIST.md) | Cutting an APK release (Mobile section). |
 
-Verified on 2026-07-19 (Windows 11, JDK 17.0.19, AGP 8.7.3, Gradle 8.11.1,
-compileSdk 35, build-tools 36.0.0):
+## Build and test
 
-| | |
-| --- | --- |
-| `./gradlew assembleDebug` | **BUILD SUCCESSFUL**, 0 errors, 0 warnings |
-| APK | `app/build/outputs/apk/debug/app-debug.apk`, 25.93 MB |
-| `./gradlew testDebugUnitTest` | **11 tests, 0 failures**, 0 skipped |
-
-Only one thing had to change to get there: `gradle.properties` was missing
-entirely, so the build died at `:app:checkDebugAarMetadata` with
-`android.useAndroidX is not enabled`. The Kotlin itself compiled clean on the
-first attempt that reached the compiler.
-
-## M1.1 acceptance: MET
-
-Verified 2026-07-19 on a physical **Samsung SM-S948U1 (Android 17)** over Wi-Fi
-debugging, against a real server on the LAN.
-
-The plan's criterion was: "on a real device on the same LAN, entering the server
-address and credentials and tapping Test shows the server's edition and feature
-list." The phone rendered:
-
-```
-Connected to Server.
-CONNECTED
-SVCS 2.2.0.dev0
-Server
-FEATURES: autocompress, device_tokens, encryption, hls, library,
-          logs_stream, metrics, plates, presets, retention, rtsp, upload
-```
-
-Confirmed on both sides, not just the phone's word for it: the device token's
-`last_used_at` was stamped server-side at the moment of the tap, so the Bearer
-credential really was verified by `gui/auth.py` rather than merely parsed by the
-client.
-
-Three implementation details were exercised incidentally and all behaved:
-
-- **`normalizeUrl()`** - the address was entered as `192.168.80.17:5000` with no
-  scheme, and the field afterwards read `http://192.168.80.17:5000`.
-- **`PasswordVisualTransformation`** - the token field masked all 48 characters.
-- **`FLAG_SECURE`** - `adb exec-out screencap` returned a black frame and
-  SurfaceFlinger logged the layer as `secure`. Screenshots of this app are
-  blocked, which is the intended trade for a surveillance client and does mean
-  bug reports cannot include screenshots.
-
-### Still NOT verified
-
-- No instrumented (on-device) tests have been run; the 11 passing tests are JVM
-  unit tests.
-- The release variant has not been built, so the ProGuard rules are unexercised.
-- Only the pairing screen exists. LIVE, LIBRARY and METRICS are M2/M3.
-
-### What HAS been verified server-side
-
-The server side, which is the part the client cannot work without, is tested in
-the Python suite that does run here:
-
-| What | Where |
-| --- | --- |
-| Bearer auth works on API, media, HLS and thumbnail routes, on separate connections | `tests/test_mobile_client_contract.py` |
-| A native client (no `Origin`/`Referer`) is not CSRF-blocked | same |
-| Every key this app parses from `/api/capabilities` is present | same |
-| Revoking one device locks out that device only | same |
-| A stolen device token cannot mint or revoke | `tests/test_device_tokens.py` |
-| `Color.kt` matches the design tokens exactly, and no font CDN is referenced | `tests/test_android_theme_sync.py` |
-
-The Kotlin now compiles and the requests it issues are the ones these tests
-pin, so the server will answer correctly. That is a real guarantee, and it is
-still strictly less than "the app works" until it runs on a phone.
-
----
-
-## Building it
+Toolchain: JDK 17, Android SDK platform 35 and build-tools 35 (AGP pulls
+34.0.0 itself), Gradle 8.11.1 through the committed wrapper. Kotlin 2.1.0,
+AGP 8.7.3, Compose BOM 2024.12.01, minSdk 29, targetSdk 35.
 
 ```bash
 cd mobile/android
-pwsh -File verify-toolchain.ps1   # check JDK/SDK/licenses BEFORE building
-./gradlew assembleDebug
-./gradlew testDebugUnitTest
+./gradlew testDebugUnitTest     # JVM tests (Robolectric where needed)
+./gradlew assembleDebug         # app-<abi>-debug.apk, package org.svcs.mobile.debug
+./gradlew assembleRelease       # R8-minified, ABI splits + universal APK
+./gradlew assembleQa            # minified like release, HTTP logging on
+./gradlew assembleDebug -PsvcsAllowScreenshots=true   # FLAG_SECURE off
 ```
 
-`verify-toolchain.ps1` exists because a missing SDK platform or an unaccepted
-license fails deep inside a Gradle stack trace rather than saying what is
-wrong. It reports each missing piece with the exact `sdkmanager` line to fix
-it, and refreshes `JAVA_HOME`/`PATH` from the registry first, since the shell
-you run it in is usually the one that predates the install.
+- `local.properties` (gitignored) needs `sdk.dir=...` if `ANDROID_HOME` is not
+  set. On Windows, `pwsh -File verify-toolchain.ps1 -WriteLocalProperties`
+  checks the JDK, SDK and licenses and writes it for you.
+- **Release signing:** with no `SVCS_ANDROID_KEYSTORE` set, `assembleRelease`
+  signs with the building machine's debug key. Phones only accept an update
+  signed with the same key as the installed app, so releases are built on
+  the owner's machine until a real keystore exists (docs/BLOCKERS.md).
+- **Screenshots:** the whole window is FLAG_SECURE, so screenshots come out
+  black unless you build with `-PsvcsAllowScreenshots=true`. Never ship that.
+- **Emulator notes:** the emulator's software HEVC encoder caps near 512 px,
+  so use H.264 when checking resolution behavior there. To pair with a
+  server on your own PC, use `10.0.2.2`, not `127.0.0.1`.
+- CI (`.github/workflows/ci.yml`, job `android`) runs `testDebugUnitTest`
+  and `assembleDebug` on every push to `main` and `mobile`.
 
-Pass `-WriteLocalProperties` to generate `local.properties` (gitignored,
-machine-specific).
+## Code layout
 
-No physical phone handy, or new to Android tooling entirely? See
-`EMULATOR-GUIDE.md` for a plain-language walkthrough of setting up and
-using an Android emulator (a virtual phone that runs on this same PC),
-including the one gotcha specific to this app: pairing against a server
-running on your own machine needs `10.0.2.2`, not `127.0.0.1`.
-
-Debugging a request failure that only happens on a minified build (release)?
-`./gradlew assembleQa` builds a third variant, `qa`, that is minified and
-shrunk exactly like `release` (so it hits the same R8 stripping bugs) but
-keeps HTTP logging on (`app-qa.apk`, installs side-by-side with `debug`/
-`release` via its own `.qa` application-id suffix). `release` itself never
-logs, even with an unset keystore. This is a local/testing build only; it
-is never attached to a GitHub release.
-
-Working on moving the resumable chunked upload off `viewModelScope` (so it
-survives process death, not just a tab switch)? See
-`UPLOAD-WORKER-DESIGN.md` for the WorkManager migration design before
-starting - it covers the `content://` Uri lifetime pitfall specifically,
-which will bite first if skipped.
-
-`gradlew` and `gradlew.bat` are committed; the wrapper JAR is not (it is a
-binary). Regenerate it with `gradle wrapper --gradle-version 8.11.1`, or just
-open the folder in Android Studio.
-
-### Toolchain this was built with
-
-| Component | Version | Source |
-| --- | --- | --- |
-| JDK | Microsoft OpenJDK 17.0.19 LTS | `winget install Microsoft.OpenJDK.17` |
-| Android Studio | 2026.1.2.10 | `winget install Google.AndroidStudio` |
-| Android SDK platform | android-35 | SDK Manager (matches `compileSdk`) |
-| Build tools | 36.0.0 | SDK Manager |
-| Gradle | 8.11.1 | wrapper |
-
-Note the SDK Manager installs the newest platform by default (android-36.1
-here), but AGP 8.7.3 supports `compileSdk 35`, so android-35 must be added
-explicitly. Moving to 36 means bumping AGP and Gradle together; that is a
-deliberate follow-up, not a drive-by.
-
-This build is deliberately **not** wired into `scripts/run_tests.ps1`. The
-Python suite must stay runnable on a machine with no JDK, which is the normal
-case for this project.
-
-## Pairing against a real server
-
-1. Start the server so the phone can reach it. Loopback is the default, so a
-   LAN bind is required: `python run_gui.py --host 0.0.0.0 --username you
-   --password <strong>`. Read the exposure warning it prints.
-2. Mint a device token. `POST /api/auth/tokens` with the dashboard password,
-   body `{"label": "Pixel 8"}`. The token is shown **once**.
-3. In the app, enter `http://<server-lan-ip>:5000` and the token, then tap
-   **Test connection**.
-
-Reach the server over a VPN (WireGuard or Tailscale) if you are off the LAN.
-Do not port-forward: the server is plain HTTP, so the token and the video both
-cross the wire in the clear.
-
-## Layout
+Package by feature under `app/src/main/java/org/svcs/mobile/`:
 
 ```
-app/src/main/java/org/svcs/mobile/
-  MainActivity.kt              single activity, FLAG_SECURE for the window
-  SvcsApplication.kt           empty on purpose: no analytics, no crash SDK
-  data/TokenStore.kt           AES-256-GCM under a Keystore key, DataStore ciphertext
-  net/HostClassifier.kt        private-range gate, mirrors src/gui/auth.py
-  net/SvcsApi.kt               OkHttp + the /api/capabilities model
-  ui/ServerSettingsScreen.kt   the pairing screen
-  ui/ServerSettingsViewModel.kt
-  ui/theme/Color.kt            GENERATED from mobile/design/tokens/colors.css
-  ui/theme/Theme.kt            dark-only scheme and type scale
+MainActivity.kt        the one activity: FLAG_SECURE, share-in (ACTION_SEND)
+SvcsApplication.kt     empty on purpose: no analytics, no crash SDK
+JobNotifier.kt         Server Mode job and event notifications
+
+compress/              the on-device engine (no UI)
+  CompressionWorker.kt   WorkManager job, Media3 Transformer, MediaStore output.
+                         Do not rename or move: WorkManager stores the class name
+                         and proguard-rules.pro keeps its constructor.
+  CompressionPresets.kt  presets, size-target bitrate math, frame-size capping
+  CompressionHistoryStore.kt  SAVED's local JSON history
+  MediaProbe.kt          duration, audio, size and rotation of a source
+detect/                Smart Compress: ObjectDetector (LiteRT), SmartCompressAnalyzer
+data/TokenStore.kt     server URL + device token (AES-GCM under an Android Keystore key)
+net/                   Server Mode REST client (OkHttp) and models
+
+ui/
+  SvcsApp.kt             tabs and navigation
+  Format.kt              humanBytes, decimalMb, clock
+  VideoIntents.kt        share / play a video in another app
+  compress/              COMPRESS tab: CompressScreen, CompressViewModel
+  saved/                 SAVED tab: CompressLibraryScreen, CompressLibraryViewModel
+  server/{home,library,live,events,metrics,settings}/
+                         Server Mode tabs; settings is also the MORE tab
+  components/            SVCS design-system widgets, line icons, VideoThumbnail
+  theme/                 Color.kt (design tokens, generated), DerivedColors.kt,
+                         Theme.kt (fonts, Material 3 scheme, type scale)
 ```
+
+Tests mirror the packages under `app/src/test/`: pure logic (presets,
+formatting, probing, SAVED's filter/sort) plus Server Mode ViewModels against
+`net/FakeSvcsApi.kt`. `app/src/androidTest/` holds the on-device TokenStore
+persistence test.
+
+## Things that are easy to get wrong
+
+- **LiteRT is pinned to `com.google.ai.edge.litert:litert` 1.4.2.** The 2.x
+  line's metadata needs Kotlin 2.3. Keep the `org.tensorflow.lite.*` imports;
+  R8 keeps that package because the JNI library calls back into it.
+- **Media3 1.5.1** has no `Presentation.createForShortSide()`.
+  `scaledFrameSize()` computes exact output dimensions from width, height and
+  rotation; Media3 hands effects upright frames.
+- `FlowRow` needs `@OptIn(ExperimentalLayoutApi::class)` on this Compose version.
+- Material 3 Expressive components exist only in material3 1.5 alpha; the app
+  does not ship alpha libraries.
+- The fonts (Bebas Neue, Space Mono, Outfit) are bundled under `res/font`,
+  SIL OFL 1.1, with license texts in `assets/licenses/`.
+- `Color.kt` is generated from the design tokens; do not hand-edit it. The
+  design folder is recoverable with
+  `git show 4558c5e:mobile/design/tokens/colors.css`.
 
 ## Decisions worth not re-litigating
 
-- **No `androidx.security:security-crypto`.** Deprecated April 2025.
-  `TokenStore` does the equivalent directly against the Keystore.
-- **No FCM, no Firebase.** Excluded three times over: the no-cloud-calls house
-  rule, the architecture (a self-hosted server has no outbound path to FCM),
-  and F-Droid policy. Notification transport is an open owner decision.
-- **No analytics, no crash reporter.** Matches the server's
-  `send_default_pii=False`. If wanted later: ACRA to a self-hosted endpoint,
-  opt-in.
-- **No FFmpeg in the APK.** The client encodes nothing. FFmpegKit was retired
-  2025-01-06 regardless.
-- **Cleartext HTTP is permitted app-wide** in `network_security_config.xml`,
-  and the real gate is `HostClassifier`. The file explains why the narrower
-  approach is not expressible: it is a build-time resource, and `<domain>`
-  supports no CIDR, so denying by default would block a server at
-  `192.168.x.x`, which is the primary use case. The actual fix is TLS on the
-  server.
-- **Port 5000**, not the 8000 the mockup pre-fills. 5000 is `run_gui.py`'s
-  default.
+- **No FFmpeg.** Media3 Transformer on the hardware encoders is faster,
+  smaller and license-clean; the roadmap explains why FFmpeg-on-Android is
+  the wrong engine in 2026.
+- **LiteRT, not ONNX Runtime Mobile**, for the detector (NNAPI is deprecated;
+  LiteRT is Google's path to GPU/NPU).
+- **No `androidx.security:security-crypto`** (deprecated April 2025).
+  TokenStore does the equivalent directly against the Keystore.
+- **No Firebase, no analytics, no crash reporter.** F-Droid friendly, and the
+  app never phones home.
+- **Cleartext HTTP is allowed app-wide** for Server Mode, gated at runtime by
+  `HostClassifier` (private ranges only unless the user consents);
+  `network_security_config.xml` explains why a narrower config is not
+  expressible.
 - **Dark theme only.** The design system has no light palette.
-
-## Fonts
-
-Bebas Neue, Space Mono, and Outfit (all OFL-1.1) are **not bundled yet**, so
-`Theme.kt` uses platform defaults at the correct sizes and tracking. Vendor the
-`.ttf` files under `res/font/` with their license text to finish this.
-`mobile/design/tokens/fonts.css` fetches them from the Google Fonts CDN, which
-must not reach the app; a test in `tests/test_android_theme_sync.py` enforces
-that.
-
-## Next
-
-M2 (LIBRARY, METRICS) and M3 (LIVE) per `docs/MOBILE-ARCHITECTURE.md`. Do not
-start either until this module compiles and pairs against a real server.

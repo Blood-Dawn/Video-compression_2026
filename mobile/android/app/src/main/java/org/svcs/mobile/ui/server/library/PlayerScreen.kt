@@ -1,4 +1,4 @@
-package org.svcs.mobile.ui
+package org.svcs.mobile.ui.server.library
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background

@@ -1,4 +1,4 @@
-package org.svcs.mobile.ui
+package org.svcs.mobile.ui.server.live
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border

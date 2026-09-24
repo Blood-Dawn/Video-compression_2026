@@ -76,10 +76,9 @@ trains never collide. The desktop update check ignores mobile tags on purpose
    comment there) whenever the release contains new commits. Add
    `mobile/android/fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`
    for F-Droid and IzzyOnDroid.
-2. **run_tests.** From `mobile/android`: `./gradlew testDebugUnitTest`. One
-   known failure is expected until TokenStore gets a crypto seam:
-   `ServerSettingsViewModelTest` "save persists then reloads push config"
-   (Robolectric has no AndroidKeyStore).
+2. **run_tests.** From `mobile/android`: `./gradlew testDebugUnitTest`. All
+   tests must pass (CI's `android` job runs the same command). The old
+   `ServerSettingsViewModelTest` Keystore failure was fixed on 2026-09-24.
 3. **build.** `./gradlew assembleRelease`. ABI splits produce
    `app/build/outputs/apk/release/app-arm64-v8a-release.apk` and
    `app-universal-release.apk` (plus armeabi-v7a and x86_64). R8 is on.

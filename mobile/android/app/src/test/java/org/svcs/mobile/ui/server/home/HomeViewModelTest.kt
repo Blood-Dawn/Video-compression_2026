@@ -1,4 +1,4 @@
-package org.svcs.mobile.ui
+package org.svcs.mobile.ui.server.home
 
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers

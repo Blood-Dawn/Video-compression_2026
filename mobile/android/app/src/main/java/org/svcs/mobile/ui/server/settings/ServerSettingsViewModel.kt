@@ -1,4 +1,4 @@
-package org.svcs.mobile.ui
+package org.svcs.mobile.ui.server.settings
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel

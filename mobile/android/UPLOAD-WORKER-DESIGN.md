@@ -6,7 +6,7 @@ against; nothing in this doc has been implemented yet.
 ## The problem this solves
 
 `LibraryViewModel.uploadFromPhone()` runs the whole resumable chunked-upload
-loop (`doUpload()`, in `mobile/android/app/src/main/java/org/svcs/mobile/ui/LibraryViewModel.kt`,
+loop (`doUpload()`, in `mobile/android/app/src/main/java/org/svcs/mobile/ui/server/library/LibraryViewModel.kt`,
 currently lines ~203-303) inside `viewModelScope.launch { ... }`. That
 survives a tab switch or a config change (rotation), because `viewModelScope`
 is tied to the ViewModel, not the Activity. It does **not** survive the

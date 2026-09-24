@@ -1,4 +1,4 @@
-package org.svcs.mobile.ui
+package org.svcs.mobile.ui.server.home
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,6 +26,7 @@ import org.svcs.mobile.ui.theme.SvcsGreen
 import org.svcs.mobile.ui.theme.SvcsRed
 import org.svcs.mobile.ui.theme.SvcsSurface2
 import org.svcs.mobile.ui.theme.SvcsTextDim
+import org.svcs.mobile.ui.humanBytes
 
 /**
  * HOME tab (M2.3): what the server is doing, and what compression actually saved.

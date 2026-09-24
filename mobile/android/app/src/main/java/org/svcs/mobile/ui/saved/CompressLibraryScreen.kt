@@ -1,4 +1,4 @@
-package org.svcs.mobile.ui
+package org.svcs.mobile.ui.saved
 
 import android.net.Uri
 import android.util.Size
@@ -73,6 +73,8 @@ import org.svcs.mobile.ui.theme.SvcsTeal
 import org.svcs.mobile.ui.theme.SvcsText
 import org.svcs.mobile.ui.theme.SvcsTextBright
 import org.svcs.mobile.ui.theme.SvcsTextDim
+import org.svcs.mobile.ui.VideoIntents
+import org.svcs.mobile.ui.humanBytes
 
 /**
  * SAVED tab (Fall roadmap Phase 1.5): search and advanced filters over

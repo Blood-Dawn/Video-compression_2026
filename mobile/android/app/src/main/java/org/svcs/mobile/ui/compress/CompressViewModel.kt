@@ -1,4 +1,4 @@
-package org.svcs.mobile.ui
+package org.svcs.mobile.ui.compress
 
 import android.app.Application
 import android.content.ContentResolver

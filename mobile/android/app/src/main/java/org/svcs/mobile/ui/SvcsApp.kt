@@ -44,6 +44,20 @@ import org.svcs.mobile.net.Fetched
 import org.svcs.mobile.net.ProbeResult
 import org.svcs.mobile.net.SvcsApi
 import org.svcs.mobile.net.SvcsApiClient
+import org.svcs.mobile.ui.compress.CompressScreen
+import org.svcs.mobile.ui.compress.CompressViewModel
+import org.svcs.mobile.ui.saved.CompressLibraryScreen
+import org.svcs.mobile.ui.server.events.EventsScreen
+import org.svcs.mobile.ui.server.events.EventsViewModel
+import org.svcs.mobile.ui.server.home.HomeScreen
+import org.svcs.mobile.ui.server.home.HomeViewModel
+import org.svcs.mobile.ui.server.library.LibraryScreen
+import org.svcs.mobile.ui.server.library.LibraryViewModel
+import org.svcs.mobile.ui.server.live.LiveScreen
+import org.svcs.mobile.ui.server.live.LiveViewModel
+import org.svcs.mobile.ui.server.metrics.MetricsScreen
+import org.svcs.mobile.ui.server.metrics.MetricsViewModel
+import org.svcs.mobile.ui.server.settings.ServerSettingsScreen
 
 /**
  * Tabs from the design mockup. LIVE is conditional: the field edition registers

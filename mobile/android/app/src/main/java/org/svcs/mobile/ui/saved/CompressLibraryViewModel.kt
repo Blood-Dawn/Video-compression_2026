@@ -1,4 +1,4 @@
-package org.svcs.mobile.ui
+package org.svcs.mobile.ui.saved
 
 import android.app.Application
 import android.net.Uri

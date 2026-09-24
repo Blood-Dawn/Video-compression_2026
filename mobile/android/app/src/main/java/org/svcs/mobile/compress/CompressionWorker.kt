@@ -79,6 +79,9 @@ class CompressionWorker(
         const val KEY_DURATION_MS = "duration_ms"
         const val KEY_MODE_TYPE = "mode_type"
         const val KEY_PRESET_LABEL = "preset_label"
+        /** Size limit in bytes for TARGET_SIZE jobs; drives SizeCalibration
+         *  and the over-limit safety re-encode. 0 for quality jobs. */
+        const val KEY_TARGET_BYTES = "target_bytes"
         // Fall roadmap Phase 2: opt-in on-device detection pass that
         // decides whether this clip can shed bitrate rather than driving
         // true per-region ROI (that needs raw MediaCodec access Media3
@@ -128,6 +131,7 @@ class CompressionWorker(
             presetLabel: String = "",
             smartCompress: Boolean = false,
             removeAudio: Boolean = false,
+            targetBytes: Long = 0L,
         ): OneTimeWorkRequest {
             val data = Data.Builder()
                 .putString(KEY_INPUT_URI, inputUri.toString())
@@ -141,6 +145,7 @@ class CompressionWorker(
                 .putString(KEY_PRESET_LABEL, presetLabel)
                 .putBoolean(KEY_SMART_COMPRESS, smartCompress)
                 .putBoolean(KEY_REMOVE_AUDIO, removeAudio)
+                .putLong(KEY_TARGET_BYTES, targetBytes)
                 .build()
             return OneTimeWorkRequest.Builder(CompressionWorker::class.java)
                 .setInputData(data)
@@ -210,6 +215,18 @@ class CompressionWorker(
         val durationMs = inputData.getLong(KEY_DURATION_MS, 0L)
         val smartCompressRequested = inputData.getBoolean(KEY_SMART_COMPRESS, false)
         val removeAudio = inputData.getBoolean(KEY_REMOVE_AUDIO, false)
+        val modeType = inputData.getString(KEY_MODE_TYPE) ?: "QUALITY"
+        val targetBytes = inputData.getLong(KEY_TARGET_BYTES, 0L)
+        val history = CompressionHistoryStore(applicationContext)
+
+        // Size-limit jobs: ask for more when this phone's encoder is known to
+        // undershoot (SizeCalibration). The safety re-encode below keeps the
+        // limit a limit.
+        var calibration = 1.0
+        if (modeType == "TARGET_SIZE" && targetBytes > 0) {
+            calibration = SizeCalibration.factor(SizeCalibration.ratios(history.readAll(), requestedCodec))
+            requestedBitrate = (requestedBitrate * calibration).toInt()
+        }
 
         val inputBytes = sizeOfUri(inputUri)
         val tempOutputFile = File(applicationContext.cacheDir, "compress_${id}.mp4")
@@ -251,36 +268,58 @@ class CompressionWorker(
         }
 
         var usedFallback = false
+        // The bitrate the final pass actually asked the encoder for.
+        var passBitrate = requestedBitrate
+
+        /** One encode, with the decode-failure fallback. */
+        suspend fun encode(bitrate: Int): TransformReport = try {
+            passBitrate = bitrate
+            runTransform(
+                inputUri, probe, tempOutputFile, bitrate, requestedMaxEdge,
+                requestedCodec, removeAudio, roiRequest,
+            )
+        } catch (first: TransformFailure) {
+            // Decode-failure fallback (roadmap section 2): a real, documented
+            // failure mode is a decoder rejecting an odd resolution/framerate
+            // combination outright. Retry once at a conservative, universally
+            // supported target rather than surfacing a raw codec error.
+            usedFallback = true
+            tempOutputFile.delete()
+            passBitrate = minOf(bitrate, 2_500_000)
+            runTransform(
+                inputUri, probe, tempOutputFile,
+                targetBitrateBps = passBitrate,
+                maxShortSidePx = 720,
+                codecMime = MimeTypes.VIDEO_H264,
+                removeAudio = removeAudio,
+                roi = null,
+            )
+        }
+
         try {
-            val report = try {
-                runTransform(
-                    inputUri, probe, tempOutputFile, requestedBitrate, requestedMaxEdge,
-                    requestedCodec, removeAudio, roiRequest,
-                )
-            } catch (first: TransformFailure) {
-                // Decode-failure fallback (roadmap section 2): a real, documented
-                // failure mode is a decoder rejecting an odd resolution/framerate
-                // combination outright. Retry once at a conservative, universally
-                // supported target rather than surfacing a raw codec error.
-                usedFallback = true
+            var report = encode(requestedBitrate)
+            if (calibration > 1.0 && tempOutputFile.length() > targetBytes) {
+                // The boost overshot on this clip. Never hand back a file over
+                // the user's limit: encode again exactly as the uncalibrated
+                // math says (Smart Compress's cut, if any, still applies).
                 tempOutputFile.delete()
-                runTransform(
-                    inputUri, probe, tempOutputFile,
-                    targetBitrateBps = minOf(requestedBitrate, 2_500_000),
-                    maxShortSidePx = 720,
-                    codecMime = MimeTypes.VIDEO_H264,
-                    removeAudio = removeAudio,
-                    roi = null,
-                )
+                usedFallback = false
+                val uncalibrated = (requestedBitrate / calibration).toInt()
+                calibration = 1.0
+                report = encode(uncalibrated)
             }
             val roiRegions = (report.roi as? RoiOutcome.Applied)?.regions ?: 0
             val encoderNote = report.encoderNote
+            val audioBps = if (removeAudio || !probe.hasAudio) 0 else AUDIO_RESERVE_BPS
+            val actualVideoBps = SizeCalibration.actualVideoBps(
+                report.result.averageVideoBitrate, tempOutputFile.length(), durationMs, audioBps,
+            )
 
             val outputUri = writeToMediaStore(tempOutputFile, outputDisplayName)
             val outputBytes = tempOutputFile.length()
             tempOutputFile.delete()
 
-            CompressionHistoryStore(applicationContext).append(
+            history.append(
                 CompressionRecord(
                     outputUri = outputUri.toString(),
                     outputDisplayName = outputDisplayName,
@@ -290,7 +329,7 @@ class CompressionWorker(
                     durationMs = durationMs,
                     timestampMs = System.currentTimeMillis(),
                     codecMime = requestedCodec,
-                    modeType = inputData.getString(KEY_MODE_TYPE) ?: "QUALITY",
+                    modeType = modeType,
                     presetLabel = inputData.getString(KEY_PRESET_LABEL) ?: "",
                     usedFallback = usedFallback,
                     smartCompressUsed = smartCompressRequested,
@@ -298,6 +337,10 @@ class CompressionWorker(
                     roiRegions = roiRegions,
                     encoderName = report.result.videoEncoderName,
                     encoderNote = encoderNote,
+                    requestedVideoBps = passBitrate,
+                    actualVideoBps = actualVideoBps,
+                    targetBytes = targetBytes,
+                    calibrationFactor = calibration,
                 ),
             )
 

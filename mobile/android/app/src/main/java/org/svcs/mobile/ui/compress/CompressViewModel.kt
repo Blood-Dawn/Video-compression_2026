@@ -266,6 +266,7 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
             presetLabel = presetLabel,
             smartCompress = s.smartCompress,
             removeAudio = s.removeAudio,
+            targetBytes = (s.mode as? CompressionMode.TargetSize)?.preset?.maxBytes ?: 0L,
         )
         activeWorkId = request.id
         _state.update {

@@ -34,6 +34,14 @@ data class CompressionRecord(
     val encoderName: String? = null,
     /** Set when the encoder lowered the resolution or switched codec. */
     val encoderNote: String? = null,
+    /** Video bitrate handed to the encoder, and what it actually averaged.
+     *  SizeCalibration learns this phone's undershoot from the pair. */
+    val requestedVideoBps: Int = 0,
+    val actualVideoBps: Int = 0,
+    /** The size limit for TARGET_SIZE jobs (0 otherwise), and the boost
+     *  SizeCalibration applied to reach it (1.0 = none). */
+    val targetBytes: Long = 0L,
+    val calibrationFactor: Double = 1.0,
 )
 
 /**
@@ -97,6 +105,10 @@ class CompressionHistoryStore(context: Context) {
         put("roiRegions", r.roiRegions)
         put("encoderName", r.encoderName ?: JSONObject.NULL)
         put("encoderNote", r.encoderNote ?: JSONObject.NULL)
+        put("requestedVideoBps", r.requestedVideoBps)
+        put("actualVideoBps", r.actualVideoBps)
+        put("targetBytes", r.targetBytes)
+        put("calibrationFactor", r.calibrationFactor)
     }
 
     private fun toRecord(o: JSONObject): CompressionRecord = CompressionRecord(
@@ -120,5 +132,9 @@ class CompressionHistoryStore(context: Context) {
         roiRegions = o.optInt("roiRegions", 0),
         encoderName = if (o.isNull("encoderName")) null else o.optString("encoderName"),
         encoderNote = if (o.isNull("encoderNote")) null else o.optString("encoderNote"),
+        requestedVideoBps = o.optInt("requestedVideoBps", 0),
+        actualVideoBps = o.optInt("actualVideoBps", 0),
+        targetBytes = o.optLong("targetBytes", 0L),
+        calibrationFactor = o.optDouble("calibrationFactor", 1.0),
     )
 }

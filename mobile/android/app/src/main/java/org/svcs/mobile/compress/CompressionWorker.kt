@@ -267,6 +267,13 @@ class CompressionWorker(
             }
         }
 
+        // Never ask the encoder for more bits/sec than the source itself
+        // used - see capToSourceBitrate's doc for why this exists (Sep 2026
+        // bug report: a 3.5 MB clip came back over 30 MB).
+        requestedBitrate = capToSourceBitrate(
+            requestedBitrate, inputBytes, durationMs, probe.hasAudio,
+        )
+
         var usedFallback = false
         // The bitrate the final pass actually asked the encoder for.
         var passBitrate = requestedBitrate

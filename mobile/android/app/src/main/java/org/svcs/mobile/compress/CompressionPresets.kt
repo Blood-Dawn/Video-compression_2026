@@ -141,3 +141,43 @@ fun scaledFrameSize(width: Int, height: Int, rotationDegrees: Int, maxShortSideP
  */
 fun estimateOutputBytes(videoBps: Int, audioBps: Int, durationMs: Long): Long =
     ((videoBps.toLong() + audioBps.toLong()) * (durationMs.coerceAtLeast(0) / 1000.0) / 8.0).toLong()
+
+/**
+ * A floor under [capToSourceBitrate] so a corrupt/near-zero source estimate
+ * can't collapse the request to something the encoder will refuse.
+ */
+const val MIN_VIDEO_BITRATE_BPS = 300_000
+
+/**
+ * Never request more bits/sec than the source itself was encoded at.
+ *
+ * Quality mode's presets (HIGH/MEDIUM/LOW) are flat numbers - 10/6/3 Mbps -
+ * with no idea what the input actually needs, and a TARGET_SIZE job budgets
+ * purely off the requested size limit. Neither knows the source might
+ * already be well under that rate, so re-encoding it at the preset's/
+ * target's bitrate doesn't compress the clip, it grows it: a 3.5 MB source
+ * around 1 Mbps, re-encoded at Medium's flat 6 Mbps, comes back several
+ * times larger (the Sep 2026 bug report: 3.5 MB in, 32+ MB out).
+ *
+ * This is a pure ceiling - it only ever lowers [requestedBps] - so it can't
+ * push a TARGET_SIZE job over its limit, and a resolution cap (e.g. LOW's
+ * 720p cap on a 4K source) is still free to shrink the file further within
+ * whatever bitrate this returns.
+ *
+ * @param inputBytes size of the source file. <= 0 skips the cap (unknown size).
+ * @param durationMs source duration. <= 0 skips the cap (can't compute a rate).
+ * @param hasAudio whether the source has an audio track worth reserving for.
+ */
+fun capToSourceBitrate(
+    requestedBps: Int,
+    inputBytes: Long,
+    durationMs: Long,
+    hasAudio: Boolean,
+    audioBps: Int = AUDIO_RESERVE_BPS,
+): Int {
+    if (inputBytes <= 0 || durationMs <= 0) return requestedBps
+    val reserve = if (hasAudio) audioBps else 0
+    val sourceTotalBps = (inputBytes * 8.0 / (durationMs / 1000.0)).toInt()
+    val sourceVideoBps = (sourceTotalBps - reserve).coerceAtLeast(MIN_VIDEO_BITRATE_BPS)
+    return minOf(requestedBps, sourceVideoBps)
+}

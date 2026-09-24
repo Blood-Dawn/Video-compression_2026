@@ -117,4 +117,58 @@ class CompressionPresetsTest {
     fun estimate_negativeDurationIsZero() {
         assertEquals(0L, estimateOutputBytes(6_000_000, 128_000, -5))
     }
+
+    // ── capToSourceBitrate: the "3.5 MB became 32 MB" bug ────────────────
+
+    @Test
+    fun capToSource_shrinksAFlatPresetDownToTheSourcesOwnRate() {
+        // The reported bug, reproduced: a 3.5 MB, 30 s clip (~933 kbps total,
+        // ~805 kbps of video after the audio reserve) asked to compress with
+        // the Medium preset's flat 6 Mbps. Uncapped that inflates the file;
+        // capped it should land at (approximately) what the source already used.
+        val capped = capToSourceBitrate(
+            requestedBps = QualityPresets.MEDIUM.targetBitrateBps,
+            inputBytes = 3_500_000,
+            durationMs = 30_000,
+            hasAudio = true,
+        )
+        assertEquals(805_333, capped)
+        assertTrue("capped bitrate must be well under Medium's flat 6 Mbps", capped < QualityPresets.MEDIUM.targetBitrateBps)
+    }
+
+    @Test
+    fun capToSource_leavesARequestAloneWhenAlreadyBelowSourceRate() {
+        // A high-bitrate 4K source being compressed down with the Low preset
+        // (3 Mbps): the request is already well under the source's own rate,
+        // so the cap must not touch it.
+        val capped = capToSourceBitrate(
+            requestedBps = QualityPresets.LOW.targetBitrateBps,
+            inputBytes = 200_000_000,
+            durationMs = 30_000,
+            hasAudio = true,
+        )
+        assertEquals(QualityPresets.LOW.targetBitrateBps, capped)
+    }
+
+    @Test
+    fun capToSource_ignoresAudioReserveWhenSourceIsSilent() {
+        val withAudio = capToSourceBitrate(10_000_000, 3_500_000, 30_000, hasAudio = true)
+        val silent = capToSourceBitrate(10_000_000, 3_500_000, 30_000, hasAudio = false)
+        assertTrue(silent > withAudio)
+    }
+
+    @Test
+    fun capToSource_neverDropsBelowTheFloor() {
+        // A tiny, long source (100 KB over 10 minutes) computes to a near-zero
+        // rate; the floor keeps the cap at something an encoder can use.
+        val capped = capToSourceBitrate(6_000_000, 100_000, 600_000, hasAudio = true)
+        assertEquals(MIN_VIDEO_BITRATE_BPS, capped)
+    }
+
+    @Test
+    fun capToSource_skipsWhenSizeOrDurationIsUnknown() {
+        assertEquals(6_000_000, capToSourceBitrate(6_000_000, inputBytes = 0, durationMs = 30_000, hasAudio = true))
+        assertEquals(6_000_000, capToSourceBitrate(6_000_000, inputBytes = 3_500_000, durationMs = 0, hasAudio = true))
+        assertEquals(6_000_000, capToSourceBitrate(6_000_000, inputBytes = -1, durationMs = -1, hasAudio = true))
+    }
 }

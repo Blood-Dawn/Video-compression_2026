@@ -31,6 +31,7 @@ import org.svcs.mobile.compress.AUDIO_RESERVE_BPS
 import org.svcs.mobile.compress.bitrateForTargetSize
 import org.svcs.mobile.compress.CompressionHistoryStore
 import org.svcs.mobile.compress.estimateOutputBytes
+import org.svcs.mobile.compress.capToSourceBitrate
 
 enum class JobPhase { IDLE, RUNNING, DONE, FAILED }
 
@@ -195,12 +196,17 @@ class CompressViewModel(application: Application) : AndroidViewModel(application
 
     private fun plan(s: CompressState): Plan {
         val audioBps = if (s.sourceHasAudio && !s.removeAudio) AUDIO_RESERVE_BPS else 0
+        // Mirror CompressionWorker's source-bitrate cap here so the estimate
+        // shown before compressing matches what the job will actually produce
+        // (see capToSourceBitrate's doc - a flat preset/target above the
+        // source's own rate doesn't compress the clip, it grows it).
+        fun capped(bps: Int) = capToSourceBitrate(bps, s.pickedSizeBytes, s.durationMs, s.sourceHasAudio)
         return when (val mode = s.mode) {
-            is CompressionMode.Quality -> Plan(mode.preset.targetBitrateBps, mode.preset.maxShortSidePx, audioBps)
+            is CompressionMode.Quality -> Plan(capped(mode.preset.targetBitrateBps), mode.preset.maxShortSidePx, audioBps)
             // No audio in the output means no audio budget: those bits go
             // to the picture instead of an AAC track that won't exist.
             is CompressionMode.TargetSize -> Plan(
-                bitrateForTargetSize(mode.preset, s.durationMs, audioBps = audioBps),
+                capped(bitrateForTargetSize(mode.preset, s.durationMs, audioBps = audioBps)),
                 mode.preset.maxShortSidePx,
                 audioBps,
             )

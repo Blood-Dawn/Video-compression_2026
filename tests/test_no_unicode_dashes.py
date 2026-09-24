@@ -64,8 +64,14 @@ SCAN_DIRS = ["src", "tests", "docs", "installer", "scripts", ".github", "mobile"
 # build caches: adding "mobile" to SCAN_DIRS without them made this test walk
 # tens of thousands of generated files and took it from 0.3s to 4s.
 SKIP_DIRS = {".git", "node_modules", ".venv", "venv", "dist", "build",
-             ".pytest_tmp", "logs", "tools", "data", "__pycache__",
+             ".pytest_tmp", "__pycache__",
              ".gradle", ".idea", ".cxx", ".kotlin"}
+# "data", "logs" and "tools" used to be in SKIP_DIRS too. Those names only
+# matter at the repo root (bulk test media, runtime logs, vendored FFmpeg),
+# which this walk never enters, but as bare names they also hid the Android
+# module's org/svcs/mobile/data package (TokenStore.kt) from the guard.
+# Found 2026-09-24 when CI's filesystem order made test_mobile_module_is_scanned
+# pick that file first.
 
 
 def _iter_text_files():
@@ -148,10 +154,20 @@ def test_mobile_module_is_scanned():
     if not mobile.is_dir():
         return
     scanned = _scanned()
-    kotlin = [p for p in mobile.rglob("*.kt")]
-    if kotlin:
-        rel = str(kotlin[0].relative_to(ROOT)).replace("\\", "/")
-        assert rel in scanned, "the Android module is not guarded"
+    # Every Kotlin source outside build output, not just the first one rglob
+    # yields: which file came first depended on filesystem order, so a gap
+    # could pass on one machine and fail on another.
+    missing = []
+    for p in mobile.rglob("*.kt"):
+        rel = str(p.relative_to(ROOT)).replace("\\", "/")
+        # Build output only. Deliberately NOT SKIP_DIRS: this check exists to
+        # catch SKIP_DIRS hiding real sources, so it cannot trust it.
+        if any(part in {"build", ".gradle", ".cxx", ".kotlin", ".idea"}
+               for part in p.relative_to(ROOT).parts):
+            continue
+        if rel not in scanned:
+            missing.append(rel)
+    assert not missing, f"Android sources not guarded: {missing}"
 
 
 def test_src_tree_is_clean():

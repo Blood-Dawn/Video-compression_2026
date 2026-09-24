@@ -906,3 +906,129 @@ class TestPerModeCodec:
         assert self._run_capture_codec(monkeypatch, tmp_path, "mode2", "libx264") == "libx264"
         # mode0 would auto-pick H.264; an explicit libsvtav1 must win.
         assert self._run_capture_codec(monkeypatch, tmp_path, "mode0", "libsvtav1") == "libsvtav1"
+
+
+# ---------------------------------------------------------------------------
+# Auto bitrate cap (2026-09 bug report: compression could make a file bigger
+# than the source - see pipeline.py's rationale next to max_bitrate_kbps).
+# ---------------------------------------------------------------------------
+
+class DummyFrameSourceWithTotal(DummyFrameSource):
+    """DummyFrameSource that also reports total_frames, which run_pipeline
+    reads via getattr(src, "total_frames", 0) to work out the source's own
+    duration (and, from that, its own average bitrate)."""
+
+    def __init__(self, frames, total_frames, fps=10.0, width=16, height=16):
+        super().__init__(frames, fps=fps, width=width, height=height)
+        self.total_frames = total_frames
+
+
+class TestAutoBitrateCap:
+    def _run(self, monkeypatch, tmp_path, mode, source_bytes, total_frames,
+              fps, max_bitrate_kbps=0):
+        source = tmp_path / "source.mp4"
+        source.write_bytes(b"\x00" * source_bytes)
+
+        encoder_kwargs = {}
+        frames = [np.full((16, 16, 3), 1, dtype=np.uint8)]
+
+        monkeypatch.setattr(
+            "pipeline.pipeline.FrameSource",
+            lambda *_a, **_k: DummyFrameSourceWithTotal(
+                frames, total_frames=total_frames, fps=fps, width=16, height=16,
+            ),
+        )
+        monkeypatch.setattr("pipeline.pipeline.BackgroundSubtractor", DummySubtractor)
+        monkeypatch.setattr("pipeline.pipeline.initialize_database", lambda *_a, **_k: None)
+
+        class RecordingEncoder(DummyEncoder):
+            def __init__(self, *args, **kwargs):
+                encoder_kwargs.update(kwargs)
+                super().__init__({"encode_segment": 0, "get_storage_report": 0}, *args, **kwargs)
+
+        monkeypatch.setattr("pipeline.pipeline.ROIEncoder", RecordingEncoder)
+
+        run_pipeline(
+            input_source=str(source),
+            camera_id="cam_test",
+            output_dir=str(tmp_path / "out"),
+            segment_seconds=60,
+            bg_method="MOG2",
+            mode=mode,
+            show_preview=False,
+            warmup_frames=0,
+            codec="libx264",
+            max_bitrate_kbps=max_bitrate_kbps,
+        )
+        return encoder_kwargs.get("max_bitrate_kbps")
+
+    def test_uncapped_default_is_replaced_with_source_bitrate(self, monkeypatch, tmp_path):
+        # 1,000,000 bytes over 10s (100 frames @ 10fps) = 800 kbps.
+        cap = self._run(
+            monkeypatch, tmp_path, mode="mode1",
+            source_bytes=1_000_000, total_frames=100, fps=10.0,
+        )
+        assert cap == 800
+
+    def test_mode0_is_exempt_stays_uncapped(self, monkeypatch, tmp_path):
+        # Archive (mode0) is explicitly "quality over size" - must not be
+        # silently capped just because no explicit limit was given.
+        cap = self._run(
+            monkeypatch, tmp_path, mode="mode0",
+            source_bytes=1_000_000, total_frames=100, fps=10.0,
+        )
+        assert cap == 0
+
+    def test_explicit_cap_is_never_overridden(self, monkeypatch, tmp_path):
+        # Even though the source's own rate (800 kbps) is lower, an explicit
+        # caller-supplied cap always wins.
+        cap = self._run(
+            monkeypatch, tmp_path, mode="mode1",
+            source_bytes=1_000_000, total_frames=100, fps=10.0,
+            max_bitrate_kbps=5000,
+        )
+        assert cap == 5000
+
+    def test_a_higher_explicit_cap_above_source_rate_still_wins(self, monkeypatch, tmp_path):
+        # An explicit cap ABOVE the source's rate is still the caller's
+        # choice to honor, not something to silently lower further.
+        cap = self._run(
+            monkeypatch, tmp_path, mode="mode2",
+            source_bytes=1_000_000, total_frames=100, fps=10.0,
+            max_bitrate_kbps=50_000,
+        )
+        assert cap == 50_000
+
+    def test_missing_source_file_leaves_it_uncapped(self, monkeypatch, tmp_path):
+        # A live source (camera index / rtsp URL) has no file to measure;
+        # the cap must not blow up or apply for a path that doesn't exist.
+        encoder_kwargs = {}
+        frames = [np.full((16, 16, 3), 1, dtype=np.uint8)]
+        monkeypatch.setattr(
+            "pipeline.pipeline.FrameSource",
+            lambda *_a, **_k: DummyFrameSourceWithTotal(
+                frames, total_frames=100, fps=10.0, width=16, height=16,
+            ),
+        )
+        monkeypatch.setattr("pipeline.pipeline.BackgroundSubtractor", DummySubtractor)
+        monkeypatch.setattr("pipeline.pipeline.initialize_database", lambda *_a, **_k: None)
+
+        class RecordingEncoder(DummyEncoder):
+            def __init__(self, *args, **kwargs):
+                encoder_kwargs.update(kwargs)
+                super().__init__({"encode_segment": 0, "get_storage_report": 0}, *args, **kwargs)
+
+        monkeypatch.setattr("pipeline.pipeline.ROIEncoder", RecordingEncoder)
+
+        run_pipeline(
+            input_source=0,   # camera index, not a file
+            camera_id="cam_test",
+            output_dir=str(tmp_path / "out"),
+            segment_seconds=60,
+            bg_method="MOG2",
+            mode="mode1",
+            show_preview=False,
+            warmup_frames=0,
+            codec="libx264",
+        )
+        assert encoder_kwargs.get("max_bitrate_kbps") == 0

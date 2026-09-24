@@ -399,6 +399,41 @@ def run_pipeline(
     # default; a preset (M3 TASK 3.1) or explicit caller can raise it for more
     # background compression. Author: Bloodawn (KheivenD), 2026-06-03.
     _bg_crf = int(background_crf) if background_crf is not None else 40
+
+    # Auto safety cap (2026-09 bug report, paired with the same failure mode
+    # in the mobile app): CRF-based encoding adapts to content, but on hard
+    # or noisy footage - or with mode2/mode3's ultrafast preset, which trades
+    # compression efficiency for encode speed - it can still land above what
+    # the source itself already used, especially once a mode ends up keeping
+    # most or all frames (e.g. a scene where background subtraction rarely
+    # reports "idle"). The result is a "compressed" file bigger than the
+    # original, defeating the entire point. When the caller hasn't set an
+    # explicit --max-bitrate-kbps, cap the encode at the source FILE's own
+    # average bitrate so it can shrink or match the source but never exceed
+    # it. Skipped for: mode0 (the one mode whose surveillance preset,
+    # Archive, is explicitly "quality matters more than size" - capping it
+    # would silently defeat that choice), a live source (camera index /
+    # rtsp:// has no file to measure), and whenever the caller already gave
+    # an explicit cap (their number wins, even if it's above source rate).
+    if not max_bitrate_kbps and mode != "mode0":
+        _auto_cap_kbps = 0
+        try:
+            _src_path = Path(str(input_source))
+            if _src_path.is_file() and total_frames > 0 and fps > 0:
+                _src_duration_s = total_frames / fps
+                _src_bytes = _src_path.stat().st_size
+                if _src_duration_s > 0 and _src_bytes > 0:
+                    _auto_cap_kbps = int(_src_bytes * 8 / 1000 / _src_duration_s)
+        except (OSError, ValueError):
+            _auto_cap_kbps = 0
+        if _auto_cap_kbps > 0:
+            log.info(
+                "No max-bitrate-kbps given: capping at the source file's own "
+                "~%d kbps so compression can't make the file bigger.",
+                _auto_cap_kbps,
+            )
+            max_bitrate_kbps = _auto_cap_kbps
+
     encoder = ROIEncoder(
         output_dir=output_dir,
         db_path=db_path,

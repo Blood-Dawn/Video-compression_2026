@@ -166,10 +166,9 @@ def test_pipeline_stress_one_hour():
 
             except Exception as e:
                 errors.append(f"Segment {seg_idx}: {e}")
-                try:
-                    del frames, bboxes
-                except UnboundLocalError:
-                    pass
+                # Rebinding instead of `del` drops the segment's frames even
+                # when the failure happened before (or after) they were bound.
+                frames = bboxes = None
                 gc.collect()
 
         # Peak memory across the entire run (catches transient spikes)

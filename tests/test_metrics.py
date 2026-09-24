@@ -46,6 +46,8 @@ def test_compute_ssim_different_frames():
 
 def test_compute_compression_ratio():
     assert compute_compression_ratio(6000, 1000) == 6.0
+
+
 def test_compute_ssim_shape_mismatch_raises():
     frame1 = np.zeros((100, 100, 3), dtype=np.uint8)
     frame2 = np.zeros((50, 50, 3), dtype=np.uint8)
@@ -82,11 +84,7 @@ def test_compute_psnr_shape_mismatch_raises():
         compute_psnr(frame1, frame2)
 
 
-def test_compute_ssim_shape_mismatch_raises():
-    frame1 = np.zeros((100, 100, 3), dtype=np.uint8)
-    frame2 = np.zeros((50, 50, 3), dtype=np.uint8)
-    with pytest.raises(ValueError):
-        compute_ssim(frame1, frame2)
+def test_compute_compression_ratio_negative_original_raises():
     with pytest.raises(ValueError, match="non-negative"):
         compute_compression_ratio(-1, 100)
 

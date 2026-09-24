@@ -223,6 +223,47 @@ def _ffmpeg_has_encoder(name: str) -> bool:
     return present
 
 
+# Hardware encoders are listed by `ffmpeg -encoders` whenever FFmpeg was BUILT
+# with them, which says nothing about the machine: Ubuntu's stock ffmpeg and
+# the common Windows builds list h264_nvenc on a laptop with no NVIDIA GPU at
+# all. Choosing one there used to pass the check above, then die mid-segment
+# with a BrokenPipeError when ffmpeg failed to open the device, instead of
+# taking the libx264 fallback. For these, "usable" means a tiny real encode
+# succeeds. Author: Bloodawn (KheivenD), 2026-09-24 (cleanup sweep).
+_HW_ENCODERS = {"h264_nvenc", "hevc_nvenc", "av1_nvenc"}
+_USABLE_CACHE: dict = {}
+
+
+def _ffmpeg_encoder_usable(name: str) -> bool:
+    """True if this machine can actually encode with ``name``.
+
+    Software encoders only need to be listed. Hardware encoders must also
+    open and encode a few frames of a synthetic source, since being compiled
+    into FFmpeg does not mean the GPU and driver are present. Cached per
+    process; any error counts as unusable, which routes to libx264.
+    """
+    name = (name or "").strip().lower()
+    if not _ffmpeg_has_encoder(name):
+        return False
+    if name not in _HW_ENCODERS:
+        return True
+    if name in _USABLE_CACHE:
+        return _USABLE_CACHE[name]
+    import subprocess
+    try:
+        proc = subprocess.run(
+            [ffmpeg_path(), "-hide_banner", "-loglevel", "error",
+             "-f", "lavfi", "-i", "color=c=black:size=256x256:rate=10:duration=0.3",
+             "-c:v", name, "-f", "null", "-"],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=20,
+        )
+        usable = proc.returncode == 0
+    except Exception:
+        usable = False
+    _USABLE_CACHE[name] = usable
+    return usable
+
+
 class ROIEncoder:
     """
     Encodes video with separate quality tiers for foreground and background.
@@ -303,11 +344,12 @@ class ROIEncoder:
         if wanted not in _KNOWN_CODECS:
             log.warning("Unknown codec %r; falling back to libx264.", wanted)
             wanted = "libx264"
-        if wanted != "libx264" and not _ffmpeg_has_encoder(
+        if wanted != "libx264" and not _ffmpeg_encoder_usable(
                 "libaom-av1" if wanted == "av1" else wanted):
             log.warning(
-                "Requested codec %s not found in this ffmpeg build; "
-                "falling back to libx264.", wanted
+                "Requested codec %s is not usable here (not in this ffmpeg "
+                "build, or no GPU/driver for it); falling back to libx264.",
+                wanted,
             )
             wanted = "libx264"
         self.codec = wanted

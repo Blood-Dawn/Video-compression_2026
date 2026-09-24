@@ -28,7 +28,8 @@ SRC = Path(__file__).parent.parent / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from compression.roi_encoder import ROIEncoder, _ffmpeg_has_encoder  # noqa: E402
+from compression import roi_encoder as roi_mod  # noqa: E402
+from compression.roi_encoder import ROIEncoder, _ffmpeg_encoder_usable  # noqa: E402
 from utils import metrics  # noqa: E402
 from utils.ffmpeg import ffmpeg_path, ffprobe_path  # noqa: E402
 
@@ -236,8 +237,8 @@ def test_real_encode_denoise_x264(tmp_path):
     assert p.is_file() and p.stat().st_size > 0
 
 
-@pytest.mark.skipif(not _ffmpeg_has_encoder("h264_nvenc"),
-                    reason="h264_nvenc not available on this machine")
+@pytest.mark.skipif(not _ffmpeg_encoder_usable("h264_nvenc"),
+                    reason="h264_nvenc not usable on this machine (no NVIDIA GPU/driver)")
 def test_real_encode_nvenc(tmp_path):
     e = _enc(tmp_path, codec="h264_nvenc")
     out = _write_frames(e)
@@ -250,6 +251,28 @@ def test_real_encode_nvenc(tmp_path):
          "-of", "csv=p=0", str(p)],
         capture_output=True, text=True, timeout=30)
     assert "h264" in (proc.stdout or "")
+
+
+def test_unusable_hw_encoder_falls_back_to_x264(tmp_path, monkeypatch):
+    """Listed-but-unopenable NVENC (distro ffmpeg, no GPU) takes the x264 path.
+
+    Before 2026-09-24 only `ffmpeg -encoders` was consulted, so this case
+    passed the check and then crashed the segment with a BrokenPipeError.
+    """
+    monkeypatch.setattr(roi_mod, "_ffmpeg_has_encoder", lambda name: True)
+    monkeypatch.setitem(roi_mod._USABLE_CACHE, "hevc_nvenc", False)
+    e = _enc(tmp_path, codec="hevc_nvenc")
+    assert e.codec == "libx264"
+
+
+def test_software_encoder_needs_no_trial_encode(monkeypatch):
+    monkeypatch.setattr(roi_mod, "_ffmpeg_has_encoder", lambda name: True)
+
+    def boom(*a, **k):  # pragma: no cover - must not be reached
+        raise AssertionError("software encoders must not run a trial encode")
+
+    monkeypatch.setattr("subprocess.run", boom)
+    assert _ffmpeg_encoder_usable("libx265") is True
 
 
 def _has_libvmaf():

@@ -224,6 +224,24 @@ class TestUpdateCheck:
         assert body["update_available"] is False
         assert body["latest_version"] is None
 
+    def test_apk_only_release_is_excluded(self, client, monkeypatch):
+        """The real mobile release is tagged `v1-beta` with APKs only (no
+        `mobile-` prefix). A higher-numbered APK-only tag must not read as a
+        desktop update just because its version compares newer."""
+        import gui.routes.setup_bp as setup_bp
+
+        apk_only = _release("v999-beta", exe_asset=False)
+        apk_only["assets"] = [{"name": "svcs-mobile-v999-beta.apk",
+                               "browser_download_url": "https://example.invalid/a.apk"}]
+        payload = _releases_payload(apk_only, _release("v0.0.1"))
+        monkeypatch.setattr(
+            setup_bp.urllib.request, "urlopen",
+            lambda req, timeout=5: _FakeHTTPResponse(payload),
+        )
+        body = client.get("/api/setup/update_check").get_json()
+        assert body["update_available"] is False
+        assert body["latest_version"] == "v0.0.1"
+
     def test_draft_release_is_excluded(self, client, monkeypatch):
         import gui.routes.setup_bp as setup_bp
 

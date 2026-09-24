@@ -43,16 +43,25 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.utils.paths import reset_state
     from src.utils.version import APP_VERSION, is_newer
 
-# Fall 3.17: desktop releases are tagged "vX.Y.Z[-stage]"; mobile releases use
-# a "mobile-" prefix specifically so they stay out of this sequence (see
-# docs/releases/RELEASE-CHECKLIST.md) - a mobile-only release must never look
-# like a newer desktop build to this check.
+# Fall 3.17: desktop releases are tagged "vX.Y.Z[-stage]". A mobile-only
+# release must never look like a newer desktop build to this check. The plan
+# was a "mobile-" tag prefix, but the first standalone APK shipped as plain
+# `v1-beta`, so a release whose assets are APKs with no installer is skipped
+# too (see docs/RELEASE-CHECKLIST.md). A release with no assets yet still
+# counts; the notice then links to the release page instead of a download.
 _GITHUB_RELEASES_URL = (
     "https://api.github.com/repos/Blood-Dawn/Video-compression_2026/releases"
 )
 _MOBILE_TAG_PREFIX = "mobile-"
 
 setup_bp = Blueprint("setup", __name__)
+
+
+def _is_mobile_only(release: dict) -> bool:
+    """True if a GitHub release ships APKs and no Windows installer."""
+    names = [str(a.get("name") or "").lower()
+             for a in release.get("assets") or [] if isinstance(a, dict)]
+    return any(n.endswith(".apk") for n in names) and not any(n.endswith(".exe") for n in names)
 
 
 def _default_encrypted_dir(output_dir: str) -> str:
@@ -260,7 +269,7 @@ def api_setup_update_check():
     if not isinstance(releases, list):
         return jsonify(result)
 
-    # Pick the newest non-draft, non-mobile release. Prereleases are NOT
+    # Pick the newest non-draft desktop release. Prereleases are NOT
     # excluded on purpose: every release this project has published so far
     # is marked prerelease on GitHub (it's a beta product), so excluding them
     # would mean this check never finds anything to report.
@@ -271,6 +280,8 @@ def api_setup_update_check():
             continue
         tag = str(rel.get("tag_name") or "")
         if not tag or rel.get("draft") or tag.startswith(_MOBILE_TAG_PREFIX):
+            continue
+        if _is_mobile_only(rel):
             continue
         if best_tag is None or is_newer(tag, best_tag):
             best_tag = tag

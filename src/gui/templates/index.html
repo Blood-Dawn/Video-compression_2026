@@ -4055,10 +4055,14 @@
           <div class="help-row">
             <span class="help-term">App version</span>
             <span class="help-def">Checks this install's version against the newest one published
-              on GitHub. New builds are a manual download + reinstall for now - this just tells
-              you when one exists.
+              on GitHub, and can download and install it for you.
               <button class="btn btn-ghost" style="margin-left:6px;" onclick="checkForUpdate()">Check for updates</button>
               <span id="help-update-result" style="display:block;margin-top:4px;font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);"></span>
+              <span id="help-update-actions" style="display:none;margin-top:6px;">
+                <button class="btn btn-ghost" id="help-update-download-btn" onclick="downloadUpdate()">Download update</button>
+                <button class="btn btn-ghost" id="help-update-install-btn" style="display:none;" onclick="installUpdate()">Install &amp; restart</button>
+                <span id="help-update-progress" style="display:block;margin-top:4px;font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);"></span>
+              </span>
             </span>
           </div>
           <div class="help-row">

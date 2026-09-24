@@ -200,8 +200,14 @@ window.checkDependencies = checkDependencies;
 // unless something is actually newer, so it never nags on every reload when
 // you're already current); the Help > "Check for updates" button re-runs it
 // on demand and always reports its result, including "up to date".
+//
+// Fall 3.18 adds the actual pipeline behind /api/update/{status,download,
+// install} (gui.services.update_manager) - downloadUpdate()/installUpdate()
+// below drive it. The check above still only ever reports; nothing here
+// downloads or installs without an explicit button click.
 async function _checkForUpdate(showResult) {
   const out = document.getElementById("help-update-result");
+  const actions = document.getElementById("help-update-actions");
   if (out && showResult) out.textContent = "Checking...";
   let data;
   try {
@@ -220,19 +226,137 @@ async function _checkForUpdate(showResult) {
       out.textContent = "Up to date (" + data.current_version + ").";
     }
   }
+  if (actions) actions.style.display = data.update_available ? "block" : "none";
   if (data.update_available && typeof pushNotif === "function") {
-    const href = data.download_url || data.release_url;
+    const actionButtons = data.download_url
+      ? [{ label: "Download update", fn: () => downloadUpdate() }]
+      : (data.release_url
+        ? [{ label: "View release", fn: () => window.open(data.release_url, "_blank") }]
+        : null);
     pushNotif(
       "Update available",
       "SVCS " + data.latest_version + " is out - you're on " + data.current_version + ".",
       "info",
-      href ? [{ label: "Download", fn: () => window.open(href, "_blank") }] : null,
+      actionButtons,
       0,
     );
   }
 }
 window.checkForUpdate = () => _checkForUpdate(true);
 window.addEventListener("DOMContentLoaded", () => _checkForUpdate(false));
+
+// ── Fall 3.18: download + verify + install ("Download update" / "Install &
+// restart" buttons in the help-update-actions block above) ─────────────────
+
+let _updatePollTimer = null;
+
+function _stopUpdatePolling() {
+  if (_updatePollTimer) {
+    clearInterval(_updatePollTimer);
+    _updatePollTimer = null;
+  }
+}
+
+function _formatBytes(n) {
+  if (!n || n <= 0) return "";
+  const mb = n / (1024 * 1024);
+  return mb >= 1 ? mb.toFixed(1) + " MB" : Math.round(n / 1024) + " KB";
+}
+
+// Renders one /api/update/status snapshot. Shared by the initial POST
+// /api/update/download response and every subsequent poll tick.
+function _renderUpdateStatus(status) {
+  const prog = document.getElementById("help-update-progress");
+  const dlBtn = document.getElementById("help-update-download-btn");
+  const instBtn = document.getElementById("help-update-install-btn");
+  if (!prog) return;
+  switch (status.phase) {
+    case "downloading": {
+      const pct = status.bytes_total
+        ? Math.min(100, Math.round((100 * status.bytes_downloaded) / status.bytes_total))
+        : null;
+      prog.textContent = "Downloading" + (pct !== null ? " " + pct + "%" : "")
+        + " (" + _formatBytes(status.bytes_downloaded)
+        + (status.bytes_total ? " / " + _formatBytes(status.bytes_total) : "") + ")";
+      if (dlBtn) dlBtn.disabled = true;
+      break;
+    }
+    case "verifying":
+      prog.textContent = "Verifying download...";
+      break;
+    case "ready":
+      prog.textContent = "Update " + (status.latest_version || "") + " verified and ready to install.";
+      if (dlBtn) dlBtn.style.display = "none";
+      if (instBtn) instBtn.style.display = "inline-block";
+      _stopUpdatePolling();
+      break;
+    case "installing":
+      prog.textContent = "Installing - SVCS will close and restart shortly...";
+      _stopUpdatePolling();
+      break;
+    case "error":
+      prog.textContent = "Update failed: " + (status.error || "unknown error");
+      if (dlBtn) { dlBtn.disabled = false; dlBtn.style.display = "inline-block"; }
+      if (instBtn) instBtn.style.display = "none";
+      _stopUpdatePolling();
+      break;
+    default:
+      prog.textContent = "";
+  }
+}
+
+async function _pollUpdateStatus() {
+  let status;
+  try {
+    status = await (await fetch("/api/update/status")).json();
+  } catch (e) {
+    // The server may be mid-restart after an install; just stop quietly
+    // rather than showing a scary error for something that is expected.
+    return;
+  }
+  _renderUpdateStatus(status);
+}
+
+// Re-checks GitHub itself and starts a background download + checksum
+// verify of whatever it finds - see update_manager's module docstring for
+// why this never accepts a URL from the page itself.
+async function downloadUpdate() {
+  const actions = document.getElementById("help-update-actions");
+  if (actions) actions.style.display = "block";
+  let status;
+  try {
+    status = await (await fetch("/api/update/download", { method: "POST" })).json();
+  } catch (e) {
+    const prog = document.getElementById("help-update-progress");
+    if (prog) prog.textContent = "Could not start the download.";
+    return;
+  }
+  _renderUpdateStatus(status);
+  _stopUpdatePolling();
+  _updatePollTimer = setInterval(_pollUpdateStatus, 700);
+}
+window.downloadUpdate = downloadUpdate;
+
+// Only enabled once the download above reaches "ready" (checksum verified).
+// Confirms first since this closes and restarts the app.
+async function installUpdate() {
+  if (!window.confirm("Install the update now? SVCS will close and restart automatically.")) {
+    return;
+  }
+  const prog = document.getElementById("help-update-progress");
+  try {
+    const r = await fetch("/api/update/install", { method: "POST" });
+    const body = await r.json();
+    if (!r.ok || !body.ok) {
+      if (prog) prog.textContent = "Install failed: " + (body.error || "unknown error");
+      return;
+    }
+    if (prog) prog.textContent = "Installing - SVCS will close and restart shortly...";
+  } catch (e) {
+    if (prog) prog.textContent = "Install failed to start.";
+  }
+}
+window.installUpdate = installUpdate;
 
 // Send feedback (fresh-install walkthrough / general bug reports): opens the
 // user's own default mail client, pre-addressed and pre-filled. No network

@@ -124,6 +124,10 @@ SAMPLES = [
     ("GET", "/api/webhook/config"),
     ("POST", "/api/webhook/test"),
     ("GET", "/api/setup/update_check"),
+    # Fall 3.18: auto-update download + verify + install.
+    ("GET", "/api/update/status"),
+    ("POST", "/api/update/download"),
+    ("POST", "/api/update/install"),
 ]
 
 
@@ -153,5 +157,6 @@ def test_sample_count_matches_route_count():
     # +1 for /api/nl_search (R5 5.4), +2 for /api/zones and /api/events/recent
     # (R5 5.6/5.7), +4 for the R6 chunked-upload routes, +2 for the R6
     # Track C push routes, +4 for the Fall Week 3 routes (zones/frame,
-    # webhook config and test, setup/update_check).
-    assert len(SAMPLES) == len(rules) == 92
+    # webhook config and test, setup/update_check), +3 for the Fall 3.18
+    # auto-update routes (status, download, install).
+    assert len(SAMPLES) == len(rules) == 95

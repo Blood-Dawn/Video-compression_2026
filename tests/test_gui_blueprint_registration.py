@@ -127,6 +127,11 @@ EXPECTED = {
     "/api/webhook/config": "webhook",
     "/api/webhook/test": "webhook",
     "/api/setup/update_check": "setup",
+    # Fall 3.18: the actual auto-update pipeline (download + verify +
+    # install) behind the Fall 3.17 check above.
+    "/api/update/status": "update",
+    "/api/update/download": "update",
+    "/api/update/install": "update",
 }
 
 EXPECTED_BLUEPRINTS = {
@@ -140,6 +145,7 @@ EXPECTED_BLUEPRINTS = {
     "ingest",          # R6 Track B: chunked resumable upload
     "push",            # R6 Track C: closed-app push settings
     "webhook",         # Fall Week 3 TASK 3.9: outbound webhook settings
+    "update",          # Fall 3.18: auto-update download + verify + install
 }
 
 
@@ -156,9 +162,11 @@ def test_route_count():
     # then +4 for the R6 chunked-upload routes, then +2 for the R6 Track C
     # push routes (/api/push/config carries GET+POST on one rule), then +4 for
     # the Fall Week 3 routes (/api/zones/frame, /api/webhook/config with
-    # GET+POST on one rule, /api/webhook/test, /api/setup/update_check).
+    # GET+POST on one rule, /api/webhook/test, /api/setup/update_check), then
+    # +3 for the Fall 3.18 auto-update pipeline (/api/update/status,
+    # /api/update/download, /api/update/install).
     rules = _rules()
-    assert len(rules) == 91, f"expected 91 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 94, f"expected 94 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_blueprints_registered():

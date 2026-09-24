@@ -30,38 +30,26 @@ try:
     from gui.services.gui_state_persist import save_setup_choice, is_setup_complete
     from gui.services.cpu_sampler import reset_mode_avgs
     from gui.services.path_safety import _safe_output_dir
+    from gui.services import update_manager
     from gui.state import _state_lock, _status
     from utils.paths import reset_state
-    from utils.version import APP_VERSION, is_newer
+    # APP_VERSION is re-exported here (unused directly below) because
+    # tests/test_setup.py asserts setup_bp.APP_VERSION; the actual current-
+    # version value returned by /api/setup/update_check now comes from
+    # update_manager.check_for_update(), which reads the same constant.
+    from utils.version import APP_VERSION
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.logging_setup import log
     from src.gui.services.cloud_detection import list_destinations, _default_output_dir
     from src.gui.services.gui_state_persist import save_setup_choice, is_setup_complete
     from src.gui.services.cpu_sampler import reset_mode_avgs
     from src.gui.services.path_safety import _safe_output_dir
+    from src.gui.services import update_manager
     from src.gui.state import _state_lock, _status
     from src.utils.paths import reset_state
-    from src.utils.version import APP_VERSION, is_newer
-
-# Fall 3.17: desktop releases are tagged "vX.Y.Z[-stage]". A mobile-only
-# release must never look like a newer desktop build to this check. The plan
-# was a "mobile-" tag prefix, but the first standalone APK shipped as plain
-# `v1-beta`, so a release whose assets are APKs with no installer is skipped
-# too (see docs/RELEASE-CHECKLIST.md). A release with no assets yet still
-# counts; the notice then links to the release page instead of a download.
-_GITHUB_RELEASES_URL = (
-    "https://api.github.com/repos/Blood-Dawn/Video-compression_2026/releases"
-)
-_MOBILE_TAG_PREFIX = "mobile-"
+    from src.utils.version import APP_VERSION
 
 setup_bp = Blueprint("setup", __name__)
-
-
-def _is_mobile_only(release: dict) -> bool:
-    """True if a GitHub release ships APKs and no Windows installer."""
-    names = [str(a.get("name") or "").lower()
-             for a in release.get("assets") or [] if isinstance(a, dict)]
-    return any(n.endswith(".apk") for n in names) and not any(n.endswith(".exe") for n in names)
 
 
 def _default_encrypted_dir(output_dir: str) -> str:
@@ -231,71 +219,18 @@ def api_setup_reset():
 def api_setup_update_check():
     """Fall 3.17: check GitHub releases for a newer DESKTOP build.
 
-    Check + notify ONLY - this never downloads or installs anything itself,
-    just tells the dashboard whether something newer exists and where to get
-    it, so the Setup page can show a notice with a download link. New
-    installer exes currently require the user to manually download and
-    reinstall; this closes the "how would I even know" half of that gap.
+    Check + notify ONLY - this route itself never downloads or installs
+    anything, just tells the dashboard whether something newer exists and
+    where to get it. Fall 3.18 (see gui.services.update_manager) added the
+    actual download/verify/install pipeline behind separate
+    /api/update/{status,download,install} endpoints; this route's job stays
+    unchanged and is now a thin wrapper around update_manager's shared
+    "what is the newest desktop release" logic, so the two can never
+    disagree about which release is newest.
 
     Best effort and silent on failure: offline, GitHub unreachable, rate
     limited, or an unexpected response shape all fall through to
     update_available=False rather than a 5xx, since a flaky network check on
     dashboard load must never itself look like an app error.
     """
-    result = {
-        "current_version": APP_VERSION,
-        "latest_version": None,
-        "update_available": False,
-        "release_url": None,
-        "download_url": None,
-        "checked": False,
-    }
-
-    try:
-        req = urllib.request.Request(
-            _GITHUB_RELEASES_URL,
-            headers={
-                "Accept": "application/vnd.github+json",
-                # GitHub's API rejects requests with no User-Agent at all.
-                "User-Agent": "SVCS-dashboard-update-check",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            releases = json.loads(resp.read().decode("utf-8"))
-    except (urllib.error.URLError, TimeoutError, ValueError, OSError):
-        # No network, GitHub down/rate-limited, or an unparseable body.
-        return jsonify(result)
-
-    if not isinstance(releases, list):
-        return jsonify(result)
-
-    # Pick the newest non-draft desktop release. Prereleases are NOT
-    # excluded on purpose: every release this project has published so far
-    # is marked prerelease on GitHub (it's a beta product), so excluding them
-    # would mean this check never finds anything to report.
-    best_tag = None
-    best_release = None
-    for rel in releases:
-        if not isinstance(rel, dict):
-            continue
-        tag = str(rel.get("tag_name") or "")
-        if not tag or rel.get("draft") or tag.startswith(_MOBILE_TAG_PREFIX):
-            continue
-        if _is_mobile_only(rel):
-            continue
-        if best_tag is None or is_newer(tag, best_tag):
-            best_tag = tag
-            best_release = rel
-
-    if best_release is not None:
-        result["latest_version"] = best_tag
-        result["update_available"] = is_newer(best_tag, APP_VERSION)
-        result["release_url"] = best_release.get("html_url")
-        for asset in best_release.get("assets") or []:
-            name = str(asset.get("name") or "")
-            if name.lower().endswith(".exe"):
-                result["download_url"] = asset.get("browser_download_url")
-                break
-
-    result["checked"] = True
-    return jsonify(result)
+    return jsonify(update_manager.check_for_update())

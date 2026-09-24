@@ -39,6 +39,11 @@ _status: dict = {
     "segment_count": 0,
     "total_frames": 0,   # 0 = live/unknown, >0 = video file with known length
     "error": None,
+    # Real, resolved SR backend for the current/last run: "realesrgan-<device>"
+    # or "bicubic". Set by gui.services.pipeline_runner once the Enhancer is
+    # constructed, so the UI can show what actually ran instead of trusting
+    # the requested enhance_model (which may have silently fallen back).
+    "enhancer_backend": None,
 }
 
 # ── Power / hardware metrics ───────────────────────────────────────────────────
@@ -122,7 +127,12 @@ _log_lock = threading.Lock()
 _VALID_MODES   = {"mode0", "mode1", "mode2", "mode3"}
 _VALID_BG      = {"MOG2", "KNN", "GMG"}
 _VALID_DEVICES = {"auto", "cuda", "mps", "cpu"}
-_VALID_MODELS  = {"espcn", "fsrcnn", "edsr", "lapsrn", "realesrnet", "realesrgan", "bicubic"}
+# Only these two are actually implemented (src/enhancement/enhancer.py).
+# espcn/fsrcnn/edsr/lapsrn/realesrnet used to be offered in the UI dropdown
+# with no backing code behind them at all - picking any of them silently ran
+# plain bicubic upscaling while the label implied a real AI model. Removed
+# 2026-09-24 rather than left as a misleading choice.
+_VALID_MODELS  = {"realesrgan", "bicubic"}
 
 # Subfolder created inside whichever cloud root (OneDrive / Google Drive) is found.
 _CLOUD_SUBFOLDER = "SVCS"

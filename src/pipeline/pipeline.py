@@ -56,12 +56,71 @@ import json as _json
 
 
 def _time_of_day(hour: int) -> str:
-    """Map UTC hour to a time-of-day label."""
+    """Map UTC hour to a time-of-day label.
+
+    Kept for callers/tests that want a pure wall-clock mapping, but the
+    pipeline itself no longer uses this to tag segments - see
+    _time_of_day_from_brightness() below. Using processing wall-clock time
+    as a stand-in for what's actually on screen was the bug: a bright
+    daytime clip dropped in and compressed at 2am local time got tagged
+    "night" regardless of its content, and this misfired identically for
+    every video, not just short/handheld ones.
+    """
     if 5 <= hour < 8 or 18 <= hour < 21:
         return "dusk_dawn"
     if 8 <= hour < 18:
         return "day"
     return "night"
+
+
+def _time_of_day_from_brightness(samples: list) -> str:
+    """Classify time-of-day from the segment's OWN footage, not the clock.
+
+    ``samples`` is the list of per-frame mean pixel brightness values (0-255
+    scale, averaged across B/G/R) collected while the segment was open (see
+    the per-frame accumulation loop in run_pipeline()). Thresholds were
+    picked from typical outdoor daylight (bright, >=110), dusk/dawn/indoor
+    or overcast light (mid-range, 40-109), and true low-light/night footage
+    (<40) - the same three labels the old wall-clock heuristic produced, but
+    now driven by what the camera actually saw.
+
+    Returns "unknown" if no frames were sampled (e.g. a zero-length or
+    entirely-skipped segment), which is preferable to guessing.
+    """
+    if not samples:
+        return "unknown"
+    avg = sum(samples) / len(samples)
+    if avg >= 110:
+        return "day"
+    if avg >= 40:
+        return "dusk_dawn"
+    return "night"
+
+
+def _compensate_camera_motion(frame_vecs: list) -> list:
+    """Subtract a single frame's own median displacement from its object
+    motion vectors before they join the segment-wide list used for scene
+    classification.
+
+    Why: if the camera pans or shakes (handheld/phone footage), every
+    detected object appears to move together in the pan direction. Fed
+    straight into detect_scene_type()'s direction-diversity heuristic, that
+    shared motion reads as "multiple independent things moving in different
+    directions" and can misclassify a plain handheld pan as an
+    "intersection", even with zero real cross-traffic. Subtracting this
+    frame's median (dx, dy) leaves only how each object moved *relative to
+    the others* - near zero for objects moving together with the camera,
+    non-zero for one that's genuinely moving independently of it.
+
+    With fewer than 2 vectors there's nothing to compare against each other,
+    so they're passed through unchanged (a lone object's motion has no
+    "relative to others" to measure).
+    """
+    if len(frame_vecs) < 2:
+        return list(frame_vecs)
+    med_dx = sorted(v[0] for v in frame_vecs)[len(frame_vecs) // 2]
+    med_dy = sorted(v[1] for v in frame_vecs)[len(frame_vecs) // 2]
+    return [(dx - med_dx, dy - med_dy) for dx, dy in frame_vecs]
 
 
 def _compute_segment_sharpness(
@@ -482,13 +541,27 @@ def run_pipeline(
     _enhance_frame_counter = 0          # counts post-warmup frames for N-frame sampling
     _last_enhanced_frame = None         # cached result from the last enhancement pass
     if enhance or upscale_output:
-        if enhance_model != "bicubic":
-            log.info(
-                "enhance_model='%s' requested; current pipeline uses Enhancer backend auto-selection.",
-                enhance_model,
-            )
         _enh_device = None if enhance_device == "auto" else enhance_device
-        enhancer = Enhancer(scale=enhance_scale, device=_enh_device)
+        # enhance_model is the user's explicit pick between the two backends
+        # that actually exist (see Enhancer.backend): "bicubic" now really
+        # means bicubic-only (use_nn=False skips loading Real-ESRGAN at all,
+        # instead of requesting it and quietly running the NN anyway).
+        # "realesrgan" asks for real AI upscaling; Enhancer still falls back
+        # to bicubic transparently if the optional `enhance` extra or its
+        # weights aren't installed, but we now check for that and say so
+        # instead of only logging it as an INFO aside.
+        enhancer = Enhancer(
+            scale=enhance_scale,
+            device=_enh_device,
+            use_nn=(enhance_model != "bicubic"),
+        )
+        if enhance_model == "realesrgan" and enhancer.backend == "bicubic":
+            log.warning(
+                "Real-ESRGAN was requested but is not active (the 'enhance' "
+                "install extra or its model weights are missing). This run "
+                "is using plain bicubic upscaling instead - see DEV.md -> "
+                "'Enhancement Module Setup' to install the real thing."
+            )
         # One worker thread. Enhancement is a serial CPU task so more workers
         # would fight over cores and slow everything down further.
         if enhance:
@@ -536,15 +609,17 @@ def run_pipeline(
     _seg_colors:        list  = []      # dominant_color strings sampled this segment
     _seg_motion_vecs:   list  = []      # (dx, dy) vectors for scene-type heuristic
     _seg_prev_centroids: list = []      # centroids from previous frame for motion deltas
+    _seg_brightness:    list  = []      # per-frame mean brightness, for real time-of-day
 
     def _open_new_segment(first_frame, first_regions):
         """Open FFmpeg pipe for a new segment.  Returns the background frame used."""
-        nonlocal segment_start_background, _seg_all_classes, _seg_colors, _seg_motion_vecs, _seg_prev_centroids
+        nonlocal segment_start_background, _seg_all_classes, _seg_colors, _seg_motion_vecs, _seg_prev_centroids, _seg_brightness
         # Reset per-segment accumulators
         _seg_all_classes  = set()
         _seg_colors       = []
         _seg_motion_vecs  = []
         _seg_prev_centroids = []
+        _seg_brightness   = []
 
         has_targets = len(first_regions) > 0
 
@@ -609,13 +684,21 @@ def run_pipeline(
         if _seg_colors:
             _dom_color = _Counter(_seg_colors).most_common(1)[0][0]
 
-        # Scene type via motion vector heuristic
-        _fh, _fw = frame.shape[:2] if frame is not None else (0, 0)
-        _scene = detect_scene_type(_seg_motion_vecs, target_frames_this_segment, _fh * _fw)
+        # Scene type via motion vector heuristic. Uses the source's own
+        # frame_w/frame_h (known for the whole run from FrameSource, set
+        # near the top of run_pipeline()) rather than the last-read `frame`
+        # variable - that one is None exactly when a segment closes because
+        # the source hit EOF, which is routinely when the final segment of
+        # a short clip gets closed. Reading frame.shape there silently
+        # dropped every orientation-based classification (this fix's
+        # "handheld" shortcut included) straight to "unknown".
+        _scene = detect_scene_type(_seg_motion_vecs, target_frames_this_segment, frame_w, frame_h)
 
-        # Time of day from current UTC hour
-        import datetime as _dt
-        _tod = _time_of_day(_dt.datetime.utcnow().hour)
+        # Time of day from the segment's own footage (mean brightness across
+        # every frame processed), not wall-clock time - see
+        # _time_of_day_from_brightness() for why the old
+        # _time_of_day(utcnow().hour) approach was wrong.
+        _tod = _time_of_day_from_brightness(_seg_brightness)
 
         # Per-type counts
         _vcls = _VEHICLE_CLASSES
@@ -729,6 +812,16 @@ def run_pipeline(
             has_regions = len(regions) > 0
 
             # ── Per-frame metadata accumulation ──────────────────────────────
+            if segment_open:
+                # Brightness is sampled on EVERY frame (not gated on
+                # has_regions) so a quiet, empty-looking daytime segment
+                # still gets tagged "day" instead of only ever contributing
+                # samples when something was detected. Cheap: one
+                # whole-array mean over already-decoded frame data, no
+                # extra grayscale conversion or resize needed for a coarse
+                # day/dusk/night signal.
+                _seg_brightness.append(float(frame.mean()))
+
             if segment_open and has_regions:
                 # Color: sample the dominant color of each detected ROI
                 for r in regions:
@@ -740,6 +833,7 @@ def run_pipeline(
                 curr_centroids = [(r.x + r.w // 2, r.y + r.h // 2) for r in regions]
                 if _seg_prev_centroids and curr_centroids:
                     # Match by nearest centroid (simple greedy)
+                    _frame_vecs = []
                     for cx, cy in curr_centroids:
                         best_dx, best_dy, best_dist = 0, 0, float("inf")
                         for px, py in _seg_prev_centroids:
@@ -747,7 +841,8 @@ def run_pipeline(
                             if d < best_dist:
                                 best_dist, best_dx, best_dy = d, cx - px, cy - py
                         if best_dist < 80:   # px threshold - ignore teleporting blobs
-                            _seg_motion_vecs.append((best_dx, best_dy))
+                            _frame_vecs.append((best_dx, best_dy))
+                    _seg_motion_vecs.extend(_compensate_camera_motion(_frame_vecs))
                 _seg_prev_centroids = curr_centroids
 
             # --- WARMUP GATE ---

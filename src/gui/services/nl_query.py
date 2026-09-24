@@ -37,6 +37,10 @@ _COLOR_WORDS = {
 _SCENE_WORDS = {
     "highway": "highway", "intersection": "intersection",
     "parking": "parking", "street": "street",
+    # "handheld" covers phone/vertical clips that the pipeline no longer
+    # force-fits into a fixed-camera label like "intersection" (see
+    # detect_scene_type()'s portrait-frame check).
+    "handheld": "handheld", "phone": "handheld", "vertical": "handheld",
 }
 _TOD_WORDS = {
     "night": "night", "nighttime": "night", "day": "day", "daytime": "day",

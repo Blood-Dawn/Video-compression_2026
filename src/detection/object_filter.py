@@ -161,17 +161,35 @@ def detect_dominant_color(frame: np.ndarray, x: int, y: int, w: int, h: int) -> 
 # ── Scene type detection ──────────────────────────────────────────────────────
 
 def detect_scene_type(motion_vectors: list[tuple[float, float]], roi_count: int,
-                      frame_area: int) -> str:
+                      frame_w: int = 0, frame_h: int = 0) -> str:
     """Heuristic scene-type classifier based on motion direction diversity.
 
     Args:
-        motion_vectors: List of (dx, dy) displacement vectors for detected ROIs
-                        across recent frames. Populated by the pipeline.
+        motion_vectors: List of (dx, dy) displacement vectors for detected
+                        ROIs across recent frames, already compensated for
+                        this frame's own camera motion by the caller (see
+                        run_pipeline()'s per-frame accumulation) - a plain
+                        camera pan should no longer look like multi-object
+                        traffic here.
         roi_count:      Total ROI count for the segment.
-        frame_area:     H * W of the frame in pixels.
+        frame_w:        Frame width in pixels (0 if unknown).
+        frame_h:        Frame height in pixels (0 if unknown).
 
-    Returns one of: highway | intersection | parking | unknown
+    Returns one of: highway | intersection | parking | street | handheld |
+    unknown
+
+    A portrait/vertical frame (frame_h > frame_w) short-circuits straight to
+    "handheld": the fixed-camera-traffic labels below (highway,
+    intersection, parking) assume a stationary, wide-angle surveillance
+    camera, an assumption a vertical phone-shot clip never meets. Without
+    this check, panning/shaky handheld footage with 2-3 people or vehicles
+    in frame could scatter across motion-direction sectors from camera
+    movement alone and read as "intersection" even with zero real
+    cross-traffic - which is exactly the bug this fixes.
     """
+    if frame_h > 0 and frame_w > 0 and frame_h > frame_w:
+        return "handheld"
+
     if not motion_vectors or roi_count < 3:
         return "unknown"
 

@@ -100,7 +100,24 @@ async function pollStatus() {
       document.querySelectorAll('.mode-chip[data-mode]').forEach(c => {
         c.classList.toggle('active', c.dataset.mode === data.config.mode);
       });
-      document.getElementById('chip-enhance').classList.toggle('active', !!data.config.enhance);
+      const _enhChip = document.getElementById('chip-enhance');
+      _enhChip.classList.toggle('active', !!data.config.enhance);
+      // Show the REAL resolved backend, not just "enhance was requested" -
+      // enhancer_backend comes from gui.state._status, set once Enhancer()
+      // actually constructs, so a silent fallback to bicubic (missing the
+      // optional Real-ESRGAN install) is visible here instead of hidden.
+      if (data.config.enhance && data.enhancer_backend) {
+        const isAi = data.enhancer_backend.startsWith('realesrgan');
+        const askedForAi = data.config.enhance_model === 'realesrgan';
+        _enhChip.textContent = isAi ? 'SR ENHANCE \u00b7 AI' : 'SR ENHANCE \u00b7 BICUBIC (no AI)';
+        // Only flag it red when AI was requested but didn't actually run
+        // (missing install extra/weights) - picking bicubic on purpose is
+        // not a warning, just an honest label.
+        _enhChip.classList.toggle('chip-warn', askedForAi && !isAi);
+      } else {
+        _enhChip.textContent = 'SR ENHANCE';
+        _enhChip.classList.remove('chip-warn');
+      }
       document.getElementById('chip-encrypt').classList.toggle('active', !!data.config.encrypt);
     }
 

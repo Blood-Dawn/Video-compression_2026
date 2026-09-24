@@ -509,6 +509,14 @@
       color: var(--amber);
       background: var(--amber-glow);
     }
+    /* Real backend fell short of what was requested (e.g. SR asked for
+       Real-ESRGAN but only bicubic is actually running) - flagged in red
+       rather than the normal "active" amber so it reads as a warning. */
+    .mode-chip.chip-warn {
+      border-color: var(--red);
+      color: var(--red);
+      background: var(--red-dim);
+    }
 
     /* ─────────────── LOG TERMINAL ─────────────── */
     .log-panel {
@@ -2560,12 +2568,8 @@
                 <div class="config-field">
                   <label class="config-label" for="enhance-model">SR Model</label>
                   <select id="enhance-model">
-                    <option value="espcn" selected>ESPCN (fast CPU)</option>
-                    <option value="fsrcnn">FSRCNN (fast CPU)</option>
-                    <option value="edsr">EDSR (high quality)</option>
-                    <option value="lapsrn">LapSRN</option>
-                    <option value="realesrnet">RealESRNet (best quality)</option>
-                    <option value="realesrgan">Real-ESRGAN (GAN, slow)</option>
+                    <option value="bicubic" selected>Bicubic (fast, no AI, always available)</option>
+                    <option value="realesrgan">Real-ESRGAN (AI, needs the "enhance" install extra)</option>
                   </select>
                 </div>
                 <div class="config-field">
@@ -3357,7 +3361,7 @@
             <span class="mode-chip" data-mode="mode1" id="chip-mode1">MODE 1 · EVENT RECORDING</span>
             <span class="mode-chip" data-mode="mode2" id="chip-mode2">MODE 2 · SMART COMPRESS</span>
             <span class="mode-chip" data-mode="mode3" id="chip-mode3">MODE 3 · OBJECT ONLY</span>
-            <span class="mode-chip" id="chip-enhance">SR ENHANCE</span>
+            <span class="mode-chip" id="chip-enhance" title="Shows the real backend once a run starts: AI (Real-ESRGAN) or Bicubic (no AI). Never trust the requested model alone - it silently falls back to bicubic if Real-ESRGAN isn't installed.">SR ENHANCE</span>
             <span class="mode-chip" id="chip-encrypt">AES-256</span>
           </div>
 
@@ -3706,6 +3710,7 @@
               <option value="intersection">Intersection / 4-way</option>
               <option value="parking">Parking Lot</option>
               <option value="street">Street</option>
+              <option value="handheld">Handheld / phone clip</option>
               <option value="unknown">Unknown</option>
             </select>
           </div>

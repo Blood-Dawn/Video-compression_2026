@@ -15,7 +15,11 @@ and do not depend on real video files, OpenCV capture devices, or FFmpeg.
 import numpy as np
 import pytest
 
-from pipeline.pipeline import run_pipeline
+from pipeline.pipeline import (
+    run_pipeline,
+    _time_of_day_from_brightness,
+    _compensate_camera_motion,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1032,3 +1036,64 @@ class TestAutoBitrateCap:
             codec="libx264",
         )
         assert encoder_kwargs.get("max_bitrate_kbps") == 0
+
+
+# ---------------------------------------------------------------------------
+# Real, content-based time-of-day (replaces the old wall-clock-hour bug:
+# a bright daytime clip processed at 2am used to be tagged "night" no
+# matter what was on screen).
+# ---------------------------------------------------------------------------
+
+class TestTimeOfDayFromBrightness:
+    def test_bright_samples_are_day(self):
+        assert _time_of_day_from_brightness([180.0, 190.0, 175.0]) == "day"
+
+    def test_dark_samples_are_night(self):
+        assert _time_of_day_from_brightness([10.0, 15.0, 8.0]) == "night"
+
+    def test_mid_samples_are_dusk_dawn(self):
+        assert _time_of_day_from_brightness([70.0, 65.0, 80.0]) == "dusk_dawn"
+
+    def test_no_samples_is_unknown_not_a_guess(self):
+        assert _time_of_day_from_brightness([]) == "unknown"
+
+    def test_uses_the_average_not_a_single_outlier_frame(self):
+        # One very dark frame (e.g. a brief lens flare/blackout) among mostly
+        # bright ones should not flip the whole segment to "night".
+        samples = [200.0] * 20 + [2.0]
+        assert _time_of_day_from_brightness(samples) == "day"
+
+
+# ---------------------------------------------------------------------------
+# Camera-motion compensation (the "TikTok clip tagged intersection" bug):
+# subtracting each frame's own median object-displacement removes shared
+# camera pan/shake before it reaches the scene-type direction-diversity
+# heuristic.
+# ---------------------------------------------------------------------------
+
+class TestCompensateCameraMotion:
+    def test_uniform_pan_is_cancelled_out(self):
+        # Three objects all "moving" the same way purely because the camera
+        # panned right - after compensation they should be ~stationary
+        # relative to each other.
+        panned = [(10.0, 0.0), (10.0, 0.0), (11.0, 0.0)]
+        result = _compensate_camera_motion(panned)
+        for dx, dy in result:
+            assert abs(dx) <= 1.0
+            assert dy == 0.0
+
+    def test_one_real_mover_stands_out_after_compensation(self):
+        # Two objects pan with the camera, one genuinely walks against it.
+        vecs = [(10.0, 0.0), (10.0, 0.0), (-15.0, 0.0)]
+        result = _compensate_camera_motion(vecs)
+        # The two panning objects collapse near zero; the real mover's
+        # residual stays large and in the opposite direction.
+        stationary = [v for v in result if abs(v[0]) < 1.0]
+        mover = [v for v in result if abs(v[0]) >= 1.0]
+        assert len(stationary) == 2
+        assert len(mover) == 1
+        assert mover[0][0] < 0
+
+    def test_fewer_than_two_vectors_passed_through_unchanged(self):
+        assert _compensate_camera_motion([]) == []
+        assert _compensate_camera_motion([(5.0, 3.0)]) == [(5.0, 3.0)]

@@ -151,6 +151,10 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
         _status["error"] = None
         _status["start_time"] = time.time()
         _status["config"] = config
+        # Cleared here, filled in by the Enhancer patch below once (and if)
+        # this run actually constructs one - stale values from a previous
+        # run must never leak into a run that isn't enhancing at all.
+        _status["enhancer_backend"] = None
 
     # Persist the chosen output_dir so the GUI can re-find segments after
     # a server restart. See _save_gui_state() up top.
@@ -171,6 +175,7 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
 
     _orig_fs_init = None
     _orig_re_init = None
+    _orig_enh_init = None
     try:
         # Patch FrameSource and ROIEncoder lazily. Import here so we can wrap.
         try:
@@ -195,6 +200,25 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
 
         _fs.FrameSource.__init__ = _patched_fs_init
         _re.ROIEncoder.__init__ = _patched_re_init
+
+        # Same pattern for Enhancer: capture the REAL resolved backend
+        # ("realesrgan-<device>" or "bicubic") into _status the moment one
+        # is constructed, so the GUI can show what's actually running
+        # instead of trusting the requested enhance_model, which silently
+        # falls back to bicubic when Real-ESRGAN isn't installed.
+        try:
+            import enhancement.enhancer as _enh
+        except ModuleNotFoundError:
+            import src.enhancement.enhancer as _enh
+
+        _orig_enh_init = _enh.Enhancer.__init__
+
+        def _patched_enh_init(self_inner, *a, **kw):
+            _orig_enh_init(self_inner, *a, **kw)
+            with _state_lock:
+                _status["enhancer_backend"] = self_inner.backend
+
+        _enh.Enhancer.__init__ = _patched_enh_init
 
         run_pipeline(
             input_source=config.get("input_source", 0),
@@ -265,6 +289,12 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
                 _fs.FrameSource.__init__ = _orig_fs_init
             if _orig_re_init is not None:
                 _re.ROIEncoder.__init__ = _orig_re_init
+            try:
+                import enhancement.enhancer as _enh2
+            except ModuleNotFoundError:
+                import src.enhancement.enhancer as _enh2
+            if _orig_enh_init is not None:
+                _enh2.Enhancer.__init__ = _orig_enh_init
         except Exception:
             pass
 

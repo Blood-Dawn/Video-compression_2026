@@ -193,6 +193,7 @@ class Enhancer:
         models_dir: Optional[str] = None,
         scale: int = 4,
         device: Optional[str] = None,
+        use_nn: bool = True,
     ) -> None:
         """
         Args:
@@ -200,6 +201,13 @@ class Enhancer:
             models_dir: Directory containing RealESRGAN_x4plus.pth.
             scale:      Model upscale factor (2 or 4).
             device:     "cuda" | "mps" | "cpu" | None (auto-detect).
+            use_nn:     False skips loading Real-ESRGAN entirely and always
+                        uses bicubic, even if the model/weights are present.
+                        This is what an explicit "bicubic" choice in the GUI
+                        maps to - it used to be accepted and then ignored,
+                        silently trying the NN anyway. True (default) keeps
+                        the previous behaviour: try Real-ESRGAN, fall back to
+                        bicubic if it's unavailable.
         """
         if scale not in _VALID_SCALES:
             raise ValueError(f"scale must be one of {_VALID_SCALES}, got {scale}")
@@ -221,7 +229,10 @@ class Enhancer:
 
         self._upsampler = None
         self._using_nn  = False
-        self._load_model()
+        if use_nn:
+            self._load_model()
+        else:
+            log.info("Enhancer: bicubic explicitly selected, skipping the AI model load.")
 
     # ------------------------------------------------------------------
     # Internal

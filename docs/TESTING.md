@@ -5,7 +5,7 @@ quirks worth knowing before a first run. For the detailed, dated log of how the
 suite grew from its first green baseline to its current size, including every
 bug that log of triage work turned up, see `docs/testing/test-baseline.md`. For the
 list of owner-gated and deferred items (things a build cannot finish on its
-own, such as code signing or a live pentest), see `docs/plans/BLOCKERS.md`.
+own, such as code signing or a live pentest), see `docs/BLOCKERS.md`.
 
 ## How to run the tests
 
@@ -71,7 +71,7 @@ rest of `docs/`, follows the same rule.
 
 A living list of deferred and owner-gated items, things that could not be
 finished inside an automated build session because they need a credential, a
-piece of hardware, or a human decision, is kept in `docs/plans/BLOCKERS.md` rather
+piece of hardware, or a human decision, is kept in `docs/BLOCKERS.md` rather
 than duplicated here. As of this writing that list includes an external
 network penetration test, a fuzzing pass on the video-ingest path, live
 camera-path testing against real RTSP hardware, and the Windows code-signing

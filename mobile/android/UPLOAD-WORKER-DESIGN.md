@@ -189,7 +189,7 @@ back" feature does not get quietly throttled without explanation.
   check before shipping (kill the app via `adb shell am kill` mid-upload,
   relaunch, confirm the upload resumes rather than restarting from 0) -
   same category as the emulator smoke-test step already in
-  `docs/releases/RELEASE-CHECKLIST.md`'s mobile section.
+  `docs/RELEASE-CHECKLIST.md`'s mobile section.
 
 ## Out of scope for v1
 

@@ -61,7 +61,7 @@ default or stays behind the documented recipe.
 - **Keep EasyOCR as a legacy, separate-env option**, demoted below the ONNX
   path in docs.
 
-## Honest caveats carried forward (also in docs/plans/BLOCKERS.md)
+## Honest caveats carried forward (also in docs/BLOCKERS.md)
 - `--no-deps` is a maintenance liability: re-audit the cv2/numpy pins on every
   fast-plate-ocr / open-image-models upgrade.
 - The default bundled model weights may carry their own (non-MIT) license -

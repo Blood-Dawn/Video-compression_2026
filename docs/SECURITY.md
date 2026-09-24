@@ -7,7 +7,7 @@ owner-run manual verification checklist into one document.
 
 Audit performed 2026-06-21 on branch `app`. Sources merged here:
 `docs/security/SECURITY-AUDIT.md` and `docs/security/SECURITY-MANUAL-VERIFY.md`.
-Deferred owner actions are also summarized here from `docs/plans/BLOCKERS.md`.
+Deferred owner actions are also summarized here from `docs/BLOCKERS.md`.
 
 For a hands-on, beginner-level walkthrough of testing these findings against
 a REAL running instance over a real network (Wireshark, nmap, a Kali VM, and
@@ -218,7 +218,7 @@ These are honest gaps. They were not run and are not claimed as covered.
 * Live RTSP/ONVIF camera-path testing with real hardware or MediaMTX.
 * Upgrading the dev/notebook dependency stack (jupyter-server, jupyterlab,
   mistune, notebook, tornado, bleach, basicsr). Not runtime dependencies, but
-  still outstanding. Tracked in `docs/plans/BLOCKERS.md`.
+  still outstanding. Tracked in `docs/BLOCKERS.md`.
 * The installer is unsigned, so SmartScreen fires. Expected until it is signed.
 
 ---
@@ -416,7 +416,7 @@ These are not preferences. A change that violates one of them does not ship.
 The CI-safe security core is covered by `tests/security/`, but several checks
 remain owner-run because they require a real deployment, special tooling, or a
 licensing decision. These items were previously recorded only in
-`plans/BLOCKERS.md`.
+`BLOCKERS.md`.
 
 | Item | Why it is deferred | Required action |
 |---|---|---|

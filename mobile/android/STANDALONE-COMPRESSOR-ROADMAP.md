@@ -396,7 +396,7 @@ later, not the launch path.
   not a store listing.
 - **Primary distribution: GitHub Releases.** Tag a build, attach the APK
   and a `SHA256SUMS.txt` (same pattern already used for the desktop and
-  the mobile-remote APK releases in `docs/releases/RELEASE-CHECKLIST.md`),
+  the mobile-remote APK releases in `docs/RELEASE-CHECKLIST.md`),
   publish. No review queue, no closed-testing window, no waiting on
   anyone. This alone is a complete, legitimate way to ship a real app to
   real users, and it's available the moment Phase 1 has a working build.
@@ -437,7 +437,7 @@ Done:
   R8 keep rules added for LiteRT (called from JNI) and the worker's
   reflective constructor, then verified on the emulator.
 - GitHub Release `v1-beta` carries the arm64 APK, the universal APK and
-  `SHA256SUMS.txt`, per `docs/releases/RELEASE-CHECKLIST.md`; notes in
+  `SHA256SUMS.txt`, per `docs/RELEASE-CHECKLIST.md`; notes in
   `docs/releases/release-notes-mobile-v1-beta.md`.
 - Fastlane metadata for F-Droid / IzzyOnDroid at
   `mobile/android/fastlane/metadata/android/en-US/` (title, short and full

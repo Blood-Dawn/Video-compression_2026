@@ -10,7 +10,7 @@ doesn't remove that duplication (svcs.iss is an Inno Setup script, not
 Python, so it can't import this), but it gives the RUNNING APP one place to
 read its own version from, and gives release day one clear rule: bump
 APP_VERSION here, pyproject.toml's version, and svcs.iss's MyAppVersion
-together (see docs/releases/RELEASE-CHECKLIST.md).
+together (see docs/RELEASE-CHECKLIST.md).
 
 Author: Bloodawn (KheivenD), 2026-09-22 (Fall 3.17 - in-app update check).
 """

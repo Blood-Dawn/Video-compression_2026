@@ -281,5 +281,5 @@ and daily summaries. The REST API and SSE log are shared by desktop and mobile.
 
 Known boundaries remain: no timeline review UI, no full multi-camera manager,
 no built-in HTTPS or RBAC, no ONVIF Profile G recording server, and no outbound
-webhook or MQTT integration. These are tracked in `plans/BLOCKERS.md` and
+webhook or MQTT integration. These are tracked in `BLOCKERS.md` and
 `plans/UPGRADE-PLAN-R6.md`, not silently presented as shipped capabilities.

@@ -129,7 +129,7 @@ scaffolding exists:
 | Video-ingest fuzzing | deterministic malformed-input tests | Run a dedicated fuzzing campaign |
 | Plate model bundling | ONNX backend and coexistence recipe | Check individual model licenses and bundle only approved weights |
 
-The detailed owner register remains in `plans/BLOCKERS.md`; security-specific gates
+The detailed owner register remains in `BLOCKERS.md`; security-specific gates
 are also indexed in `SECURITY.md`.
 
 ## 6. Source plans
@@ -137,8 +137,8 @@ are also indexed in `SECURITY.md`.
 - `plans/REFACTOR-PLAN-gui-app.md`: historical GUI extraction constraints and route inventory.
 - `plans/UPGRADE-PLAN-R6.md`: August 2026 desktop and mobile roadmap audit.
 - `plans/DESKTOP-ZONES-EVENTS-PLAN.md`: detailed D1 through D5 desktop implementation plan.
-- `plans/BLOCKERS.md`: owner actions, credentials, build tools, and manual gates.
-- `releases/RELEASE-CHECKLIST.md`: release execution checklist.
+- `BLOCKERS.md`: owner actions, credentials, build tools, and manual gates.
+- `RELEASE-CHECKLIST.md`: release execution checklist.
 
 When one of these source records changes a current decision, update this file
 and preserve the dated source record.

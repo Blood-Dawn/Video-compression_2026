@@ -255,6 +255,6 @@ bundle and installer sizes.
 
 The detailed source records remain beside this document for dated evidence:
 `build/BUILDS.md`, `build/deployment_packaging.md`, `build/ffmpeg-licensing.md`,
-`build/onnx-models.md`, `build/build-metrics.md`, `releases/RELEASE-CHECKLIST.md`,
+`build/onnx-models.md`, `build/build-metrics.md`, `RELEASE-CHECKLIST.md`,
 and `releases/winget-submission.md`. Update this document when a current build policy or
 release procedure changes; keep those records dated rather than deleting them.

@@ -334,7 +334,7 @@ week 4 rather than rushing the security testing below.
 |---|---|---|
 | 3.9 | Read `push_notify.is_safe_push_url` and specify the webhook emitter | Written specification for `utils/event_webhook.py` reusing the existing guard |
 | 3.10 | Write the socket-server test harness for webhook delivery | Test fixture in the style of `tests/test_push_notify.py` |
-| 3.14 | External network penetration test against a running SVCS instance | Written findings against the threat model in `docs/SECURITY.md`; anything found gets a severity-rated entry in `docs/plans/BLOCKERS.md` |
+| 3.14 | External network penetration test against a running SVCS instance | Written findings against the threat model in `docs/SECURITY.md`; anything found gets a severity-rated entry in `docs/BLOCKERS.md` |
 | 3.15 | Fuzz the video-ingest and upload path with malformed media | A clean rejection or a filed crash report for each malformed file tried |
 
 ### Week 4 (Sep 21 to Sep 27)

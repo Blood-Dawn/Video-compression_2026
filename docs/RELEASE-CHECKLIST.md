@@ -1,69 +1,112 @@
 # Release checklist
 
-A repeatable, step-by-step process for cutting a desktop beta build. Every
-step here is something the agent (or any contributor) can run; the actual
-publish/tag is the last step and is explicitly gated to the repo owner.
+The one checklist for cutting a release, desktop or mobile. Before
+2026-09-24 there were two (this file and a second copy under docs/releases/)
+that disagreed about the branch, the tag and where the notes go; they are
+merged here.
 
-The current published beta tag is `v2.2.0-beta`; the next release bumps this.
+Every step up to the last one can be run by any contributor. **Tagging and
+publishing the GitHub Release is the repo owner's action alone**; nothing
+before that step touches the public remote's tags or releases. Open gates
+(signing cert, release keystore) are tracked in [BLOCKERS.md](BLOCKERS.md).
 
-## Steps
+Current tags: desktop `v2.2.0-beta`, mobile `v1-beta` (app 1.1.0-beta,
+versionCode 14).
 
-1. **run_tests** - from the repo root, with the project venv active:
-   `pytest -q`. All tests must pass (or have a documented, reviewed skip) on
-   both the Linux and Windows CI matrix before continuing. `tests/security/`
-   in particular must be green; it is the guard against auth, CSRF, SQLi,
-   XSS, SSRF, path-traversal, and crypto regressions.
-2. **build** - `installer\build.ps1` from the repo root with the venv
-   active. Use `-Edition server` for the desktop/server build (the default)
-   or `-Edition field` for the offline field kit. Add `-Installer` to also
-   package `dist\SVCS` into an Inno Setup `SVCS-Setup-*.exe`. Add `-Sign` to
-   Authenticode-sign the bundle and the installer (see "Code signing"
-   below); without a cert configured, signing degrades to a warning and the
-   build still completes unsigned.
-3. **smoke** - `build.ps1` launches the freshly built exe and confirms it
-   answers on `http://127.0.0.1:5000` within `-SmokeTimeoutSec` (default 60s)
-   unless `-SkipSmoke` was passed. Do not skip this for a release build: a
-   build that produces an exe that never binds its port is a silent failure.
-4. **checksum / sha256** - after the build, compute SHA-256 for every
-   artifact you are about to publish (the installer exe and the mobile APK)
-   and write them to `dist/SHA256SUMS.txt`, one `<hash>  <filename>` line per
-   artifact:
-   `Get-FileHash dist\SVCS-Setup-<version>.exe -Algorithm SHA256`.
-   These are what let a user verify their download was not tampered with in
-   transit, and what the release notes point to.
-5. **draft** - write (or update) `docs/release-notes-v<version>-beta.md`
-   before touching GitHub. It must say plainly that the build is an unsigned
-   beta, explain the Windows SmartScreen warning users will hit and how to
-   proceed past it, list the SHA-256 checksums from the step above, and
-   state the license (AGPL-3.0). Draft it as a normal file in this repo, not
-   directly in the GitHub release editor, so it goes through the same
-   review as everything else.
-6. **owner / publish / tag** - tagging the commit (`git tag vX.Y.Z-beta`),
-   pushing the tag, and publishing the GitHub Release with the built
-   artifacts attached is the repo owner's action alone. Nothing before this
-   step should touch the public `origin` remote's tags or releases. The
-   owner reviews the draft notes and checksums from steps 4-5, then
-   publishes.
+## Desktop (Windows installer)
 
-## Code signing
+1. **Pre-flight.** Release from `main` with a clean working tree. The
+   version must match in three places: `pyproject.toml`,
+   `installer/svcs.iss` (`MyAppVersion`) and `src/utils/version.py`
+   (`APP_VERSION`, which also feeds the in-app update check and
+   `/api/capabilities`). `tests/test_version_consistency.py` checks the
+   first two. Then `uv sync --frozen --extra enhance --extra crash-reporting`.
+2. **run_tests.** `uv run pytest` (or `pwsh scripts/run_tests.ps1`). Everything
+   passes or has a documented skip, on the Linux and Windows CI matrix too.
+   `tests/security/` must be green: it guards auth, CSRF, SQLi, XSS, SSRF,
+   path traversal and crypto regressions.
+3. **build.** `installer\build.ps1 -Installer` with the venv active
+   (`-Edition server` is the default; `-Edition field` builds the offline
+   field kit). It vendors FFmpeg, runs PyInstaller, then `iscc`. Add `-Sign`
+   to Authenticode-sign (see Code signing below); without a cert it warns and
+   builds unsigned.
+4. **smoke.** `build.ps1` launches the new exe and waits for
+   `http://127.0.0.1:5000` (`-SmokeTimeoutSec`, default 60). Never pass
+   `-SkipSmoke` for a release. Then, on a clean Windows VM with no Python or
+   FFmpeg: install, launch, compress a short clip, check the output with
+   `ffprobe`, confirm ONNX detection works with no torch, and confirm
+   uninstall keeps user data in `%APPDATA%`.
+5. **checksum / sha256.** Write `SHA256SUMS.txt` for every artifact you will
+   attach:
+   ```powershell
+   Get-FileHash .\SVCS-Setup-<version>.exe -Algorithm SHA256 |
+     ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path $_.Path -Leaf)" } |
+     Out-File -Encoding ascii SHA256SUMS.txt
+   ```
+6. **draft.** Write `docs/releases/release-notes-v<version>-beta.md` in the
+   repo first, so it gets reviewed like everything else. It must say plainly
+   that the build is an unsigned beta, explain the SmartScreen warning and
+   how to get past it, list the checksums, and state the license (AGPL-3.0).
+   If the winget manifests are being updated, recompute their SHA with
+   `pwsh scripts/winget_validate.ps1 -Recompute` against the real asset.
+7. **owner / publish / tag.** The owner creates the tag (`git tag vX.Y.Z-beta`),
+   pushes it, and publishes a pre-release with the installer and
+   `SHA256SUMS.txt` attached. Afterwards, check that the download page link
+   (`docs/site/index.html`, Releases/latest) resolves to the new asset.
 
-`installer\build.ps1 -Sign` signs both the bundle exe and the installer exe
-via `signtool`, SHA-256 file digest, RFC3161 timestamp (`/fd SHA256 /tr ...`)
-so the signature stays valid after the cert expires. The certificate is read
-from the environment (`SVCS_SIGN_CERT` or `SVCS_SIGN_THUMBPRINT`, plus
-`SVCS_SIGN_PASSWORD` for a `.pfx`) and is never committed to the repo. With
-no cert configured, `-Sign` prints a warning and the build still produces an
-unsigned exe rather than failing outright - see `docs/BLOCKERS.md` for the
-current status of getting a real cert.
+### Code signing
 
-## Notes
+`installer\build.ps1 -Sign` signs both the bundle exe and the installer with
+`signtool`, SHA-256 file digest and an RFC3161 timestamp (`/fd SHA256 /tr ...`)
+so signatures outlive the cert. The cert comes from the environment, never the
+repo: `SVCS_SIGN_CERT` (path to a `.pfx`) plus `SVCS_SIGN_PASSWORD`, or
+`SVCS_SIGN_THUMBPRINT` for a cert already in the store. Verify with
+`signtool verify /pa /v dist\SVCS-Setup-<version>.exe` (and `dist\SVCS\SVCS.exe`).
+Getting a cert (SignPath's free OSS program first) is an owner gate in
+[BLOCKERS.md](BLOCKERS.md).
 
-- This checklist governs the desktop/server exe and the Inno Setup
-  installer. The mobile APK has its own build step under `mobile/android`
-  and is versioned independently (see `mobile/CHANGES-SUMMER-2026.md`-style
-  per-round notes).
-- If a step here stops matching how a release actually gets made, fix the
-  checklist in the same PR that changes the process. A checklist nobody
-  follows is worse than no checklist.
+## Mobile (Android APK)
 
-Author: Bloodawn (KheivenD), 2026-09-21.
+Mobile releases use their own tags (`v1-beta` so far) so the two release
+trains never collide. The desktop update check ignores mobile tags on purpose
+(see `src/gui/routes/setup_bp.py`).
+
+1. **Pre-flight.** Bump `versionCode` and `versionName` in
+   `mobile/android/app/build.gradle.kts` (and add a line to the history
+   comment there) whenever the release contains new commits. Add
+   `mobile/android/fastlane/metadata/android/en-US/changelogs/<versionCode>.txt`
+   for F-Droid and IzzyOnDroid.
+2. **run_tests.** From `mobile/android`: `./gradlew testDebugUnitTest`. One
+   known failure is expected until TokenStore gets a crypto seam:
+   `ServerSettingsViewModelTest` "save persists then reloads push config"
+   (Robolectric has no AndroidKeyStore).
+3. **build.** `./gradlew assembleRelease`. ABI splits produce
+   `app/build/outputs/apk/release/app-arm64-v8a-release.apk` and
+   `app-universal-release.apk` (plus armeabi-v7a and x86_64). R8 is on.
+   **Signing matters:** without `SVCS_ANDROID_KEYSTORE` the release build
+   falls back to the debug key of the machine that built it, and Android
+   refuses to install an update signed with a different key than the
+   installed app. Build releases on the same machine as the previous ones
+   (the owner's Windows PC) until a real release keystore exists (an owner
+   gate in [BLOCKERS.md](BLOCKERS.md)). Never publish a cloud- or CI-built APK.
+4. **smoke.** Install the release APK over the previous version on an
+   emulator or phone (`adb install -r`), launch it, confirm the process stays
+   up and `adb logcat -d | grep -E "FATAL|AndroidRuntime"` is empty, then run
+   one compression job end to end. This is the first real exercise of the R8
+   keep rules, so do not skip it.
+5. **checksum / sha256.** Rename to `svcs-mobile-<tag>.apk` (arm64) and
+   `svcs-mobile-<tag>-universal.apk`, then write `SHA256SUMS.txt` for both
+   (`sha256sum` or the `Get-FileHash` snippet above).
+6. **draft.** Notes in `docs/releases/release-notes-mobile-<tag>.md` (see
+   `release-notes-mobile-v1-beta.md` for the shape: which APK to pick, what
+   changed, what was verified, known limits).
+7. **owner / publish / tag.** The owner tags and publishes a pre-release with
+   both APKs and `SHA256SUMS.txt`.
+
+## Keeping this honest
+
+If a release stops matching these steps, fix this file in the same change
+that alters the process. A checklist nobody follows is worse than none.
+
+Authors: Bloodawn (KheivenD), 2026-06-03 (desktop checklist), 2026-09-22
+(mobile-only section, TASK 4.11), 2026-09-24 (merged into one file).

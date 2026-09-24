@@ -1374,7 +1374,7 @@ in-process backend ships enabled by default or stays behind the documented recip
   when present and hides the plate UI when absent (unchanged behaviour).
 - **Keep EasyOCR as a legacy, separate-env option**, demoted below the ONNX path in docs.
 
-### 9.5 Honest caveats carried forward (also in plans/BLOCKERS.md)
+### 9.5 Honest caveats carried forward (also in BLOCKERS.md)
 
 `--no-deps` is a maintenance liability: re-audit the cv2 and numpy pins on every fast-plate-ocr or
 open-image-models upgrade. The default bundled model weights may carry their own non-MIT license, so

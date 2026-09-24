@@ -9,16 +9,12 @@ Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - blueprints).
 from flask import Blueprint, jsonify, request
 
 try:
-    from gui.state import (_demo_lock, _demo_state)
     from gui.services.gui_state_persist import _load_gui_state
     from gui.services.db_helpers import _get_archive_db_path, _rows_to_segment_list
-    from gui.services.demo_runner import _run_demo_thread
     from utils.db import (query_by_type, query_daily_storage_summary, query_segments_by_target_count)
 except ModuleNotFoundError:  # pragma: no cover - import path shim
-    from src.gui.state import (_demo_lock, _demo_state)
     from src.gui.services.gui_state_persist import _load_gui_state
     from src.gui.services.db_helpers import _get_archive_db_path, _rows_to_segment_list
-    from src.gui.services.demo_runner import _run_demo_thread
     from src.utils.db import (query_by_type, query_daily_storage_summary, query_segments_by_target_count)
 
 queries_bp = Blueprint("queries", __name__)
@@ -137,13 +133,5 @@ def api_busiest():
 # server restart. See _load_gui_state() above for details.
 # Author: Bloodawn (KheivenD), 2026-05-04 (output-dir persistence).
 _load_gui_state()
-
-
-# _run_demo_thread now lives in gui.services.demo_runner (imported below); the
-# /api/demo* routes spawn and read it.
-try:
-    from gui.services.demo_runner import _run_demo_thread
-except ModuleNotFoundError:  # pragma: no cover - import path shim
-    from src.gui.services.demo_runner import _run_demo_thread
 
 

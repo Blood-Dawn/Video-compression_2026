@@ -18,7 +18,6 @@ Author: KD
 
 import sys
 import time
-import threading
 import json
 import os
 from pathlib import Path

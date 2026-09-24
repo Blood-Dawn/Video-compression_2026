@@ -16,7 +16,6 @@ Author: Bloodawn (KheivenD), 2026-07-04 (R4 Phase 4 - server/field split).
 import sys
 from pathlib import Path
 
-import pytest
 from flask import Flask
 
 SRC = Path(__file__).parent.parent / "src"

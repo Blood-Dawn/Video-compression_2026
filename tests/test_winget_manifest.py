@@ -12,7 +12,6 @@ Author: Bloodawn (KheivenD), 2026-06-21 (R3.2a - winget manifest).
 """
 
 import re
-import sys
 from pathlib import Path
 
 import pytest

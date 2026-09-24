@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest import mock
 
 import pytest
 
@@ -34,7 +33,6 @@ def _reimport_paths(monkeypatch, tmp_data: Path, tmp_cache: Path,
     Returns the freshly imported module. We re-import per test so the
     module-level migration step runs against the test fixture state.
     """
-    import importlib
     import sys
 
     import platformdirs

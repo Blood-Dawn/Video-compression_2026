@@ -18,7 +18,6 @@ the repo.
 Author: Bloodawn (KheivenD), 2026-07-04 (R4 Phase 6 - universal formats).
 """
 
-import os
 import subprocess
 import sys
 from pathlib import Path

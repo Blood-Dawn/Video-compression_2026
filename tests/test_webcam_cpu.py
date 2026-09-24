@@ -23,9 +23,8 @@ Usage:
 """
 
 import os
-import time
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import cv2
 import numpy as np

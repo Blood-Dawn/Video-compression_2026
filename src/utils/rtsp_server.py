@@ -19,7 +19,6 @@ Typical flow:
 Author: EGN 4950C Group 16
 """
 
-import os
 import platform
 import shutil
 import subprocess

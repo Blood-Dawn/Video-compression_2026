@@ -14,13 +14,13 @@ from flask import Blueprint, current_app, jsonify, request
 try:
     from gui.state import (_state_lock, _status, _VALID_MODES, _VALID_BG, _VALID_DEVICES, _VALID_MODELS, _CLOUD_SUBFOLDER)
     from gui.logging_setup import log
-    from gui.services.cloud_detection import _default_output_dir, _detect_onedrive_root, _detect_gdrive_root, _detect_cloud_root
+    from gui.services.cloud_detection import _detect_cloud_root
     from pipeline.presets import list_presets, resolve_preset, PRESETS, DEFAULT_PRESET, VALID_CODECS
     from pipeline.content_detect import detect_content
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.state import (_state_lock, _status, _VALID_MODES, _VALID_BG, _VALID_DEVICES, _VALID_MODELS, _CLOUD_SUBFOLDER)
     from src.gui.logging_setup import log
-    from src.gui.services.cloud_detection import _default_output_dir, _detect_onedrive_root, _detect_gdrive_root, _detect_cloud_root
+    from src.gui.services.cloud_detection import _detect_cloud_root
     from src.pipeline.presets import list_presets, resolve_preset, PRESETS, DEFAULT_PRESET, VALID_CODECS
     from src.pipeline.content_detect import detect_content
 

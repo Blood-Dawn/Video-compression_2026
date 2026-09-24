@@ -4,19 +4,26 @@ src/gui/routes/hls_bp.py
 hls routes blueprint, carved from gui/app.py (TASK 1.3).
 Pure relocation: every URL, method, and response shape is unchanged.
 Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - blueprints).
+
+HLS live streaming (task 4.1): OpenCV VideoCapture -> BackgroundSubtractor ->
+ROI boxes and corner overlay drawn on each frame -> rawvideo piped to FFmpeg
+stdin -> .m3u8 + .ts -> Flask serves /api/hls/<camera_id>/ -> hls.js plays in
+the browser. Frames are annotated in Python before encoding so the live stream
+shows the same green ROI boxes as the demo comparison output. The worker and
+its rebindable process/thread handles live in gui.services.hls_runner.
+(This note used to trail the end of demo_bp.py, left behind by the carve.)
 """
 
 import threading
 import subprocess
 import time
 from pathlib import Path
-from flask import Blueprint, jsonify, request, Response, send_from_directory, abort
+from flask import Blueprint, jsonify, request, send_from_directory, abort
 
 try:
     from gui.state import (_hls_lock, _hls_state, _hls_frame_ts_dq, _hls_segment_latencies)
     from gui.logging_setup import log
     from gui.services.cloud_detection import _default_output_dir
-    from gui.services.rtsp import _rtsp_mgr
     from gui.services import hls_runner as _hls_runner
     from gui.services.hls_runner import _hls_dir_for, _hls_annotator_thread
     from gui.services.path_safety import is_safe_input_source, redact_input_source
@@ -24,7 +31,6 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.state import (_hls_lock, _hls_state, _hls_frame_ts_dq, _hls_segment_latencies)
     from src.gui.logging_setup import log
     from src.gui.services.cloud_detection import _default_output_dir
-    from src.gui.services.rtsp import _rtsp_mgr
     from src.gui.services import hls_runner as _hls_runner
     from src.gui.services.hls_runner import _hls_dir_for, _hls_annotator_thread
     from src.gui.services.path_safety import (is_safe_input_source,
@@ -299,12 +305,4 @@ def api_hls_segment(camera_id: str, ts_file: str):
 #   POST /api/rtsp/stop           - stop server (and any active push)
 #   POST /api/rtsp/push           - start FFmpeg looping a file into the server
 #   POST /api/rtsp/stop_push      - stop the FFmpeg push
-
-# _rtsp_mgr (the local MediaMTX server singleton) now lives in
-# gui.services.rtsp; the /api/rtsp/* routes below drive it.
-try:
-    from gui.services.rtsp import _rtsp_mgr
-except ModuleNotFoundError:  # pragma: no cover - import path shim
-    from src.gui.services.rtsp import _rtsp_mgr
-
 

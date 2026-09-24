@@ -29,7 +29,6 @@ from gui.services import job_history as jh                      # noqa: E402
 from gui.services import autocompress_runner as ac              # noqa: E402
 from gui.services import pipeline_runner as pr                  # noqa: E402
 from utils import compressed_index as cidx                      # noqa: E402
-from utils import watchfolder as wf                             # noqa: E402
 
 
 @pytest.fixture()

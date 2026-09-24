@@ -32,7 +32,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 
 def _import_app():
-    import importlib
     import sys
     for k in list(sys.modules):
         if k == "gui.app" or k.startswith("gui.app."):

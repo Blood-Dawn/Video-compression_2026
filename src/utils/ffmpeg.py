@@ -29,7 +29,7 @@ import shutil
 import sys
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 _IS_WINDOWS = os.name == "nt"
 

@@ -14,19 +14,22 @@ from urllib.parse import quote, unquote
 from flask import Blueprint, jsonify, request, Response, send_from_directory, abort
 
 try:
-    from gui.state import (_state_lock, _status, _demo_lock, _demo_state, _CLOUD_SUBFOLDER, _ALLOWED_EXTENSIONS)
+    from gui.state import _state_lock, _status, _demo_lock, _demo_state, _ALLOWED_EXTENSIONS
     from gui.logging_setup import log
-    from gui.services.cloud_detection import _detect_cloud_root
-    from gui.services.db_helpers import _get_db_path, _get_archive_db_path, _rows_to_segment_list
     from gui.services import path_safety as _ps
+    from gui.services.cloud_detection import _detect_cloud_root  # noqa: F401 (test seam, see below)
     from utils.db import (get_connection)
 except ModuleNotFoundError:  # pragma: no cover - import path shim
-    from src.gui.state import (_state_lock, _status, _demo_lock, _demo_state, _CLOUD_SUBFOLDER, _ALLOWED_EXTENSIONS)
+    from src.gui.state import (_state_lock, _status, _demo_lock, _demo_state, _ALLOWED_EXTENSIONS)
     from src.gui.logging_setup import log
-    from src.gui.services.cloud_detection import _detect_cloud_root
-    from src.gui.services.db_helpers import _get_db_path, _get_archive_db_path, _rows_to_segment_list
     from src.gui.services import path_safety as _ps
+    from src.gui.services.cloud_detection import _detect_cloud_root  # noqa: F401 (test seam, see below)
     from src.utils.db import (get_connection)
+
+# _detect_cloud_root is deliberately in scope but never called here: M0.7 says
+# uploads must not fall into a detected OneDrive/Drive root on the app's own
+# initiative. tests/test_upload_dir_policy.py patches this name to a fake cloud
+# root and proves _upload_dir() still picks the local folder.
 
 # Extensions /media/<path> may serve (SEC-004): media + a few preview image
 # types, so it can never hand back source code, the metadata DB, configs, etc.
@@ -817,15 +820,5 @@ def api_segments_cleanup_missing():
 
 
 # ── Archive query routes (Ashleyn's DB queries) ───────────────────────────────
-# _get_db_path / _get_archive_db_path / _rows_to_segment_list now live in
-# gui.services.db_helpers (imported below).
-try:
-    from gui.services.db_helpers import (
-        _get_db_path, _get_archive_db_path, _rows_to_segment_list,
-    )
-except ModuleNotFoundError:  # pragma: no cover - import path shim
-    from src.gui.services.db_helpers import (
-        _get_db_path, _get_archive_db_path, _rows_to_segment_list,
-    )
 
 

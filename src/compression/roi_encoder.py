@@ -14,7 +14,6 @@ import ffmpeg
 import logging
 import numpy as np
 import subprocess
-import re
 from pathlib import Path
 from datetime import datetime
 from typing import List, Optional, Tuple
@@ -22,7 +21,7 @@ from typing import List, Optional, Tuple
 # Encryption is imported lazily in finish_segment so the encoder still works
 # on machines where the `cryptography` package is not installed.
 try:
-    from utils.encryption import encrypt_file as _encrypt_file, generate_key as _generate_key
+    from utils.encryption import encrypt_file as _encrypt_file
     _CRYPTO_AVAILABLE = True
 except ImportError:
     _CRYPTO_AVAILABLE = False

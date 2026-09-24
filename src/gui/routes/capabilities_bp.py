@@ -22,11 +22,9 @@ Author: Bloodawn (KheivenD), 2026-07-18 (M0.6 - capabilities for the mobile clie
 from flask import Blueprint, current_app, jsonify
 
 try:
-    from gui.edition import (EDITION_FIELD, edition_label, get_edition,
-                             server_features_enabled)
+    from gui.edition import EDITION_FIELD, edition_label, get_edition
 except ModuleNotFoundError:  # pragma: no cover - import path shim
-    from src.gui.edition import (EDITION_FIELD, edition_label, get_edition,
-                                 server_features_enabled)
+    from src.gui.edition import (EDITION_FIELD, edition_label, get_edition)
 
 capabilities_bp = Blueprint("capabilities", __name__)
 

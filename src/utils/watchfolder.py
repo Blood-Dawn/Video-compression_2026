@@ -471,7 +471,7 @@ def run_watchfolder(
     watch_path = Path(watch_dir)
     watch_path.mkdir(parents=True, exist_ok=True)
 
-    log.info(f"Watchfolder daemon started.")
+    log.info("Watchfolder daemon started.")
     log.info(f"Watching : {watch_path.resolve()}")
     log.info(f"Output   : {output_dir}")
     log.info(f"Interval : {poll_interval}s")

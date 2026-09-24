@@ -11,7 +11,7 @@ import time
 import uuid as _uuid
 from pathlib import Path
 import re as _re
-from flask import Blueprint, jsonify, request, abort
+from flask import Blueprint, jsonify, request
 
 try:
     from gui.state import (_state_lock, _status)

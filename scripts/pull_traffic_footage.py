@@ -21,7 +21,6 @@ Each clip is saved as: <camera_id>_<timestamp>.mp4
 """
 
 import subprocess
-import time
 from datetime import datetime
 from pathlib import Path
 

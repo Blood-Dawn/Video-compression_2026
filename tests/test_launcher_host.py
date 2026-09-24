@@ -14,7 +14,6 @@ Author: Bloodawn (KheivenD), 2026-06-03 (FIX round 1 - frozen launch fix).
 import importlib.util
 from pathlib import Path
 
-import pytest
 
 LAUNCHER = Path(__file__).parent.parent / "installer" / "launcher.py"
 

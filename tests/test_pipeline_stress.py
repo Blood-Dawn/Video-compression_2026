@@ -41,7 +41,6 @@ import pytest
 from pathlib import Path
 
 from compression.roi_encoder import ROIEncoder
-from background_subtraction.background_subtraction import BackgroundSubtractor
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +167,7 @@ def test_pipeline_stress_one_hour():
                 errors.append(f"Segment {seg_idx}: {e}")
                 # Rebinding instead of `del` drops the segment's frames even
                 # when the failure happened before (or after) they were bound.
-                frames = bboxes = None
+                frames = bboxes = None  # noqa: F841 (drop refs before gc)
                 gc.collect()
 
         # Peak memory across the entire run (catches transient spikes)
@@ -184,7 +183,7 @@ def test_pipeline_stress_one_hour():
         # --- Assertions ---
 
         assert len(errors) == 0, (
-            f"Pipeline errors during stress test:\n" + "\n".join(errors)
+            "Pipeline errors during stress test:\n" + "\n".join(errors)
         )
         assert segments_encoded == TOTAL_SEGMENTS, (
             f"Expected {TOTAL_SEGMENTS} segments, got {segments_encoded}"
@@ -208,7 +207,7 @@ def test_pipeline_stress_one_hour():
             f"Expected {TOTAL_SEGMENTS} DB rows, got {row_count}"
         )
 
-        print(f"\nStress test passed.")
+        print("\nStress test passed.")
         print(f"  Segments encoded : {segments_encoded}")
         print(f"  Retained memory growth: {retained_growth_mb:.1f} MB")
         print(f"  Peak memory growth: {memory_growth_mb:.1f} MB")
@@ -257,7 +256,7 @@ def test_storage_extrapolation():
         gb_per_camera_per_week    = bytes_per_camera_per_week  / 1e9
         tb_100_cameras_60_days    = bytes_100_cameras_60_days  / 1e12
 
-        print(f"\nStorage extrapolation:")
+        print("\nStorage extrapolation:")
         print(f"  FG segment size          : {fg_size / 1024:.1f} KB")
         print(f"  BG segment size          : {bg_size / 1024:.1f} KB")
         print(f"  Per camera per week      : {gb_per_camera_per_week:.2f} GB")

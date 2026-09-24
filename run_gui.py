@@ -182,7 +182,7 @@ def _ensure_extras_installed(extras: list[str], skip: bool = False) -> None:
                   "extras may not be installed. Dashboard will start anyway.")
     except Exception as exc:  # noqa: BLE001
         print(f"  [warn] uv sync raised {type(exc).__name__}: {exc}")
-        print(f"         Dashboard will start anyway with missing extras.")
+        print("         Dashboard will start anyway with missing extras.")
 
 
 def _open_browser(host: str, port: int):
@@ -274,7 +274,7 @@ def main():
         pass
 
     print(f"\n{'━'*55}")
-    print(f"  SVCS Dashboard")
+    print("  SVCS Dashboard")
     print(f"  http://{args.host}:{args.port}")
     print(f"{'━'*55}")
     # Make sure the AI extras are installed before we load the Flask app
@@ -291,7 +291,7 @@ def main():
     print(f"{'━'*55}")
     print(f"  Drop test videos into:  {Path('data').resolve()}")
     print(f"  Outputs written to:     {Path('outputs').resolve()}")
-    print(f"  Press Ctrl+C to stop.")
+    print("  Press Ctrl+C to stop.")
     print(f"{'━'*55}\n")
 
     # Import the Flask app NOW (after extras are installed) so any

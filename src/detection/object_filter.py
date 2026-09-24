@@ -46,8 +46,7 @@ Author: Bloodawn / KheivenD
 from __future__ import annotations
 
 import logging
-from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Optional, Tuple
 
 import cv2
 import numpy as np

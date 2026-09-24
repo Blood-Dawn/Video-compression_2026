@@ -187,7 +187,7 @@ class TestAutoPreset:
 
     def test_scan_passes_autodetected_preset_to_pipeline(self, tmp_path):
         from pipeline.content_detect import PresetRecommendation, ContentSignals
-        p = _make_video(tmp_path, "clip.mp4")
+        _make_video(tmp_path, "clip.mp4")
 
         rec = PresetRecommendation(
             preset="continuous_cctv", label="Continuous CCTV", reason="static",

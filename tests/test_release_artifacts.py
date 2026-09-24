@@ -13,7 +13,6 @@ Author: Bloodawn (KheivenD), 2026-06-03 (TASK 5.4).
 
 from pathlib import Path
 
-import pytest
 
 DOCS = Path(__file__).parent.parent / "docs"
 CHECKLIST = DOCS / "RELEASE-CHECKLIST.md"

@@ -70,7 +70,7 @@ except FileNotFoundError:
 # Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - state/logging split).
 try:
     from gui import state as _state
-    from gui.state import (
+    from gui.state import (  # noqa: F401 (re-export, see note above)
         _state_lock, _status,
         _power_lock, _power_state,
         _demo_lock, _demo_state,
@@ -79,10 +79,10 @@ try:
         _VALID_MODES, _VALID_BG, _VALID_DEVICES, _VALID_MODELS,
         _CLOUD_SUBFOLDER, _SAFE_FILENAME_RE, _ALLOWED_EXTENSIONS,
     )
-    from gui.logging_setup import log, _LOG_FILE
+    from gui.logging_setup import log, _LOG_FILE  # noqa: F401 (re-export)
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui import state as _state
-    from src.gui.state import (
+    from src.gui.state import (  # noqa: F401 (re-export, see note above)
         _state_lock, _status,
         _power_lock, _power_state,
         _demo_lock, _demo_state,
@@ -91,7 +91,7 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
         _VALID_MODES, _VALID_BG, _VALID_DEVICES, _VALID_MODELS,
         _CLOUD_SUBFOLDER, _SAFE_FILENAME_RE, _ALLOWED_EXTENSIONS,
     )
-    from src.gui.logging_setup import log, _LOG_FILE
+    from src.gui.logging_setup import log, _LOG_FILE  # noqa: F401 (re-export)
 
 # ── Pipeline thread runner ────────────────────────────────────────────────────
 # _patch_frame_source / _patch_encoder / _run_pipeline_thread and the rebindable
@@ -103,34 +103,33 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 # /api/start route's bare-name call picks up the fake.
 try:
     from gui.services import pipeline_runner as _pipeline_runner
-    from gui.services.pipeline_runner import _run_pipeline_thread
+    from gui.services.pipeline_runner import _run_pipeline_thread  # noqa: F401 (re-export)
     # hls_runner module is needed only for the _FORWARDED_GLOBALS map below
     # (the HLS handles); the HLS routes themselves live in gui.routes.hls_bp.
     from gui.services import hls_runner as _hls_runner
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.services import pipeline_runner as _pipeline_runner
-    from src.gui.services.pipeline_runner import _run_pipeline_thread
+    from src.gui.services.pipeline_runner import _run_pipeline_thread  # noqa: F401 (re-export)
     from src.gui.services import hls_runner as _hls_runner
 
 # ── Security helpers ──────────────────────────────────────────────────────────
 # _safe_output_dir / _assert_within_output / _safe_filename now live in
-# gui.services.path_safety (imported below). `import re as _re` stays - the
-# route handlers still use it for camera_id / stream_name validation.
-import re as _re
+# gui.services.path_safety (imported below). The `import re as _re` that used
+# to sit here went with the route handlers that needed it (now in blueprints).
 
 try:
-    from gui.services.path_safety import (
+    from gui.services.path_safety import (  # noqa: F401 (re-export, see note above)
         _safe_output_dir, _assert_within_output, _safe_filename,
     )
-    from gui.services.cloud_detection import (
+    from gui.services.cloud_detection import (  # noqa: F401 (re-export, see note above)
         _default_output_dir,
         _detect_onedrive_root, _detect_gdrive_root, _detect_cloud_root,
     )
 except ModuleNotFoundError:  # pragma: no cover - import path shim
-    from src.gui.services.path_safety import (
+    from src.gui.services.path_safety import (  # noqa: F401 (re-export, see note above)
         _safe_output_dir, _assert_within_output, _safe_filename,
     )
-    from src.gui.services.cloud_detection import (
+    from src.gui.services.cloud_detection import (  # noqa: F401 (re-export, see note above)
         _default_output_dir,
         _detect_onedrive_root, _detect_gdrive_root, _detect_cloud_root,
     )
@@ -142,11 +141,11 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 # time - create_app() calls start_hw_sampler() instead. _PSUTIL_OK is re-imported
 # here because the /api/system_metrics route still consults it.
 try:
-    from gui.services.cpu_sampler import (
+    from gui.services.cpu_sampler import (  # noqa: F401 (re-export, see note above)
         _PSUTIL_OK, _start_cpu_sampler, _stop_cpu_sampler, start_hw_sampler,
     )
 except ModuleNotFoundError:  # pragma: no cover - import path shim
-    from src.gui.services.cpu_sampler import (
+    from src.gui.services.cpu_sampler import (  # noqa: F401 (re-export, see note above)
         _PSUTIL_OK, _start_cpu_sampler, _stop_cpu_sampler, start_hw_sampler,
     )
 
@@ -156,11 +155,11 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 # gui.services.gui_state_persist (imported below). _load_gui_state() is still
 # invoked once at module import (further down) to seed the last-known roots.
 try:
-    from gui.services.gui_state_persist import (
+    from gui.services.gui_state_persist import (  # noqa: F401 (re-export, see note above)
         _GUI_STATE_FILE, _load_gui_state, _save_gui_state,
     )
 except ModuleNotFoundError:  # pragma: no cover - import path shim
-    from src.gui.services.gui_state_persist import (
+    from src.gui.services.gui_state_persist import (  # noqa: F401 (re-export, see note above)
         _GUI_STATE_FILE, _load_gui_state, _save_gui_state,
     )
 

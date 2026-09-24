@@ -13,19 +13,15 @@ from urllib.parse import quote
 from flask import Blueprint, jsonify, request
 
 try:
-    from gui.state import (_state_lock, _status, _demo_lock, _demo_state, _hls_lock, _hls_state, _hls_frame_ts_dq, _hls_segment_latencies, _CLOUD_SUBFOLDER)
+    from gui.state import _state_lock, _status, _demo_lock, _demo_state, _CLOUD_SUBFOLDER
     from gui.services.cloud_detection import _default_output_dir, _detect_onedrive_root
     from gui.services.gui_state_persist import _save_gui_state
     from gui.services.demo_runner import _run_demo_thread
-    from gui.services import hls_runner as _hls_runner
-    from gui.services.hls_runner import _hls_dir_for, _hls_annotator_thread
 except ModuleNotFoundError:  # pragma: no cover - import path shim
-    from src.gui.state import (_state_lock, _status, _demo_lock, _demo_state, _hls_lock, _hls_state, _hls_frame_ts_dq, _hls_segment_latencies, _CLOUD_SUBFOLDER)
+    from src.gui.state import (_state_lock, _status, _demo_lock, _demo_state, _CLOUD_SUBFOLDER)
     from src.gui.services.cloud_detection import _default_output_dir, _detect_onedrive_root
     from src.gui.services.gui_state_persist import _save_gui_state
     from src.gui.services.demo_runner import _run_demo_thread
-    from src.gui.services import hls_runner as _hls_runner
-    from src.gui.services.hls_runner import _hls_dir_for, _hls_annotator_thread
 
 # Repo root (…/src/gui/routes/<bp>_bp.py -> parents[3]).
 _ROOT = Path(__file__).resolve().parents[3]
@@ -235,29 +231,3 @@ def api_demo_history():
         })
 
     return jsonify(runs)
-
-
-# ── HLS live streaming (task 4.1) ────────────────────────────────────────────
-#
-# Architecture:
-#   Input → OpenCV VideoCapture → BackgroundSubtractor → ROI boxes + corner
-#   overlay drawn on each frame → rawvideo piped to FFmpeg stdin → .m3u8 + .ts
-#   → Flask serves /api/hls/<camera_id>/ → hls.js plays in browser
-#
-# Frames are annotated in Python before encoding so the live stream shows
-# the same green ROI bounding boxes as the demo comparison output.
-
-# _hls_lock / _hls_state and the latency deques (_hls_frame_ts_dq /
-# _hls_segment_latencies) live in gui.state. The rebindable process/thread
-# handles (_hls_process / _hls_thread / _hls_stop_event) and the annotator
-# worker now live in gui.services.hls_runner; the handles are forwarded from
-# this module (see _FORWARDED_GLOBALS) so the /api/hls/* routes and the test
-# suite (which sets gui_module._hls_process = None) share one live value.
-try:
-    from gui.services import hls_runner as _hls_runner
-    from gui.services.hls_runner import _hls_dir_for, _hls_annotator_thread
-except ModuleNotFoundError:  # pragma: no cover - import path shim
-    from src.gui.services import hls_runner as _hls_runner
-    from src.gui.services.hls_runner import _hls_dir_for, _hls_annotator_thread
-
-

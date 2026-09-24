@@ -67,6 +67,7 @@ def test_falls_back_to_path_when_not_bundled(tmp_path, monkeypatch):
     ff._clear_cache()
     resolved = ff.ffmpeg_path()
     assert Path(resolved).name.lower().startswith("ffmpeg")
+    assert Path(resolved).resolve() == onpath.resolve()
     assert Path(resolved).parent == path_dir
 
 

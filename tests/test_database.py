@@ -10,7 +10,6 @@ create isolated SQLite databases in pytest's tmp_path - no side effects
 on outputs/metadata.db.
 """
 
-import pytest
 from utils.db import (
     initialize_database,
     insert_segment,

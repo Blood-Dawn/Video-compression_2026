@@ -17,8 +17,6 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 import gui.services.path_safety as ps  # noqa: E402
-import gui.routes.files_bp as fb  # noqa: E402
-import gui.routes.library_bp as lib  # noqa: E402
 
 
 @pytest.fixture()

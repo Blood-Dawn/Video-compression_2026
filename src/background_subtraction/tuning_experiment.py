@@ -14,15 +14,12 @@ Section: 2.7 -- Detection Tuning and Calibration
 """
 
 import sys
-import os
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 import numpy as np
-import cv2
 from dataclasses import dataclass
-from typing import List, Dict, Tuple
 from background_subtraction.background_subtraction import BackgroundSubtractor
 
 

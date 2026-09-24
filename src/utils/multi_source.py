@@ -28,7 +28,6 @@ Usage:
 import threading
 import time
 import logging
-from pathlib import Path
 from typing import List, Optional, Tuple
 
 import cv2

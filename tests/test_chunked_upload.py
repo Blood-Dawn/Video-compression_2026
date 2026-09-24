@@ -40,7 +40,8 @@ def client(tmp_path, monkeypatch):
 PAYLOAD = b"fake-video-bytes-" * 200  # 3400 bytes
 
 
-def _begin(c, name="clip.mp4", size=len(PAYLOAD)):
+def _begin(c, name="clip.mp4", size=None):
+    size = len(PAYLOAD) if size is None else size
     r = c.post("/api/upload/begin", json={"name": name, "size": size})
     assert r.status_code == 200, r.get_json()
     return r.get_json()["upload_id"]

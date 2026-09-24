@@ -62,7 +62,7 @@ def test_missing_file_detected(tmp_path):
 
 
 def test_manifest_tamper_breaks_the_chain(tmp_path):
-    files = _make_outputs(tmp_path)
+    _make_outputs(tmp_path)
     manifest = tmp_path / MANIFEST_NAME
     lines = manifest.read_text(encoding="utf-8").splitlines()
     entry = json.loads(lines[0])

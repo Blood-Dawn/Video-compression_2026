@@ -241,7 +241,7 @@ class TestHlsRouteUnit:
                 camera_id="cam_01",
                 hls_dir=str(tmpdir),
             )
-        r = client.get("/api/hls/cam_01/playlist.m3u8")
+        client.get("/api/hls/cam_01/playlist.m3u8")
         # .m3u8 is served by the playlist route, not the segment route
         # Test that *.py or *.sh files are rejected
         r2 = client.get("/api/hls/cam_01/secret.py")

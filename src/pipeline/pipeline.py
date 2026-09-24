@@ -512,7 +512,6 @@ def run_pipeline(
         _seg_prev_centroids = []
 
         has_targets = len(first_regions) > 0
-        roi_count   = sum(1 for _ in first_regions)
 
         # Use real YOLO labels if available, otherwise fall back to unknown
         if obj_filter is not None and hasattr(obj_filter, "last_detected_classes"):

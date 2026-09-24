@@ -52,7 +52,7 @@ import numpy as np
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from background_subtraction.background_subtraction import BackgroundSubtractor
-from utils.metrics import compute_psnr, compute_ssim, foreground_coverage, storage_savings_report
+from utils.metrics import compute_psnr, compute_ssim, foreground_coverage
 from utils.frame_source import FrameSource
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)s  %(message)s")
@@ -378,9 +378,7 @@ def benchmark_one(
         selective_path = str(Path(tmpdir) / "selective.mp4")
 
         # --- Baseline encode ---
-        t0 = time.time()
         baseline_ok = encode_baseline(encode_input, baseline_path)
-        baseline_time = time.time() - t0
 
         # --- Selective encode ---
         t0 = time.time()
@@ -532,7 +530,7 @@ if __name__ == "__main__":
         video_files = (list(data_dir.glob("*.mp4")) + list(data_dir.glob("*.avi")))
         scenes += [str(v) for v in video_files]
         if not scenes:
-            log.error(f"No input found. Use --input to specify a scene or video file.")
+            log.error("No input found. Use --input to specify a scene or video file.")
             sys.exit(1)
 
     log.info(f"Scenes to benchmark: {len(scenes)}")

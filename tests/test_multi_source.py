@@ -21,7 +21,6 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from utils.multi_source import (
-    BUFFER_SIZE,
     FRAME_TIMEOUT,
     MultiFrameSource,
     _StreamReader,

@@ -32,7 +32,7 @@ Author: Bloodawn (KheivenD)
 import subprocess
 import sys
 from pathlib import Path
-from typing import List, Tuple
+from typing import List
 
 import numpy as np
 import pytest
@@ -319,6 +319,12 @@ class TestBackgroundCompression:
         # but at minimum FG should not be dramatically worse than BG
         assert np.mean(fg_maes) <= FOREGROUND_MAE_THRESHOLD, (
             f"Foreground MAE {np.mean(fg_maes):.2f} exceeds threshold even in the quality check."
+        )
+        # The comparison this test is named for. bg_maes used to be computed
+        # and then dropped, so the test never checked it (found by ruff F841).
+        assert np.mean(bg_maes) >= np.mean(fg_maes), (
+            f"Background MAE {np.mean(bg_maes):.2f} is lower than foreground MAE "
+            f"{np.mean(fg_maes):.2f}: the quality tiers are not separating."
         )
 
 

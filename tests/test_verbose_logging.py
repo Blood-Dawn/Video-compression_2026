@@ -17,7 +17,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-import pytest
 
 SRC = Path(__file__).parent.parent / "src"
 if str(SRC) not in sys.path:

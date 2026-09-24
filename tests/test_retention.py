@@ -144,8 +144,8 @@ def test_freshness_window_protects_recent_files(iso):
     # Age says "delete" (max_age_days effectively 0-ish via tiny age) but the
     # file was just written, so the freshness window must save it.
     just_written = _mkclip(comp, "cam_live.mp4", age_days=0.0)
-    summary = ret.purge_once(str(iso / "out"),
-                             policy={"enabled": True, "max_age_days": 1, "max_total_gb": 0.000001})
+    ret.purge_once(str(iso / "out"),
+                   policy={"enabled": True, "max_age_days": 1, "max_total_gb": 0.000001})
     assert just_written.exists(), "a file inside the freshness window must survive"
 
 

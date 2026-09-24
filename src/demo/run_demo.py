@@ -73,12 +73,10 @@ try:
     from demo.demo import render_demo
     from demo.split_screen import build_split_screen_from_manifest
     from pipeline.pipeline import run_pipeline
-    from utils.metrics import build_demo_metrics, measure_cpu_usage
 except ModuleNotFoundError:
     from src.demo.demo import render_demo
     from src.demo.split_screen import build_split_screen_from_manifest
     from src.pipeline.pipeline import run_pipeline
-    from src.utils.metrics import build_demo_metrics, measure_cpu_usage
 
 
 ALLOWED_MODES = {"mode0", "mode1", "mode2", "mode3"}

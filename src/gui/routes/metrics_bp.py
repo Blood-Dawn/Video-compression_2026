@@ -10,11 +10,11 @@ import time
 from flask import Blueprint, jsonify
 
 try:
-    from gui.state import (_state_lock, _status, _power_lock, _power_state, _VALID_MODES, _VALID_BG, _VALID_DEVICES, _VALID_MODELS)
+    from gui.state import _state_lock, _status, _power_lock, _power_state
     from gui.services.cpu_sampler import _PSUTIL_OK
     from utils.db import (get_connection)
 except ModuleNotFoundError:  # pragma: no cover - import path shim
-    from src.gui.state import (_state_lock, _status, _power_lock, _power_state, _VALID_MODES, _VALID_BG, _VALID_DEVICES, _VALID_MODELS)
+    from src.gui.state import (_state_lock, _status, _power_lock, _power_state)
     from src.gui.services.cpu_sampler import _PSUTIL_OK
     from src.utils.db import (get_connection)
 

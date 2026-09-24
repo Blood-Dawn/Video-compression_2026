@@ -16,7 +16,6 @@ Author: Bloodawn (KheivenD), 2026-05-14 (audit item: crash reporting).
 
 from __future__ import annotations
 
-import importlib
 import sys
 from pathlib import Path
 from unittest import mock

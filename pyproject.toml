@@ -194,6 +194,18 @@ python_functions = ["test_*"]
 # Author: Bloodawn (KheivenD), 2026-05-14.
 addopts = "--basetemp=.pytest_tmp --tb=short -ra"
 
+# Lint baseline (2026-09-24 cleanup): the pyflakes rules are clean across
+# src, tests, scripts and installer, and this keeps them that way. Run with
+# `uvx ruff check` (ruff is not a project dependency). Intentional re-exports,
+# such as the gui.app shim that tests/test_gui_state_reexports.py pins, carry
+# an explicit `# noqa: F401` instead of a blanket per-file ignore.
+[tool.ruff]
+target-version = "py311"
+extend-exclude = ["mobile", "data", "reports", "models"]
+
+[tool.ruff.lint]
+select = ["F", "B008"]
+
 # ── PyTorch CUDA index ────────────────────────────────────────────────────────
 # Tell uv to always fetch torch and torchvision from the CUDA 12.8 wheel index
 # instead of PyPI. Without this, uv/pip installs the CPU-only build because

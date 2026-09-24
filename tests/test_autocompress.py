@@ -102,7 +102,7 @@ def test_never_recompresses_its_own_output(iso):
     # When the watched folder IS the output base, the compressed/ subtree must
     # be ignored so outputs are never fed back in.
     base = iso / "base"
-    src = _mkvid(base / "clip.mp4")
+    _mkvid(base / "clip.mp4")
     first = _scan(base, base)        # output base == watch folder
     assert len(first) == 1
     # A second scan sees the compressed/ output but must not recompress it.

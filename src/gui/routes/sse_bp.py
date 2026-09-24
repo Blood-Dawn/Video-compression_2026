@@ -12,10 +12,8 @@ from flask import Blueprint, request, Response
 
 try:
     from gui.state import (_log_queue, _log_history, _log_lock)
-    from gui.logging_setup import log
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.state import (_log_queue, _log_history, _log_lock)
-    from src.gui.logging_setup import log
 
 sse_bp = Blueprint("sse", __name__)
 

@@ -25,7 +25,6 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-import pytest
 
 # Make sure src/ is importable
 SRC = Path(__file__).parent.parent / "src"
@@ -33,7 +32,6 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from enhancement.plate_reader import (  # noqa: E402
-    PlateRead,
     PlateReader,
     PlateReadResult,
     _normalise_plate_text,

@@ -47,7 +47,7 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 from background_subtraction.background_subtraction import BackgroundSubtractor
-from utils.metrics import foreground_coverage, storage_savings_report
+from utils.metrics import foreground_coverage
 from utils.frame_source import FrameSource
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(levelname)s  %(message)s")
@@ -126,7 +126,7 @@ def build_comparison_grid(
 
     panel_orig = add_label(original, f"Original  [frame {frame_idx}]")
     panel_mask = add_label(mask_bgr, f"{method} Mask  |  FG: {coverage_pct:.1f}% of pixels", color=(0, 220, 80))
-    panel_anno = add_label(annotated, f"Detected Regions")
+    panel_anno = add_label(annotated, "Detected Regions")
 
     return np.hstack([panel_orig, panel_mask, panel_anno])
 
@@ -329,10 +329,10 @@ def print_coverage_report(results: list):
 
         # Plain-English interpretation for the report
         bg_pct = 100.0 - r["avg_coverage_pct"]
-        print(f"  INTERPRETATION:")
+        print("  INTERPRETATION:")
         print(f"    On average, {bg_pct:.1f}% of each frame is static background.")
-        print(f"    A standard encoder wastes quality bits on all of those pixels.")
-        print(f"    Selective compression can target CRF 40+ on the background and")
+        print("    A standard encoder wastes quality bits on all of those pixels.")
+        print("    Selective compression can target CRF 40+ on the background and")
         print(f"    CRF 18-20 only on the {r['avg_coverage_pct']:.1f}% that actually matters.")
         print()
 

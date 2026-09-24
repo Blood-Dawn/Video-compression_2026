@@ -63,20 +63,28 @@ Name: "compact"; Description: "Compact - use a system FFmpeg on PATH"
 Name: "custom";  Description: "Custom installation"; Flags: iscustom
 
 [Components]
-Name: "main";   Description: "SVCS dashboard + ONNX detector"; Types: full compact custom; Flags: fixed
-Name: "ffmpeg"; Description: "Bundled FFmpeg (~243 MB) - uncheck to use a system FFmpeg on PATH"; Types: full
+Name: "main";           Description: "SVCS dashboard + ONNX detector"; Types: full compact custom; Flags: fixed
+Name: "ffmpeg";         Description: "Bundled FFmpeg (~243 MB) - uncheck to use a system FFmpeg on PATH"; Types: full
+Name: "enhance_models"; Description: "AI Super-Resolution models (ESPCN/FSRCNN/EDSR/LapSRN, ~115 MB) - uncheck to use plain bicubic upscaling"; Types: full
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; Everything EXCEPT the bundled FFmpeg goes in the required "main" component.
+; Everything EXCEPT the bundled FFmpeg and AI Super-Resolution models goes in
+; the required "main" component.
 Source: "..\dist\SVCS\*"; DestDir: "{app}"; \
-    Excludes: "_internal\ffmpeg\*,_internal\src\gui\static\src\*"; \
+    Excludes: "_internal\ffmpeg\*,_internal\models\*,_internal\src\gui\static\src\*"; \
     Flags: ignoreversion recursesubdirs createallsubdirs; Components: main
 ; The bundled FFmpeg is its own optional component.
 Source: "..\dist\SVCS\_internal\ffmpeg\*"; DestDir: "{app}\_internal\ffmpeg"; \
     Flags: ignoreversion recursesubdirs createallsubdirs; Components: ffmpeg
+; The bundled AI Super-Resolution model weights (ESPCN/FSRCNN/EDSR/LapSRN -
+; see installer/svcs.spec for why RealESRGAN/RealESRNet aren't here) are their
+; own optional component too, same reasoning as ffmpeg: skip it and the app
+; still runs, just with plain bicubic upscaling instead of AI enhancement.
+Source: "..\dist\SVCS\_internal\models\*"; DestDir: "{app}\_internal\models"; \
+    Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist; Components: enhance_models
 
 [Icons]
 Name: "{group}\SVCS Dashboard"; Filename: "{app}\{#MyAppExeName}"

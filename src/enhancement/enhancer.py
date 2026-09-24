@@ -43,10 +43,25 @@ import numpy as np
 
 log = logging.getLogger(__name__)
 
-# Default models directory
-_DEFAULT_MODELS_DIR = Path(
-    os.environ.get("ENHANCER_MODELS_DIR", "")
-) if os.environ.get("ENHANCER_MODELS_DIR") else Path(__file__).parent.parent.parent / "models"
+# Default models directory.
+#
+# In a frozen PyInstaller build, resolve straight off sys._MEIPASS instead of
+# walking up from __file__: this module can load under either the canonical
+# name (enhancement.enhancer) or the src.* mirror (src.enhancement.enhancer -
+# see installer/svcs.spec's dual-import-name comment for why both exist), and
+# those two resolve __file__ at different depths under _MEIPASS. Walking
+# __file__.parent.parent.parent lands in the right place for one of them and
+# one level too high for the other, which would make a bundled models/ folder
+# silently invisible depending on which name happened to win. sys._MEIPASS is
+# unambiguous: PyInstaller sets it to the same place regardless of which
+# import name resolved, and installer/svcs.spec bundles the AI-enhance model
+# weights to "models" relative to that same COLLECT root.
+if os.environ.get("ENHANCER_MODELS_DIR"):
+    _DEFAULT_MODELS_DIR = Path(os.environ["ENHANCER_MODELS_DIR"])
+elif getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+    _DEFAULT_MODELS_DIR = Path(sys._MEIPASS) / "models"
+else:
+    _DEFAULT_MODELS_DIR = Path(__file__).parent.parent.parent / "models"
 
 _VALID_SCALES = {2, 3, 4, 8}
 

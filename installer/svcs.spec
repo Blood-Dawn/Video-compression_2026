@@ -23,12 +23,18 @@ Things to know:
   ship EasyOCR instead for the optional plate reader, the entire test
   suite). Without
   these, dist/SVCS/ ends up around 3.5 GB. With them, ~1.5 GB.
-- ffmpeg is NOT bundled. We expect users to have it on PATH; the GUI
-  detects its absence on launch and shows a download link. We will
-  bundle it for the Inno Setup installer later (June milestone).
-- yolov8n.pt is bundled if present so first-launch doesn't need to
-  hit the internet. RealESRGAN weights are NOT bundled (63 MB, paid
-  tier only) - the GUI falls back to bicubic when they're missing.
+- ffmpeg is bundled from tools/ffmpeg/ when present (see the datas block
+  below); Inno Setup then wraps it as its own optional component so a
+  user with FFmpeg already on PATH can skip the extra size. If
+  tools/ffmpeg is absent at build time the app falls back to PATH.
+- yolov8n.onnx is bundled if present so first-launch doesn't need to hit
+  the internet. The 4 cv2.dnn_superres AI-enhance models (ESPCN, FSRCNN,
+  EDSR, LapSRN) are bundled the same way, as their own optional Inno Setup
+  component - see the datas block below. RealESRGAN/RealESRNet are NOT
+  bundled: they need basicsr + torch, which this build EXCLUDES entirely
+  (see the excludes list), so those two stay dev-only regardless of
+  whether their weights are present; the GUI falls back to bicubic
+  honestly whenever a requested model isn't actually active.
 
 Author: Bloodawn (KheivenD), 2026-05-14 (installer prep).
 """
@@ -131,6 +137,32 @@ if _yolo_onnx.exists():
 _ffmpeg_dir = REPO_ROOT / "tools" / "ffmpeg"
 if _ffmpeg_dir.exists():
     datas.append((str(_ffmpeg_dir), "ffmpeg"))
+
+# AI Super-Resolution model weights (2026-09-24, real AI-enhance models).
+# Bundles the 4 cv2.dnn_superres weight files to <app>/models/ so
+# enhancer.py finds them at runtime with no extra download needed, and
+# installer/svcs.iss wraps them in their own optional component (like
+# ffmpeg above) so a user who doesn't want the extra size can skip them.
+#
+# RealESRGAN/RealESRNet (.pth, RRDBNet via basicsr) are deliberately NOT
+# bundled here even if present in models/ on the build machine: the
+# excludes list above strips torch/torchvision/basicsr from this slim
+# build (M2 TASK 2.2), so those two models cannot actually load in the
+# frozen app regardless of whether their weights ship - bundling 67 MB
+# each of dead weight would be worse than honest. They stay dev-only
+# (`uv run`) until/unless a future build variant bundles torch. See
+# DEV.md -> "Enhancement module (super-resolution) setup".
+_DNN_SUPERRES_FILES = (
+    "ESPCN_x2.pb", "ESPCN_x3.pb", "ESPCN_x4.pb",
+    "FSRCNN_x2.pb", "FSRCNN_x3.pb", "FSRCNN_x4.pb",
+    "EDSR_x2.pb", "EDSR_x3.pb", "EDSR_x4.pb",
+    "LapSRN_x2.pb", "LapSRN_x4.pb", "LapSRN_x8.pb",
+)
+_models_dir = REPO_ROOT / "models"
+for _name in _DNN_SUPERRES_FILES:
+    _f = _models_dir / _name
+    if _f.exists():
+        datas.append((str(_f), "models"))
 
 # Make sure the LICENSE text travels with the binary - required by AGPL.
 _license = REPO_ROOT / "LICENSE"

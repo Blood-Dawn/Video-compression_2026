@@ -3102,6 +3102,52 @@
               </div>
             </div>
           </details>
+
+          <!-- Paired mobile devices (M0.10 UI, closes the gap the 2026-09
+               security review flagged: tokens_bp.py has always had list/mint/
+               revoke, but no dashboard page ever called it, so pairing a
+               phone or revoking a lost one required raw curl/PowerShell. -->
+          <details class="source-advanced" id="devices-panel" style="margin-bottom:0.8rem;" ontoggle="if(this.open)devicesRefresh()">
+            <summary style="cursor:pointer;font-family:var(--display);font-size:0.95rem;letter-spacing:0.08em;color:var(--text-dim);">
+              PAIRED DEVICES (MOBILE)
+            </summary>
+            <div style="padding:0.5rem 0 0;">
+              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
+                Every phone paired to Server Mode, by the token it was given. Revoking one here
+                takes effect immediately: that phone drops back to fully local, on-device
+                compression with no further access to this server. Only the SHA-256 of a token is
+                ever stored; a revoked or expired one is shown, not deleted, so you can see history.
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.4rem;flex-wrap:wrap;gap:0.4rem;">
+                <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+                  <button class="btn btn-ghost" id="devices-refresh-btn" onclick="devicesRefresh()">Refresh</button>
+                  <button class="btn btn-primary" id="devices-mint-btn" onclick="devicesMint()">Pair a new device</button>
+                  <button class="btn btn-ghost" id="devices-revoke-all-btn" onclick="devicesRevokeAll()" style="color:var(--red);">Revoke all</button>
+                </div>
+                <span id="devices-updated" style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);"></span>
+              </div>
+              <div id="devices-mint-result" style="display:none;font-family:var(--mono);font-size:0.62rem;line-height:1.6;background:var(--surface2,rgba(255,255,255,0.04));border:1px solid var(--amber);border-radius:4px;padding:0.6rem;margin-bottom:0.6rem;"></div>
+              <div id="devices-empty" style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);padding:0.6rem 0;display:none;">
+                No devices paired yet. Compressing on the phone never needs this - pairing is only
+                for browsing this server's library, live cameras, and event alerts from the app.
+              </div>
+              <div style="max-height:300px;overflow-y:auto;">
+                <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:0.6rem;">
+                  <thead>
+                    <tr style="text-align:left;color:var(--text-dim);border-bottom:1px solid var(--border);">
+                      <th style="padding:0.25rem 0.4rem;">Label</th>
+                      <th style="padding:0.25rem 0.4rem;">Paired</th>
+                      <th style="padding:0.25rem 0.4rem;">Last used</th>
+                      <th style="padding:0.25rem 0.4rem;">Status</th>
+                      <th style="padding:0.25rem 0.4rem;"></th>
+                    </tr>
+                  </thead>
+                  <tbody id="devices-rows"></tbody>
+                </table>
+              </div>
+              <div id="devices-status" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -4393,6 +4439,7 @@
   <script src="{{ url_for('static', filename='js/events.js') }}"></script>
   <script src="{{ url_for('static', filename='js/zone_editor.js') }}"></script>
   <script src="{{ url_for('static', filename='js/webhook.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/devices.js') }}"></script>
 
 <!-- AI Plate Reader modal - Bloodawn (KheivenD), 2026-05-02 -->
 <div id="plate-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center;">

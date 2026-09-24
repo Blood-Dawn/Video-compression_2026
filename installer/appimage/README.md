@@ -34,7 +34,7 @@ chmod +x SVCS-x86_64.AppImage
 ```
 
 Binding to a non-localhost address requires auth (see the dashboard auth policy
-in `docs/deployment_packaging.md`).
+in `docs/build/deployment_packaging.md`).
 
 ## Notes
 

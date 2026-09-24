@@ -40,7 +40,7 @@ System requirements: Windows 10/11 64-bit, any modern CPU (no GPU), 4 GB+ RAM,
 
 - **Unsigned** - SmartScreen warning on first launch (signing is the next milestone).
 - Cloud-locked cameras (Ring/Nest/Arlo) require export or a bridge - see
-  `docs/camera-ingestion.md`.
+  `docs/architecture/camera-ingestion.md`.
 - Beta: please report issues on GitHub.
 
 ## Verify

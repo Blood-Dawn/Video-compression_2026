@@ -49,7 +49,7 @@ four `SVCS_ANDROID_*` variables on the release machine.
 
 ### Team emails in public git history
 
-`week3.local.json` and `scripts/team-emails.local.json` (teammates' email
+`week3.local.json` and scripts/team-emails.local.json (teammates' email
 addresses) were committed before commit ce6490f untracked them, so they are
 still readable in the public history. Removing them needs a history rewrite
 and a force push, which is the owner's call (and invalidates every clone).
@@ -259,7 +259,7 @@ blocks now exist (content_detect signals + the preset registry).
 #### (historical) Execution status: M2 TASK 2.1 + 2.2 DONE
 
 - **TASK 2.1 (ONNX detection backend):** done + parity-tested. Real-ESRGAN ONNX
-  deferred (see `docs/onnx-models.md`).
+  deferred (see `docs/build/onnx-models.md`).
 - **TASK 2.2 (default ONNX, torch optional):** done. torch/torchvision/
   ultralytics → `[torch]` extra; `ObjectFilter` default backend is now
   onnx-first; `svcs.spec` excludes torch/CUDA/Real-ESRGAN. **Slim bundle
@@ -268,7 +268,7 @@ blocks now exist (content_detect signals + the preset registry).
 
 **Next: TASK 2.3 (bundle LGPL FFmpeg) and TASK 2.4 (Inno Setup installer).**
 - 2.3 has no deps (parallel-able): vendor a pinned LGPL FFmpeg binary, resolve
-  ffmpeg from the bundle first then PATH, add a `docs/ffmpeg-licensing.md`
+  ffmpeg from the bundle first then PATH, add a `docs/build/ffmpeg-licensing.md`
   (LGPL/GPL/x264/x265 matrix), and a test asserting the app finds the bundled
   ffmpeg when PATH lacks it. The current code shells out to `ffmpeg` on PATH
   (e.g. roi_encoder, hls_runner) - add a single resolver in `src/utils/` and

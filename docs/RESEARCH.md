@@ -1248,7 +1248,7 @@ default overshoot), not a VBV guarantee.
 
 Date 2026-07-04. Method: deep-research workflow, 5 angles, 104 agents, 22 sources, 25 claims verified
 by 3-vote (24 confirmed, 1 refuted), mapped against the ground-truth SVCS feature inventory
-(`docs/SVCS-FEATURE-INVENTORY.md`). The workflow's auto-synthesis field returned a stub, so the source
+(`docs/architecture/SVCS-FEATURE-INVENTORY.md`). The workflow's auto-synthesis field returned a stub, so the source
 document is a hand synthesis from the verified claim set plus the source list.
 
 ### 8.1 Verified competitor behaviors

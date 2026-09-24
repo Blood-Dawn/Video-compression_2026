@@ -1,41 +1,79 @@
 # SVCS documentation map
 
-This folder uses a small set of canonical documents. The phase reports and
-dated notes remain as evidence, but new decisions should be added to the
-canonical document for their subject instead of creating another parallel
-overview.
+Start here to find the right document. It is grouped by what you are trying to
+do, following the [Diataxis](https://diataxis.fr/) split: learn by doing
+(tutorials), get a specific job done (how-to), look something up (reference),
+or understand why (explanation). Dated records sit apart at the end.
 
-## Canonical documents
+New to the code? Read [../DEV.md](../DEV.md) first; it is the developer guide
+and links back here for depth.
 
-| Document | Covers | Supporting records |
-|---|---|---|
-| [RESEARCH.md](RESEARCH.md) | Compression, detection, design research, codec decisions, UI research, competitor findings, plate-reader research, VMAF work, benchmarks, and test evidence | `research/` |
-| [SYSTEM-ARCHITECTURE.md](SYSTEM-ARCHITECTURE.md) | Desktop pipeline, live streaming, camera and format ingestion, mobile client, notifications, and feature inventory | `architecture/` |
-| [BUILD-AND-RELEASE.md](BUILD-AND-RELEASE.md) | Editions, packaging, deployment, FFmpeg and model licensing, build metrics, release, and winget | `build/`, `releases/` |
-| [SECURITY.md](SECURITY.md) | Threat model, audit findings, hardening, manual checks, and operating rules | `security/` |
-| [TESTING.md](TESTING.md) | Test commands, current baseline, environment constraints, validation evidence, and known limits | `testing/`, `research/stress_test_results.md` |
-| [PROJECT-PLAN.md](PROJECT-PLAN.md) | Active roadmap, GUI refactor constraints, desktop zones/events work, mobile follow-up, and owner gates | `plans/`, `releases/` |
-| [getting-started.md](getting-started.md) | First install and first successful compression | [releases/INSTALL.md](releases/INSTALL.md), [operations/RUNBOOK-LOCAL.md](operations/RUNBOOK-LOCAL.md) |
+The files did not move into tutorials/, how-to/ and similar folders: their
+paths are linked from code comments, tests, release notes and published pages,
+so the grouping lives in this index instead.
 
-## Status and planning records
+## Tutorials: first steps
 
-These files are intentionally kept separate because their dates and decisions
-are part of the record: [plans/](plans/),
-[CHANGES-SUMMER-2026.md](CHANGES-SUMMER-2026.md),
-[release notes](releases/), and the files under `project-records/`. Their canonical summary is
-[PROJECT-PLAN.md](PROJECT-PLAN.md).
+| Document | For |
+|---|---|
+| [getting-started.md](getting-started.md) | Install the desktop app and run a first compression. |
+| [../mobile/android/EMULATOR-GUIDE.md](../mobile/android/EMULATOR-GUIDE.md) | Run the Android app on an emulator with no phone and no Android background. |
 
-## Operational records
+## How-to guides: specific tasks
 
-These are setup-specific or owner-run records rather than research chapters:
-[operations/](operations/), [releases/INSTALL.md](releases/INSTALL.md), and
-[getting-started.md](getting-started.md). The
-Google Drive guide describes an optional team workflow and must not be read as
-the default output policy; first-run output selection remains local and
-operator-controlled.
+| Document | Task |
+|---|---|
+| [releases/INSTALL.md](releases/INSTALL.md) | Install on Windows (one-liner, winget, manual), verify the download. |
+| [RELEASE-CHECKLIST.md](RELEASE-CHECKLIST.md) | Cut a desktop or Android release, step by step. |
+| [operations/RUNBOOK-LOCAL.md](operations/RUNBOOK-LOCAL.md) | Run, stop and troubleshoot a local server. |
+| [operations/google_drive_output.md](operations/google_drive_output.md) | Optional: send output to a synced Google Drive folder (not the default). |
+| [build/BUILDS.md](build/BUILDS.md) | Build the Server and Field editions. |
+| [releases/winget-submission.md](releases/winget-submission.md) | Submit the winget manifest. |
+| [security/KALI-PENTEST-GUIDE.md](security/KALI-PENTEST-GUIDE.md), [security/SECURITY-MANUAL-VERIFY.md](security/SECURITY-MANUAL-VERIFY.md) | Test a running install's security by hand. |
 
-## Editing rule
+## Reference: how things are
 
-When a supporting record changes a current decision, update the canonical file
-and leave the supporting record dated. Do not describe a file as archived unless
-it has actually been moved under `archive/`.
+| Document | Covers |
+|---|---|
+| [SYSTEM-ARCHITECTURE.md](SYSTEM-ARCHITECTURE.md) | Desktop pipeline, live streaming, ingestion, mobile client, notifications. Details in `architecture/`. |
+| [architecture/MOBILE-ARCHITECTURE.md](architecture/MOBILE-ARCHITECTURE.md) | Android Server Mode design (pairing, tokens, push). The standalone compressor is in the mobile roadmap below. |
+| [BUILD-AND-RELEASE.md](BUILD-AND-RELEASE.md) | Editions, packaging, FFmpeg and model licensing, build metrics. Details in `build/`. |
+| [SECURITY.md](SECURITY.md) | Threat model, audit findings, hardening. Details in `security/`. |
+| [TESTING.md](TESTING.md) | Test commands, baseline, environment limits. Details in `testing/`. |
+| [BLOCKERS.md](BLOCKERS.md) | Open owner gates (signing cert, Android keystore, ...) and the gate register. |
+| [releases/](releases/) | Release notes for every desktop and Android release. |
+
+## Explanation: why it is built this way
+
+| Document | Covers |
+|---|---|
+| [RESEARCH.md](RESEARCH.md) | Compression, detection, codecs, UI research, competitors, VMAF, benchmarks. Chapters in `research/`. |
+| [../mobile/android/STANDALONE-COMPRESSOR-ROADMAP.md](../mobile/android/STANDALONE-COMPRESSOR-ROADMAP.md) | Why the Android compressor uses Media3 and LiteRT instead of the desktop's FFmpeg, and its phased plan and progress. |
+| [../mobile/android/UI-REVIEW.md](../mobile/android/UI-REVIEW.md) | The Android UI redesign: research, what changed, open items. |
+| [../mobile/android/UPLOAD-WORKER-DESIGN.md](../mobile/android/UPLOAD-WORKER-DESIGN.md) | Moving phone uploads to WorkManager. |
+| [PROJECT-PLAN.md](PROJECT-PLAN.md) | Desktop work tracks, GUI refactor constraints, owner gates. |
+| [../ROADMAP.md](../ROADMAP.md) | The team's Fall 2026 semester plan, by person and week. |
+
+## Records
+
+Dated documents kept as evidence. They describe the project as it was when
+written; do not update them to match today, update the canonical document
+instead.
+
+- [CHANGES-SUMMER-2026.md](CHANGES-SUMMER-2026.md): what landed over the summer.
+- [plans/](plans/): the detailed plans behind PROJECT-PLAN.md (GUI refactor,
+  desktop zones and events, R6 upgrade).
+- [project-records/](project-records/): progress reports, the planner export,
+  handoffs, session logs, the final report.
+- [archive/](archive/): retired roadmaps (Spring 2026, the June v2 plan).
+- [site/](site/): the static download page.
+
+## Editing rules
+
+- When a record changes a current decision, update the canonical document
+  and leave the record dated.
+- Only call something archived once it is under `archive/`.
+- Run `python scripts/check_doc_links.py` after moving or renaming a file;
+  it lists every relative link and repo path that no longer resolves.
+- ASCII hyphens only: no em or en dashes (`tests/test_no_unicode_dashes.py`
+  enforces it).

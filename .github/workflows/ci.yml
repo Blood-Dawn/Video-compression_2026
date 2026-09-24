@@ -96,3 +96,30 @@ jobs:
       # never down) so coverage can't silently regress.
       - name: Run test suite
         run: uv run pytest tests/ --cov=src --cov-report=term-missing
+
+  # Android JVM unit tests and a debug build of mobile/android (added
+  # 2026-09-24, once ServerSettingsViewModelTest stopped flaking). Builds
+  # only; it never signs or publishes an APK. Release APKs must be built on
+  # the owner's machine, see docs/RELEASE-CHECKLIST.md.
+  android:
+    name: android (unit tests + debug build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile/android
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # ubuntu-latest ships an Android SDK and sets ANDROID_HOME; AGP pulls
+      # any missing build-tools itself.
+      - name: Unit tests and debug build
+        run: ./gradlew --no-daemon testDebugUnitTest assembleDebug

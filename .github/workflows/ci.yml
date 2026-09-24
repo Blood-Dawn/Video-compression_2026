@@ -2,7 +2,9 @@
 #
 # Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.7).
 #
-# What this enforces on every push / PR to `app`:
+# What this enforces on every push to `main` or `mobile`, and every PR to
+# `main`. Until 2026-09-24 the triggers named the `app` branch, which no
+# longer exists, so CI had silently stopped running:
 #   - the full pytest suite is green on both Linux and Windows
 #   - dependencies install cleanly from a fresh environment
 #
@@ -26,9 +28,9 @@ name: CI
 
 on:
   push:
-    branches: [app]
+    branches: [main, mobile]
   pull_request:
-    branches: [app]
+    branches: [main]
 
 # Cancel superseded runs on the same ref to save runner minutes.
 concurrency:

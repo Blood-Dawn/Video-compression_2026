@@ -47,22 +47,14 @@ import org.svcs.mobile.net.SvcsApiClient
 import org.svcs.mobile.ui.compress.CompressScreen
 import org.svcs.mobile.ui.compress.CompressViewModel
 import org.svcs.mobile.ui.saved.CompressLibraryScreen
-import org.svcs.mobile.ui.server.events.EventsScreen
-import org.svcs.mobile.ui.server.events.EventsViewModel
-import org.svcs.mobile.ui.server.home.HomeScreen
-import org.svcs.mobile.ui.server.home.HomeViewModel
-import org.svcs.mobile.ui.server.library.LibraryScreen
-import org.svcs.mobile.ui.server.library.LibraryViewModel
-import org.svcs.mobile.ui.server.live.LiveScreen
-import org.svcs.mobile.ui.server.live.LiveViewModel
-import org.svcs.mobile.ui.server.metrics.MetricsScreen
-import org.svcs.mobile.ui.server.metrics.MetricsViewModel
+import org.svcs.mobile.ui.server.ServerScreen
+import org.svcs.mobile.ui.server.ServerTab
 import org.svcs.mobile.ui.server.settings.ServerSettingsScreen
 
 /**
- * Tabs from the design mockup. LIVE is conditional: the field edition registers
- * no HLS blueprint at all, so on that build the tab must not exist rather than
- * appear and 404 on every request. /api/capabilities is what tells us.
+ * Bottom-bar tabs. Since 2026-09-24 the five Server Mode sections (HOME,
+ * LIBRARY, LIVE, EVENTS, METRICS) live under SERVER as top tabs
+ * (server/ServerScreen.kt), so the bar is at most four items instead of eight.
  */
 enum class Tab(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector) {
     // Fall roadmap Phase 1: the standalone, server-free compressor. Always
@@ -73,14 +65,11 @@ enum class Tab(val label: String, val icon: androidx.compose.ui.graphics.vector.
     COMPRESS("COMPRESS", SvcsIcons.Compress),
     // Fall roadmap Phase 1.5: local library of on-device compression jobs.
     // Always visible alongside COMPRESS for the same reason - no pairing,
-    // no network. Distinct from LIBRARY below, which is the server's
+    // no network. Distinct from Server Mode's LIBRARY, which is the server's
     // remote catalog.
     SAVED("SAVED", SvcsIcons.Saved),
-    HOME("HOME", SvcsIcons.Home),
-    LIBRARY("LIBRARY", SvcsIcons.Library),
-    LIVE("LIVE", SvcsIcons.Live),
-    EVENTS("EVENTS", SvcsIcons.Events),
-    METRICS("METRICS", SvcsIcons.Metrics),
+    // Server Mode, only once a server is paired.
+    SERVER("SERVER", SvcsIcons.Server),
     MORE("MORE", SvcsIcons.More),
 }
 
@@ -114,6 +103,7 @@ fun SvcsApp(
     var caps by remember { mutableStateOf<Capabilities?>(null) }
     var checked by remember { mutableStateOf(false) }
     var tab by remember { mutableStateOf(Tab.COMPRESS) }
+    var serverTab by remember { mutableStateOf(ServerTab.HOME) }
 
     /**
      * Bumped whenever credentials are saved (a real save, not a replay; the
@@ -155,9 +145,13 @@ fun SvcsApp(
         api = newApi
         caps = newCaps
         checked = true
+        if (newApi == null && tab == Tab.SERVER) tab = Tab.COMPRESS
         // Land in the app after a successful save; the pairing screen's
         // SAVE & OPEN button promises exactly this.
-        if (newApi != null && (isRepair || tab == Tab.MORE)) tab = Tab.HOME
+        if (newApi != null && (isRepair || tab == Tab.MORE)) {
+            tab = Tab.SERVER
+            serverTab = ServerTab.HOME
+        }
     }
 
     // M5 slice: notify when a server job finishes. Polls /api/jobs/recent
@@ -232,16 +226,15 @@ fun SvcsApp(
     val visibleTabs = if (api == null) {
         listOf(Tab.COMPRESS, Tab.SAVED, Tab.MORE)
     } else {
-        Tab.entries.filter { it != Tab.LIVE || caps?.hasLive == true }
+        Tab.entries.toList()
     }
 
     Scaffold(
         bottomBar = {
             // Icons from the design mockup's bottom bar (SvcsIcons). Before the
             // 2026-09-23 UI pass this passed icon = {} and showed an empty
-            // indicator pill over bare labels. With a server paired there are
-            // eight tabs, past Material's five-item guidance, so labels show on
-            // the selected tab only once the bar gets that crowded.
+            // indicator pill over bare labels. At most four tabs now, so every
+            // label always shows.
             Column {
                 Box(Modifier.fillMaxWidth().height(1.dp).background(SvcsBorder))
                 NavigationBar(containerColor = SvcsSurface, tonalElevation = 0.dp) {
@@ -251,7 +244,7 @@ fun SvcsApp(
                             onClick = { tab = t },
                             icon = { Icon(t.icon, contentDescription = t.label, modifier = Modifier.size(22.dp)) },
                             label = { Text(t.label, style = MaterialTheme.typography.labelSmall, maxLines = 1) },
-                            alwaysShowLabel = visibleTabs.size <= 5,
+                            alwaysShowLabel = true,
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = SvcsAmber,
                                 selectedTextColor = SvcsAmber,
@@ -278,36 +271,19 @@ fun SvcsApp(
                 Tab.SAVED -> CompressLibraryScreen(vm = viewModel(key = "saved"))
                 Tab.MORE -> ServerSettingsScreen(
                     onCredentialsSaved = { sessionEpoch++ })
-                else -> {
-                    // Everything below here is Server Mode and needs a live
-                    // client; `client` gives Kotlin the smart-cast the tabs'
-                    // ViewModel constructors want, without changing their
-                    // (pre-existing) non-nullable `api` signatures.
+                Tab.SERVER -> {
+                    // `client` gives Kotlin the smart-cast; SERVER is only in
+                    // the bar while a server is paired.
                     val client = api
                     if (client != null) {
-                        when (tab) {
-                            Tab.LIBRARY -> LibraryScreen(
-                                vm = viewModel(key = "lib-$sessionEpoch") {
-                                    LibraryViewModel(client,
-                                        autoCompress = { store.autoCompressUpload() })
-                                })
-                            Tab.METRICS -> MetricsScreen(
-                                vm = viewModel(key = "metrics-$sessionEpoch") { MetricsViewModel(client) })
-                            Tab.HOME -> HomeScreen(
-                                vm = viewModel(key = "home-$sessionEpoch") { HomeViewModel(client) })
-                            Tab.EVENTS -> EventsScreen(
-                                vm = viewModel(key = "events-$sessionEpoch") { EventsViewModel(client) })
-                            Tab.LIVE -> LiveScreen(
-                                vm = viewModel(key = "live-$sessionEpoch") {
-                                    LiveViewModel(
-                                        api = client,
-                                        lastSourceProvider = { store.lastLiveSource() },
-                                        lastSourceSaver = { store.setLastLiveSource(it) },
-                                    )
-                                },
-                            )
-                            else -> Unit
-                        }
+                        ServerScreen(
+                            client = client,
+                            caps = caps,
+                            store = store,
+                            sessionEpoch = sessionEpoch,
+                            selected = serverTab,
+                            onSelect = { serverTab = it },
+                        )
                     }
                 }
             }

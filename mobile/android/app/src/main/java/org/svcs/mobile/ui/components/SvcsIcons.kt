@@ -69,6 +69,12 @@ object SvcsIcons {
     /** A pulse line: something happened. */
     val Events = icon("Events", listOf("M3 12h4l2.5-6 5 12 2.5-6h4"))
     val Metrics = icon("Metrics", listOf("M5 20V11", "M12 20V4", "M19 20v-6"))
+    /** Two stacked rack units: the paired desktop server (Server Mode). */
+    val Server = icon(
+        "Server",
+        listOf("M4 4.5h16v6H4z", "M4 13.5h16v6H4z", "M11 7.5h6", "M11 16.5h6"),
+        listOf(circle(7.5f, 7.5f, 1.1f), circle(7.5f, 16.5f, 1.1f)),
+    )
     val More = icon("More", emptyList(), listOf(circle(5f, 12f, 1.4f), circle(12f, 12f, 1.4f), circle(19f, 12f, 1.4f)))
 
     // ── Actions ──────────────────────────────────────────────────────────

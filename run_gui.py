@@ -13,18 +13,19 @@ to find them automatically.
 
 On first start (or whenever pyproject.toml has changed), this script
 runs ``uv sync --extra enhance`` to install the Real-ESRGAN
-super-resolution stack. The YOLO object filter is already in the core
-deps; no extra needed.
+super-resolution stack. Object detection (YOLOv8n on ONNX Runtime) is
+already in the core deps; no extra needed.
 
-The ``plates`` extra is optional and not pulled in by default. If you
-want the plate reader locally, add it manually:
-
-    uv sync --extra enhance --extra plates
+The plate reader is optional and is NOT installed through an extra: the
+``plates`` extra (EasyOCR) replaces opencv-contrib-python with a headless
+build and breaks background subtraction. Use scripts/install_plates.ps1,
+which installs the ONNX plate reader into the same environment safely
+(see the [plates] note in pyproject.toml).
 
 If ``uv`` isn't on PATH or the install fails, the dashboard still
 launches - relevant features just degrade gracefully (Real-ESRGAN
-falls back to bicubic, plate reader hides its UI when no backend is
-installed, YOLO falls back to pass-through if ultralytics is missing).
+falls back to bicubic, the plate reader hides its UI when no backend is
+installed).
 
 Pass ``--no-sync`` to skip the dependency check entirely.
 
@@ -46,8 +47,8 @@ from threading import Timer
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 # Note: do NOT import gui.app at module load time. We want the optional
-# `enhance` and `plates` extras installed first (see _ensure_extras_installed
-# below) so that gui.app's lazy imports of paddleocr / realesrgan find them
+# `enhance` extra installed first (see _ensure_extras_installed
+# below) so that gui.app's lazy imports of realesrgan find it
 # on the first request after a fresh clone.
 # Author: Bloodawn (KheivenD), 2026-05-03.
 
@@ -134,7 +135,7 @@ def _ensure_extras_installed(extras: list[str], skip: bool = False) -> None:
 
     Skips entirely when invoked under ``uv run`` (see _running_inside_uv);
     that path expects extras to be passed on the uv-run command line, e.g.:
-        uv run --extra enhance --extra plates python run_gui.py
+        uv run --extra enhance python run_gui.py
 
     Author: Bloodawn (KheivenD)
     """
@@ -146,8 +147,8 @@ def _ensure_extras_installed(extras: list[str], skip: bool = False) -> None:
         # uv already managed the venv - don't recurse. Print a hint about
         # how to pull in the AI extras under uv run.
         print("  [skip] running inside `uv run` - uv already sync'd the venv")
-        print("         If AI features ('enhance', 'plates') are missing, exit and run:")
-        print("           uv run --extra enhance --extra plates python run_gui.py")
+        print("         If super-resolution ('enhance') is missing, exit and run:")
+        print("           uv run --extra enhance python run_gui.py")
         return
 
     fingerprint = _pyproject_fingerprint()
@@ -161,7 +162,7 @@ def _ensure_extras_installed(extras: list[str], skip: bool = False) -> None:
     if not uv:
         print("  [warn] 'uv' not on PATH; skipping auto-install of extras")
         print("         Install uv from https://astral.sh/uv to enable AI features,")
-        print("         or run `pip install paddleocr realesrgan basicsr` manually.")
+        print("         or install the 'enhance' extra yourself: uv sync --extra enhance")
         return
 
     cmd = [uv, "sync"]
@@ -224,7 +225,7 @@ def main():
     parser.add_argument("--no-browser", action="store_true",
                         help="Don't auto-open browser")
     parser.add_argument("--no-sync", action="store_true",
-                        help="Skip the auto `uv sync --extra enhance --extra plates` "
+                        help="Skip the auto `uv sync --extra enhance` "
                              "check that runs when pyproject.toml has changed.")
     parser.add_argument("--username", default=None,
                         help="Dashboard Basic-Auth username (or set "
@@ -282,9 +283,9 @@ def main():
     # First-run: ~1-3 minutes for the heavy installs; subsequent launches
     # are instant because the stamp file matches.
     # The default install only auto-installs `enhance`.
-    # `plates` is optional and intentionally NOT pulled in here. If you
-    # want the plate reader locally, edit this list or pass --extra
-    # plates to your launch wrapper before calling this script.
+    # The plate reader is intentionally NOT pulled in here: the `plates`
+    # extra swaps in headless OpenCV and breaks background subtraction.
+    # scripts/install_plates.ps1 installs the ONNX reader safely instead.
     # Author: Bloodawn (KheivenD), 2026-05-14.
     _ensure_extras_installed(["enhance"], skip=args.no_sync)
 
@@ -310,7 +311,7 @@ def main():
         print( "          Most likely a core dependency wasn't installed in this venv.")
         print( "          Try one of:")
         print( "            • uv sync                                  (installs core deps)")
-        print( "            • uv run --extra enhance --extra plates python run_gui.py")
+        print( "            • uv run --extra enhance python run_gui.py")
         print( "            • pip install -e .                          (if not using uv)")
         print(f"          Full error: {exc}")
         sys.exit(2)

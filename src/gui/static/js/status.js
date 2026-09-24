@@ -12,6 +12,7 @@ function startPolling() {
   if (storageInterval) clearInterval(storageInterval);
   if (segmentsInterval) clearInterval(segmentsInterval);
   if (jobsInterval) clearInterval(jobsInterval);
+  if (savingsInterval) clearInterval(savingsInterval);
   statusInterval  = setInterval(pollStatus,   1200);
   storageInterval = setInterval(pollStorage,  5000);
   segmentsInterval = setInterval(loadSegments, 8000);
@@ -19,6 +20,10 @@ function startPolling() {
   // refresh also picks up auto-compress batches finished by the daemon.
   jobsInterval = setInterval(loadRecentJobs, 15000);
   loadRecentJobs();
+  // Measured savings (2026-09 follow-up, RESEARCH-DESKTOP-DEEPDIVE-2026-09.md
+  // Part B3): a real API existed (savings_bp.py) with no frontend consumer.
+  savingsInterval = setInterval(pollMeasuredSavings, 15000);
+  pollMeasuredSavings();
 }
 
 let _statusPollInFlight = false;
@@ -171,6 +176,29 @@ async function pollStorage() {
       _updateCompressionRatio();
     }
   } catch(e) {}
+}
+
+// Real before/after bytes for files SVCS actually compressed, kept
+// separate from the raw-vs-compressed estimate in _updateCompressionRatio
+// below. That estimate compares against theoretical raw RGB frames, which
+// answers "does video compression exist" more than "did SVCS help" - see
+// savings_bp.py's own docstring. This shows the honest number next to it.
+async function pollMeasuredSavings() {
+  const el = document.getElementById('stat-measured-savings');
+  if (!el) return;
+  try {
+    const res = await fetch('/api/savings');
+    const d = await res.json();
+    const m = d.measured || {};
+    if (m.files > 0 && m.saved_bytes > 0) {
+      const savedMb = m.saved_bytes / (1024 * 1024);
+      const savedStr = savedMb >= 1024 ? (savedMb / 1024).toFixed(2) + ' GB' : savedMb.toFixed(1) + ' MB';
+      const ratioStr = m.ratio ? ` (${m.ratio}\u00d7)` : '';
+      el.textContent = `Measured: ${savedStr} saved over ${m.files} file${m.files === 1 ? '' : 's'}${ratioStr}`;
+    } else {
+      el.textContent = 'Measured: no compressed files with a known source yet';
+    }
+  } catch (e) {}
 }
 
 function _updateCompressionRatio() {

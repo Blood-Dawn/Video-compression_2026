@@ -16,6 +16,7 @@ let statusInterval  = null;
 let storageInterval = null;
 let segmentsInterval = null;
 let jobsInterval = null;   // recent-jobs panel refresh (R4 Phase 1)
+let savingsInterval = null; // measured-savings refresh (2026-09 follow-up)
 
 
 // ── Target quality (VMAF) toggle (R5 TASK 5.1) ─────────────────

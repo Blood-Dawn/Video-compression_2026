@@ -131,6 +131,37 @@ function _renderLibrary(list) {
 }
 
 // Client-side search + type filter + sort over the loaded page.
+// Aggregate stats for the filtered set (2026-09 follow-up).
+// RESEARCH-DESKTOP-DEEPDIVE-2026-09.md Part B2: real counts/sizes only,
+// deliberately no invented compression ratio (see status.js's
+// pollMeasuredSavings comment for why a synthetic ratio is avoided).
+function _fmtBytes(bytes) {
+  if (!bytes) return '0 MB';
+  const mb = bytes / (1024 * 1024);
+  return mb >= 1024 ? (mb / 1024).toFixed(2) + ' GB' : mb.toFixed(1) + ' MB';
+}
+
+function _renderLibraryStats(list) {
+  const strip = document.getElementById('library-stats-strip');
+  if (!strip) return;
+  if (!list.length) { strip.style.display = 'none'; return; }
+  let totalBytes = 0, origCount = 0, origBytes = 0, compCount = 0, compBytes = 0;
+  list.forEach((v) => {
+    const sz = v.size || 0;
+    totalBytes += sz;
+    if (v.kind === 'compressed') { compCount++; compBytes += sz; }
+    else { origCount++; origBytes += sz; }
+  });
+  strip.style.display = 'flex';
+  strip.innerHTML =
+    '<span>' + list.length + ' clip' + (list.length === 1 ? '' : 's') +
+    ' &middot; ' + _fmtBytes(totalBytes) + ' total</span>' +
+    '<span style="color:var(--text-primary);">Originals: ' + origCount +
+    ' (' + _fmtBytes(origBytes) + ')</span>' +
+    '<span style="color:var(--green);">Compressed: ' + compCount +
+    ' (' + _fmtBytes(compBytes) + ')</span>';
+}
+
 function filterLibrary() {
   const all = window._svcsLibrary.all || [];
   const q = ((document.getElementById("library-search") || {}).value || "").trim().toLowerCase();
@@ -152,6 +183,7 @@ function filterLibrary() {
   }[field] || ((a, b) => a.mtime - b.mtime);
   list.sort(cmp);
   if (dir === "desc") list.reverse();
+  _renderLibraryStats(list);
   _renderLibrary(list);
 }
 window.filterLibrary = filterLibrary;

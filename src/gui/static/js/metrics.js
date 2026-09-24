@@ -7,6 +7,71 @@
  * global (reachable from inline on* handlers and the other modules).
  * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - JS split).
  */
+// ---- System-load history chart (2026-09 follow-up, uPlot) ----
+// RESEARCH-DESKTOP-DEEPDIVE-2026-09.md Part B1: /api/system_metrics already
+// computes cpu_pct/ram_pct every 2s but the old UI only ever showed the
+// latest sample. This keeps a capped client-side ring buffer and plots it.
+let _mHistT = [];
+let _mHistCpu = [];
+let _mHistRam = [];
+let _mHistChart = null;
+const _M_HIST_MAX = 300; // ~10 minutes at one sample per 2s
+
+function _pushHistoryPoint(cpuPct, ramPct) {
+  _mHistT.push(Date.now() / 1000);
+  _mHistCpu.push(cpuPct);
+  _mHistRam.push(ramPct);
+  if (_mHistT.length > _M_HIST_MAX) {
+    _mHistT.shift(); _mHistCpu.shift(); _mHistRam.shift();
+  }
+  _renderHistoryChart();
+}
+
+function _renderHistoryChart() {
+  const el = document.getElementById('metrics-history-chart');
+  // typeof guard: uPlot is a vendored script loaded before this file, but
+  // fail soft rather than throw if it's ever missing (e.g. a stripped build).
+  if (!el || typeof uPlot === 'undefined' || el.offsetWidth === 0) return;
+  const data = [_mHistT, _mHistCpu, _mHistRam];
+  if (_mHistChart) {
+    _mHistChart.setData(data);
+    return;
+  }
+  const opts = {
+    width: el.offsetWidth,
+    height: 100,
+    padding: [8, 8, 0, 0],
+    cursor: { show: false },
+    legend: { show: false },
+    axes: [
+      { show: false },
+      { stroke: 'rgba(200,200,210,0.5)', font: '10px monospace', size: 28,
+        values: (u, vals) => vals.map((v) => v + '%') },
+    ],
+    scales: { y: { range: [0, 100] } },
+    series: [
+      {},
+      { label: 'CPU', stroke: '#ffb84d', width: 1.5, points: { show: false } },
+      { label: 'RAM', stroke: '#4ecdc4', width: 1.5, points: { show: false } },
+    ],
+  };
+  el.innerHTML = '';
+  try {
+    _mHistChart = new uPlot(opts, data, el);
+  } catch (e) {
+    // Never let a chart-library failure take down the METRICS tab.
+  }
+}
+
+function _resizeHistoryChart() {
+  const el = document.getElementById('metrics-history-chart');
+  if (!el) return;
+  if (!_mHistChart && el.offsetWidth > 0) { _renderHistoryChart(); return; }
+  if (_mHistChart && el.offsetWidth > 0) {
+    _mHistChart.setSize({ width: el.offsetWidth, height: 100 });
+  }
+}
+
 function openHelp() {
   document.getElementById('help-overlay').classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -101,6 +166,8 @@ function _applyHardwareMetrics(d) {
   // Color cpu bar by load
   const cpuFill = document.getElementById('hw-cpu-fill');
   if (cpuFill) cpuFill.style.background = cpuPct > 80 ? 'var(--red)' : cpuPct > 50 ? 'var(--amber)' : 'var(--green)';
+
+  _pushHistoryPoint(cpuPct, ramPct);
 
   if (batPct !== null && batPct !== undefined) {
     const batCell = document.getElementById('hw-battery-cell');
@@ -199,7 +266,7 @@ function switchTab(name) {
     page.classList.toggle('active', page.id === 'tab-' + name);
   });
   // When switching to metrics, ensure library summary is current
-  if (name === 'metrics') _updateLibrarySummary(_segmentData);
+  if (name === 'metrics') { _updateLibrarySummary(_segmentData); _resizeHistoryChart(); }
   // Auto-compress tab: start/stop its status poll + log stream on show/hide.
   if (name === 'autocompress' && typeof acOnTabShow === 'function') acOnTabShow();
   if (name !== 'autocompress' && typeof acOnTabHide === 'function') acOnTabHide();

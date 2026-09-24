@@ -9,6 +9,9 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <!-- hls.js - MIT licensed, browser-based HLS playback (task 4.1) -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <!-- uPlot - MIT licensed, vendored (not CDN) so METRICS history charts
+       still work in the offline Field build. v1.6.31. -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/uPlot.min.css') }}" />
 
   <style>
     /* ─────────────── RESET & TOKENS ─────────────── */
@@ -3116,6 +3119,14 @@
         </div>
         <div id="library-status" style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);margin-bottom:0.5rem;"></div>
 
+        <!-- Aggregate stats for the currently filtered set (2026-09 follow-up).
+             Shows real counts/sizes only - no invented compression ratio
+             (see docs/research/RESEARCH-DESKTOP-DEEPDIVE-2026-09.md Part B2). -->
+        <div id="library-stats-strip" style="display:none;gap:1rem;flex-wrap:wrap;
+             font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);
+             margin-bottom:0.5rem;padding:0.4rem 0.6rem;background:var(--surface2);
+             border:1px solid var(--border);border-radius:4px;"></div>
+
         <!-- Empty state (shown when a folder has no videos) -->
         <div id="library-empty" style="display:none;text-align:center;color:var(--text-dim);padding:2rem 1rem;">
           <div style="font-size:0.85rem;margin-bottom:0.5rem;">No videos in this folder.</div>
@@ -3280,6 +3291,11 @@
               <div class="stat-value" id="stat-storage"> - </div>
               <div class="stat-unit" id="stat-storage-unit">MB used</div>
               <div class="savings-ratio" id="stat-savings-ratio"></div>
+            <!-- Real measured before/after bytes, separate from the raw-vs-
+                 compressed estimate above (see docs/research/RESEARCH-
+                 DESKTOP-DEEPDIVE-2026-09.md Part B3 and savings_bp.py). -->
+            <div class="savings-measured" id="stat-measured-savings"
+                 style="font-size:0.58rem;color:var(--text-dim);margin-top:2px;"></div>
             </div>
           </div>
 
@@ -3540,6 +3556,16 @@
                 <button class="btn btn-ghost" style="flex:1;font-size:0.65rem;" id="metrics-enc-btn"
                         onclick="_metricsEncryptBtn()">[Lock] Encrypt this segment</button>
               </div>
+            </div>
+
+            <!-- Live CPU/RAM history (R4 Phase 2 follow-up, 2026-09). -->
+            <div class="metrics-library-card">
+              <div class="metrics-library-title">System Load (last 10 min)
+                <span style="font-family:var(--body);font-weight:400;font-size:0.58rem;color:var(--text-dim);margin-left:0.5rem;">
+                  CPU (amber) / RAM (teal)
+                </span>
+              </div>
+              <div id="metrics-history-chart" style="height:100px;"></div>
             </div>
 
             <!-- Library summary -->
@@ -4324,6 +4350,7 @@
   <script src="{{ url_for('static', filename='js/hls.js') }}"></script>
   <script src="{{ url_for('static', filename='js/rtsp.js') }}"></script>
   <script src="{{ url_for('static', filename='js/tools.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/vendor/uPlot.iife.min.js') }}"></script>
   <script src="{{ url_for('static', filename='js/library.js') }}"></script>
   <script src="{{ url_for('static', filename='js/autocompress.js') }}"></script>
   <script src="{{ url_for('static', filename='js/metrics.js') }}"></script>

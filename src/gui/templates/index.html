@@ -3418,7 +3418,7 @@
             <span class="mode-chip" data-mode="mode2" id="chip-mode2">MODE 2 · SMART COMPRESS</span>
             <span class="mode-chip" data-mode="mode3" id="chip-mode3">MODE 3 · OBJECT ONLY</span>
             <span class="mode-chip" id="chip-enhance" title="Shows the real backend once a run starts: which AI model (ESPCN/FSRCNN/EDSR/LapSRN/Real-ESRGAN/RealESRNet) or Bicubic (no AI). Never trust the requested model alone - it silently falls back to bicubic if that model's weights aren't downloaded.">SR ENHANCE</span>
-            <span class="mode-chip" id="chip-encrypt">AES-256</span>
+            <span class="mode-chip" id="chip-encrypt" title="Lit only once every segment actually encrypted with no failures. A run started with Encrypt on but no password/key file (or a missing cryptography package) will show AES-256 · N UNENCRYPTED! instead of silently writing plaintext.">AES-256</span>
           </div>
 
           <div class="status-message" id="status-message">Ready. Configure a source and press Start.</div>

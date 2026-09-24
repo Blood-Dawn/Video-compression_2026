@@ -408,6 +408,15 @@ class ROIEncoder:
         self._stream_encrypt: bool = False
         self._stream_encrypt_password: Optional[str] = None
         self._stream_encrypt_key_file: Optional[str] = None
+        # Segments where encrypt=True was requested but the output was
+        # written as plaintext instead (missing credential, missing
+        # cryptography package, unreadable key file, or encrypt_file()
+        # itself raising - see the three warning branches in
+        # finish_segment()). gui.services.pipeline_runner reads this off the
+        # live instance so /api/status can report it honestly instead of
+        # the caller trusting config.encrypt, which only reflects what was
+        # requested. 2026-09-24 dishonesty audit (task #86).
+        self.encryption_failures: int = 0
 
         # Cache the audio-presence check so we don't probe every segment.
         # Surveillance cameras virtually never have audio; probing is wasted I/O.
@@ -1167,6 +1176,7 @@ class ROIEncoder:
                     "Install it with: pip install cryptography",
                     output_path.name,
                 )
+                self.encryption_failures += 1
             else:
                 _raw_key: Optional[bytes] = None
                 if self._stream_encrypt_key_file:
@@ -1189,6 +1199,7 @@ class ROIEncoder:
                         "Segment %s will not be encrypted.",
                         output_path.name,
                     )
+                    self.encryption_failures += 1
                 else:
                     try:
                         enc_path = _encrypt_file(
@@ -1205,6 +1216,7 @@ class ROIEncoder:
                             "Encryption failed for %s: %s. Keeping plaintext output.",
                             output_path.name, _enc_err,
                         )
+                        self.encryption_failures += 1
 
         insert_segment(
             timestamp       = self._stream_timestamp,

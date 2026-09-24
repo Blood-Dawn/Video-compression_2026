@@ -44,6 +44,14 @@ _status: dict = {
     # constructed, so the UI can show what actually ran instead of trusting
     # the requested enhance_model (which may have silently fallen back).
     "enhancer_backend": None,
+    # Count of segments this run requested encryption for but wrote as
+    # plaintext instead (no password/key file, cryptography missing, an
+    # unreadable key file, or encrypt_file() itself raising). Set by
+    # gui.services.pipeline_runner from the live ROIEncoder instance so the
+    # UI can show what actually happened instead of trusting config.encrypt,
+    # which only reflects what was REQUESTED and stays true even when every
+    # segment silently fell back to plaintext. 2026-09-24 dishonesty audit.
+    "encryption_failures": 0,
 }
 
 # ── Power / hardware metrics ───────────────────────────────────────────────────

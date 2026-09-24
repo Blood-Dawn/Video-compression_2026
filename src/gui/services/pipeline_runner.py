@@ -77,19 +77,33 @@ def _patch_frame_source(src_obj):
 
 
 # ── Segment-count interceptor ─────────────────────────────────────────────────
-# We patch ROIEncoder.encode_segment() to count encoded segments without
-# modifying roi_encoder.py.
+# We patch ROIEncoder.finish_segment() to count encoded segments without
+# modifying roi_encoder.py's encode logic.
+#
+# 2026-09-24 dishonesty audit (task #86): this used to wrap encode_segment(),
+# which roi_encoder.py's own docstrings say the begin_segment/write_frame/
+# finish_segment streaming trio REPLACED - and pipeline.py's real streaming
+# path only ever calls finish_segment(). Nothing in src/ or tests/ calls
+# encode_segment() at all, so the old wrapper silently never fired: a live
+# GUI-driven run's dashboard "segments written" counter stayed at 0 for the
+# entire run no matter how many segments were actually written to disk.
+# Confirmed live: a 1-segment synthetic run left frame_count=150 (correct)
+# and segment_count=0 (wrong) before this fix. Wrapping finish_segment also
+# lets this same patch publish encoder.encryption_failures into _status (see
+# roi_encoder.py's own 2026-09-24 comment) for the same honesty reason the
+# Enhancer patch below reports the real backend instead of the requested one.
 
 def _patch_encoder(enc_obj):
-    original_encode = enc_obj.encode_segment
+    original_finish = enc_obj.finish_segment
 
-    def _counted_encode(*args, **kwargs):
-        result = original_encode(*args, **kwargs)
+    def _counted_finish(*args, **kwargs):
+        result = original_finish(*args, **kwargs)
         with _state_lock:
             _status["segment_count"] += 1
+            _status["encryption_failures"] = getattr(enc_obj, "encryption_failures", 0)
         return result
 
-    enc_obj.encode_segment = _counted_encode
+    enc_obj.finish_segment = _counted_finish
     return enc_obj
 
 
@@ -151,6 +165,10 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
         _status["error"] = None
         _status["start_time"] = time.time()
         _status["config"] = config
+        # Cleared here for the same reason as enhancer_backend just below: a
+        # stale failure count from a previous encrypted run must never leak
+        # into a fresh run, encrypted or not.
+        _status["encryption_failures"] = 0
         # Cleared here, filled in by the Enhancer patch below once (and if)
         # this run actually constructs one - stale values from a previous
         # run must never leak into a run that isn't enhancing at all.

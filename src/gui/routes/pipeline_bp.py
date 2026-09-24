@@ -186,6 +186,23 @@ def api_start():
             return jsonify({"error": "encrypt_key_file must be a regular file"}), 400
         encrypt_key_file = str(kf)
 
+    # ── Reject encrypt=True with no credential (2026-09-24 dishonesty audit) ──
+    # Without this, the request used to be accepted as-is: the run would
+    # start, roi_encoder.py would log a server-side warning per segment and
+    # silently write PLAINTEXT output, and /api/status's config.encrypt (and
+    # the dashboard's ENCRYPT chip) stayed true the whole time with nothing
+    # anywhere telling the operator their surveillance footage was not
+    # actually encrypted. Confirmed live via a direct run_pipeline() call.
+    # Failing fast here, the same way encrypt_key_file's existence is
+    # checked just above, is far better than a security feature that can
+    # silently no-op.
+    encrypt_password = (data.get("encrypt_password") or "").strip()
+    if bool(data.get("encrypt", False)) and not encrypt_password and not encrypt_key_file:
+        return jsonify({
+            "error": "encrypt requires encrypt_password or encrypt_key_file "
+                     "(a run would otherwise silently write unencrypted output)"
+        }), 400
+
     config = {
         "input_source": resolved_input,
         "camera_id": camera_id,

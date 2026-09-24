@@ -282,3 +282,63 @@ class TestGetStorageReport:
         report = enc.get_storage_report()
         assert report["total_segments"] == 0
         assert report["total_bytes"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Encryption honesty (2026-09-24 dishonesty audit, task #86)
+#
+# encrypt=True with no usable credential (or a missing cryptography package,
+# or an unreadable key file) used to just log a server-side warning and
+# silently write plaintext, with nothing anywhere - not the return value, not
+# gui.state._status, not the dashboard's AES-256 chip - ever reflecting that
+# the segment was NOT actually encrypted. Confirmed live via a direct
+# run_pipeline(encrypt=True, encrypt_password=None, encrypt_key_file=None)
+# call: it completed normally and wrote a plain .mp4. These tests pin the
+# fix: finish_segment() now increments encoder.encryption_failures on every
+# path that ends up writing plaintext despite encrypt=True, so
+# gui.services.pipeline_runner can publish it into _status honestly.
+# ---------------------------------------------------------------------------
+
+def _stream_write(enc, camera_id, n=8, shape=(180, 320, 3), **begin_kwargs):
+    """Write n frames through the real streaming API (begin/write/finish),
+    mirroring tests/test_encoder_r4.py's _write_frames helper. Uses a
+    real-video-sized frame and has_targets=False deliberately: the tiny
+    16x16 fixture frames used elsewhere in this file are fine for the
+    batch encode_segment() path but were observed to make the streaming
+    pipe's FFmpeg process exit immediately (exit -12) - not related to
+    encryption, so real-sized frames sidestep that instead of chasing it
+    here."""
+    enc.begin_segment(shape, fps=10.0, camera_id=camera_id,
+                      has_targets=False, **begin_kwargs)
+    for i in range(n):
+        enc.write_frame(np.full(shape, i * 10 % 255, dtype=np.uint8))
+    return enc.finish_segment()
+
+
+class TestEncryptionHonesty:
+    def test_no_credential_increments_failure_counter_and_writes_plaintext(
+        self, encoder,
+    ):
+        out = _stream_write(
+            encoder, "cam_enc",
+            encrypt=True, encrypt_password=None, encrypt_key_file=None,
+        )
+
+        assert encoder.encryption_failures == 1
+        assert not out["file_path"].endswith(".enc")
+        from pathlib import Path
+        assert Path(out["file_path"]).exists()
+
+    def test_encryption_failures_starts_at_zero(self, encoder):
+        assert encoder.encryption_failures == 0
+
+    def test_successful_encryption_does_not_increment_failure_counter(
+        self, encoder,
+    ):
+        out = _stream_write(
+            encoder, "cam_enc_ok",
+            encrypt=True, encrypt_password="a-real-password",
+        )
+
+        assert encoder.encryption_failures == 0
+        assert out["file_path"].endswith(".enc")

@@ -120,7 +120,29 @@ async function pollStatus() {
         _enhChip.textContent = 'SR ENHANCE';
         _enhChip.classList.remove('chip-warn');
       }
-      document.getElementById('chip-encrypt').classList.toggle('active', !!data.config.encrypt);
+      // 2026-09-24 dishonesty audit (task #86): config.encrypt only reflects
+      // what was REQUESTED, and used to be the only thing this chip looked
+      // at - so a run with no password/key file (or a missing cryptography
+      // package, or an unreadable key file) showed "encrypted" the whole
+      // time while every segment silently wrote as plaintext. encryption_
+      // failures comes from the live ROIEncoder instance (gui.state._status,
+      // set by pipeline_runner's finish_segment patch), so a real failure is
+      // now visible instead of hidden, the same honesty fix already applied
+      // to the SR ENHANCE chip above.
+      const _encChip = document.getElementById('chip-encrypt');
+      const encRequested = !!data.config.encrypt;
+      const encFailures = data.encryption_failures || 0;
+      if (encRequested) {
+        const encHealthy = encFailures === 0;
+        _encChip.classList.toggle('active', encHealthy);
+        _encChip.classList.toggle('chip-warn', !encHealthy);
+        _encChip.textContent = encHealthy
+          ? 'AES-256'
+          : 'AES-256 · ' + encFailures + ' UNENCRYPTED!';
+      } else {
+        _encChip.classList.remove('active', 'chip-warn');
+        _encChip.textContent = 'AES-256';
+      }
     }
 
     // ── HOME hero strip ────────────────────────────────────────

@@ -288,6 +288,27 @@ class TestApiStart:
         assert cfg["enhance"] is False
         assert cfg["encrypt"] is False
 
+    def test_start_encrypt_with_no_credential_returns_400(self, client, fake_pipeline):
+        """2026-09-24 dishonesty audit (task #86): encrypt=True with neither a
+        password nor a key file used to be accepted, start a run, and silently
+        write plaintext output while /api/status kept reporting config.encrypt
+        as true (confirmed live via a direct run_pipeline() call). The route
+        must now reject it outright instead of starting a run under a false
+        premise - the same way an unusable encrypt_key_file already is."""
+        resp = client.post("/api/start", json={
+            "input_source": "data/test.mp4", "encrypt": True,
+        })
+        assert resp.status_code == 400
+        assert "encrypt" in resp.get_json()["error"].lower()
+
+    def test_start_encrypt_with_password_is_accepted(self, client, fake_pipeline):
+        resp = client.post("/api/start", json={
+            "input_source": "data/test.mp4", "encrypt": True,
+            "encrypt_password": "a-real-password",
+        })
+        assert resp.status_code == 200
+        assert resp.get_json()["config"]["encrypt"] is True
+
     def test_start_codec_default_is_auto(self, client, fake_pipeline):
         """Default codec is now "auto" (TASK 1.6). The backend resolves "auto"
         per-mode in run_pipeline (H.264 for mode0/1, AV1 for mode2/3); the GUI

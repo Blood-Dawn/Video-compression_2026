@@ -1,5 +1,6 @@
 package org.svcs.mobile.ui.server.settings
 
+import org.svcs.mobile.compress.EncoderCapabilities
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -348,6 +349,23 @@ fun ServerSettingsScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = SvcsTextDim,
                 )
+            }
+
+            // Phase 2: whether this phone's encoders can do region-of-interest
+            // encoding (Android 15 FEATURE_Roi). It decides which Smart
+            // Compress strategy a job gets, so it is worth being able to see.
+            val encoderLines by androidx.compose.runtime.produceState(initialValue = emptyList<String>()) {
+                value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    EncoderCapabilities.summary(EncoderCapabilities.all())
+                }
+            }
+            if (encoderLines.isNotEmpty()) {
+                org.svcs.mobile.ui.components.SvcsPanel(modifier = Modifier.fillMaxWidth(), contentPadding = 12.dp) {
+                    Text("THIS PHONE'S ENCODERS", style = MaterialTheme.typography.labelSmall, color = SvcsTextDim)
+                    encoderLines.forEach { line ->
+                        Text(line, style = MaterialTheme.typography.bodySmall, color = SvcsTextDim)
+                    }
+                }
             }
         }
     }

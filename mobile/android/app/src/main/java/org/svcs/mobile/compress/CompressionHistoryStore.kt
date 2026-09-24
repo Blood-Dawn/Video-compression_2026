@@ -28,6 +28,10 @@ data class CompressionRecord(
     // smartCompressUsed is false - there was no analysis pass to report.
     val smartCompressUsed: Boolean = false,
     val smartCompressActivityDetected: Boolean? = null,
+    /** Regions encoded at higher quality via FEATURE_Roi; 0 when not used. */
+    val roiRegions: Int = 0,
+    /** The video encoder Media3 used, e.g. "c2.qti.hevc.encoder". */
+    val encoderName: String? = null,
 )
 
 /**
@@ -88,6 +92,8 @@ class CompressionHistoryStore(context: Context) {
         put("usedFallback", r.usedFallback)
         put("smartCompressUsed", r.smartCompressUsed)
         put("smartCompressActivityDetected", r.smartCompressActivityDetected ?: JSONObject.NULL)
+        put("roiRegions", r.roiRegions)
+        put("encoderName", r.encoderName ?: JSONObject.NULL)
     }
 
     private fun toRecord(o: JSONObject): CompressionRecord = CompressionRecord(
@@ -108,5 +114,7 @@ class CompressionHistoryStore(context: Context) {
         } else {
             o.optBoolean("smartCompressActivityDetected")
         },
+        roiRegions = o.optInt("roiRegions", 0),
+        encoderName = if (o.isNull("encoderName")) null else o.optString("encoderName"),
     )
 }

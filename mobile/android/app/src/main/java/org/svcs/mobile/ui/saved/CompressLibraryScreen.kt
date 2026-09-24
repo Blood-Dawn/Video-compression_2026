@@ -334,7 +334,11 @@ private fun LibraryRow(
                     SvcsTag(record.presetLabel, SvcsTextDim)
                     if (record.smartCompressUsed) {
                         SvcsTag(
-                            if (record.smartCompressActivityDetected == false) "Smart: squeezed" else "Smart: kept quality",
+                            when {
+                                record.smartCompressActivityDetected == false -> "Smart: squeezed"
+                                record.roiRegions > 0 -> "Smart: regions"
+                                else -> "Smart: kept quality"
+                            },
                             SvcsAmber,
                         )
                     }

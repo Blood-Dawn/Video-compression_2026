@@ -12,14 +12,11 @@ import org.tensorflow.lite.Interpreter
 /**
  * Thin wrapper over the quantized YOLOv8n LiteRT model bundled as an asset.
  *
- * Fall roadmap Phase 2 ("Smart Compress"): this only answers "was anything
- * worth caring about in this frame", not full detection with boxes and
- * labels - that is the minimum needed to drive the bitrate-adjustment
- * fallback strategy documented in STANDALONE-COMPRESSOR-ROADMAP.md section
- * 4, since true per-region QP control (Android 15's FEATURE_Roi) is
- * OEM-optional and not yet wired through Media3 Transformer's higher-level
- * API - that is real remaining work, not something this class pretends to
- * do.
+ * Fall roadmap Phase 2 ("Smart Compress"). Two questions per frame:
+ * [detectsAnything] ("was anything worth caring about here", which drives
+ * the whole-clip bitrate fallback) and, since 2026-09-24, [detect] (where
+ * it is, as normalized boxes) for region-of-interest encoding on phones
+ * whose encoder supports Android 15's FEATURE_Roi.
  *
  * Model provenance: yolov8n.pt -> ONNX -> TFLite, INT8 (dynamic-range)
  * quantized, 320x320 input, exported with
@@ -34,7 +31,7 @@ class ObjectDetector(context: Context) : AutoCloseable {
         private const val MODEL_ASSET = "yolov8n_int8.tflite"
         private const val INPUT_SIZE = 320
         // COCO has 80 classes; output rows 4..83 are per-class confidence,
-        // rows 0..3 are box coordinates (unused here - presence only).
+        // rows 0..3 are the box (decoded by YoloDecoder).
         private const val NUM_CLASSES = 80
         private const val NUM_ANCHORS = 2100
 
@@ -87,6 +84,31 @@ class ObjectDetector(context: Context) : AutoCloseable {
      *  above [CONFIDENCE_THRESHOLD] in this single frame. The caller owns sampling frequency and cadence -
      *  this only ever looks at the one bitmap it's handed. */
     fun detectsAnything(bitmap: Bitmap): Boolean {
+        run(bitmap)
+        // Presence only: stop at the first target-class score over the bar,
+        // cheaper than decoding boxes when that is all the caller needs.
+        val scores = outputBuffer[0]
+        for (cls in TARGET_CLASSES) {
+            val row = scores[4 + cls]
+            for (anchor in 0 until NUM_ANCHORS) {
+                if (row[anchor] > CONFIDENCE_THRESHOLD) return true
+            }
+        }
+        return false
+    }
+
+    /**
+     * The target-class objects in this frame, as boxes normalized to the
+     * frame (0..1, the bitmap's own orientation). Added 2026-09-24 for
+     * region-of-interest encoding; same classes and threshold as
+     * [detectsAnything], so the two always agree on "is anything there".
+     */
+    fun detect(bitmap: Bitmap): List<Detection> {
+        run(bitmap)
+        return YoloDecoder.decode(outputBuffer[0], TARGET_CLASSES, CONFIDENCE_THRESHOLD, INPUT_SIZE)
+    }
+
+    private fun run(bitmap: Bitmap) {
         val resized = if (bitmap.width == INPUT_SIZE && bitmap.height == INPUT_SIZE) {
             bitmap
         } else {
@@ -102,18 +124,9 @@ class ObjectDetector(context: Context) : AutoCloseable {
         }
         if (resized !== bitmap) resized.recycle()
 
-        interpreter.run(inputBuffer, outputBuffer)
-
         // Output layout: [1, 84, 2100]; class scores are already
         // sigmoid-activated in the Ultralytics export.
-        val scores = outputBuffer[0]
-        for (cls in TARGET_CLASSES) {
-            val row = scores[4 + cls]
-            for (anchor in 0 until NUM_ANCHORS) {
-                if (row[anchor] > CONFIDENCE_THRESHOLD) return true
-            }
-        }
-        return false
+        interpreter.run(inputBuffer, outputBuffer)
     }
 
     override fun close() {

@@ -554,8 +554,12 @@ private fun DoneView(s: CompressState, vm: CompressViewModel) {
                     Icon(SvcsIcons.Smart, contentDescription = null, tint = SvcsAmber, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        if (hadActivity) "Smart Compress found activity, so it kept full quality."
-                        else "Smart Compress found nothing happening and squeezed it harder.",
+                        when {
+                            !hadActivity -> "Smart Compress found nothing happening and squeezed it harder."
+                            s.roiRegions == 1 -> "Smart Compress found activity and gave that part of the picture more of the bitrate."
+                            s.roiRegions > 1 -> "Smart Compress found activity and gave those ${s.roiRegions} areas more of the bitrate."
+                            else -> "Smart Compress found activity, so it kept full quality."
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         color = SvcsText,
                     )

@@ -38,6 +38,7 @@ import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import org.svcs.mobile.detect.NormBox
 import org.svcs.mobile.detect.SmartCompressAnalyzer
 
 /**
@@ -91,6 +92,10 @@ class CompressionWorker(
         const val KEY_SMART_COMPRESS = "smart_compress"
         const val KEY_SMART_COMPRESS_USED = "smart_compress_used"
         const val KEY_SMART_COMPRESS_ACTIVITY = "smart_compress_activity_detected"
+        /** Regions given extra quality through FEATURE_Roi; 0 when region-of-
+         *  interest encoding was not used (unsupported phone, nothing found,
+         *  or the encoder refused). */
+        const val KEY_ROI_REGIONS = "roi_regions"
         /** Applied to the requested bitrate only when Smart Compress found
          *  nothing worth protecting anywhere in the sampled frames. Never
          *  applied upward on a hit - see doWork() for why. */
@@ -205,32 +210,50 @@ class CompressionWorker(
 
         val inputBytes = sizeOfUri(inputUri)
         val tempOutputFile = File(applicationContext.cacheDir, "compress_${id}.mp4")
+        val probe = MediaProbe.probe(applicationContext, inputUri)
 
-        // Fall roadmap Phase 2, coarse fallback path: sample a bounded set
-        // of frames and only ever REDUCE the bitrate, never raise it above
-        // what the user's preset already promised - raising it would break
-        // a target-size job's whole point. True per-region redistribution
-        // (more bits where the detector fires, fewer where it doesn't,
-        // same total budget) needs raw MediaCodec QP-offset access that
-        // Media3 Transformer doesn't expose yet; this is the documented
-        // stepping stone toward that, not a stand-in for it.
+        // Fall roadmap Phase 2. Two strategies, picked per phone:
+        //  - Region of interest (2026-09-24): when the encoder reports
+        //    Android 15's FEATURE_Roi and the sweep finds activity, the same
+        //    bitrate is redistributed toward where it was (RoiPlanner,
+        //    RoiEncoderFactory). The bitrate itself is left alone.
+        //  - Whole clip (everywhere): when the sweep finds nothing at all,
+        //    the bitrate is REDUCED, never raised above what the preset
+        //    promised, since raising it would break a size-limit job.
         var smartCompressActivityDetected: Boolean? = null
+        var roiRequest: RoiRequest? = null
         if (smartCompressRequested) {
             setProgress(workDataOf(KEY_STAGE to STAGE_ANALYZING))
             setForeground(buildForegroundInfo(-1, analyzing = true))
-            val analysis = SmartCompressAnalyzer.analyze(applicationContext, inputUri, durationMs)
+            val roiCapable = EncoderCapabilities.encodersFor(requestedCodec).any { it.roi }
+            val analysis = SmartCompressAnalyzer.analyze(
+                applicationContext, inputUri, durationMs, collectRegions = roiCapable,
+            )
             smartCompressActivityDetected = analysis.hasActivity
             if (!analysis.hasActivity) {
                 requestedBitrate = (requestedBitrate * NO_ACTIVITY_BITRATE_SCALE)
                     .toInt()
                     .coerceAtLeast(MIN_SMART_COMPRESS_BITRATE_BPS)
+            } else if (roiCapable && probe.hasFrameSize) {
+                val regions = RoiPlanner.regions(analysis.boxes)
+                if (regions.isNotEmpty()) {
+                    val (outW, outH) = scaledFrameSize(
+                        probe.width, probe.height, probe.rotationDegrees, requestedMaxEdge,
+                    ) ?: (probe.displayWidth to probe.displayHeight)
+                    roiRequest = RoiRequest(
+                        regions, RoiPlanner.encoderRotation(outW, outH, probe.rotationDegrees),
+                    )
+                }
             }
         }
 
         var usedFallback = false
         try {
-            try {
-                runTransform(inputUri, tempOutputFile, requestedBitrate, requestedMaxEdge, requestedCodec, removeAudio)
+            val report = try {
+                runTransform(
+                    inputUri, probe, tempOutputFile, requestedBitrate, requestedMaxEdge,
+                    requestedCodec, removeAudio, roiRequest,
+                )
             } catch (first: TransformFailure) {
                 // Decode-failure fallback (roadmap section 2): a real, documented
                 // failure mode is a decoder rejecting an odd resolution/framerate
@@ -239,13 +262,15 @@ class CompressionWorker(
                 usedFallback = true
                 tempOutputFile.delete()
                 runTransform(
-                    inputUri, tempOutputFile,
+                    inputUri, probe, tempOutputFile,
                     targetBitrateBps = minOf(requestedBitrate, 2_500_000),
                     maxShortSidePx = 720,
                     codecMime = MimeTypes.VIDEO_H264,
                     removeAudio = removeAudio,
+                    roi = null,
                 )
             }
+            val roiRegions = (report.roi as? RoiOutcome.Applied)?.regions ?: 0
 
             val outputUri = writeToMediaStore(tempOutputFile, outputDisplayName)
             val outputBytes = tempOutputFile.length()
@@ -266,6 +291,8 @@ class CompressionWorker(
                     usedFallback = usedFallback,
                     smartCompressUsed = smartCompressRequested,
                     smartCompressActivityDetected = smartCompressActivityDetected,
+                    roiRegions = roiRegions,
+                    encoderName = report.result.videoEncoderName,
                 ),
             )
 
@@ -277,6 +304,7 @@ class CompressionWorker(
                     KEY_USED_FALLBACK to usedFallback,
                     KEY_SMART_COMPRESS_USED to smartCompressRequested,
                     KEY_SMART_COMPRESS_ACTIVITY to (smartCompressActivityDetected ?: true),
+                    KEY_ROI_REGIONS to roiRegions,
                 ),
             )
         } catch (e: TransformFailure) {
@@ -302,29 +330,37 @@ class CompressionWorker(
         }
     }
 
+    /** Smart Compress's region-of-interest plan for one job. */
+    private data class RoiRequest(val regions: List<NormBox>, val rotationDegrees: Int)
+
+    /** What one Transformer pass produced, as Media3 reports it. */
+    private data class TransformReport(val result: ExportResult, val roi: RoiOutcome?)
+
     /** Runs one Transformer pass. Transformer must be built/started/polled from
      *  a thread with a Looper (Media3 requirement), so this hops to Main. */
     private suspend fun runTransform(
         inputUri: Uri,
+        probe: VideoProbe,
         outputFile: File,
         targetBitrateBps: Int,
         maxShortSidePx: Int?,
         codecMime: String,
         removeAudio: Boolean,
-    ) {
-        // Read the source geometry off the main thread, before hopping to it
-        // for Transformer. See scaledFrameSize() for why this replaced a
-        // plain height cap.
-        val frameSize = if (maxShortSidePx != null) sourceFrameSize(inputUri, maxShortSidePx) else null
-        withContext(Dispatchers.Main) {
-            suspendCancellableCoroutine<Unit> { cont ->
-                val encoderFactory = DefaultEncoderFactory.Builder(applicationContext)
+        roi: RoiRequest?,
+    ): TransformReport {
+        // See scaledFrameSize() for why this replaced a plain height cap.
+        val frameSize = if (maxShortSidePx != null) sourceFrameSize(probe, maxShortSidePx) else null
+        return withContext(Dispatchers.Main) {
+            suspendCancellableCoroutine<TransformReport> { cont ->
+                val defaultFactory = DefaultEncoderFactory.Builder(applicationContext)
                     .setRequestedVideoEncoderSettings(
                         VideoEncoderSettings.Builder()
                             .setBitrate(targetBitrateBps)
                             .build(),
                     )
                     .build()
+                val roiFactory = roi?.let { RoiEncoderFactory(defaultFactory, it.regions, it.rotationDegrees) }
+                val encoderFactory = roiFactory ?: defaultFactory
 
                 val transformer = Transformer.Builder(applicationContext)
                     .setVideoMimeType(codecMime)
@@ -332,7 +368,7 @@ class CompressionWorker(
                     .setEncoderFactory(encoderFactory)
                     .addListener(object : Transformer.Listener {
                         override fun onCompleted(composition: Composition, result: ExportResult) {
-                            if (cont.isActive) cont.resume(Unit)
+                            if (cont.isActive) cont.resume(TransformReport(result, roiFactory?.outcome))
                         }
 
                         override fun onError(
@@ -427,8 +463,7 @@ class CompressionWorker(
     }
 
     /** null = the source is already within the cap, leave it alone. */
-    private fun sourceFrameSize(uri: Uri, maxShortSidePx: Int): FrameSize? {
-        val probe = MediaProbe.probe(applicationContext, uri)
+    private fun sourceFrameSize(probe: VideoProbe, maxShortSidePx: Int): FrameSize? {
         if (!probe.hasFrameSize) return FrameSize.Unknown
         return scaledFrameSize(probe.width, probe.height, probe.rotationDegrees, maxShortSidePx)
             ?.let { (sw, sh) -> FrameSize.Exact(sw, sh) }

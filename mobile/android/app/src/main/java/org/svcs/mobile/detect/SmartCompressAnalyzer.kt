@@ -22,17 +22,30 @@ object SmartCompressAnalyzer {
     private const val MAX_SAMPLES = 16
     private const val SAMPLE_INTERVAL_MS = 750L
 
-    data class Result(val hasActivity: Boolean, val framesSampled: Int)
+    /**
+     * [boxes] holds every detection from every sampled frame (upright,
+     * normalized) when the sweep ran with collectRegions; empty otherwise.
+     */
+    data class Result(val hasActivity: Boolean, val framesSampled: Int, val boxes: List<NormBox> = emptyList())
 
-    /** Runs synchronously - callers are expected to already be off the main
-     *  thread (CompressionWorker's doWork() is). */
-    fun analyze(context: Context, uri: Uri, durationMs: Long): Result {
+    /**
+     * Runs synchronously - callers are expected to already be off the main
+     * thread (CompressionWorker's doWork() is).
+     *
+     * With [collectRegions] false (the default) the sweep stops at the first
+     * frame with a hit, since "anything at all" is the whole question for the
+     * bitrate fallback. With it true every sampled frame is decoded into
+     * boxes for region-of-interest encoding, which only pays off on phones
+     * whose encoder supports it, so the worker asks for it only there.
+     */
+    fun analyze(context: Context, uri: Uri, durationMs: Long, collectRegions: Boolean = false): Result {
         val span = durationMs.coerceAtLeast(1000L)
         val sampleCount = (span / SAMPLE_INTERVAL_MS).toInt().coerceIn(MIN_SAMPLES, MAX_SAMPLES)
 
         val retriever = MediaMetadataRetriever()
         var detector: ObjectDetector? = null
         var sampled = 0
+        val boxes = ArrayList<NormBox>()
         try {
             retriever.setDataSource(context, uri)
             detector = ObjectDetector(context)
@@ -44,9 +57,14 @@ object SmartCompressAnalyzer {
                     null
                 } ?: continue
                 sampled++
-                val hit = detector.detectsAnything(frame)
-                frame.recycle()
-                if (hit) return Result(hasActivity = true, framesSampled = sampled)
+                if (collectRegions) {
+                    detector.detect(frame).mapTo(boxes) { it.box }
+                    frame.recycle()
+                } else {
+                    val hit = detector.detectsAnything(frame)
+                    frame.recycle()
+                    if (hit) return Result(hasActivity = true, framesSampled = sampled)
+                }
             }
         } catch (_: Exception) {
             // A source the retriever can't pull a single frame from
@@ -64,6 +82,6 @@ object SmartCompressAnalyzer {
             detector?.close()
             retriever.release()
         }
-        return Result(hasActivity = false, framesSampled = sampled)
+        return Result(hasActivity = boxes.isNotEmpty(), framesSampled = sampled, boxes = boxes)
     }
 }

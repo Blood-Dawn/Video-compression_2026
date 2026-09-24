@@ -19,10 +19,11 @@ checks in its message; this page is the summary.
 
 ## After
 
-- Python: 1,660 or so passing, 0 failing (skips only for missing hardware or
-  data: CDnet clips, webcam, GPU, libvmaf). `uvx ruff check .` clean.
-- Android: 67 JVM tests, 0 failing, stable across repeated runs; debug and
-  release (R8) builds pass.
+- Python: about 1,670 passing, 0 failing (skips only for missing hardware
+  or data: CDnet clips, webcam, GPU, libvmaf). `uvx ruff check .` clean.
+- Android: 67 JVM tests at the end of the cleanup (97 after the roadmap work
+  that followed), 0 failing, stable across repeated runs; debug and release
+  (R8) builds pass.
 - CI runs on `main` and `mobile` again, with a new Android job.
 
 ## What changed, by area
@@ -46,6 +47,12 @@ checks in its message; this page is the summary.
 - Two tests silently checked less than their names promised (a shadowed
   duplicate test, and an MAE comparison that was computed but never
   asserted). Both restored.
+- The dashboard's storage and search routes returned 500 on a
+  `metadata.db` with no tables, and `/api/encrypt` created exactly that
+  file when run before any pipeline job. Both fixed, with tests. A security
+  test had been leaving that empty database in the repo's own `outputs/`.
+- The no-em-dash guard skipped every folder named `data`, which hid the
+  Android `data` package (TokenStore). It surfaced once CI ran again.
 
 **Python hygiene**: 116 unused imports, 27 placeholder-less f-strings, 9
 unused variables and one default-argument call removed; intentional

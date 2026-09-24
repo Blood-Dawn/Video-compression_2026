@@ -168,9 +168,11 @@ class BackgroundSubtractor:
                 history=history, detectShadows=True
             )
         elif method == "GMG":
-            # GMG requires opencv-contrib-python (cv2.bgsegm module).
-            # The default requirements.txt installs opencv-python only.
-            # Raise a clear error rather than an AttributeError at apply() time.
+            # GMG requires opencv-contrib-python (cv2.bgsegm module), which is
+            # what pyproject.toml installs. An environment built some other way
+            # (plain opencv-python, or easyocr's headless build clobbering it)
+            # lacks bgsegm, so raise a clear error rather than an
+            # AttributeError at apply() time.
             if not hasattr(cv2, "bgsegm"):
                 raise ImportError(
                     "GMG requires 'opencv-contrib-python'. "

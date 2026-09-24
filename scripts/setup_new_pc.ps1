@@ -1,8 +1,14 @@
 # =============================================================================
-#  setup_new_pc.ps1  -  EGN4950C Capstone | Fresh Windows PC Setup
-#  Run this FROM INSIDE your project folder (Video-compression_2026):
+#  setup_new_pc.ps1 - one-time developer setup for the SVCS desktop app on a
+#  fresh Windows PC. Run it from the repo root:
 #    Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
-#    .\setup_new_pc.ps1
+#    .\scripts\setup_new_pc.ps1
+#
+#  pyproject.toml + uv.lock are the single source of Python dependencies, so
+#  this installs uv and runs `uv sync --frozen` rather than building a pip
+#  venv from requirements.txt (which is only a generated export now).
+#
+#  Author: Bloodawn (KheivenD), Spring 2026; moved to uv 2026-09-24 (cleanup).
 # =============================================================================
 
 $ErrorActionPreference = 'Stop'
@@ -14,143 +20,74 @@ function Write-Fail { param($msg) Write-Host "  [FAIL] $msg" -ForegroundColor Re
 
 Write-Host ''
 Write-Host '=============================================' -ForegroundColor Magenta
-Write-Host '  Capstone Compression - PC Setup Script    ' -ForegroundColor Magenta
-Write-Host '  EGN4950C | FAU | Spring 2026              ' -ForegroundColor Magenta
+Write-Host '  SVCS desktop - developer setup            ' -ForegroundColor Magenta
 Write-Host '=============================================' -ForegroundColor Magenta
 
-# ---------------------------------------------------------------------------
-# STEP 1 - Confirm we are inside the project folder
-# ---------------------------------------------------------------------------
+# --- 1. Repo root ------------------------------------------------------------
 Write-Step 'Confirming project location...'
 $projectDir = (Get-Location).Path
-if (-not (Test-Path (Join-Path $projectDir 'requirements.txt'))) {
-    Write-Fail 'requirements.txt not found here. cd into your project folder first.'
+if (-not (Test-Path (Join-Path $projectDir 'pyproject.toml'))) {
+    Write-Fail 'pyproject.toml not found here. cd into the repo root first.'
 }
 Write-OK "Project folder: $projectDir"
 
-# ---------------------------------------------------------------------------
-# STEP 2 - Check Python
-# ---------------------------------------------------------------------------
-Write-Step 'Checking Python...'
-try {
-    $pyVer = & python --version 2>&1
-    Write-OK "Found: $pyVer"
-    $pyMajor = [int](& python -c 'import sys; print(sys.version_info.major)')
-    $pyMinor = [int](& python -c 'import sys; print(sys.version_info.minor)')
-    if ($pyMajor -lt 3 -or ($pyMajor -eq 3 -and $pyMinor -lt 9)) {
-        Write-Fail "Python 3.9+ required. You have $pyVer. Download from https://python.org"
-    }
-} catch {
-    Write-Fail 'Python not found. Install Python 3.11 from https://python.org (check Add Python to PATH), then re-run.'
-}
-
-# ---------------------------------------------------------------------------
-# STEP 3 - Check Git
-# ---------------------------------------------------------------------------
+# --- 2. Git ------------------------------------------------------------------
 Write-Step 'Checking Git...'
-try {
-    $gitVer = & git --version 2>&1
-    Write-OK "Found: $gitVer"
-} catch {
-    Write-Fail 'Git not found. Install from https://git-scm.com then re-run.'
+if (Get-Command git -ErrorAction SilentlyContinue) {
+    Write-OK (& git --version)
+} else {
+    Write-Fail 'Git not found. Install it (winget install Git.Git) and re-run.'
 }
 
-# ---------------------------------------------------------------------------
-# STEP 4 - FFmpeg
-# ---------------------------------------------------------------------------
+# --- 3. uv (it also provides Python 3.11, no separate install needed) --------
+Write-Step 'Checking uv...'
+if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+    Write-Warn 'uv not found. Installing via winget...'
+    & winget install --id astral-sh.uv -e --accept-package-agreements --accept-source-agreements
+    $env:Path = [Environment]::GetEnvironmentVariable('Path', 'User') + ';' +
+                [Environment]::GetEnvironmentVariable('Path', 'Machine')
+    if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+        Write-Fail 'uv installed but not on PATH yet. Open a new terminal and re-run.'
+    }
+}
+Write-OK (& uv --version)
+
+# --- 4. FFmpeg (a system binary, not a Python package) -----------------------
 Write-Step 'Checking FFmpeg...'
-try {
-    $ffVer = & ffmpeg -version 2>&1 | Select-Object -First 1
-    Write-OK "Already installed: $ffVer"
-} catch {
-    Write-Warn 'FFmpeg not found. Attempting install via winget...'
-    try {
-        & winget install --id Gyan.FFmpeg -e --accept-package-agreements --accept-source-agreements
-        Write-OK 'FFmpeg installed. Restart your terminal when the script finishes so ffmpeg is on PATH.'
-    } catch {
-        Write-Warn 'winget failed. Install FFmpeg manually:'
-        Write-Warn '  1. Download ffmpeg-release-essentials.zip from https://www.gyan.dev/ffmpeg/builds/'
-        Write-Warn '  2. Extract to C:\ffmpeg'
-        Write-Warn '  3. Add C:\ffmpeg\bin to System PATH in Environment Variables'
-        Write-Warn '  4. Restart terminal and re-run this script'
-    }
-}
-
-# ---------------------------------------------------------------------------
-# STEP 5 - Virtual environment
-# ---------------------------------------------------------------------------
-Write-Step 'Setting up Python virtual environment...'
-$venvActivate = Join-Path $projectDir 'venv\Scripts\Activate.ps1'
-
-if (Test-Path $venvActivate) {
-    Write-OK 'venv already exists, skipping creation.'
+if (Get-Command ffmpeg -ErrorAction SilentlyContinue) {
+    Write-OK ((& ffmpeg -version 2>&1) | Select-Object -First 1)
 } else {
-    & python -m venv venv
-    Write-OK 'Virtual environment created.'
+    Write-Warn 'FFmpeg not found. Installing via winget...'
+    & winget install --id Gyan.FFmpeg -e --accept-package-agreements --accept-source-agreements
+    Write-Warn 'Restart your terminal when this finishes so ffmpeg is on PATH.'
 }
 
-& $venvActivate
-Write-OK 'Virtual environment activated.'
+# --- 5. Python environment from the lockfile ---------------------------------
+Write-Step 'Installing Python dependencies (uv sync --frozen)...'
+& uv sync --frozen
+if ($LASTEXITCODE -ne 0) { Write-Fail 'uv sync failed; see the output above.' }
+Write-OK 'Environment matches uv.lock (.venv).'
 
-# ---------------------------------------------------------------------------
-# STEP 6 - Install Python packages
-# ---------------------------------------------------------------------------
-Write-Step 'Installing Python packages from requirements.txt...'
-& python -m pip install --upgrade pip --quiet
-& pip install -r requirements.txt
-Write-OK 'All packages installed.'
-
-# ---------------------------------------------------------------------------
-# STEP 7 - Create gitignored local folders
-# ---------------------------------------------------------------------------
-Write-Step 'Creating required local directories...'
-$dirs = @('outputs', 'logs', 'models', (Join-Path 'data' 'samples'))
-foreach ($d in $dirs) {
-    if (-not (Test-Path $d)) {
-        New-Item -ItemType Directory -Path $d | Out-Null
-        Write-OK "Created: $d"
-    } else {
-        Write-OK "Already exists: $d"
-    }
+# --- 6. Local, gitignored folders --------------------------------------------
+Write-Step 'Creating local folders...'
+foreach ($d in @('outputs', 'logs', 'models', (Join-Path 'data' 'samples'))) {
+    if (-not (Test-Path $d)) { New-Item -ItemType Directory -Path $d | Out-Null }
+    Write-OK $d
 }
 
-# ---------------------------------------------------------------------------
-# STEP 8 - Import sanity check
-# ---------------------------------------------------------------------------
-Write-Step 'Running import sanity check...'
-$checkScript = 'import cv2, numpy, PIL, ffmpeg, tqdm, yaml, click, skimage, scipy, pytest, matplotlib, pandas, flask, cryptography; print("ALL_OK")'
-$importResult = & python -c $checkScript 2>&1
-if ($importResult -match 'ALL_OK') {
-    Write-OK 'All Python packages import correctly.'
+# --- 7. Sanity check: the imports the pipeline and dashboard need ------------
+Write-Step 'Checking key imports...'
+$check = 'import cv2, cv2.bgsegm, numpy, onnxruntime, flask, cryptography, platformdirs; print("ALL_OK")'
+$result = & uv run --frozen python -c $check 2>&1
+if ($result -match 'ALL_OK') {
+    Write-OK 'OpenCV (contrib), ONNX Runtime, Flask and crypto all import.'
 } else {
-    Write-Warn 'One or more imports may have issues:'
-    Write-Warn "$importResult"
+    Write-Warn "Import check failed: $result"
 }
 
-# FFmpeg final check
-Write-Step 'Final FFmpeg check...'
-try {
-    $ff2 = & ffmpeg -version 2>&1 | Select-Object -First 1
-    Write-OK "FFmpeg on PATH: $ff2"
-} catch {
-    Write-Warn 'FFmpeg not on PATH yet. Close this terminal and open a new one.'
-}
-
-# ---------------------------------------------------------------------------
-# DONE
-# ---------------------------------------------------------------------------
 Write-Host ''
-Write-Host '=============================================' -ForegroundColor Magenta
-Write-Host '  Setup complete!' -ForegroundColor Green
-Write-Host '=============================================' -ForegroundColor Magenta
-Write-Host ''
-Write-Host 'Next steps:' -ForegroundColor White
-Write-Host '  1. RESTART your terminal (FFmpeg PATH needs to refresh)' -ForegroundColor Yellow
-Write-Host '  2. Re-activate venv in the new terminal:' -ForegroundColor Gray
-Write-Host "       cd '$projectDir'" -ForegroundColor Gray
-Write-Host '       .\venv\Scripts\Activate.ps1' -ForegroundColor Gray
-Write-Host '  3. Drop a test .mp4 into data\samples\' -ForegroundColor Gray
-Write-Host '  4. Run the pipeline:' -ForegroundColor Gray
-Write-Host '       python src\pipeline\pipeline.py --input data\samples\clip.mp4 --camera-id cam_test --output outputs\ --preview' -ForegroundColor Gray
-Write-Host '  5. Run tests: pytest tests\ -v' -ForegroundColor Gray
+Write-Host 'Setup complete. Next:' -ForegroundColor Green
+Write-Host '  uv run python run_gui.py       # dashboard at http://localhost:5000' -ForegroundColor Gray
+Write-Host '  uv run pytest                  # test suite' -ForegroundColor Gray
+Write-Host '  See DEV.md for everything else, including the Android app.' -ForegroundColor Gray
 Write-Host ''

@@ -1,7 +1,7 @@
-# CDnet 2014 — Test Video Clips
+# CDnet 2014 - Test Video Clips
 
 53 clips from the CDnet 2014 Change Detection Benchmark, organized by scene category.
-These files are gitignored — each team member builds them locally from the image frames.
+These files are gitignored - each team member builds them locally from the image frames.
 See **DEV.md Section 13** for step-by-step instructions.
 
 > Citation: Y. Wang et al., "CDnet 2014: An Expanded Change Detection Benchmark Dataset," IEEE CVPR Workshops, 2014.

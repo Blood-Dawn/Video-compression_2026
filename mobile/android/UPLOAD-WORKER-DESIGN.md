@@ -10,7 +10,7 @@ loop (`doUpload()`, in `mobile/android/app/src/main/java/org/svcs/mobile/ui/Libr
 currently lines ~203-303) inside `viewModelScope.launch { ... }`. That
 survives a tab switch or a config change (rotation), because `viewModelScope`
 is tied to the ViewModel, not the Activity. It does **not** survive the
-process being killed — backgrounded long enough for Android to reclaim it,
+process being killed - backgrounded long enough for Android to reclaim it,
 or the user swiping the app away mid-upload of a multi-gigabyte clip on a
 slow connection. When that happens today, the upload just stops; there is no
 mechanism to pick it back up.
@@ -31,7 +31,7 @@ reports the server's authoritative offset; `POST /api/upload/finish`
 verifies size + SHA-256 + decodability. `SvcsApiClient` (interface) /
 `SvcsApi` (implementation) already expose all four calls
 (`uploadBegin`/`uploadChunk`/`uploadStatus`/`uploadFinish`). None of that
-needs to change — this migration is purely about *what drives the loop*,
+needs to change - this migration is purely about *what drives the loop*,
 not the wire protocol.
 
 ## Design
@@ -39,7 +39,7 @@ not the wire protocol.
 ### 1. Worker type: `CoroutineWorker`
 
 The four `SvcsApiClient` calls are already synchronous/blocking Kotlin calls
-made from a coroutine via `withContext(ioDispatcher)` in the current code —
+made from a coroutine via `withContext(ioDispatcher)` in the current code -
 `CoroutineWorker.doWork()` is a `suspend fun`, so the existing chunk-loop
 body ports over close to as-is, just moved out of `viewModelScope.launch`
 and into `doWork()`.
@@ -48,16 +48,16 @@ and into `doWork()`.
 
 WorkManager persists the `OneTimeWorkRequest` itself (worker class,
 constraints, input `Data`) automatically. It does **not** persist anything
-the Worker computes mid-run — no upload offset, no `upload_id`. `Data` (both
+the Worker computes mid-run - no upload offset, no `upload_id`. `Data` (both
 input and output) is capped at 10 KB serialized and is immutable once
 enqueued, so it cannot be used as a place to keep updating the offset either.
 
-So the Worker's own persisted state — `upload_id` and last-known offset —
+So the Worker's own persisted state - `upload_id` and last-known offset -
 must be written by the app itself, not left to WorkManager. Given this app
 already uses `androidx.datastore.preferences` (see `TokenStore`, `pairing`
 package) for small durable key-value state, the natural fit is a small
 DataStore-backed `UploadState` (or a tiny Room table if more than one
-concurrent upload ever needs tracking — out of scope for v1, this app
+concurrent upload ever needs tracking - out of scope for v1, this app
 uploads one clip at a time today) keyed by a locally-generated upload
 tracking id, holding: `contentPath` (see #3, NOT the original `content://`
 Uri), `filename`, `size`, `serverUploadId` (nullable until `/begin`
@@ -65,13 +65,13 @@ succeeds), `lastKnownOffset`.
 
 **Critical point for `doWork()`'s first lines, every single invocation**
 (fresh start AND resume-after-death AND `Result.retry()` restart all look
-identical from inside `doWork()` — there is no way to tell them apart, and
+identical from inside `doWork()` - there is no way to tell them apart, and
 the code should not try to): treat the locally-stored offset as a *hint*,
 not the truth. Always call `GET /api/upload/status?upload_id=X` first (or
 `POST /begin` if no `serverUploadId` is stored yet) and resume from
 whatever the server reports, exactly like the current `doUpload()` already
 does reactively on a 409. This sidesteps any question of whether the local
-DataStore write and the server ack were ever perfectly in sync — the server
+DataStore write and the server ack were ever perfectly in sync - the server
 is always asked, not assumed.
 
 ### 3. The `content://` Uri problem (read this before writing any code)
@@ -81,7 +81,7 @@ implementation from the start, not be patched in later. `uploadFromPhone(resolve
 ContentResolver, uri: Uri)` currently takes a `content://` Uri straight from
 whatever picker `LibraryScreen` uses to launch the upload. That Uri's read
 permission is scoped to the Activity/task that received it and is not
-guaranteed to survive the Activity going away — including across the
+guaranteed to survive the Activity going away - including across the
 process death this whole migration exists to survive. Depending on which
 picker contract is used (`GET_CONTENT`, the system Photo Picker, or
 `OPEN_DOCUMENT`), a persistable grant (`takePersistableUriPermission`) may
@@ -89,7 +89,7 @@ not even be available.
 
 **Do not defer reading the source Uri into the Worker.** Instead, as soon as
 the user picks the file (in the UI layer, while the grant from the picker
-is still fresh — this part is unchanged from what already happens today),
+is still fresh - this part is unchanged from what already happens today),
 stream-copy it into app-private storage (`context.filesDir` or
 `context.cacheDir`) under a stable name, and give the `OneTimeWorkRequest`'s
 input `Data` that stable path instead of the original Uri string. This is
@@ -136,17 +136,17 @@ observes it via `WorkManager.getInstance(context).getWorkInfosForUniqueWorkFlow(
 (a `Flow`, fits the existing `StateFlow`-based ViewModel pattern used
 elsewhere in this file) and maps `WorkInfo.progress.getInt(KEY_PROGRESS, 0)`
 into the same `actionMessage` field the UI already reads. `setProgress` is
-only observable while the Worker is actively running — it is not a durable
+only observable while the Worker is actively running - it is not a durable
 store, so it plays no role in #2's resume logic.
 
 ### 6. Retry strategy: keep the inner retry, add an outer one
 
 The current code already retries a failed chunk up to 5 times before giving
 up (`retries += 1; if (retries > 5) return "Upload failed after retries..."`).
-Keep that inner loop as-is inside `doWork()` — it is the right granularity
+Keep that inner loop as-is inside `doWork()` - it is the right granularity
 for a single dropped chunk. Layer WorkManager's own `Result.retry()` on top
 for the coarser case: the inner retry budget is exhausted, or a structural
-failure (token rejected — `ChunkResult.Unauthorized` already exists in the
+failure (token rejected - `ChunkResult.Unauthorized` already exists in the
 current code and should map to `Result.failure()`, not retry, since retrying
 with the same bad token will never succeed). Reserve `Result.failure()` for
 anything retrying cannot fix: unauthorized, a 4xx that will not change,
@@ -158,13 +158,13 @@ A chunked upload of a large clip on a slow connection can easily run past
 WorkManager's own ~10-minute expedited-work ceiling, so this needs
 `setForeground()`/`ForegroundInfo`, not `setExpedited()`. Concretely:
 manifest needs `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_DATA_SYNC`
-permissions (the latter is a normal, install-time-granted permission — no
+permissions (the latter is a normal, install-time-granted permission - no
 runtime prompt) plus a manifest merge line for WorkManager's own
 `SystemForegroundService` declaring `android:foregroundServiceType="dataSync"`;
 `doWork()` calls `setForeground(ForegroundInfo(id, notification,
 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC))` at the start and again
 periodically to refresh the progress notification. Wrap that call in
-try/catch — a `ForegroundServiceStartNotAllowedException` is possible if the
+try/catch - a `ForegroundServiceStartNotAllowedException` is possible if the
 OS refuses (app background-restricted); on Android 15+ there is also a
 6-hour rolling aggregate cap on `dataSync` foreground-service time shared
 across the app, which will not be hit by a single upload in practice but is
@@ -178,7 +178,7 @@ back" feature does not get quietly throttled without explanation.
   offset-reconciliation logic in #2 (given a local hint and a mocked server
   response, confirm it resumes from the server's value), and the
   `Result.success()`/`retry()`/`failure()` mapping for each `ChunkResult`
-  case — same shape as the existing `LibraryViewModelTest`-style fakes
+  case - same shape as the existing `LibraryViewModelTest`-style fakes
   already used elsewhere in this test suite (see `FakeSvcsApi`).
 - **Instrumented tests** (`androidTest`, `WorkManagerTestInitHelper` +
   `SynchronousExecutor`): `enqueueUniqueWork` + `NetworkType.CONNECTED`
@@ -187,7 +187,7 @@ back" feature does not get quietly throttled without explanation.
 - Not practically coverable by `work-testing` at all: an actual
   kill-and-restart of the process mid-upload. That needs a manual/on-device
   check before shipping (kill the app via `adb shell am kill` mid-upload,
-  relaunch, confirm the upload resumes rather than restarting from 0) —
+  relaunch, confirm the upload resumes rather than restarting from 0) -
   same category as the emulator smoke-test step already in
   `docs/releases/RELEASE-CHECKLIST.md`'s mobile section.
 
@@ -198,5 +198,5 @@ back" feature does not get quietly throttled without explanation.
   above would need to become per-upload-id rather than a single fixed name
   if that ever changes).
 - A user-initiated-data-transfer-job migration (Android 16+ quota exemption
-  API) — flagged as a future follow-up if upload duration/frequency ever
+  API) - flagged as a future follow-up if upload duration/frequency ever
   becomes a real quota problem, not needed for this migration.

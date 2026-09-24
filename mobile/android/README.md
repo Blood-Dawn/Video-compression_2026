@@ -120,7 +120,7 @@ is never attached to a GitHub release.
 Working on moving the resumable chunked upload off `viewModelScope` (so it
 survives process death, not just a tab switch)? See
 `UPLOAD-WORKER-DESIGN.md` for the WorkManager migration design before
-starting — it covers the `content://` Uri lifetime pitfall specifically,
+starting - it covers the `content://` Uri lifetime pitfall specifically,
 which will bite first if skipped.
 
 `gradlew` and `gradlew.bat` are committed; the wrapper JAR is not (it is a

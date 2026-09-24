@@ -1,6 +1,6 @@
 # Standalone Compressor Roadmap
 
-Fall 2026. This is a for-fun project now, not capstone-gated — EGN4950C is
+Fall 2026. This is a for-fun project now, not capstone-gated - EGN4950C is
 satisfied by the desktop app, which is done. Nothing here has a deadline.
 The point of this document is to answer one question with real research
 instead of guessing: **can the mobile app stop depending on the desktop
@@ -11,7 +11,7 @@ Short answer: yes, but not by porting the desktop pipeline. The desktop's
 FFmpeg + libx264 approach is the wrong engine for Android in 2026, for
 reasons that are now well-documented (below) rather than assumed. The right
 engine is Android's own hardware codec path via Jetpack Media3 Transformer
-— which is also exactly what the app we're benchmarking against uses.
+ -  which is also exactly what the app we're benchmarking against uses.
 
 ## 0. The competitive bar: Compressor by JoshAtticus
 
@@ -20,8 +20,8 @@ what it actually is, since it sets the bar for what "a real Android
 compressor app" looks like in 2026.
 
 [Compressor](https://github.com/JoshAtticus/Compressor) is 100% Kotlin,
-built entirely on `androidx.media3:media3-transformer` — Google's own
-hardware-accelerated transcoding library — with **zero third-party
+built entirely on `androidx.media3:media3-transformer` - Google's own
+hardware-accelerated transcoding library - with **zero third-party
 libraries and no bundled FFmpeg**. Its README brands this explicitly: "not
 another slow, bulky FFmpeg wrapper." That's the whole thesis of the app,
 and it's the reason it's fast:
@@ -40,14 +40,14 @@ and it's the reason it's fast:
   WhatsApp, Instagram limits).
 - **What it does *not* do:** anything algorithmically smart. No scene
   detection, no per-region quality, no ML of any kind. It wins purely on
-  hardware-accelerated speed, tiny footprint, and zero ads/telemetry — not
+  hardware-accelerated speed, tiny footprint, and zero ads/telemetry - not
   on compression sophistication.
 - **Monetization:** completely free. No ads, no IAP, no subscription.
   Funded only by optional donations (Buy Me a Coffee / crypto). Rating was
   4.7-4.8 stars on ~156 Play reviews at research time (your 4.9 may reflect
   a slightly newer snapshot - it's climbing).
 - **Distribution:** simultaneously on Google Play, IzzyOnDroid (an
-  F-Droid-compatible repo), and GitHub Releases — possible with zero
+  F-Droid-compatible repo), and GitHub Releases - possible with zero
   license friction specifically *because* there's no GPL code involved.
 
 The broader market (Panda Video Compressor: 10M+ installs, 4.7 stars,
@@ -61,7 +61,7 @@ which is a very achievable bar, and a good one to aim at.
 ## 1. Why not port the desktop pipeline
 
 The desktop's `roi_encoder.py` gets its per-region quality shaping from
-FFmpeg's `addroi` filter feeding libx264's software (CPU) encoder — CRF 18
+FFmpeg's `addroi` filter feeding libx264's software (CPU) encoder - CRF 18
 on foreground, CRF 40+ on long-static background, degraded per grid cell.
 That's a genuinely good desktop design. It does not transplant to Android,
 for three independent, converging reasons the research turned up:
@@ -69,30 +69,30 @@ for three independent, converging reasons the research turned up:
 **FFmpeg-on-Android's ecosystem collapsed.** `ffmpeg-kit` (the library
 basically every hobbyist FFmpeg-on-Android/Flutter app used to wrap) was
 retired by its own maintainer, with binary packages pulled starting
-February 2025 and the GitHub repo archived in mid-2026. The real reason —
+February 2025 and the GitHub repo archived in mid-2026. The real reason -
 confirmed from the maintainer's own "Saying Goodbye to FFmpegKit" post,
-correcting an earlier assumption — was **years of unpaid maintenance
+correcting an earlier assumption - was **years of unpaid maintenance
 burden plus IP-law-firm advice following MPEG LA's 2023 acquisition by
 Via-LA**, not a Google Play rejection over GPL (GPL apps do ship on Play
-today — `brarcher/video-transcoder` is live proof). A community
+today - `brarcher/video-transcoder` is live proof). A community
 continuation (`ffmpegkit-maintained`) and an official source-only successor
 (`ffmpeg-kit-next`) exist, but both mean *you* now own a native build
 pipeline indefinitely, and neither was a going concern before this
-research — this project would be an early adopter of unproven successors.
+research - this project would be an early adopter of unproven successors.
 
 **Android hardware encoders can't do what the desktop algorithm needs.**
 CRF/constant-quality encoding (`BITRATE_MODE_CQ`) is confirmed unreliable
 or entirely unsupported on Exynos and even Google's own AV1 hardware
-encoder — compression has to be driven by bitrate/size targets, not a
+encoder - compression has to be driven by bitrate/size targets, not a
 quality dial. True two-pass VBR doesn't exist on Android hardware encoders
 at all; they're real-time ASICs built for camera capture, not offline
-transcode. And per-region quality control — the actual core of
-`roi_encoder.py` — exists on Android only as a **Qualcomm-exclusive vendor
+transcode. And per-region quality control - the actual core of
+`roi_encoder.py` - exists on Android only as a **Qualcomm-exclusive vendor
 extension** historically, with a real, standardized, cross-vendor
 equivalent (`MediaCodec.PARAMETER_KEY_QP_OFFSET_MAP`/`_RECTS`) landing only
 in **Android 15**, gated behind an OEM-optional `FEATURE_Roi` capability
 flag that's explicitly "best effort." It may silently do nothing on a
-given device. (More on this below — it's not a dead end, just not a
+given device. (More on this below - it's not a dead end, just not a
 foundation.)
 
 **Bundling FFmpeg's native binaries adds compliance debt the alternative
@@ -118,20 +118,20 @@ built on. No bundled native code, no licensing question, benchmarked by
 Google at roughly 1.3s to transcode a 10s 720p clip to H.265/AAC on a
 Pixel 9 Pro XL.
 
-It inherits every MediaCodec limitation above rather than solving them —
+It inherits every MediaCodec limitation above rather than solving them -
 that's fine, it's the same ceiling every competitor in this space is
 working under, including the one you're benchmarking against. Concretely,
 this means the compression UX should be built around **bitrate/resolution
-presets and target-file-size estimation**, not a CRF slider — with an
+presets and target-file-size estimation**, not a CRF slider - with an
 opportunistic "Quality mode" toggle only on devices where
 `EncoderCapabilities.isBitrateModeSupported(BITRATE_MODE_CQ)` actually
-returns true (Compressor has an open feature request for exactly this —
+returns true (Compressor has an open feature request for exactly this -
 it's a known, unsolved gap in the whole category, not something we'd be
 behind on).
 
 Default output codec: **H.265/HEVC**, broadest reliable hardware encode
 support across vendors. H.264 as the universal fallback for old/low-end
-devices. AV1 encode marked experimental/opt-in — Google's own Pixel AV1
+devices. AV1 encode marked experimental/opt-in - Google's own Pixel AV1
 encoder path has documented "broken output" reports, this isn't safe as a
 default yet.
 
@@ -146,20 +146,20 @@ path, not an edge case.
 ## 3. What stays from the current app, what's new
 
 The current mobile app (`mobile/android/app/src/main/java/org/svcs/mobile/`)
-is a thin remote client — every function in `net/SvcsApi.kt` is a call to
+is a thin remote client - every function in `net/SvcsApi.kt` is a call to
 the desktop server; there's no capture, detection, or encoding on-device
 anywhere in it. None of that needs to be thrown away, and most of it is
 worth keeping:
 
 - **Keep as-is, becomes a secondary mode:** everything under `net/` and
-  the `Library`/`Live`/`Events`/`Metrics`/`ServerSettings` screens — this
+  the `Library`/`Live`/`Events`/`Metrics`/`ServerSettings` screens - this
   is a legitimately useful "control my home SVCS box" feature once the
   standalone engine exists alongside it, not instead of it. Reframe it in
   the UI as "Server Mode" rather than the app's whole identity.
   `JobNotifier.kt`'s notification patterns and the WorkManager design
   already written for chunked upload (`mobile/android/UPLOAD-WORKER-
   DESIGN.md`, Fall 3.3) generalize directly to the new compression worker
-  below — same `CoroutineWorker` + foreground-service shape, different
+  below - same `CoroutineWorker` + foreground-service shape, different
   payload.
 - **Keep as-is:** the Compose UI shell, theming (`ui/theme/`), navigation
   (`ui/SvcsApp.kt`), and the `qa` build-variant/logging setup from Week 3.
@@ -168,7 +168,7 @@ worth keeping:
   Transformer, plus (Phase 2) a port of the existing on-device detection
   work the desktop already has.
 
-This also answers "do we scrap most of the mobile app" — no. The remote
+This also answers "do we scrap most of the mobile app" - no. The remote
 client is maybe 15% of the eventual app's surface area and none of it
 conflicts with adding a standalone engine alongside it.
 

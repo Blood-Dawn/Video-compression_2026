@@ -142,6 +142,61 @@ the dashboard is plain HTTP serving footage of real people.
 Test footage is not in the repo; [docs/testing/TEST-DATA.md](docs/testing/TEST-DATA.md)
 explains how to build the CDnet 2014 and VIRAT sets locally.
 
+### Enhancement module (super-resolution) setup
+
+The SR Model dropdown offers 6 real backends plus bicubic, all in
+`src/enhancement/enhancer.py`: ESPCN, FSRCNN, EDSR and LapSRN run through
+OpenCV's `cv2.dnn_superres`; Real-ESRGAN and RealESRNet run through basicsr's
+RRDBNet (`--extra enhance`). Every one of them needs its weights file
+downloaded into `models/` first, or it silently (and honestly - see the SR
+ENHANCE chip and the pipeline log) falls back to bicubic.
+
+Fetch every model in one step:
+
+```bash
+uv run python scripts/download_enhance_models.py          # all 6
+uv run python scripts/download_enhance_models.py espcn edsr   # just these
+```
+
+Or by hand, into `models/`:
+
+| Model | File(s) | Source | License |
+|---|---|---|---|
+| ESPCN | `ESPCN_x2.pb`, `x3`, `x4` (~90 KB each) | [fannymonori/TF-ESPCN](https://github.com/fannymonori/TF-ESPCN) | Apache-2.0 |
+| FSRCNN | `FSRCNN_x2.pb`, `x3`, `x4` (~40 KB each) | [Saafke/FSRCNN_Tensorflow](https://github.com/Saafke/FSRCNN_Tensorflow) | Apache-2.0 |
+| EDSR | `EDSR_x2.pb`, `x3`, `x4` (~38 MB each) | [Saafke/EDSR_Tensorflow](https://github.com/Saafke/EDSR_Tensorflow) | Apache-2.0 |
+| LapSRN | `LapSRN_x2.pb`, `x4`, `x8` (1.3-4 MB) | [fannymonori/TF-LapSRN](https://github.com/fannymonori/TF-LapSRN) | Apache-2.0 |
+| Real-ESRGAN | `RealESRGAN_x4plus.pth` (~64 MB) | [xinntao/Real-ESRGAN releases](https://github.com/xinntao/Real-ESRGAN/releases) | BSD-3-Clause |
+| RealESRNet | `RealESRNet_x4plus.pth` (~64 MB) | [xinntao/Real-ESRGAN releases](https://github.com/xinntao/Real-ESRGAN/releases) | BSD-3-Clause |
+
+All redistributed under their original permissive licenses with attribution
+kept in this table; `scripts/download_enhance_models.py` fetches directly
+from these same upstream URLs, it does not re-host anything.
+
+Two real bugs found and fixed 2026-09-24 while wiring this up, worth knowing
+about if SR ever silently stops working again:
+
+- **`cv2.dnn_superres` has no implementation** if plain `opencv-python` or
+  `opencv-python-headless` is ever installed alongside
+  `opencv-contrib-python` in the same environment - whichever installed
+  *last* wins and silently overwrites the contrib build's compiled module,
+  with no error, no warning, just an empty `cv2.dnn_superres` namespace
+  (`bgsegm`/GMG background subtraction breaks the same way). This is exactly
+  what `--extra plates` does (see "Set up" above) - if SR or GMG stop
+  working, check `pip show opencv-python opencv-python-headless
+  opencv-contrib-python` for more than one installed, and fix with
+  `pip uninstall opencv-python opencv-python-headless && pip install
+  --force-reinstall opencv-contrib-python`.
+- **basicsr breaks on torchvision >= 0.17** (`ModuleNotFoundError:
+  torchvision.transforms.functional_tensor`), which made Real-ESRGAN/
+  RealESRNet silently and permanently fall back to bicubic no matter how
+  correctly they were configured - the existing `except ImportError` catch
+  swallowed it cleanly, so it never crashed, it just never worked.
+  `enhancer._ensure_torchvision_functional_tensor_shim()` patches around
+  this automatically; no action needed, but if you see that traceback
+  outside `enhancer.py` (e.g. importing basicsr directly in a script), apply
+  the same shim there.
+
 ### Test and lint
 
 ```bash

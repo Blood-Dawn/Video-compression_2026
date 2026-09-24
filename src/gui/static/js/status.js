@@ -107,9 +107,11 @@ async function pollStatus() {
       // actually constructs, so a silent fallback to bicubic (missing the
       // optional Real-ESRGAN install) is visible here instead of hidden.
       if (data.config.enhance && data.enhancer_backend) {
-        const isAi = data.enhancer_backend.startsWith('realesrgan');
-        const askedForAi = data.config.enhance_model === 'realesrgan';
-        _enhChip.textContent = isAi ? 'SR ENHANCE \u00b7 AI' : 'SR ENHANCE \u00b7 BICUBIC (no AI)';
+        const isAi = !data.enhancer_backend.startsWith('bicubic');
+        const askedForAi = !!data.config.enhance_model && data.config.enhance_model !== 'bicubic';
+        _enhChip.textContent = isAi
+          ? 'SR ENHANCE \u00b7 AI (' + data.config.enhance_model.toUpperCase() + ')'
+          : 'SR ENHANCE \u00b7 BICUBIC (no AI)';
         // Only flag it red when AI was requested but didn't actually run
         // (missing install extra/weights) - picking bicubic on purpose is
         // not a warning, just an honest label.

@@ -105,7 +105,13 @@ def main():
 
     # Load enhancer
     try:
-        enhancer = Enhancer(scale=SCALE, device="cpu")
+        # NOTE: this used to construct Enhancer() without model=SR_MODEL, so
+        # it always tested whichever model Enhancer()'s default resolved to
+        # (now "realesrgan") no matter what SR_MODEL above said - the summary
+        # would print "SR model: espcn" while having actually benchmarked
+        # Real-ESRGAN. Fixed 2026-09-24 while auditing for exactly this kind
+        # of "label says X, code does Y" mismatch.
+        enhancer = Enhancer(scale=SCALE, device="cpu", model=SR_MODEL)
         print(f"Enhancer loaded: {enhancer.backend} backend on {enhancer.device}")
     except Exception as e:
         print(f"[WARN] Could not load Enhancer: {e}")

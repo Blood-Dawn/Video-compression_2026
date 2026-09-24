@@ -280,15 +280,30 @@ class TestBenchmarkEnhancement:
         assert "variants" in s and "deltas" in s and "verdict" in s
 
     def test_no_enhancer_falls_back_to_bicubic(self, tmp_path):
-        """When the Enhancer is unavailable, all SR variants degrade to
-        bicubic, so the deltas should be ~0 and the verdict should call
-        out the lack of gain."""
+        """When the enhancer is explicitly bicubic (no AI model active),
+        all SR variants degrade to bicubic, so the deltas should be ~0 and
+        the verdict should call out the lack of gain.
+
+        This used to pass ``enhancer=None`` and rely on
+        ``benchmark_enhancement``'s lazy-construct default Enhancer()
+        silently failing to load (missing weights / the basicsr-torchvision
+        bug) and falling back to bicubic. Now that enhancer.py's
+        torchvision shim makes the default Real-ESRGAN actually load on
+        machines that have the weights, ``enhancer=None`` genuinely runs
+        real AI enhancement - which is correct behaviour for that
+        argument, not something to work around here. This test's actual
+        intent is "bicubic only", so it asks for that explicitly and
+        deterministically instead of relying on the default failing to
+        load.
+        """
+        from enhancement.enhancer import Enhancer
+
         clip = tmp_path / "synth.mp4"
         _write_synthetic_video(clip, n_frames=8, w=320, h=180)
 
         res = benchmark_enhancement(
             clip, roi_box=(20, 50, 240, 70),
-            enhancer=None,                  # force bicubic everywhere
+            enhancer=Enhancer(model="bicubic", scale=2),  # force bicubic, deterministic
             sample_every_n_frames=2, max_frames=3,
             sr_scale=2,                     # smaller scale just for speed
         )

@@ -2569,8 +2569,18 @@
                   <label class="config-label" for="enhance-model">SR Model</label>
                   <select id="enhance-model">
                     <option value="bicubic" selected>Bicubic (fast, no AI, always available)</option>
-                    <option value="realesrgan">Real-ESRGAN (AI, needs the "enhance" install extra)</option>
+                    <option value="espcn">ESPCN (AI, fastest, needs downloaded weights)</option>
+                    <option value="fsrcnn">FSRCNN (AI, fast, needs downloaded weights)</option>
+                    <option value="edsr">EDSR (AI, higher quality, slower, needs downloaded weights)</option>
+                    <option value="lapsrn">LapSRN (AI, supports x2/x4/x8, needs downloaded weights)</option>
+                    <option value="realesrgan">Real-ESRGAN (AI, best quality, needs the "enhance" install extra + weights)</option>
+                    <option value="realesrnet">RealESRNet (AI, same family as Real-ESRGAN without the GAN sharpening, needs the "enhance" install extra + weights)</option>
                   </select>
+                  <div style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);margin-top:0.3rem;line-height:1.5;">
+                    Missing weights silently fall back to bicubic - the SR ENHANCE chip on the Home tab always
+                    shows the backend that actually ran, not just what was requested. Run
+                    <code>scripts/download_enhance_models.py</code> or see DEV.md to fetch every model's weights.
+                  </div>
                 </div>
                 <div class="config-field">
                   <label class="config-label" for="enhance-scale">Scale</label>
@@ -3407,7 +3417,7 @@
             <span class="mode-chip" data-mode="mode1" id="chip-mode1">MODE 1 · EVENT RECORDING</span>
             <span class="mode-chip" data-mode="mode2" id="chip-mode2">MODE 2 · SMART COMPRESS</span>
             <span class="mode-chip" data-mode="mode3" id="chip-mode3">MODE 3 · OBJECT ONLY</span>
-            <span class="mode-chip" id="chip-enhance" title="Shows the real backend once a run starts: AI (Real-ESRGAN) or Bicubic (no AI). Never trust the requested model alone - it silently falls back to bicubic if Real-ESRGAN isn't installed.">SR ENHANCE</span>
+            <span class="mode-chip" id="chip-enhance" title="Shows the real backend once a run starts: which AI model (ESPCN/FSRCNN/EDSR/LapSRN/Real-ESRGAN/RealESRNet) or Bicubic (no AI). Never trust the requested model alone - it silently falls back to bicubic if that model's weights aren't downloaded.">SR ENHANCE</span>
             <span class="mode-chip" id="chip-encrypt">AES-256</span>
           </div>
 

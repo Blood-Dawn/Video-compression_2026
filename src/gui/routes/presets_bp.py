@@ -161,7 +161,7 @@ def api_config_import():
         "warmup_frames":    _int("warmup_frames", 120, lo=0, hi=9999),
         "enhance":          _bool("enhance"),
         "enhance_model":    _choice("enhance_model", _VALID_MODELS, "bicubic"),
-        "enhance_scale":    _int("enhance_scale", 4, lo=2, hi=4),
+        "enhance_scale":    _int("enhance_scale", 4, lo=2, hi=8),
         "enhance_every_n":  _int("enhance_every_n", 5, lo=1, hi=25),
         "enhance_max_roi_px": _int("enhance_max_roi_px", 200, lo=32),
         "enhance_device":   _choice("enhance_device", _VALID_DEVICES, "auto"),

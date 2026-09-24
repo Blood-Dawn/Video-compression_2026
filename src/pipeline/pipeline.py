@@ -542,25 +542,28 @@ def run_pipeline(
     _last_enhanced_frame = None         # cached result from the last enhancement pass
     if enhance or upscale_output:
         _enh_device = None if enhance_device == "auto" else enhance_device
-        # enhance_model is the user's explicit pick between the two backends
-        # that actually exist (see Enhancer.backend): "bicubic" now really
-        # means bicubic-only (use_nn=False skips loading Real-ESRGAN at all,
-        # instead of requesting it and quietly running the NN anyway).
-        # "realesrgan" asks for real AI upscaling; Enhancer still falls back
-        # to bicubic transparently if the optional `enhance` extra or its
-        # weights aren't installed, but we now check for that and say so
-        # instead of only logging it as an INFO aside.
+        # enhance_model is the user's explicit pick among the 6 real backends
+        # plus bicubic (see Enhancer.backend / enhancer.py's model registry).
+        # "bicubic" means bicubic-only (use_nn=False skips loading any model
+        # at all, instead of requesting one and quietly running it anyway).
+        # Any other value asks for real AI upscaling; Enhancer still falls
+        # back to bicubic transparently if that model's package/weights
+        # aren't installed, but we check for that below and say so instead
+        # of only logging it as an INFO aside.
         enhancer = Enhancer(
             scale=enhance_scale,
             device=_enh_device,
             use_nn=(enhance_model != "bicubic"),
+            model=enhance_model,
         )
-        if enhance_model == "realesrgan" and enhancer.backend == "bicubic":
+        if enhance_model != "bicubic" and enhancer.backend == "bicubic":
             log.warning(
-                "Real-ESRGAN was requested but is not active (the 'enhance' "
-                "install extra or its model weights are missing). This run "
-                "is using plain bicubic upscaling instead - see DEV.md -> "
-                "'Enhancement Module Setup' to install the real thing."
+                "%s was requested but is not active (its package/model "
+                "weights are missing). This run is using plain bicubic "
+                "upscaling instead - see DEV.md -> 'Enhancement Module "
+                "Setup', or run scripts/download_enhance_models.py, to "
+                "install the real thing.",
+                enhance_model,
             )
         # One worker thread. Enhancement is a serial CPU task so more workers
         # would fight over cores and slow everything down further.

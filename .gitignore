@@ -237,3 +237,4 @@ svcs_mobile_test/
 mobile/android/**/build/
 mobile/android/local.properties
 mobile/android/**/*.iml
+mobile/android/build_log.txt

@@ -90,8 +90,10 @@ test under `tests/security/`, suite green at every commit.
 | SEC-015 | Info disclosure | Low | `/api/media_debug` (`files_bp.py:295`) | Reported `exists` / `resolved` / `would_serve` for ANY absolute path, making it a filesystem existence and path-disclosure oracle with no confinement | Confined to the same allowed roots as the media routes | fixed (`aa949e8`) |
 | SEC-016 | Supply chain (installer) | Low | `installer/Install-SVCS.ps1` | The direct-download fallback fetched the Release `.exe` over HTTPS and ran it silently with no hash or signature check. The winget path pins a SHA256; this path did not | Hash verification added to the direct-download fallback path | fixed (`0c7b8a7`) |
 
-**Count: 16 SEC findings. 15 fixed, 1 (SEC-009) reviewed and accepted as
-informational with no attacker-controlled fetch.**
+| SEC-017 | SSRF (DNS rebinding, TOCTOU) | Medium | `is_safe_push_url()` / `_post()` (`src/utils/push_notify.py:238-337`), reused identically by `src/utils/event_webhook.py` | `is_safe_push_url` resolves the target hostname once via `socket.getaddrinfo` and checks THAT resolved IP against the blocklist. The actual outbound `urllib` request then re-resolves the same hostname independently. An attacker-controlled DNS name can answer the validation lookup with a public IP and the connection-time lookup with `127.0.0.1` or a link-local/metadata address, passing the guard and then connecting somewhere the guard was built to block. Reproduced locally with a mocked `socket.getaddrinfo` returning different answers on the two calls; no live network attack was run | Open. Recommended fix: resolve once, then connect to the validated IP directly (e.g. pass the IP through as the connection target, or pin it via a custom `HTTPConnection`/`create_connection` override) instead of letting the HTTP client re-resolve the hostname | open |
+
+**Count: 17 SEC findings. 15 fixed, 1 (SEC-009) reviewed and accepted as
+informational with no attacker-controlled fetch, 1 (SEC-017) open.**
 
 ### Verified defenses (attacked, found holding)
 
@@ -212,7 +214,10 @@ asserts the block, so the flaw cannot silently return.
 
 These are honest gaps. They were not run and are not claimed as covered.
 
-* External network penetration test against a live LAN bind.
+* External network penetration test against a live LAN bind. A sandboxed,
+  code-level pentest pass was run 2026-09-25 (see below) against an isolated
+  clone in a throwaway container, not the real deployed instance, so this
+  gap still stands as described.
 * A fuzzing campaign (AFL, boofuzz) on the video-ingest and ffmpeg path with
   dedicated tools.
 * Live RTSP/ONVIF camera-path testing with real hardware or MediaMTX.
@@ -220,6 +225,55 @@ These are honest gaps. They were not run and are not claimed as covered.
   mistune, notebook, tornado, bleach, basicsr). Not runtime dependencies, but
   still outstanding. Tracked in `docs/BLOCKERS.md`.
 * The installer is unsigned, so SmartScreen fires. Expected until it is signed.
+
+## Pentest pass — 2026-09-25 (sandboxed)
+
+Requested as a follow-up to the 2026-06-21 audit above: "pentest the app, make a
+sandbox and install the tools." Scope and honesty note first, since this is easy
+to overstate: this was a code-level and dynamic-HTTP pass against an isolated
+clone of the repo, run inside a throwaway cloud container, against a locally
+bound instance with test credentials. It is NOT the "external network
+penetration test against a live LAN bind" that this document and
+`docs/BLOCKERS.md` have carried as an owner-only, still-open item since June.
+That item remains open and unmet; nothing here closes it.
+
+**Setup:** fresh `git clone` of the repo into an isolated container, a fresh
+virtualenv, `run_gui.py` started with `--host 0.0.0.0 --no-browser --no-sync`
+and throwaway `SVCS_DASHBOARD_USER` / `SVCS_DASHBOARD_PASSWORD` values, never
+the user's real credentials or real deployment. `nmap`, `nikto`, `sqlmap`,
+`testssl.sh`, and `gobuster` were installed. `nmap` hung on every scan against
+the target in this sandbox (a container/raw-socket restriction, confirmed
+unrelated to the target since `curl` and `nikto` worked normally against the
+same port), so port-scan coverage was dropped in favor of `curl`-based manual
+HTTP analysis and `nikto`.
+
+**Re-verified as holding, no regressions found:**
+
+* CSRF protection (`install_csrf_protection`, `src/gui/csrf.py`) covers the
+  `/api/update/*` and `/api/webhook/*` routes added earlier this development
+  cycle, with no separate wiring needed — confirming the app-wide
+  `before_request` hook design works as intended for new blueprints.
+* SEC-002/003/004 path-traversal fixes still block traversal attempts with no
+  regression.
+* Basic+Bearer auth and the failed-login lockout (10 failures / 300s window /
+  300s lockout, table capped at 1024 IPs) behave exactly as documented,
+  including locking out the legitimate operator too (an accepted trade-off).
+* Device token privilege separation holds: a Bearer token cannot list, mint,
+  or revoke tokens, and no token hash is ever returned to a client.
+* `is_safe_push_url()`'s baseline checks (scheme allowlist, credential
+  rejection, literal blocked IPs, loopback/link-local/multicast/reserved
+  range checks) behave as documented for direct IP-literal and simple
+  hostname inputs.
+
+**New finding:** SEC-017, a DNS-rebinding TOCTOU bypass of the SSRF guard
+shared by `push_notify.py` and `event_webhook.py` — see the findings table
+above. Proven locally with a mocked, non-networked `socket.getaddrinfo` that
+returns a public IP on the guard's validation call and `127.0.0.1` on the
+connection's own re-resolution; no traffic was sent over a real network to
+reproduce it. Filed as open; not fixed as part of this pass, since it changes
+outbound-networking behavior and the fix approach (pin the validated IP
+rather than re-resolving) is worth a deliberate choice rather than a
+same-pass patch.
 
 ---
 
@@ -421,7 +475,7 @@ licensing decision. These items were previously recorded only in
 | Item | Why it is deferred | Required action |
 |---|---|---|
 | Development and notebook dependency CVEs | They are not runtime dependencies in the frozen app, but they remain part of the development environment | Upgrade the notebook stack in a dedicated lockfile pass when notebooks are next touched |
-| External network penetration test | It needs a live LAN bind and an external tester | Test a real deployment before production or public rollout |
+| External network penetration test | It needs a live LAN bind and an external tester. A sandboxed code-level pass (isolated clone, own container, no live network) was completed 2026-09-25 and found SEC-017; the live-network component is still open | Test a real deployment before production or public rollout |
 | Video-ingest and FFmpeg fuzzing | AFL, boofuzz, or equivalent dedicated tooling is not a deterministic unit test | Fuzz upload, watch-folder, thumbnail, and decode paths with malformed media |
 | Live RTSP and ONVIF testing | It requires hardware or a running MediaMTX relay | Exercise discovery, authentication, reconnect, and sustained capture manually |
 | Plate-reader model bundling | Framework licenses do not automatically cover downloaded model weights | Verify each weight license before adding models to a frozen installer |

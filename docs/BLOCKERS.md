@@ -151,12 +151,30 @@ cheap Medium/Low findings this session. Genuinely-deferred items:
 | Item | Severity | Why deferred | Proposed approach |
 |------|----------|--------------|-------------------|
 | Dev/notebook dependency CVEs | Medium | `pip-audit` flagged jupyter-server, jupyterlab, mistune, notebook, tornado, bleach, basicsr, idna - all DEV/notebook-only deps, not imported by the runtime app or shipped in the installer. The runtime ones (cryptography, urllib3) were bumped (SEC-008). | Bump the notebook stack in a dedicated `uv lock --upgrade-package` pass when the notebooks are next touched; they are not in the frozen app. |
-| External network penetration test | n/a (process) | Requires a live LAN bind + an external tester; not a pytest-coverable, CI-safe activity. | Owner runs a pentest against a real deployment before any public/production rollout. |
+| External network penetration test | n/a (process) | Requires a live LAN bind + an external tester; not a pytest-coverable, CI-safe activity. A sandboxed code-level pass ran 2026-09-25 in an isolated container (no live network, no production instance touched) and found SEC-017 (see below); the live-network component is still unmet. | Owner runs a pentest against a real deployment before any public/production rollout. |
 | Fuzzing the video-ingest / ffmpeg path | n/a (process) | A real fuzzing campaign (AFL/boofuzz) needs dedicated tooling + time and is not deterministic in CI. | Owner runs a fuzzing pass on the upload/watch-folder/thumbnail path with malformed media corpora. |
 | Live RTSP/ONVIF camera-path testing | n/a (process) | Needs a real camera or a running MediaMTX server; hardware/timing dependent. | Owner exercises the live camera path manually (see `docs/testing/FEATURE-AUDIT.md`). |
 
 The CI-safe core (path traversal, SQLi, XSS, CSRF, auth, crypto, delete-original
 safety, SSRF input guard, supply-chain pins) is covered by `tests/security/`.
+
+#### Security audit - sandboxed pentest pass (2026-09-25)
+
+Follow-up pass requested as "pentest the app, make a sandbox and install the
+tools." Run against an isolated clone of the repo in a throwaway container
+(nmap/nikto/sqlmap/testssl.sh/gobuster installed; nmap could not scan in this
+sandbox and was dropped for curl/nikto), never against the owner's real
+deployed instance. Full write-up: `docs/SECURITY.md`, "Pentest pass - 2026-09-25
+(sandboxed)". One new finding:
+
+| Item | Severity | Why deferred | Proposed approach |
+|------|----------|--------------|-------------------|
+| SEC-017: DNS-rebinding TOCTOU bypass of `is_safe_push_url()` (`src/utils/push_notify.py`, reused by `src/utils/event_webhook.py`) | Medium | The guard validates one DNS resolution of the target hostname; the actual outbound request re-resolves the hostname independently, so an attacker-controlled DNS answer can differ between the two lookups and bypass the SSRF block. Proven locally with a mocked resolver, not a live network attack. Not fixed in this pass because it changes outbound-networking behavior and deserves a deliberate choice of fix approach rather than a same-pass patch. | Resolve the hostname once, then connect to that validated IP directly (pin it through a custom connection/transport) instead of letting the HTTP client re-resolve the hostname on connect. |
+
+Re-verified as still holding with no regressions: CSRF coverage of the
+update/webhook routes, SEC-002/003/004 path-traversal fixes, the
+auth failed-login lockout, and device-token privilege separation. See
+`docs/SECURITY.md` for the full list.
 
 #### R3.2 distribution - owner-gated / owner-verified (2026-06-21)
 

@@ -39,16 +39,18 @@ Owner action needed: apply to SignPath (or acquire a commercial cert),
 then set `SVCS_SIGN_THUMBPRINT` (or `SVCS_SIGN_CERT` + `SVCS_SIGN_PASSWORD`)
 in the build environment and re-run `build.ps1 -Sign -Installer`.
 
-### v2.2.0-beta desktop exe is stale relative to `main`
+### v2.2.0-beta desktop exe was stale relative to `mobile` (resolved 2026-09-26)
 
-`dist/SVCS-Setup-2.2.0.dev0.exe` (the artifact currently attached to the
-GitHub v2.2.0-beta release) was built 2026-08-17, before the chunked
-resumable upload, zone/behavior events, job registry, and mobile push
-features landed on `main`. It also predates the chunked-upload filename
-sanitization fix. A fresh build from current `main`, using
-`docs/RELEASE-CHECKLIST.md`, is owner-gated the same way any publish is:
-someone with a Windows machine and the project venv needs to run
-`build.ps1 -Installer` (optionally `-Sign`, see above) and re-publish.
+`dist/SVCS-Setup-2.2.0.dev0.exe` (the artifact attached to the GitHub
+v2.2.0-beta release) was built 2026-08-17 from an old commit, missing the
+chunked resumable upload, zone/behavior events, job registry, mobile push,
+the webhook emitter, and the SEC-017 SSRF fix. Rebuilt 2026-09-26 from
+`mobile` (the branch this work actually lands on; `main` trails it and
+was never the right release source, see `docs/RELEASE-CHECKLIST.md`) at
+commit `7f3ac24`: `dist/SVCS-Setup-2.2.1.dev0.exe`, full test suite
+green (1787 passed, 9 environment-only skips), smoke test passed against
+127.0.0.1:5000. Still owner-gated for the actual tag and GitHub Release
+publish step.
 
 ### Android release keystore (blocks: F-Droid/IzzyOnDroid, any update path)
 

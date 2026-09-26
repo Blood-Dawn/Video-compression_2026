@@ -17,7 +17,9 @@ a hotfix for a compression bitrate bug found in 1.2.0-beta; notes drafted in
 
 ## Desktop (Windows installer)
 
-1. **Pre-flight.** Release from `main` with a clean working tree. The
+1. **Pre-flight.** Release from `mobile` (the active integration branch
+   all work actually lands on; `main` trails it and should not be used
+   for a build) with a clean working tree. The
    version must match in three places: `pyproject.toml`,
    `installer/svcs.iss` (`MyAppVersion`) and `src/utils/version.py`
    (`APP_VERSION`, which also feeds the in-app update check and

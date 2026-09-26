@@ -90,10 +90,10 @@ test under `tests/security/`, suite green at every commit.
 | SEC-015 | Info disclosure | Low | `/api/media_debug` (`files_bp.py:295`) | Reported `exists` / `resolved` / `would_serve` for ANY absolute path, making it a filesystem existence and path-disclosure oracle with no confinement | Confined to the same allowed roots as the media routes | fixed (`aa949e8`) |
 | SEC-016 | Supply chain (installer) | Low | `installer/Install-SVCS.ps1` | The direct-download fallback fetched the Release `.exe` over HTTPS and ran it silently with no hash or signature check. The winget path pins a SHA256; this path did not | Hash verification added to the direct-download fallback path | fixed (`0c7b8a7`) |
 
-| SEC-017 | SSRF (DNS rebinding, TOCTOU) | Medium | `is_safe_push_url()` / `_post()` (`src/utils/push_notify.py:238-337`), reused identically by `src/utils/event_webhook.py` | `is_safe_push_url` resolves the target hostname once via `socket.getaddrinfo` and checks THAT resolved IP against the blocklist. The actual outbound `urllib` request then re-resolves the same hostname independently. An attacker-controlled DNS name can answer the validation lookup with a public IP and the connection-time lookup with `127.0.0.1` or a link-local/metadata address, passing the guard and then connecting somewhere the guard was built to block. Reproduced locally with a mocked `socket.getaddrinfo` returning different answers on the two calls; no live network attack was run | Open. Recommended fix: resolve once, then connect to the validated IP directly (e.g. pass the IP through as the connection target, or pin it via a custom `HTTPConnection`/`create_connection` override) instead of letting the HTTP client re-resolve the hostname | open |
+| SEC-017 | SSRF (DNS rebinding, TOCTOU) | Medium | `validate_push_url()` / `pin_resolution()` / `_post()` (`src/utils/push_notify.py`), reused identically by `src/utils/event_webhook.py` | `is_safe_push_url` resolved the target hostname once via `socket.getaddrinfo` and checked THAT resolved IP against the blocklist, but the actual outbound `urllib` request then re-resolved the same hostname independently. An attacker-controlled DNS name could answer the validation lookup with a public IP and the connection-time lookup with `127.0.0.1` or a link-local/metadata address, passing the guard and then connecting somewhere the guard was built to block | `validate_push_url()` now returns the exact addresses it approved; `pin_resolution()` pins `socket.getaddrinfo` to those addresses for the lifetime of the one request the guard just validated, so there is only ever a single resolution in effect. Regression tests in `tests/security/test_dns_rebinding.py` reproduce the rebinding attack against the old two-lookup pattern and prove the pin holds against it | fixed (`SEC-017 fix`, 2026-09-26) |
 
-**Count: 17 SEC findings. 15 fixed, 1 (SEC-009) reviewed and accepted as
-informational with no attacker-controlled fetch, 1 (SEC-017) open.**
+**Count: 17 SEC findings. 16 fixed, 1 (SEC-009) reviewed and accepted as
+informational with no attacker-controlled fetch.**
 
 ### Verified defenses (attacked, found holding)
 
@@ -270,10 +270,11 @@ shared by `push_notify.py` and `event_webhook.py` — see the findings table
 above. Proven locally with a mocked, non-networked `socket.getaddrinfo` that
 returns a public IP on the guard's validation call and `127.0.0.1` on the
 connection's own re-resolution; no traffic was sent over a real network to
-reproduce it. Filed as open; not fixed as part of this pass, since it changes
-outbound-networking behavior and the fix approach (pin the validated IP
-rather than re-resolving) is worth a deliberate choice rather than a
-same-pass patch.
+reproduce it. Fixed the same day: `validate_push_url()` returns the
+addresses it approved and `pin_resolution()` locks the actual connection to
+them, so the guard's check and the request's connection are backed by a
+single resolution instead of two independent ones. See
+`tests/security/test_dns_rebinding.py`.
 
 ---
 

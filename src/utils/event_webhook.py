@@ -51,10 +51,10 @@ from pathlib import Path
 
 try:
     from utils import paths as _paths
-    from utils.push_notify import is_safe_push_url
+    from utils.push_notify import is_safe_push_url, pin_resolution, validate_push_url
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.utils import paths as _paths
-    from src.utils.push_notify import is_safe_push_url
+    from src.utils.push_notify import is_safe_push_url, pin_resolution, validate_push_url
 
 log = logging.getLogger(__name__)
 
@@ -174,7 +174,10 @@ def _post(cfg: dict, event_type: str, payload: dict,
           timeout: float = _POST_TIMEOUT_S) -> "tuple[bool, str]":
     """One synchronous JSON POST to the configured URL. Returns (ok, detail)."""
     url = cfg.get("url", "")
-    ok, why = is_safe_push_url(url)
+    # validate_push_url (not is_safe_push_url) so the connection below can be
+    # pinned to the exact addresses that were just validated, closing the
+    # SEC-017 DNS-rebinding gap (see push_notify.pin_resolution's docstring).
+    ok, why, addrs, host = validate_push_url(url)
     if not ok:
         return False, why
     body_obj = {"event": event_type, "sent_at": time.time(), "data": payload}
@@ -187,8 +190,9 @@ def _post(cfg: dict, event_type: str, payload: dict,
         req.add_header("X-SVCS-Signature", sig)
     opener = urllib.request.build_opener(_NoRedirect)
     try:
-        with opener.open(req, timeout=timeout) as resp:
-            code = getattr(resp, "status", None) or resp.getcode()
+        with pin_resolution(host, addrs):
+            with opener.open(req, timeout=timeout) as resp:
+                code = getattr(resp, "status", None) or resp.getcode()
         return (200 <= int(code) < 300), f"HTTP {code}"
     except urllib.error.HTTPError as exc:
         if 300 <= exc.code < 400:

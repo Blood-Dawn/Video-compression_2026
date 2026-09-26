@@ -42,6 +42,7 @@ Author: Bloodawn (KheivenD), 2026-08-17 (R6 TRACK C1).
 
 from __future__ import annotations
 
+import contextlib
 import ipaddress
 import json
 import logging
@@ -69,6 +70,10 @@ _MAX_QUEUE = 64
 # Most events a single append_events call may publish before it summarises.
 _MAX_PER_BATCH = 5
 _POST_TIMEOUT_S = 3.0
+
+# Serializes pin_resolution()'s process-wide socket.getaddrinfo monkeypatch
+# (see its docstring) across this module and event_webhook, which reuses it.
+_dns_pin_lock = threading.Lock()
 
 DEFAULT_CONFIG = {
     "enabled": False,
@@ -235,47 +240,126 @@ def _address_refused(ip) -> str:
     return ""
 
 
-def is_safe_push_url(url) -> "tuple[bool, str]":
-    """Validate an ntfy topic URL. Returns (ok, reason).
+def validate_push_url(url) -> "tuple[bool, str, list, str]":
+    """Validate an ntfy topic URL. Returns (ok, reason, addrs, host).
 
     Allows http and https to loopback, RFC1918 / unique-local, and public
     hosts, because a self-hosted ntfy is legitimately any of those. Refuses
     other schemes, URL-embedded credentials, a missing topic path, the
     cloud-metadata hostnames and addresses, and anything whose DNS answer
     lands on a refused address.
+
+    ``addrs`` and ``host`` are the exact addresses this call resolved and
+    approved, and the hostname they belong to. A caller that goes on to
+    make the real request MUST reuse them (see ``pin_resolution`` below)
+    rather than resolving the hostname a second time: two independent
+    lookups is the SEC-017 DNS-rebinding gap, where a hostile DNS answer
+    can differ between the check and the connection.
     """
     s = str(url or "").strip()
     if not s:
-        return False, "empty topic URL"
+        return False, "empty topic URL", [], ""
     if len(s) > 2048:
-        return False, "topic URL is too long"
+        return False, "topic URL is too long", [], ""
     try:
         parsed = urlparse(s)
     except ValueError:
-        return False, "topic URL could not be parsed"
+        return False, "topic URL could not be parsed", [], ""
     scheme = (parsed.scheme or "").lower()
     if scheme not in ("http", "https"):
-        return False, f"scheme not allowed: {scheme or 'none'}"
+        return False, f"scheme not allowed: {scheme or 'none'}", [], ""
     if parsed.username or parsed.password:
-        return False, "credentials in the URL are not allowed, use the token field"
+        return False, "credentials in the URL are not allowed, use the token field", [], ""
     try:
         host = (parsed.hostname or "").lower()
     except ValueError:
-        return False, "topic URL host could not be parsed"
+        return False, "topic URL host could not be parsed", [], ""
     if not host:
-        return False, "no host in the topic URL"
+        return False, "no host in the topic URL", [], ""
     if host in _BLOCKED_HOSTS:
-        return False, "blocked cloud-metadata host"
+        return False, "blocked cloud-metadata host", [], host
     if not (parsed.path or "").strip("/"):
-        return False, "no topic in the URL path, for example http://192.168.1.50:8080/svcs-alerts"
+        return False, "no topic in the URL path, for example http://192.168.1.50:8080/svcs-alerts", [], host
     addrs, why = _addresses_for(host)
     if why:
-        return False, why
+        return False, why, [], host
     for ip in addrs:
         refused = _address_refused(ip)
         if refused:
-            return False, refused
-    return True, ""
+            return False, refused, [], host
+    return True, "", addrs, host
+
+
+def is_safe_push_url(url) -> "tuple[bool, str]":
+    """Validate an ntfy topic URL. Returns (ok, reason).
+
+    Thin (ok, reason) view of ``validate_push_url`` kept for every existing
+    caller and test that only wants the yes/no answer. A caller that is
+    about to make the actual request should call ``validate_push_url``
+    directly and pin the connection to the addresses it returns instead
+    (see ``pin_resolution``).
+    """
+    ok, why, _addrs, _host = validate_push_url(url)
+    return ok, why
+
+
+@contextlib.contextmanager
+def pin_resolution(host: str, addrs: list):
+    """Force every DNS lookup for ``host`` to return exactly ``addrs``.
+
+    SEC-017: ``validate_push_url`` resolves the topic host once to decide
+    whether it is safe. Without this, the HTTP client that makes the real
+    request resolves the SAME hostname a second time, independently, and a
+    hostile authoritative DNS server can answer those two lookups
+    differently (a public address for the validation lookup, a loopback or
+    link-local address for the connection) and walk straight through the
+    guard. Pinning ``socket.getaddrinfo`` for the lifetime of one request
+    means there is only ever one resolution in effect: whatever DNS
+    actually answers with at connect time is ignored for this host, and
+    only the already-validated addresses are used. TLS verification is
+    unaffected, since the hostname passed to the HTTP client (and used for
+    SNI / certificate matching) never changes, only which address it
+    connects the socket to.
+
+    Serialized with a module-level lock: this monkeypatches
+    ``socket.getaddrinfo`` process-wide for the duration, so concurrent
+    calls (from this module and from ``event_webhook``, which reuses this
+    same guard) must not overlap.
+    """
+    normalized_host = (host or "").lower()
+    pinned = []
+    for ip in addrs:
+        family = socket.AF_INET6 if ip.version == 6 else socket.AF_INET
+        pinned.append((family, str(ip)))
+
+    original_getaddrinfo = socket.getaddrinfo
+
+    def _pinned_getaddrinfo(node, port, family=0, type=0, proto=0, flags=0):
+        if (node or "").lower() != normalized_host:
+            return original_getaddrinfo(node, port, family, type, proto, flags)
+        try:
+            port_num = int(port) if port not in (None, "") else 0
+        except (TypeError, ValueError):
+            port_num = 0
+        result = []
+        for fam, ip_str in pinned:
+            if family and family != fam:
+                continue
+            sockaddr = (ip_str, port_num) if fam == socket.AF_INET else (ip_str, port_num, 0, 0)
+            result.append((fam, socket.SOCK_STREAM, socket.IPPROTO_TCP, "", sockaddr))
+        if not result:
+            # Nothing pinned matches the requested family. Fail closed with
+            # a normal resolution error rather than silently falling back
+            # to a fresh, unpinned lookup that would reopen the gap.
+            raise socket.gaierror(f"no pinned address for {node!r} matching the requested family")
+        return result
+
+    with _dns_pin_lock:
+        socket.getaddrinfo = _pinned_getaddrinfo
+        try:
+            yield
+        finally:
+            socket.getaddrinfo = original_getaddrinfo
 
 
 # ── posting ──────────────────────────────────────────────────────────────────
@@ -307,7 +391,7 @@ def _post(cfg: dict, title: str, message: str, tags: str = "",
           priority: str = "", timeout: float = _POST_TIMEOUT_S) -> "tuple[bool, str]":
     """One synchronous POST to the configured topic. Returns (ok, detail)."""
     url = cfg.get("topic_url", "")
-    ok, why = is_safe_push_url(url)
+    ok, why, addrs, host = validate_push_url(url)
     if not ok:
         return False, why
     body = str(message or "").encode("utf-8")[:4096]
@@ -326,8 +410,9 @@ def _post(cfg: dict, title: str, message: str, tags: str = "",
         req.add_header("Authorization", "Bearer " + _header_safe(token, 512))
     opener = urllib.request.build_opener(_NoRedirect)
     try:
-        with opener.open(req, timeout=timeout) as resp:
-            code = getattr(resp, "status", None) or resp.getcode()
+        with pin_resolution(host, addrs):
+            with opener.open(req, timeout=timeout) as resp:
+                code = getattr(resp, "status", None) or resp.getcode()
         return (200 <= int(code) < 300), f"HTTP {code}"
     except urllib.error.HTTPError as exc:
         if 300 <= exc.code < 400:

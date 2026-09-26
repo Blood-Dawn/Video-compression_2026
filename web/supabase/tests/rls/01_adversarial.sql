@@ -212,6 +212,41 @@ select set_config('request.jwt.claim.sub', '', false);
 -- ══════════════════════════════════════════════════════════════════════
 set role service_role;
 call expect_count('service_role sees every job (bypassrls)', 'select count(*) from public.jobs', 3);
+insert into public.ingest_rate_limits (client_ip, fail_times) values ('203.0.113.5', '[1,2,3]'::jsonb);
+call expect_count('service_role can read ingest_rate_limits', 'select count(*) from public.ingest_rate_limits', 1);
+reset role;
+
+-- ══════════════════════════════════════════════════════════════════════
+-- 9b. anon/authenticated cannot touch ingest_rate_limits at all - this is
+--     failed-attempt bookkeeping keyed by IP, not user data
+-- ══════════════════════════════════════════════════════════════════════
+call become('authenticated', '00000000-0000-0000-0000-00000000000a');
+do $$
+begin
+  begin
+    perform count(*) from public.ingest_rate_limits;
+    raise exception 'FAIL: an authenticated user was able to SELECT ingest_rate_limits';
+  exception
+    when insufficient_privilege then
+      raise notice 'ok: authenticated cannot select ingest_rate_limits (insufficient_privilege)';
+  end;
+end
+$$;
+reset role;
+select set_config('request.jwt.claim.sub', '', false);
+
+call become('anon', null);
+do $$
+begin
+  begin
+    perform count(*) from public.ingest_rate_limits;
+    raise exception 'FAIL: anon was able to SELECT ingest_rate_limits';
+  exception
+    when insufficient_privilege then
+      raise notice 'ok: anon cannot select ingest_rate_limits (insufficient_privilege)';
+  end;
+end
+$$;
 reset role;
 
 -- ══════════════════════════════════════════════════════════════════════

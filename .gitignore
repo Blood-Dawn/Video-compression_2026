@@ -239,7 +239,12 @@ mobile/android/local.properties
 mobile/android/**/*.iml
 mobile/android/build_log.txt
 
-# The web/ dashboard's Supabase Edge Function is genuine TypeScript, not an
-# ffmpeg .ts segment - un-ignore it specifically rather than loosen the
-# blanket *.ts rule above.
-!web/supabase/functions/**/*.ts
+# Everything under web/ is the SVCS Web dashboard: genuine TypeScript
+# source (Edge Functions, test config, future shared utils), never an
+# ffmpeg .ts segment - un-ignore the whole tree rather than loosen the
+# blanket *.ts rule above or keep adding narrower exceptions one
+# subdirectory at a time (the original web/supabase/functions/**/*.ts-only
+# exception silently dropped web/vitest.config.ts from `git add`, caught
+# only by noticing `git status` didn't list a file that should have been
+# there).
+!web/**/*.ts

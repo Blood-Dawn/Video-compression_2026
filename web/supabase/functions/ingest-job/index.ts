@@ -10,11 +10,13 @@
 // the operator's webhook secret).
 //
 // This function has no idea in advance WHICH user a request belongs to, so
-// it tries every ingest_tokens row's secret (constant-time compare, keeps
-// checking every candidate even after a match — the same approach SVCS's
-// own device_tokens.verify_token uses for exactly the same reason: don't
-// let comparison timing leak which secret, if any, is correct) until one
-// verifies the signature, and attributes the job to that row's user_id.
+// it tries every ingest_tokens row's secret until one verifies the
+// signature, and attributes the job to that row's user_id. The actual
+// verification, and the rate-limit bookkeeping below, live in logic.ts as
+// plain functions so they can be unit-tested without a deployed function
+// (see web/supabase/functions/ingest-job/logic.test.ts) — this file is
+// just the I/O wiring around them: read the request, ask logic.ts what to
+// do, read/write Postgres, respond.
 //
 // Deploy: `supabase functions deploy ingest-job` (see web/README.md). Needs
 // the project's own SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY, which
@@ -22,6 +24,15 @@
 // configure here beyond deploying it.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  checkLockout,
+  emptyRateLimitRow,
+  LOCKOUT_S,
+  matchTokenAgainstBody,
+  recordFailure,
+  recordSuccess,
+  type RateLimitRow,
+} from "./logic.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -30,29 +41,44 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
-async function hmacSha256Hex(secret: string, body: string): Promise<string> {
-  const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
-  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
-  return Array.from(new Uint8Array(mac))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+// Best-effort client identity for rate limiting, mirroring
+// src/gui/auth.py's _client_ip() in spirit but not in mechanism: auth.py
+// deliberately does NOT trust X-Forwarded-For because its Flask app is
+// reachable directly, with no proxy in front of it, so that header would
+// be entirely attacker-supplied. An Edge Function is the opposite case —
+// Supabase's edge network is the ONLY hop between the internet and this
+// code, and it is the one that sets/appends this header, not the caller.
+// The rightmost entry is the one the trusted edge itself appended (a
+// client can freely prepend fake entries before it reaches the edge, but
+// cannot control what the edge appends after receiving the request), so
+// that is the one entry here worth trusting.
+function clientIp(req: Request): string {
+  const xff = req.headers.get("x-forwarded-for") || "";
+  const parts = xff.split(",").map((s) => s.trim()).filter(Boolean);
+  if (parts.length > 0) return parts[parts.length - 1];
+  return "unknown";
 }
 
-// Constant-time string compare (equal-length hex digests here, but never
-// short-circuit on the first differing byte regardless).
-function timingSafeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) {
-    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
-  }
-  return diff === 0;
+async function loadRateLimitRow(ip: string): Promise<RateLimitRow | null> {
+  const { data, error } = await supabase
+    .from("ingest_rate_limits")
+    .select("fail_times, locked_until")
+    .eq("client_ip", ip)
+    .maybeSingle();
+  if (error || !data) return null;
+  return {
+    fail_times: Array.isArray(data.fail_times) ? data.fail_times : [],
+    locked_until: data.locked_until ? Date.parse(data.locked_until) / 1000 : null,
+  };
+}
+
+async function saveRateLimitRow(ip: string, row: RateLimitRow): Promise<void> {
+  await supabase.from("ingest_rate_limits").upsert({
+    client_ip: ip,
+    fail_times: row.fail_times,
+    locked_until: row.locked_until != null ? new Date(row.locked_until * 1000).toISOString() : null,
+    updated_at: new Date().toISOString(),
+  });
 }
 
 Deno.serve(async (req) => {
@@ -60,10 +86,26 @@ Deno.serve(async (req) => {
     return new Response("method not allowed", { status: 405 });
   }
 
+  const ip = clientIp(req);
+  const now = Date.now() / 1000;
+
+  const existingRow = await loadRateLimitRow(ip);
+  const lockout = checkLockout(existingRow, now);
+  if (lockout.locked) {
+    return new Response("too many failed signature attempts, try again later", {
+      status: 429,
+      headers: { "Retry-After": String(Math.ceil(LOCKOUT_S)) },
+    });
+  }
+  // A just-expired lockout gets its clean slate persisted now, same as
+  // auth.py's _is_locked_out popping both dicts once a lockout is served.
+  const baseRow = lockout.resetRow ?? existingRow ?? emptyRateLimitRow();
+
   const signatureHeader = req.headers.get("x-svcs-signature") || "";
   const rawBody = await req.text();
 
   if (!signatureHeader.startsWith("sha256=")) {
+    await saveRateLimitRow(ip, recordFailure(baseRow, now).row);
     return new Response("missing or malformed signature", { status: 401 });
   }
   const presentedDigest = signatureHeader.slice("sha256=".length).toLowerCase();
@@ -76,21 +118,16 @@ Deno.serve(async (req) => {
     return new Response("internal error", { status: 500 });
   }
 
-  let matchedUserId: string | null = null;
-  let matchedTokenId: string | null = null;
-  // Deliberately check EVERY token, even after a match, so how long this
-  // handler takes never reveals which secret (if any) verified.
-  for (const token of tokens ?? []) {
-    const expectedDigest = await hmacSha256Hex(token.secret, rawBody);
-    if (timingSafeEqual(expectedDigest, presentedDigest) && matchedUserId === null) {
-      matchedUserId = token.user_id;
-      matchedTokenId = token.id;
-    }
-  }
+  const match = await matchTokenAgainstBody(tokens ?? [], rawBody, presentedDigest);
 
-  if (!matchedUserId) {
+  if (!match) {
+    await saveRateLimitRow(ip, recordFailure(baseRow, now).row);
     return new Response("signature did not match any known ingest token", { status: 401 });
   }
+
+  // A verified request clears this IP's failure history, same as
+  // auth.py's _record_success.
+  await saveRateLimitRow(ip, recordSuccess());
 
   let payload: { event?: string; data?: Record<string, unknown> };
   try {
@@ -100,8 +137,9 @@ Deno.serve(async (req) => {
   }
 
   if (payload.event !== "job") {
-    // Other event kinds (behavior/motion events) aren't stored yet - accept
-    // and no-op rather than making the desktop app's webhook retry forever.
+    // Other event kinds (behavior/motion events) are out of scope for v1 —
+    // see docs/plans/WEB-DASHBOARD-PLAN.md section 3 item 8. Accept and
+    // no-op rather than making the desktop app's webhook retry forever.
     return new Response("ok (event kind not stored)", { status: 200 });
   }
 
@@ -110,7 +148,7 @@ Deno.serve(async (req) => {
     typeof v === "number" ? new Date(v * 1000).toISOString() : null;
 
   const { error: insertError } = await supabase.from("jobs").insert({
-    user_id: matchedUserId,
+    user_id: match.userId,
     kind: String(entry.kind ?? "pipeline"),
     label: entry.label != null ? String(entry.label) : null,
     started_at: toIso(entry.started_at),
@@ -131,7 +169,7 @@ Deno.serve(async (req) => {
   await supabase
     .from("ingest_tokens")
     .update({ last_used_at: new Date().toISOString() })
-    .eq("id", matchedTokenId);
+    .eq("id", match.tokenId);
 
   return new Response("ok", { status: 200 });
 });

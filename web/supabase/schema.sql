@@ -2,9 +2,11 @@
 --
 -- Run this once against a fresh Supabase project (SQL Editor -> New query
 -- -> paste this whole file -> Run). It creates:
---   * profiles      one row per signed-up user, holding their role
---   * ingest_tokens one row per "desktop app -> this account" sync link
---   * jobs          the synced job-history rows the desktop app reports
+--   * profiles           one row per signed-up user, holding their role
+--   * ingest_tokens      one row per "desktop app -> this account" sync link
+--   * jobs               the synced job-history rows the desktop app reports
+--   * ingest_rate_limits per-IP failed-signature bookkeeping for the
+--                        ingest-job Edge Function's rate limiting
 --
 -- Roles: 'admin' (sees every user's jobs), 'operator' (the default; sees
 -- only their own jobs), 'guest' (signed in, but sees nothing at all until
@@ -223,3 +225,32 @@ create policy "jobs: read own" on public.jobs
 
 create policy "jobs: admin reads all" on public.jobs
   for select using (public.current_role() = 'admin');
+
+-- ── ingest_rate_limits ───────────────────────────────────────────────────
+-- Backs the ingest-job Edge Function's rate limiting (plan section 3 item
+-- 7). Mirrors src/gui/auth.py's lockout scheme exactly (10 failures per
+-- 300s window per client IP trips a 300s lockout — see
+-- web/supabase/functions/ingest-job/logic.ts for the actual decision
+-- logic and why it needs a Postgres-backed table at all: an Edge Function
+-- has no in-process memory shared across invocations the way auth.py's
+-- module-level dict does).
+--
+-- Never exposed to anon or authenticated at all, in either direction —
+-- this is failed-signature-attempt bookkeeping keyed by IP address, not
+-- user data anyone has a legitimate reason to read through the browser
+-- client, and RLS with no permissive policy already defaults to deny, but
+-- the explicit REVOKE is the same belt-and-suspenders approach as the
+-- column-level GRANTs above: don't rely solely on "no policy happens to
+-- allow it" when "the grant does not exist at all" is just as easy to
+-- write down.
+
+create table if not exists public.ingest_rate_limits (
+  client_ip text primary key,
+  fail_times jsonb not null default '[]'::jsonb,
+  locked_until timestamptz,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.ingest_rate_limits enable row level security;
+
+revoke all on public.ingest_rate_limits from anon, authenticated;

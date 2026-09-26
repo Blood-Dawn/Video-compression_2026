@@ -226,7 +226,7 @@ These are honest gaps. They were not run and are not claimed as covered.
   still outstanding. Tracked in `docs/BLOCKERS.md`.
 * The installer is unsigned, so SmartScreen fires. Expected until it is signed.
 
-## Pentest pass — 2026-09-25 (sandboxed)
+## Pentest pass, 2026-09-25 (sandboxed)
 
 Requested as a follow-up to the 2026-06-21 audit above: "pentest the app, make a
 sandbox and install the tools." Scope and honesty note first, since this is easy
@@ -251,7 +251,7 @@ HTTP analysis and `nikto`.
 
 * CSRF protection (`install_csrf_protection`, `src/gui/csrf.py`) covers the
   `/api/update/*` and `/api/webhook/*` routes added earlier this development
-  cycle, with no separate wiring needed — confirming the app-wide
+  cycle, with no separate wiring needed, confirming the app-wide
   `before_request` hook design works as intended for new blueprints.
 * SEC-002/003/004 path-traversal fixes still block traversal attempts with no
   regression.
@@ -266,7 +266,7 @@ HTTP analysis and `nikto`.
   hostname inputs.
 
 **New finding:** SEC-017, a DNS-rebinding TOCTOU bypass of the SSRF guard
-shared by `push_notify.py` and `event_webhook.py` — see the findings table
+shared by `push_notify.py` and `event_webhook.py`; see the findings table
 above. Proven locally with a mocked, non-networked `socket.getaddrinfo` that
 returns a public IP on the guard's validation call and `127.0.0.1` on the
 connection's own re-resolution; no traffic was sent over a real network to

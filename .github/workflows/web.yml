@@ -1,0 +1,160 @@
+# SVCS Web (the companion cloud dashboard, docs/plans/WEB-DASHBOARD-PLAN.md)
+# continuous integration. Separate from the main ci.yml on purpose: this is
+# Kheiven's own initiative outside the Fall 2026 roadmap the rest of the team
+# is executing (see docs/BLOCKERS.md), living entirely under web/, and this
+# workflow only ever runs when a change actually touches that directory.
+#
+# What this enforces on every push/PR touching web/:
+#   - ESLint (flat config) and the Prettier format check are both clean
+#   - `npm run build` succeeds
+#   - the ingest-job Edge Function's unit tests pass (vitest)
+#   - the RLS adversarial suite passes against a real Postgres, not just a
+#     read of schema.sql (see web/supabase/tests/rls/README.md)
+#
+# What it deliberately does NOT do: deploy anything. Netlify already builds
+# and deploys web/ itself from its own dashboard config (base directory
+# `web`, per docs/plans/WEB-DASHBOARD-PLAN.md section 4); this workflow is
+# the pre-merge gate, not a second deploy path.
+
+name: Web
+
+on:
+  push:
+    branches: [main, mobile]
+    paths:
+      - "web/**"
+      - ".github/workflows/web.yml"
+  pull_request:
+    branches: [main, mobile]
+    paths:
+      - "web/**"
+      - ".github/workflows/web.yml"
+
+concurrency:
+  group: web-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: web
+
+jobs:
+  lint-build-test:
+    name: lint, build, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Prettier format check
+        run: npx prettier --check .
+
+      - name: Build (Vite)
+        run: npm run build
+
+      - name: Unit tests (ingest-job HMAC + rate-limit logic)
+        run: npm test
+
+  e2e-smoke:
+    name: Playwright smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright's Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://smoke-test-project.supabase.co
+          VITE_SUPABASE_ANON_KEY: smoke-test-anon-key
+
+      - name: Start the preview server
+        # --host 127.0.0.1 is load-bearing, not stylistic: with no --host,
+        # Vite binds an unspecified address, which on this runner resolves
+        # to IPv6-only (::) - the server comes up fine but every plain
+        # IPv4 curl to 127.0.0.1 below gets "Connection refused" forever,
+        # not a timing issue no amount of waiting fixes. Confirmed directly
+        # from this exact job's own log on a prior run: vite printed its
+        # "ready" banner while curl failed every second for the entire
+        # 30s poll. Force the literal IPv4 loopback address instead of
+        # letting the OS pick.
+        run: |
+          nohup npm run preview -- --port 4317 --strictPort --host 127.0.0.1 > preview.log 2>&1 &
+          echo "started preview server, pid $!"
+
+      - name: Wait for the preview server
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:4317/ | grep -q 200; then
+              echo "server is up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "server never came up; preview.log:"
+          cat preview.log
+          exit 1
+        env:
+          VITE_SUPABASE_URL: https://smoke-test-project.supabase.co
+          VITE_SUPABASE_ANON_KEY: smoke-test-anon-key
+
+      - name: Run the smoke test
+        run: npm run test:e2e
+
+      - name: Upload trace on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-trace
+          path: web/test-results/
+          retention-days: 7
+
+  rls-adversarial:
+    name: RLS adversarial suite (real Postgres)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: localhost
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run the adversarial RLS suite
+        run: ./supabase/tests/rls/run.sh

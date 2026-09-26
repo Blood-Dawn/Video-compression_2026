@@ -1,0 +1,11 @@
+[build]
+  base = "web"
+  command = "npm run build"
+  publish = "dist"
+
+[[redirects]]
+  # Client-side routing (react-router): let the app's own router decide,
+  # instead of Netlify 404ing on a deep link like /admin or /settings.
+  from = "/*"
+  to = "/index.html"
+  status = 200

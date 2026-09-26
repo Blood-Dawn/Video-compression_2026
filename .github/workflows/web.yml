@@ -93,8 +93,17 @@ jobs:
           VITE_SUPABASE_ANON_KEY: smoke-test-anon-key
 
       - name: Start the preview server
+        # --host 127.0.0.1 is load-bearing, not stylistic: with no --host,
+        # Vite binds an unspecified address, which on this runner resolves
+        # to IPv6-only (::) - the server comes up fine but every plain
+        # IPv4 curl to 127.0.0.1 below gets "Connection refused" forever,
+        # not a timing issue no amount of waiting fixes. Confirmed directly
+        # from this exact job's own log on a prior run: vite printed its
+        # "ready" banner while curl failed every second for the entire
+        # 30s poll. Force the literal IPv4 loopback address instead of
+        # letting the OS pick.
         run: |
-          nohup npm run preview -- --port 4317 --strictPort > preview.log 2>&1 &
+          nohup npm run preview -- --port 4317 --strictPort --host 127.0.0.1 > preview.log 2>&1 &
           echo "started preview server, pid $!"
 
       - name: Wait for the preview server

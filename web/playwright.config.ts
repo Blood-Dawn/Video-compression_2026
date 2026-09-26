@@ -62,7 +62,12 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run build && npm run preview -- --port 4317 --strictPort",
+    // --host 127.0.0.1 is load-bearing (see .github/workflows/web.yml's
+    // "Start the preview server" step comment): without it, Vite binds an
+    // unspecified host, which resolves to IPv6-only on some Linux setups -
+    // the server comes up fine but a plain IPv4 client can never reach it,
+    // no matter how long anything waits.
+    command: "npm run build && npm run preview -- --port 4317 --strictPort --host 127.0.0.1",
     url: "http://127.0.0.1:4317",
     reuseExistingServer: true,
     timeout: 120_000, // the build step itself is included in this wait

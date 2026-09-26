@@ -6,6 +6,19 @@ than a fix a contributor can just make.
 
 ## Open
 
+### SVCS Web companion dashboard (new idea, unreviewed draft exists)
+
+Kheiven's own initiative, outside the Fall 2026 roadmap the rest of the team
+is executing: a multi-user cloud dashboard (Supabase Auth + Postgres RLS for
+admin/operator/guest roles, deployed to Netlify) so more than one person can
+each see their own synced job history. Full plan, what's already sketched,
+and what real engineering is still needed:
+`docs/plans/WEB-DASHBOARD-PLAN.md`. An unreviewed, untested draft scaffold
+exists on branch `draft/web-dashboard` - do not treat it as done or as
+something to merge as-is. Also needs a Supabase project and a Netlify site
+created by hand (account creation can't be automated) before any of it can
+go live.
+
 ### Code signing cert (blocks: a signed v2.2.0-beta or later release)
 
 The signing step itself is wired and tested: `installer\build.ps1 -Sign`

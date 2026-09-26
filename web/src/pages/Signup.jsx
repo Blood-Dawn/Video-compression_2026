@@ -45,16 +45,25 @@ export default function Signup() {
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Display name</label>
+            <label
+              htmlFor="signup-display-name"
+              className="mb-1 block text-sm font-medium text-slate-700"
+            >
+              Display name
+            </label>
             <input
+              id="signup-display-name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Email</label>
+            <label htmlFor="signup-email" className="mb-1 block text-sm font-medium text-slate-700">
+              Email
+            </label>
             <input
+              id="signup-email"
               type="email"
               required
               value={email}
@@ -63,8 +72,14 @@ export default function Signup() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Password</label>
+            <label
+              htmlFor="signup-password"
+              className="mb-1 block text-sm font-medium text-slate-700"
+            >
+              Password
+            </label>
             <input
+              id="signup-password"
               type="password"
               required
               minLength={6}

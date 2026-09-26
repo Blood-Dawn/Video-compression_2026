@@ -40,20 +40,22 @@ export default [
     settings: { react: { version: "18.3" } },
   },
 
-  // ── Supabase Edge Function (Deno runtime) ───────────────────────────
-  // logic.ts and its test run under Node too (vitest), but the TS syntax
-  // is identical either way - this block is about parsing TypeScript at
-  // all, not about which runtime executes it.
+  // ── all TypeScript: the Supabase Edge Function, the Playwright config
+  //    and smoke test - every one of these is plain TS with no bundler
+  //    involved, so they all get the same parser setup. logic.ts and its
+  //    test also run under Node (vitest), but the TS syntax is identical
+  //    either way - this block is about parsing TypeScript at all, not
+  //    about which runtime executes it. ───────────────────────────────
   ...tseslint.configs.recommended.map((config) => ({
     ...config,
-    files: ["supabase/functions/**/*.ts"],
+    files: ["supabase/functions/**/*.ts", "e2e/**/*.ts", "*.config.ts"],
   })),
   {
-    files: ["supabase/functions/**/*.ts"],
+    files: ["supabase/functions/**/*.ts", "e2e/**/*.ts", "*.config.ts"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",
-      globals: { ...globals.es2022, Deno: "readonly" },
+      globals: { ...globals.es2022, ...globals.node },
     },
     rules: {
       "@typescript-eslint/no-unused-vars": [
@@ -62,10 +64,16 @@ export default [
       ],
     },
   },
+  // The Edge Function specifically also has Deno's globals (Deno.serve,
+  // Deno.env) on top of the shared TS setup above.
+  {
+    files: ["supabase/functions/**/*.ts"],
+    languageOptions: { globals: { Deno: "readonly" } },
+  },
 
   // ── everything else that's plain JS config (vite.config.js etc.) ────
   {
-    files: ["*.config.{js,ts}", "*.config.cjs"],
+    files: ["*.config.{js,cjs}"],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: "module",

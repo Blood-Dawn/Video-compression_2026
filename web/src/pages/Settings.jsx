@@ -84,8 +84,14 @@ export default function Settings() {
         <Card className="p-4">
           <form onSubmit={handleSaveName} className="flex items-end gap-3">
             <div className="flex-1">
-              <label className="mb-1 block text-sm font-medium text-slate-700">Display name</label>
+              <label
+                htmlFor="settings-display-name"
+                className="mb-1 block text-sm font-medium text-slate-700"
+              >
+                Display name
+              </label>
               <input
+                id="settings-display-name"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
@@ -113,8 +119,14 @@ export default function Settings() {
 
           <form onSubmit={handleGenerateToken} className="mb-4 flex items-end gap-3">
             <div className="flex-1">
-              <label className="mb-1 block text-sm font-medium text-slate-700">Label</label>
+              <label
+                htmlFor="ingest-token-label"
+                className="mb-1 block text-sm font-medium text-slate-700"
+              >
+                Label
+              </label>
               <input
+                id="ingest-token-label"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"

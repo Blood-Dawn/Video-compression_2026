@@ -14,9 +14,8 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
 if (!url || !anonKey) {
   // Fail loudly in dev rather than silently rendering a broken app.
-  // eslint-disable-next-line no-console
   console.error(
-    "Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY. Copy web/.env.example to web/.env and fill them in from your Supabase project's Settings -> API page."
+    "Missing VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY. Copy web/.env.example to web/.env and fill them in from your Supabase project's Settings -> API page.",
   );
 }
 

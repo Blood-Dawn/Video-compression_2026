@@ -63,7 +63,10 @@ export default function Login() {
           </Button>
         </form>
         <p className="mt-4 text-center text-sm text-slate-500">
-          No account yet? <Link to="/signup" className="text-brand-600 hover:underline">Sign up</Link>
+          No account yet?{" "}
+          <Link to="/signup" className="text-brand-600 hover:underline">
+            Sign up
+          </Link>
         </p>
       </Card>
     </div>

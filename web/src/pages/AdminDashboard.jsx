@@ -60,7 +60,9 @@ export default function AdminDashboard() {
                 {users.map((u) => (
                   <tr key={u.id} className="border-b border-slate-100 last:border-0">
                     <td className="py-2 pr-4 text-sm text-slate-700">{u.display_name}</td>
-                    <td className="py-2 pr-4"><RoleBadge role={u.role} /></td>
+                    <td className="py-2 pr-4">
+                      <RoleBadge role={u.role} />
+                    </td>
                     <td className="py-2 text-sm text-slate-400">
                       {new Date(u.created_at).toLocaleDateString()}
                     </td>

@@ -41,7 +41,7 @@ export default function Signup() {
       <Card className="w-full max-w-sm p-8">
         <h1 className="mb-1 text-xl font-semibold text-slate-900">Create your account</h1>
         <p className="mb-6 text-sm text-slate-500">
-          New accounts start as an "operator" and only ever see their own jobs.
+          New accounts start as an &quot;operator&quot; and only ever see their own jobs.
         </p>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -80,7 +80,10 @@ export default function Signup() {
           </Button>
         </form>
         <p className="mt-4 text-center text-sm text-slate-500">
-          Already have an account? <Link to="/login" className="text-brand-600 hover:underline">Sign in</Link>
+          Already have an account?{" "}
+          <Link to="/login" className="text-brand-600 hover:underline">
+            Sign in
+          </Link>
         </p>
       </Card>
     </div>

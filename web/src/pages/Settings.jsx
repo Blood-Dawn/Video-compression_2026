@@ -8,7 +8,9 @@ function randomSecret() {
   // 32 bytes of crypto-quality randomness, hex-encoded — same entropy class
   // as SVCS's own device tokens (src/gui/device_tokens.py: 256-bit).
   const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 // Supabase's Edge Function invocation URL: <project>.functions.supabase.co/<fn>.
@@ -89,7 +91,9 @@ export default function Settings() {
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
               />
             </div>
-            <Button type="submit" disabled={savingName}>Save</Button>
+            <Button type="submit" disabled={savingName}>
+              Save
+            </Button>
           </form>
           {nameNotice && <p className="mt-2 text-sm text-slate-500">{nameNotice}</p>}
         </Card>
@@ -99,8 +103,8 @@ export default function Settings() {
         <h1 className="mb-1 text-lg font-semibold text-slate-900">Connect a desktop app</h1>
         <p className="mb-4 text-sm text-slate-500">
           In the SVCS desktop app: Settings → Webhook. Turn it on, paste the URL below into
-          "Webhook URL", and paste the generated secret into "Secret". Every finished job then
-          syncs here automatically — nothing else in the desktop app changes.
+          &quot;Webhook URL&quot;, and paste the generated secret into &quot;Secret&quot;. Every
+          finished job then syncs here automatically — nothing else in the desktop app changes.
         </p>
         <Card className="p-4">
           <div className="mb-4 rounded-md bg-slate-50 p-3 font-mono text-sm text-slate-700">
@@ -122,7 +126,7 @@ export default function Settings() {
           {newSecret && (
             <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3">
               <p className="mb-1 text-sm font-medium text-amber-800">
-                Copy this now — paste it into the desktop app's Webhook secret field.
+                Copy this now — paste it into the desktop app&apos;s Webhook secret field.
               </p>
               <code className="break-all text-sm text-amber-900">{newSecret}</code>
             </div>

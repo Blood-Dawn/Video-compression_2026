@@ -31,7 +31,9 @@ export default function JobRow({ job, ownerLabel }) {
         {job.ended_at ? new Date(job.ended_at).toLocaleString() : "—"}
       </td>
       <td className="py-2 pr-4">
-        <span className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[job.status] || ""}`}>
+        <span
+          className={`rounded px-2 py-0.5 text-xs font-medium ${STATUS_STYLES[job.status] || ""}`}
+        >
           {job.status}
         </span>
       </td>

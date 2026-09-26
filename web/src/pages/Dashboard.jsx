@@ -35,9 +35,7 @@ export default function Dashboard() {
 
   return (
     <div>
-      <h1 className="mb-1 text-lg font-semibold text-slate-900">
-        Your compression jobs
-      </h1>
+      <h1 className="mb-1 text-lg font-semibold text-slate-900">Your compression jobs</h1>
       <p className="mb-6 text-sm text-slate-500">
         Synced automatically from the SVCS desktop app on{" "}
         {profile?.display_name ? `${profile.display_name}'s` : "your"} machine(s), once you point

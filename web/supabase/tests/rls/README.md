@@ -22,32 +22,32 @@ ships), applies the real `web/supabase/schema.sql` unmodified, then runs
 
 Against real Postgres RLS enforcement (not a read of the policy text):
 
-* An operator can only ever see their own `jobs` rows, including when they
+- An operator can only ever see their own `jobs` rows, including when they
   name another user's `user_id` directly in the `WHERE` clause.
-* An admin sees every `jobs` row and every `profiles` row.
-* A guest sees nothing at all: not their own `jobs` rows, not their own
+- An admin sees every `jobs` row and every `profiles` row.
+- A guest sees nothing at all: not their own `jobs` rows, not their own
   `ingest_tokens` rows, not other `profiles` rows, and cannot insert an
   `ingest_tokens` row either. This is the deliberate MVP scope from
   `docs/plans/WEB-DASHBOARD-PLAN.md` section 3 item 5, not an oversight.
-* A user cannot escalate their own `role` to `admin` through the
+- A user cannot escalate their own `role` to `admin` through the
   `profiles` update policy, even though the `USING`/`WITH CHECK` clause on
   that policy alone does not stop it (this was a real, reproduced hole in
   the draft - see `web/SECURITY.md` SVCS-WEB-002 - fixed with a
   column-level `GRANT`, not by trying to make RLS express a column
   restriction it cannot express).
-* A user cannot touch another user's `profiles` row at all, not even a
+- A user cannot touch another user's `profiles` row at all, not even a
   no-op update.
-* A user cannot re-read their own `ingest_tokens.secret` after generating
+- A user cannot re-read their own `ingest_tokens.secret` after generating
   it, even though the row-level policy alone would allow it (also a real,
   reproduced hole - SVCS-WEB-003 - fixed the same way, with a column-level
   `GRANT`).
-* `anon` (not signed in) sees nothing in any of the three tables.
-* An authenticated user cannot `INSERT` a `jobs` row directly, despite the
+- `anon` (not signed in) sees nothing in any of the three tables.
+- An authenticated user cannot `INSERT` a `jobs` row directly, despite the
   broad table-level `INSERT` grant `authenticated` has by Supabase
   default - no policy grants it, so it is refused.
-* `service_role` (what the ingest-job Edge Function authenticates as)
+- `service_role` (what the ingest-job Edge Function authenticates as)
   bypasses RLS entirely, as intended.
-* `admin_set_role()` refuses a non-admin caller (including a caller trying
+- `admin_set_role()` refuses a non-admin caller (including a caller trying
   to promote themselves) and rejects an invalid role string, and actually
   performs the change for a real admin caller - this is the only
   remaining path to changing a role at all now that direct `UPDATE` of the
@@ -63,15 +63,15 @@ real project.
 
 ## What this does NOT prove
 
-* It does not exercise Supabase Auth itself (email/password sign-up, JWT
+- It does not exercise Supabase Auth itself (email/password sign-up, JWT
   issuance, session refresh) - only the SQL-level RLS policies and column
   grants that `schema.sql` defines. `auth.uid()` here is a stand-in
   function reading a session-local setting, not real JWT verification.
-* It does not exercise PostgREST (the actual HTTP layer a real Supabase
+- It does not exercise PostgREST (the actual HTTP layer a real Supabase
   project puts in front of Postgres) - only direct SQL role-switching.
   PostgREST is what actually turns a verified JWT's `sub` claim into the
   `request.jwt.claim.sub` setting this harness sets by hand.
-* It has never been run against the live Supabase project
+- It has never been run against the live Supabase project
   (`nqgjrwcumdlpqudmzdcj.supabase.co`) mentioned in the task instructions -
   only against a local, disposable Postgres 16 instance. Running it there
   would require either the project's Postgres connection string (not just

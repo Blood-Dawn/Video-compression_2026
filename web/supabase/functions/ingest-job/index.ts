@@ -54,7 +54,10 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 // that is the one entry here worth trusting.
 function clientIp(req: Request): string {
   const xff = req.headers.get("x-forwarded-for") || "";
-  const parts = xff.split(",").map((s) => s.trim()).filter(Boolean);
+  const parts = xff
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   if (parts.length > 0) return parts[parts.length - 1];
   return "unknown";
 }
@@ -144,8 +147,7 @@ Deno.serve(async (req) => {
   }
 
   const entry = payload.data ?? {};
-  const toIso = (v: unknown) =>
-    typeof v === "number" ? new Date(v * 1000).toISOString() : null;
+  const toIso = (v: unknown) => (typeof v === "number" ? new Date(v * 1000).toISOString() : null);
 
   const { error: insertError } = await supabase.from("jobs").insert({
     user_id: match.userId,

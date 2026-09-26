@@ -17,16 +17,16 @@ Netlify hosts a static site (this React app) and can run short-lived
 serverless functions, both with hard execution-time and memory limits.
 Neither can run a long-lived compression pipeline. So the architecture is:
 
-* the desktop app keeps compressing video and keeps its own local job
+- the desktop app keeps compressing video and keeps its own local job
   history exactly as it does today;
-* it POSTs a small JSON summary of each finished job (not the video
+- it POSTs a small JSON summary of each finished job (not the video
   itself) to a Supabase Edge Function whenever one finishes, using the
   webhook feature it already has (Settings → Webhook — no code changes
   needed in the desktop app, just a URL and a secret);
-* that Edge Function verifies the request really came from a known
+- that Edge Function verifies the request really came from a known
   desktop install and writes one row into a `jobs` table, tagged with
   that install's owner;
-* this web app reads that table straight from the browser through
+- this web app reads that table straight from the browser through
   Supabase's client, and Postgres RLS (not this app's code) makes sure a
   signed-in user only ever sees their own rows unless they're an admin.
 
@@ -77,16 +77,16 @@ npm run dev
 
 ## What this is not (yet)
 
-* No video files are uploaded anywhere — only job metadata (name, size
+- No video files are uploaded anywhere — only job metadata (name, size
   before/after, duration, status). Hosting full video would have real
   storage and bandwidth cost; that's a deliberate later decision, not an
   oversight.
-* Guests currently see nothing (the safe default). If you want a shared
+- Guests currently see nothing (the safe default). If you want a shared
   read-only demo view for guests, add a policy for that explicitly in
   `supabase/schema.sql` rather than loosening the operator policy.
-* Roles are changed manually in the SQL Editor for now — no admin UI for
+- Roles are changed manually in the SQL Editor for now — no admin UI for
   promoting/demoting users yet.
-* This only ingests "job" events (job_history.py, one row per finished
+- This only ingests "job" events (job_history.py, one row per finished
   compression run). SVCS's behavior/motion events go through the same
   webhook but aren't stored here yet — the Edge Function accepts and
   no-ops on them (see `supabase/functions/ingest-job/index.ts`).

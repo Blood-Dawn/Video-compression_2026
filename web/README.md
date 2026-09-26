@@ -75,18 +75,54 @@ cp .env.example .env   # then fill in the two Supabase values
 npm run dev
 ```
 
-## What this is not (yet)
+## Design decisions (plan section 3, items 5, 8, 9)
 
-- No video files are uploaded anywhere — only job metadata (name, size
-  before/after, duration, status). Hosting full video would have real
-  storage and bandwidth cost; that's a deliberate later decision, not an
-  oversight.
-- Guests currently see nothing (the safe default). If you want a shared
-  read-only demo view for guests, add a policy for that explicitly in
-  `supabase/schema.sql` rather than loosening the operator policy.
-- Roles are changed manually in the SQL Editor for now — no admin UI for
-  promoting/demoting users yet.
-- This only ingests "job" events (job_history.py, one row per finished
-  compression run). SVCS's behavior/motion events go through the same
-  webhook but aren't stored here yet — the Edge Function accepts and
-  no-ops on them (see `supabase/functions/ingest-job/index.ts`).
+These three were flagged in `docs/plans/WEB-DASHBOARD-PLAN.md` as things
+the draft left as an accidental default rather than an actual decision.
+Recorded here now that each has been deliberately decided:
+
+- **Guest role scope: guests see nothing at all, not even their own
+  data, until an explicit share feature exists.** Not "the safe default
+  that happened to fall out of RLS" — the draft's policies didn't
+  actually check role at all, so a guest with their own connected
+  desktop app and synced jobs would have seen exactly what an operator
+  sees. Fixed with an explicit `current_role() <> 'guest'` check on the
+  `jobs` and `ingest_tokens` policies (see `supabase/schema.sql` and the
+  adversarial tests in `supabase/tests/rls/01_adversarial.sql`), so a
+  guest cannot read or create anything, full stop, in this MVP. A future
+  "share this job/view with a guest" feature needs its own explicit
+  policy when it's built — never by loosening the operator policy to
+  quietly include guests.
+- **Non-job events (behavior/motion) are out of scope for v1, by
+  decision, not by silent no-op.** `event_webhook.py` sends both `"job"`
+  and other event kinds through the same webhook. The ingest-job Edge
+  Function accepts non-`"job"` events with a 200 (so the desktop app's
+  webhook delivery doesn't retry forever) but does not store them. This
+  is deliberate: behavior events carry per-frame labels/geometry and
+  camera identifiers that haven't been reviewed for multi-user exposure
+  the way job summaries have, and the desktop app already has its own
+  notification paths for those (`push_notify.py`, the in-app UI). If
+  behavior-event history in the dashboard is wanted later, it needs its
+  own table, its own RLS policies, and its own adversarial test pass —
+  not a quiet addition to the jobs table.
+- **No media hosting.** Only text metadata ever reaches Supabase (name,
+  sizes, timing, status) — never the video itself, never a thumbnail.
+  Supabase Storage has real per-GB storage and egress cost that scales
+  with exactly the kind of usage this dashboard would otherwise
+  encourage, and video/thumbnail bytes raise the same "who else can see
+  this" questions the RLS work above exists to answer carefully rather
+  than by default. Revisiting this is a deliberate future decision that
+  needs its own storage-quota and access-policy design, not a
+  side effect of adding an `image` column somewhere.
+
+## Admin role management
+
+Promoting or demoting a user's role goes through the `admin_set_role(
+target_user uuid, new_role text)` Postgres function (see
+`supabase/schema.sql`), callable via
+`supabase.rpc('admin_set_role', {...})` from an admin's signed-in
+session — never a direct `UPDATE` of `profiles.role`, which is no longer
+possible even for a user's own row (see `web/SECURITY.md`, SVCS-WEB-002).
+The Admin dashboard's user list has a role picker wired to this RPC (see
+`src/pages/AdminDashboard.jsx`), replacing the manual-SQL-editor-only
+path plan section 3 item 6 flagged.

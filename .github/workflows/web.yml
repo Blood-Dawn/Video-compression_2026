@@ -86,6 +86,33 @@ jobs:
       - name: Install Playwright's Chromium
         run: npx playwright install --with-deps chromium
 
+      - name: Build
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: https://smoke-test-project.supabase.co
+          VITE_SUPABASE_ANON_KEY: smoke-test-anon-key
+
+      - name: Start the preview server
+        run: |
+          nohup npm run preview -- --port 4317 --strictPort > preview.log 2>&1 &
+          echo "started preview server, pid $!"
+
+      - name: Wait for the preview server
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sS -o /dev/null -w "%{http_code}" http://127.0.0.1:4317/ | grep -q 200; then
+              echo "server is up after ${i}s"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "server never came up; preview.log:"
+          cat preview.log
+          exit 1
+        env:
+          VITE_SUPABASE_URL: https://smoke-test-project.supabase.co
+          VITE_SUPABASE_ANON_KEY: smoke-test-anon-key
+
       - name: Run the smoke test
         run: npm run test:e2e
 

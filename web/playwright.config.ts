@@ -12,15 +12,22 @@ import { defineConfig, devices } from "@playwright/test";
 //
 // Build+preview rather than the dev server: the dev server's first request
 // after a fresh `npm ci` can trigger Vite's on-demand dependency
-// pre-bundling (esbuild scanning node_modules), which is usually fast but
-// was observed to occasionally stall past Playwright's webServer timeout
-// under CI's shared-CPU runners - a real, reproduced flake (`CI=true npx
-// playwright test` hung locally on one run and passed instantly on the
-// next, with nothing about the test or the code having changed). A prebuilt
-// `dist/` that `vite preview` just serves as static files removes that
-// on-demand compilation step entirely, which is also arguably a MORE
-// faithful smoke test: it exercises the same build Netlify actually
-// deploys, not a dev-only code path.
+// pre-bundling, which is usually fast but is one more variable-latency
+// step than build+preview needs. It is also a more faithful smoke test:
+// it exercises the same build Netlify actually deploys, not a dev-only
+// code path.
+//
+// reuseExistingServer is unconditionally true: in CI (see
+// .github/workflows/web.yml's e2e-smoke job) the workflow itself builds,
+// starts `vite preview`, and waits for it to answer over plain curl in a
+// separate step BEFORE running this test - with the server's real stdout
+// going straight to the job log, not hidden behind Playwright's own
+// webServer piping, which is what let two earlier "config.webServer timed
+// out" CI failures happen with literally nothing else in the log to go
+// on. Playwright here just finds that already-running server via this
+// flag and never spawns its own in CI. A local ad hoc `npm run test:e2e`
+// with nothing already running still works exactly as before: the
+// `command` below still starts one when the URL isn't already reachable.
 
 // The sandbox this was developed in pre-installs one specific Chromium
 // build that does not necessarily match whatever revision the installed
@@ -57,7 +64,7 @@ export default defineConfig({
   webServer: {
     command: "npm run build && npm run preview -- --port 4317 --strictPort",
     url: "http://127.0.0.1:4317",
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: true,
     timeout: 120_000, // the build step itself is included in this wait
     env: {
       VITE_SUPABASE_URL: "https://smoke-test-project.supabase.co",

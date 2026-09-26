@@ -238,3 +238,8 @@ mobile/android/**/build/
 mobile/android/local.properties
 mobile/android/**/*.iml
 mobile/android/build_log.txt
+
+# The web/ dashboard's Supabase Edge Function is genuine TypeScript, not an
+# ffmpeg .ts segment - un-ignore it specifically rather than loosen the
+# blanket *.ts rule above.
+!web/supabase/functions/**/*.ts

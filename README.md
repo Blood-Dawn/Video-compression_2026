@@ -20,6 +20,7 @@ This repository holds three things:
 | **Desktop app** (Python) | A local web dashboard that watches camera footage, keeps moving people and vehicles at high quality, and compresses the static background hard. The graded capstone deliverable. | v2.2.0-beta, Windows installer |
 | **Android compressor** (Kotlin) | Compresses videos on the phone with its hardware encoder: quality presets, app size limits (Discord, WhatsApp, email...), on-device Smart Compress, a history of saved jobs. Fully offline. | v1-beta (1.1.0-beta) APK |
 | **Android Server Mode** | The same app, paired to a desktop install: browse its library, watch live cameras, get event alerts. Optional. | Included in the APK |
+| **SVCS Web** (React, [`web/`](web/)) | An optional, separate multi-user cloud companion: real accounts and roles (admin/operator/guest) via Supabase Auth + Postgres RLS, showing job history the desktop app syncs up through its existing outbound webhook. Never runs the actual compression, and the desktop/Android apps above work identically with or without it — this is the one opt-in exception to "no account and no cloud." Kheiven's own initiative, outside the team's Fall 2026 roadmap. | In review — see [`docs/plans/WEB-DASHBOARD-PLAN.md`](docs/plans/WEB-DASHBOARD-PLAN.md) and [`web/README.md`](web/README.md) |
 
 ## Download
 

@@ -6,18 +6,33 @@ than a fix a contributor can just make.
 
 ## Open
 
-### SVCS Web companion dashboard (new idea, unreviewed draft exists)
+### SVCS Web companion dashboard (reviewed and adversarially tested; not yet merged or live)
 
 Kheiven's own initiative, outside the Fall 2026 roadmap the rest of the team
 is executing: a multi-user cloud dashboard (Supabase Auth + Postgres RLS for
 admin/operator/guest roles, deployed to Netlify) so more than one person can
 each see their own synced job history. Full plan, what's already sketched,
 and what real engineering is still needed:
-`docs/plans/WEB-DASHBOARD-PLAN.md`. An unreviewed, untested draft scaffold
-exists on branch `draft/web-dashboard` - do not treat it as done or as
-something to merge as-is. Also needs a Supabase project and a Netlify site
-created by hand (account creation can't be automated) before any of it can
-go live.
+`docs/plans/WEB-DASHBOARD-PLAN.md`.
+
+Status as of this entry: the unreviewed `draft/web-dashboard` scaffold has
+been raided, rewritten, and adversarially tested on branch
+`claude/svcs-web-dashboard` (a PR against `mobile` follows this commit). What
+changed: three real RLS holes were found and fixed against a real local
+Postgres, not just read and assumed correct (an admin-policy infinite
+recursion bug, a role self-escalation path, and a secret-readback gap — see
+`web/SECURITY.md`); rate limiting, ESLint/Prettier, a GitHub Actions CI
+workflow, an admin role-management UI, and a Playwright smoke test were all
+added; a react-router-dom CVE was patched. See `web/README.md` and
+`web/SECURITY.md` for the current, real state, including what has explicitly
+NOT been tested yet (the live Supabase project itself, the Edge Function
+under a real Deno runtime, an external network penetration test).
+
+Still needed before this is genuinely production-ready: a human reviewing
+and merging the PR, deploying the `ingest-job` Edge Function to the live
+project (needs Supabase CLI access this session did not use), and pointing
+Netlify's deploy at the merged branch instead of `draft/web-dashboard`.
+Nothing here should be treated as done or live yet.
 
 ### Code signing cert (blocks: a signed v2.2.0-beta or later release)
 

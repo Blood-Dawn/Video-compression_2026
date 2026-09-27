@@ -19,7 +19,7 @@
       the dead background hard - the same useful footage at a fraction of the size.
     </p>
     <div class="cta">
-      <a class="btn-download" href="https://github.com/Blood-Dawn/Video-compression_2026/releases/tag/v2.2.0-beta">
+      <a class="btn-download" href="https://github.com/Blood-Dawn/Video-compression_2026/releases/latest">
         Download for Windows
       </a>
       <a class="btn-secondary" href="https://github.com/Blood-Dawn/Video-compression_2026">
@@ -70,7 +70,7 @@ irm https://raw.githubusercontent.com/Blood-Dawn/Video-compression_2026/main/ins
       <h3>Or download the installer</h3>
       <p>
         The Windows installer is attached to the
-        <a href="https://github.com/Blood-Dawn/Video-compression_2026/releases/tag/v2.2.0-beta">current desktop release</a>
+        <a href="https://github.com/Blood-Dawn/Video-compression_2026/releases/latest">current desktop release</a>
         (<code>SVCS-Setup-*.exe</code>). The Android app has its own releases on the
         <a href="https://github.com/Blood-Dawn/Video-compression_2026/releases">Releases page</a>.
       </p>
@@ -81,10 +81,10 @@ irm https://raw.githubusercontent.com/Blood-Dawn/Video-compression_2026/main/ins
         After downloading, check the file's hash matches:
       </p>
       <pre><code># Windows (PowerShell)
-Get-FileHash .\SVCS-Setup-2.1.0.exe -Algorithm SHA256
+Get-FileHash .\SVCS-Setup-<version>.exe -Algorithm SHA256
 
 # Linux / macOS
-sha256sum SVCS-Setup-2.1.0.exe</code></pre>
+sha256sum SVCS-Setup-<version>.exe</code></pre>
       <p class="note">
         Compare the output against the value in <code>SHA256SUMS.txt</code> for
         that release. If they don't match, do not run the installer.

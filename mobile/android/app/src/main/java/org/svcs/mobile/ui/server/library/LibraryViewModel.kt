@@ -12,13 +12,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import android.content.ContentResolver
 import android.net.Uri
-import android.provider.OpenableColumns
-import java.security.MessageDigest
-import org.svcs.mobile.net.ChunkResult
 import org.svcs.mobile.net.Fetched
 import org.svcs.mobile.net.LibraryItem
 import org.svcs.mobile.net.StartCompressResult
 import org.svcs.mobile.net.SvcsApiClient
+import org.svcs.mobile.upload.ServerUploads
+import org.svcs.mobile.upload.UploadUpdate
 
 data class LibraryState(
     val items: List<LibraryItem> = emptyList(),
@@ -57,11 +56,39 @@ data class LibraryState(
  */
 class LibraryViewModel(
     private val api: SvcsApiClient?,
-    /** 0.8.0: whether an upload auto-starts a compress (MORE toggle). */
-    private val autoCompress: suspend () -> Boolean = { true },
+    /**
+     * Fall 4.3: phone-to-server uploads run in UploadWorker (WorkManager), not
+     * in this ViewModel, so they survive the app being killed. Null in tests
+     * that do not exercise uploads. The auto-compress toggle is now read by
+     * the worker itself when an upload finishes.
+     */
+    private val uploads: ServerUploads? = null,
     /** Overridden in tests so a fetch resolves on the test's virtual clock. */
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ViewModel() {
+
+    /**
+     * True once this ViewModel has seen the upload queued or running. A
+     * finished upload from days ago is still in WorkManager's history; its
+     * result should not reappear every time LIBRARY opens.
+     */
+    private var sawActiveUpload = false
+
+    private fun applyUpload(u: UploadUpdate) {
+        if (u.active) sawActiveUpload = true else if (!sawActiveUpload) return
+        _state.update { s ->
+            when (u.phase) {
+                UploadUpdate.Phase.WAITING -> s.copy(compressing = true,
+                    actionMessage = "Upload queued; it starts when the phone is online.")
+                UploadUpdate.Phase.RUNNING -> s.copy(compressing = true,
+                    actionMessage = if (u.percent >= 0) "Uploading: ${u.percent}%" else "Connecting to the server...")
+                UploadUpdate.Phase.SUCCEEDED,
+                UploadUpdate.Phase.FAILED,
+                UploadUpdate.Phase.CANCELLED -> s.copy(compressing = false, actionMessage = u.message)
+            }
+        }
+        if (!u.active) sawActiveUpload = false
+    }
 
     /** 0.8.0: open the INFO dialog for one clip and fetch its metrics. */
     fun showMeta(item: LibraryItem) {
@@ -88,6 +115,14 @@ class LibraryViewModel(
 
     private val _state = MutableStateFlow(LibraryState())
     val state: StateFlow<LibraryState> = _state.asStateFlow()
+
+    init {
+        // Re-attaches to an upload that was already running when the process
+        // died: WorkManager reruns it, and its progress shows up here again.
+        uploads?.let { u ->
+            viewModelScope.launch { u.updates().collect { it?.let(::applyUpload) } }
+        }
+    }
 
     /** Guards against the scroll listener firing a second load mid-flight. */
     private var inFlight = false
@@ -200,113 +235,36 @@ class LibraryViewModel(
     }
 
     /**
-     * R6 Track B: upload a gallery video to the server, resumably.
+     * R6 Track B, moved onto WorkManager in Fall 4.3: upload a gallery video
+     * to the server, resumably.
      *
-     * The whole-file sha256 is computed in a first local pass (cheap, local
-     * I/O), then chunks stream in CHUNK-sized pieces; a 409 from the server
-     * carries the REAL offset after any drop and the loop reseeks - that
-     * reseek is the resume protocol working, not an error. Runs in the
-     * ViewModel scope, so it survives tab switches; a WorkManager wrapper for
-     * process-death survival is the documented next step, and the server
-     * protocol already supports it.
+     * This only makes an app-private copy of the pick (while the picker's read
+     * grant is still valid) and queues UploadWorker. The chunk loop, resume
+     * from the server's offset, retries, and the auto-compress hand-off all
+     * live in UploadEngine now; progress comes back through [applyUpload].
      */
     fun uploadFromPhone(resolver: ContentResolver, uri: Uri) {
-        val client = api ?: return
+        val u = uploads ?: run {
+            _state.update { it.copy(actionMessage = "Uploads are not available here.") }
+            return
+        }
         if (_state.value.compressing) return
         _state.update { it.copy(compressing = true, actionMessage = "Preparing upload...") }
+        // Marked before queuing so even a tiny file that finishes before its
+        // first progress report still gets its result shown and clears the
+        // buttons. Safe: WorkManager only emits when the queue changes, so no
+        // stale result from an older upload arrives in between.
+        sawActiveUpload = true
         viewModelScope.launch {
-            val result = withContext(ioDispatcher) {
-                runCatching { doUpload(client, resolver, uri) }
+            val error = withContext(ioDispatcher) {
+                runCatching { u.start(resolver, uri) }
                     .getOrElse { "Upload failed: ${it.message ?: it.javaClass.simpleName}" }
             }
-            _state.update { it.copy(compressing = false, actionMessage = result) }
-        }
-    }
-
-    private suspend fun doUpload(client: SvcsApiClient, resolver: ContentResolver, uri: Uri): String {
-        var name = "phone_upload.mp4"
-        var size = -1L
-        resolver.query(uri, null, null, null, null)?.use { c ->
-            if (c.moveToFirst()) {
-                val ni = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                val si = c.getColumnIndex(OpenableColumns.SIZE)
-                if (ni >= 0) c.getString(ni)?.let { name = it }
-                if (si >= 0) size = c.getLong(si)
+            if (error != null) {
+                sawActiveUpload = false
+                _state.update { it.copy(compressing = false, actionMessage = error) }
             }
-        }
-        if (size <= 0) return "Could not read that file's size."
-
-        // Pass 1: whole-file hash, locally.
-        val md = MessageDigest.getInstance("SHA-256")
-        resolver.openInputStream(uri)?.use { ins ->
-            val buf = ByteArray(1024 * 1024)
-            while (true) {
-                val n = ins.read(buf)
-                if (n <= 0) break
-                md.update(buf, 0, n)
-            }
-        } ?: return "Could not open that file."
-        val sha = md.digest().joinToString("") { "%02x".format(it) }
-
-        val begun = client.uploadBegin(name, size)
-        if (begun !is Fetched.Ok) return "Upload refused: " +
-            ((begun as? Fetched.Failed)?.detail ?: "re-pair under MORE")
-        val uploadId = begun.value.uploadId
-        val chunk = begun.value.chunkHint.coerceIn(64 * 1024, 4 * 1024 * 1024)
-
-        var offset = 0L
-        var retries = 0
-        while (offset < size) {
-            val sent = resolver.openInputStream(uri)?.use { ins ->
-                var skipped = 0L
-                while (skipped < offset) {
-                    val s = ins.skip(offset - skipped)
-                    if (s <= 0) break
-                    skipped += s
-                }
-                val buf = ByteArray(chunk)
-                var filled = 0
-                while (filled < chunk) {
-                    val n = ins.read(buf, filled, chunk - filled)
-                    if (n <= 0) break
-                    filled += n
-                }
-                if (filled <= 0) return@use null
-                client.uploadChunk(uploadId, offset, buf.copyOf(filled))
-            } ?: return "Could not reopen the file at offset $offset."
-            when (sent) {
-                is ChunkResult.Ok -> {
-                    offset = sent.offset
-                    retries = 0
-                    val pct = (offset * 100 / size).toInt()
-                    _state.update { it.copy(actionMessage = "Uploading $name: $pct%") }
-                }
-                is ChunkResult.Conflict -> offset = sent.offset  // resume point
-                ChunkResult.Unauthorized ->
-                    return "The server rejected this device's token. Re-pair under MORE."
-                is ChunkResult.Failed -> {
-                    retries += 1
-                    if (retries > 5) return "Upload failed after retries: ${sent.detail}"
-                    val st = client.uploadStatus(uploadId)
-                    if (st is Fetched.Ok) offset = st.value.offset
-                }
-            }
-        }
-        val fin = client.uploadFinish(uploadId, sha)
-        if (fin !is Fetched.Ok) return "Finalize failed: " +
-            ((fin as? Fetched.Failed)?.detail ?: "re-pair under MORE")
-        // 0.8.0: auto-compress is a CHOICE (MORE toggle), not a law. Off means
-        // the file just lands in the uploads folder for later.
-        if (!autoCompress()) {
-            return "Uploaded ${fin.value.filename}. Auto-compress is off; " +
-                "compress it whenever you are ready."
-        }
-        val started = client.startCompress(fin.value.path, mode = "mode1")
-        return if (started is StartCompressResult.Started) {
-            "Uploaded ${fin.value.filename}; compressing on the server (mode1)."
-        } else {
-            "Uploaded ${fin.value.filename}. Start the compress from the desktop " +
-                "or when the server is free."
+            // Otherwise queued: the worker's updates take over the message.
         }
     }
 

@@ -72,6 +72,13 @@ compress/              the on-device engine (no UI)
 detect/                Smart Compress: ObjectDetector (LiteRT), SmartCompressAnalyzer
 data/TokenStore.kt     server URL + device token (AES-GCM under an Android Keystore key)
 net/                   Server Mode REST client (OkHttp) and models
+upload/                phone-to-server upload that survives the app being killed
+  UploadWorker.kt        WorkManager job, dataSync foreground service.
+                         Do not rename or move: same reason as CompressionWorker.
+  UploadEngine.kt        the resumable chunk loop, no Android deps (unit-tested)
+  ServerUploads.kt       copies the pick into app storage, queues the worker,
+                         reports progress to LIBRARY
+  DataStoreCheckpointStore.kt  upload_id + offset hint across process death
 
 ui/
   SvcsApp.kt             tabs and navigation
@@ -88,7 +95,8 @@ ui/
 
 Tests mirror the packages under `app/src/test/`: pure logic (presets,
 formatting, probing, SAVED's filter/sort) plus Server Mode ViewModels against
-`net/FakeSvcsApi.kt`. `app/src/androidTest/` holds the on-device TokenStore
+`net/FakeSvcsApi.kt`, and `upload/UploadEngineTest.kt` driving the upload loop
+against an in-memory fake server. `app/src/androidTest/` holds the on-device TokenStore
 persistence test.
 
 ## Things that are easy to get wrong

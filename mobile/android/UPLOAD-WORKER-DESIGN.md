@@ -1,7 +1,21 @@
 # Upload Worker Design: moving the chunked upload off viewModelScope
 
 Fall 3.3. Design doc for Jorge (or whoever implements this next) to build
-against; nothing in this doc has been implemented yet.
+against.
+
+**Status: implemented in Fall 4.3** (`app/src/main/java/org/svcs/mobile/upload/`).
+Differences from the text below, on purpose:
+
+- One fixed unique work name (`server_upload`) instead of `upload-$id`. The
+  app runs one upload at a time (section "Out of scope for v1"), and a fixed
+  name lets LIBRARY re-attach to a running upload after process death without
+  having to persist the tracking id anywhere else.
+- The chunk loop lives in `UploadEngine`, a plain Kotlin class with no Android
+  dependencies, so the resume logic in sections 2 and 6 is covered by JVM
+  tests without `TestListenableWorkerBuilder`. `UploadWorker` is a thin shell
+  around it.
+- The whole-file SHA-256 is computed during the pick-time copy (section 3), so
+  a retry never re-reads a large file just to hash it again.
 
 ## The problem this solves
 

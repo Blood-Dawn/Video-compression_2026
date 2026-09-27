@@ -163,8 +163,8 @@ work) to week 4 rather than rushing the security testing.
 | 4.6 | Write browser tests for the EVENTS panel | Ashleyn | Rows render from a seeded events file; empty state verified | Not started |
 | 4.7 | Implement drag-to-draw for exclude rectangles and crossing lines | Riley | Zones round-trip through POST and GET with normalized coordinates intact | Not started |
 | 4.8 | Implement loiter zones and the SAVE and CLEAR actions | Riley | Full toolbar working, banner states that changes apply to the next run | Not started |
-| 4.9 | Implement `utils/event_webhook.py` with the SSRF guard | Victor | Events post to a configured URL, fire and forget, two second timeout | Not started |
-| 4.10 | Add the webhook configuration UI next to the push panel | Victor | Off by default, write-only secret field, refuses metadata endpoints | Not started |
+| 4.9 | Implement `utils/event_webhook.py` with the SSRF guard | Victor | Events post to a configured URL, fire and forget, two second timeout. Marked done 2026-09-27: duplicated 3.9/3.10, already Completed | Completed |
+| 4.10 | Add the webhook configuration UI next to the push panel | Victor | Off by default, write-only secret field, refuses metadata endpoints. Marked done 2026-09-27: UI already wired in src/gui | Completed |
 | 4.11 | Cut a mobile-only GitHub release: build and publish just the APK | Kheiven | A new GitHub Release exists tagged separately from desktop releases (e.g. `mobile-v0.9.0-beta`), carrying only the built `.apk` as its asset, no desktop installer | Complete Sep 22 |
 
 ### Week 5: September 28 to October 4

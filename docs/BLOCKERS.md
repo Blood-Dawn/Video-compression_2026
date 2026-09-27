@@ -20,7 +20,7 @@ been raided, rewritten, and adversarially tested on branch
 `claude/svcs-web-dashboard` (a PR against `mobile` follows this commit). What
 changed: three real RLS holes were found and fixed against a real local
 Postgres, not just read and assumed correct (an admin-policy infinite
-recursion bug, a role self-escalation path, and a secret-readback gap — see
+recursion bug, a role self-escalation path, and a secret-readback gap, see
 `web/SECURITY.md`); rate limiting, ESLint/Prettier, a GitHub Actions CI
 workflow, an admin role-management UI, and a Playwright smoke test were all
 added; a react-router-dom CVE was patched. See `web/README.md` and

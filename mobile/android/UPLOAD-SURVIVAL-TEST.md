@@ -51,14 +51,39 @@ cannot do: they cannot kill a process.
 
 | Check | Result | Evidence |
 |-------|--------|----------|
-| % when force-stopped | | screenshot |
-| First % after reopening | | screenshot |
-| Upload finished on its own | | screenshot of notification |
-| Size on server matches | | |
-| SHA-256 matches | | |
-| Single copy on server | | |
+| % when force-stopped | 43% | notification: "Uploading 1000000041.mp4" / "43% sent" (dumpsys notification) |
+| First % after reopening | not captured as a single frame; see notes | server log shows one begin and one finish for this upload, so it was the same session resuming, not a fresh one |
+| Upload finished on its own | yes | notification: "Uploaded 1000000041.mp4. Auto-compress is off; compress it whenever you are ready." |
+| Size on server matches | yes, 75187707 bytes both sides | `Get-FileHash`/`Get-Item` on the test clip and on `data/uploads/1000000041.mp4` |
+| SHA-256 matches | yes, 4709e82503d95ddd9c90cab8735573cdd77b07ecef2834cd8b077caf4548e542 both sides | `Get-FileHash -Algorithm SHA256` on both files |
+| Single copy on server | yes, one `1000000041.mp4`, no `_1`/`(1)` duplicate | directory listing of `data/uploads/` |
 
-Tested by: ____________    Date: ____________
-Device / emulator image: ____________
+Tested by: Kheiven D'Haiti (run end to end by Claude, at Kheiven's request, on Kheiven's dev machine)
+Date: 2026-09-27
+Device / emulator image: Android Emulator, AVD `svcs_test`, system image android-35 (Android 15) google_apis x86_64, network throttled to 3000:3000 kbps via `adb emu network speed`
 
 ## Notes / anything odd
+
+Ran this with the emulator, per the "Device" line in Setup above, since Jorge's
+own attempt at this had trouble and asked in the group chat for someone to run
+it. Automated end to end: paired the app with a locally minted device token,
+picked a 75,187,707-byte synthetic clip from the Photo Picker, force-stopped
+mid-transfer at 43%, reopened, and let it finish.
+
+The strongest evidence this was a real resume and not a restart-from-zero is
+the desktop's own log, not a screenshot: it shows exactly one
+`Chunked upload begun: 1000000041.mp4` line and exactly one
+`Chunked upload finished: 1000000041.mp4` line for the whole run. A
+restart-from-zero after the force-stop would have logged a second `begun`
+line with a new upload id for the same file name; it did not, so the resumed
+run reattached to the same upload the first run had started, which is exactly
+what UPLOAD-WORKER-DESIGN.md calls for.
+
+One thing worth a look, not a failure: right after the notification said
+"Uploaded," the finished file briefly showed up empty (0 bytes) at
+`outputs/uploads/1000000041.mp4` before settling at its final, correct
+location and size at `data/uploads/1000000041.mp4`. That reads as the
+server relocating a just-finished upload into the folder it treats as
+compressible input, which existed before this test and is unrelated to
+4.3/4.4, but it is a distinct step from the chunk-upload path this test
+covers and is not itself covered by anything in section 5.

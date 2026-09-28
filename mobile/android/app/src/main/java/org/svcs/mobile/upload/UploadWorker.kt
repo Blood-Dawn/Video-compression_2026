@@ -23,7 +23,9 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import java.io.File
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import org.svcs.mobile.data.TokenStore
 import org.svcs.mobile.net.SvcsApi
@@ -130,46 +132,62 @@ class UploadWorker(
 
         tryForeground(-1)
 
-        val store = TokenStore(applicationContext)
-        val url = store.serverUrl()
-        val token = store.token()
-        if (url.isNullOrBlank() || token.isNullOrBlank()) {
-            return fail("Not paired with a server any more. Pair under MORE, then upload again.", file, checkpoints)
-        }
-
-        val outcome = withContext(Dispatchers.IO) {
-            FileUploadSource(file).use { source ->
-                UploadEngine(
-                    api = SvcsApi(url, token),
-                    source = source,
-                    displayName = displayName,
-                    sha256 = sha,
-                    checkpoints = checkpoints,
-                    autoCompress = { store.autoCompressUpload() },
-                    onProgress = { pct ->
-                        setProgress(workDataOf(KEY_PROGRESS_PERCENT to pct))
-                        tryForeground(pct)
-                    },
-                    isStopped = { this@UploadWorker.isStopped },
-                ).run()
+        try {
+            val store = TokenStore(applicationContext)
+            val url = store.serverUrl()
+            val token = store.token()
+            if (url.isNullOrBlank() || token.isNullOrBlank()) {
+                return fail("Not paired with a server any more. Pair under MORE, then upload again.", file, checkpoints)
             }
-        }
 
-        return when (outcome) {
-            is UploadOutcome.Succeeded -> {
-                cleanup(file, checkpoints)
-                notifyDone("Upload finished", outcome.message)
-                Result.success(workDataOf(KEY_MESSAGE to outcome.message))
-            }
-            is UploadOutcome.Failed -> fail(outcome.message, file, checkpoints)
-            is UploadOutcome.RetryLater -> {
-                Log.i(TAG, "Run ${runAttemptCount + 1} will retry: ${outcome.reason}")
-                if (runAttemptCount + 1 >= MAX_RUN_ATTEMPTS) {
-                    fail("Upload gave up after $MAX_RUN_ATTEMPTS tries. ${outcome.reason}", file, checkpoints)
-                } else {
-                    Result.retry()
+            val outcome = withContext(Dispatchers.IO) {
+                FileUploadSource(file).use { source ->
+                    UploadEngine(
+                        api = SvcsApi(url, token),
+                        source = source,
+                        displayName = displayName,
+                        sha256 = sha,
+                        checkpoints = checkpoints,
+                        autoCompress = { store.autoCompressUpload() },
+                        onProgress = { pct ->
+                            setProgress(workDataOf(KEY_PROGRESS_PERCENT to pct))
+                            tryForeground(pct)
+                        },
+                        isStopped = { this@UploadWorker.isStopped },
+                    ).run()
                 }
             }
+
+            return when (outcome) {
+                is UploadOutcome.Succeeded -> {
+                    cleanup(file, checkpoints)
+                    notifyDone("Upload finished", outcome.message)
+                    Result.success(workDataOf(KEY_MESSAGE to outcome.message))
+                }
+                is UploadOutcome.Failed -> fail(outcome.message, file, checkpoints)
+                is UploadOutcome.RetryLater -> {
+                    Log.i(TAG, "Run ${runAttemptCount + 1} will retry: ${outcome.reason}")
+                    if (runAttemptCount + 1 >= MAX_RUN_ATTEMPTS) {
+                        fail("Upload gave up after $MAX_RUN_ATTEMPTS tries. ${outcome.reason}", file, checkpoints)
+                    } else {
+                        Result.retry()
+                    }
+                }
+            }
+        } catch (e: CancellationException) {
+            // WorkManager cancelled this run (Cancel tapped, constraints lost,
+            // the app uninstalled mid-upload). doWork() unwinds through this
+            // exception instead of returning a Result, so the cleanup() calls
+            // above never run. NonCancellable lets the suspend cleanup still
+            // execute on a job that is itself already cancelled.
+            withContext(NonCancellable) { cleanup(file, checkpoints) }
+            throw e
+        } catch (e: Exception) {
+            // A DataStore read (serverUrl/token/autoCompressUpload) or
+            // anything else unexpected from the engine must still end in
+            // fail(), or the staged copy and checkpoint are orphaned.
+            Log.w(TAG, "Upload run failed with an unexpected exception", e)
+            return fail(e.message ?: "The upload failed unexpectedly.", file, checkpoints)
         }
     }
 

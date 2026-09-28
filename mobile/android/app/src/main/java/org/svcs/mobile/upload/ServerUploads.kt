@@ -13,6 +13,8 @@ import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /** What LIBRARY shows about the one server upload (v1 runs one at a time). */
@@ -64,12 +66,19 @@ class WorkManagerServerUploads(context: Context) : ServerUploads {
         /** Room left on the phone after the copy, so staging an upload never
          *  fills the disk completely. */
         const val FREE_SPACE_MARGIN = 100L * 1024 * 1024
+
+        /** Serializes start(): without this, two overlapping calls can both
+         *  see no unfinished work, then both clear staging/checkpoints and
+         *  race to enqueue. ExistingWorkPolicy.KEEP only protects the enqueue
+         *  itself, not the check-and-clear before it. */
+        val startMutex = Mutex()
     }
 
     override suspend fun start(resolver: ContentResolver, uri: Uri): String? = withContext(Dispatchers.IO) {
+        startMutex.withLock {
         val existing = workManager.getWorkInfosForUniqueWork(UploadWorker.UNIQUE_WORK_NAME).get()
         if (existing.any { !it.state.isFinished }) {
-            return@withContext "An upload is already in progress. Wait for it to finish, or cancel it from the notification."
+            return@withLock "An upload is already in progress. Wait for it to finish, or cancel it from the notification."
         }
 
         var name = "phone_upload.mp4"
@@ -82,7 +91,7 @@ class WorkManagerServerUploads(context: Context) : ServerUploads {
                 if (si >= 0 && !c.isNull(si)) size = c.getLong(si)
             }
         }
-        if (size <= 0) return@withContext "Could not read that file's size."
+        if (size <= 0) return@withLock "Could not read that file's size."
 
         // Nothing is queued or running, so anything left in staging is from a
         // cancelled or crashed upload. Clear it before adding a new copy.
@@ -93,7 +102,7 @@ class WorkManagerServerUploads(context: Context) : ServerUploads {
 
         if (dir.usableSpace < size + FREE_SPACE_MARGIN) {
             val needMb = (size + FREE_SPACE_MARGIN) / (1024 * 1024)
-            return@withContext "Not enough free space on the phone to stage this upload (needs about $needMb MB)."
+            return@withLock "Not enough free space on the phone to stage this upload (needs about $needMb MB)."
         }
 
         val trackingId = UUID.randomUUID().toString()
@@ -117,15 +126,15 @@ class WorkManagerServerUploads(context: Context) : ServerUploads {
             }
         } catch (e: Exception) {
             copy.delete()
-            return@withContext "Could not read that file: ${e.message ?: e.javaClass.simpleName}"
+            return@withLock "Could not read that file: ${e.message ?: e.javaClass.simpleName}"
         }
         if (copied == null) {
             copy.delete()
-            return@withContext "Could not open that file."
+            return@withLock "Could not open that file."
         }
         if (copied <= 0L) {
             copy.delete()
-            return@withContext "That file is empty."
+            return@withLock "That file is empty."
         }
         // The worker uploads copy.length(), not the provider's SIZE column,
         // which can be stale for a file that was still being written.
@@ -137,6 +146,7 @@ class WorkManagerServerUploads(context: Context) : ServerUploads {
             UploadWorker.buildRequest(copy.absolutePath, name, sha, trackingId),
         )
         null
+        }
     }
 
     override fun updates(): Flow<UploadUpdate?> =

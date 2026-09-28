@@ -13,6 +13,8 @@
   - POST_NOTIFICATIONS: compression progress and server job alerts.
   - FOREGROUND_SERVICE(_MEDIA_PROCESSING): keeps an on-device encode alive
     when the app goes to the background.
+  - FOREGROUND_SERVICE_DATA_SYNC (Fall 4.3): keeps an upload to the paired
+    server alive when the app goes to the background.
   - REQUEST_INSTALL_PACKAGES (Fall 3.18): lets the app hand a downloaded
     update APK to the system package installer without a separate consent
     dialog every time. This is ONLY ever exercised for a sideloaded install
@@ -43,6 +45,10 @@
          app still needs at the OS level, independent of any store. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
+    <!-- Fall 4.3: UploadWorker sends a video to the paired server as a
+         dataSync foreground service, so a long upload is not cut off when the
+         app backgrounds. Install-time permission; no runtime prompt. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- Fall 3.18: direct-APK-sideload auto-update (see the block comment
          above and org.svcs.mobile.update.UpdateManager). -->
@@ -80,14 +86,15 @@
             </intent-filter>
         </activity>
 
-        <!-- Merge the mediaProcessing foreground-service type onto WorkManager's
-             own service, which is what actually runs CompressionWorker's
-             setForeground() call. Declaring it here AND at runtime (see
-             CompressionWorker.buildForegroundInfo) is what the platform
-             requires - the manifest declaration alone is not enough. -->
+        <!-- Merge the foreground-service types onto WorkManager's own service,
+             which is what actually runs each worker's setForeground() call.
+             Declaring a type here AND at runtime is what the platform
+             requires - the manifest declaration alone is not enough.
+             mediaProcessing: CompressionWorker.buildForegroundInfo.
+             dataSync (Fall 4.3): UploadWorker.buildForegroundInfo. -->
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"
-            android:foregroundServiceType="mediaProcessing"
+            android:foregroundServiceType="mediaProcessing|dataSync"
             tools:node="merge" />
 
         <!-- Fall 3.18: exposes only getExternalFilesDir()/updates/ (where

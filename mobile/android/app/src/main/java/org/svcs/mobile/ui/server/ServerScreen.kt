@@ -22,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -29,6 +30,7 @@ import org.svcs.mobile.data.TokenStore
 import org.svcs.mobile.net.Capabilities
 import org.svcs.mobile.net.SvcsApiClient
 import org.svcs.mobile.ui.components.SvcsIcons
+import org.svcs.mobile.upload.WorkManagerServerUploads
 import org.svcs.mobile.ui.server.events.EventsScreen
 import org.svcs.mobile.ui.server.events.EventsViewModel
 import org.svcs.mobile.ui.server.home.HomeScreen
@@ -92,6 +94,7 @@ fun ServerScreen(
 ) {
     val tabs = visibleServerTabs(caps)
     val current = effectiveServerTab(selected, caps)
+    val appContext = LocalContext.current.applicationContext
     Column(Modifier.fillMaxSize()) {
         ServerTabStrip(tabs, current, onSelect)
         Box(Modifier.fillMaxSize()) {
@@ -100,7 +103,7 @@ fun ServerScreen(
                     vm = viewModel(key = "home-$sessionEpoch") { HomeViewModel(client) })
                 ServerTab.LIBRARY -> LibraryScreen(
                     vm = viewModel(key = "lib-$sessionEpoch") {
-                        LibraryViewModel(client, autoCompress = { store.autoCompressUpload() })
+                        LibraryViewModel(client, uploads = WorkManagerServerUploads(appContext))
                     })
                 ServerTab.LIVE -> LiveScreen(
                     vm = viewModel(key = "live-$sessionEpoch") {

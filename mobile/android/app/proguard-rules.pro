@@ -45,3 +45,9 @@
 -keep class org.svcs.mobile.compress.CompressionWorker {
     public <init>(android.content.Context, androidx.work.WorkerParameters);
 }
+
+# Fall 4.3: UploadWorker, same reason. Without this a release/qa build would
+# strip the constructor and every queued upload would fail to start.
+-keep class org.svcs.mobile.upload.UploadWorker {
+    public <init>(android.content.Context, androidx.work.WorkerParameters);
+}

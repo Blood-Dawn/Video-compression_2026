@@ -129,7 +129,18 @@ if (-not $env:VIRTUAL_ENV) {
 
 # ── Step 1: make sure pyinstaller is installed ─────────────────────────
 Write-Host "[1/4] Checking pyinstaller install..." -ForegroundColor Cyan
+# PowerShell 7.3+ turns a non-zero exit from a native command into a
+# script-terminating error under $ErrorActionPreference = "Stop" (this
+# script's default), regardless of the 2>$null redirection below, since that
+# preference is keyed on exit code, not stderr content. A missing PyInstaller
+# import (expected right after a plain `uv sync`, since PyInstaller is a
+# build-time tool and not a project dependency) would otherwise abort the
+# whole build before the self-heal install below ever runs. Silence the
+# preference for just this one check.
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "SilentlyContinue"
 $pyinstallerCheck = & python -c "import PyInstaller; print(PyInstaller.__version__)" 2>$null
+$ErrorActionPreference = $prevEap
 if ($LASTEXITCODE -ne 0) {
     # PyInstaller is a build-time tool, not a project dependency, so a plain
     # `uv sync` removes it. The repo's .venv is uv-managed and has no `pip`,

@@ -200,6 +200,35 @@ function _metricsRowClick(idx) {
   showMetricsDetail(s);
 }
 
+// See-metrics deep link (Library tab, 2026-09-30): jumps to the Metrics
+// tab and opens this exact file's row, reusing the same selection path a
+// manual table click takes. Falls back to a clear message when the file
+// has no segment record yet (a raw clip that has never been compressed or
+// analyzed) instead of landing on a tab that looks empty for no obvious
+// reason.
+async function viewMetricsForFile(path) {
+  if (!path) return;
+  if (typeof switchTab === 'function') switchTab('metrics');
+  if (!_segmentData || !_segmentData.length) {
+    try { await loadSegments(); } catch (e) { /* fall through to the not-found case below */ }
+  }
+  const idx = _segmentData.findIndex((s) => s.file_path === path);
+  if (idx === -1) {
+    if (typeof pushNotif === 'function') {
+      pushNotif(
+        'No metrics yet',
+        'This file has not been compressed or analyzed, so there is nothing recorded for it yet.',
+        'info', null, 4500,
+      );
+    }
+    return;
+  }
+  _metricsRowClick(idx);
+  const row = document.querySelector('#segments-tbody tr[data-seg-idx="' + idx + '"]');
+  if (row && row.scrollIntoView) row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+window.viewMetricsForFile = viewMetricsForFile;
+
 function showMetricsDetail(s) {
   const noSel = document.getElementById('metrics-no-selection');
   const detail = document.getElementById('metrics-detail');

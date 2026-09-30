@@ -2919,6 +2919,28 @@
             Advanced streaming tools: run a local RTSP server (MediaMTX) and view a live HLS stream in the browser.
           </p>
 
+          <!-- App updates (Fall 3.18 UX follow-up, 2026-09-30): surfaced
+               here too, not just in the Help glossary panel, since Tools is
+               where people actually look for a "check for updates" control.
+               Same checkForUpdate()/downloadUpdate()/installUpdate() as the
+               Help > App version row in setup.js - one shared flow, two
+               entry points. Progress and the install step show up as an
+               in-app toast notification (see _showUpdateNotif in setup.js),
+               so they are visible no matter which tab is open. -->
+          <details class="source-advanced" id="update-panel" style="margin-bottom:0.8rem;">
+            <summary style="cursor:pointer;font-family:var(--display);font-size:0.95rem;letter-spacing:0.08em;color:var(--text-dim);">
+              APP UPDATES
+            </summary>
+            <div style="padding:0.5rem 0 0;">
+              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
+                Checks this install's version against the newest one published on GitHub. If one is
+                found, SVCS downloads it, verifies it, and installs it for you - no GitHub visit needed.
+              </div>
+              <button class="btn btn-ghost" onclick="checkForUpdate()">Check for updates</button>
+              <span id="tools-update-result" style="display:block;margin-top:4px;font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);"></span>
+            </div>
+          </details>
+
           <!-- Closed-app phone alerts (R6 TRACK C1). Off by default: with no
                topic URL the server never opens a socket. Self-hosted only,
                there is no default server to fall back to. -->

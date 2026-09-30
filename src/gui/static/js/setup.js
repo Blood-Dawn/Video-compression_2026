@@ -198,57 +198,67 @@ window.checkDependencies = checkDependencies;
 // In-app update check (Fall 3.17): check + notify only - never downloads or
 // installs anything itself. Runs once automatically on dashboard load (silent
 // unless something is actually newer, so it never nags on every reload when
-// you're already current); the Help > "Check for updates" button re-runs it
-// on demand and always reports its result, including "up to date".
+// you're already current); the Help > "Check for updates" and Tools >
+// "Check for updates" buttons re-run it on demand and always report their
+// result, including "up to date".
 //
 // Fall 3.18 adds the actual pipeline behind /api/update/{status,download,
 // install} (gui.services.update_manager) - downloadUpdate()/installUpdate()
 // below drive it. The check above still only ever reports; nothing here
-// downloads or installs without an explicit button click.
+// downloads or installs without the user starting it from a button or the
+// update notification.
+//
+// Fall 3.18 UX follow-up (2026-09-30): progress used to live only in a
+// hidden help-update-progress span inside the Help glossary panel, so if you
+// were not looking at that one tab you would never see it move, and
+// installing needed a second manual click plus a confirm() dialog after the
+// download had already finished verifying. Now: (1) an update notification
+// tracks its own download/verify/install progress in place, visible from any
+// tab, and (2) once the download is verified, install starts on its own -
+// clicking the notification (or "Check for updates" in Help or Tools) is the
+// one click the whole update needs.
 async function _checkForUpdate(showResult) {
   const out = document.getElementById("help-update-result");
+  const toolsOut = document.getElementById("tools-update-result");
   const actions = document.getElementById("help-update-actions");
-  if (out && showResult) out.textContent = "Checking...";
+  if (showResult) {
+    if (out) out.textContent = "Checking...";
+    if (toolsOut) toolsOut.textContent = "Checking...";
+  }
   let data;
   try {
     data = await (await fetch("/api/setup/update_check")).json();
   } catch (e) {
-    if (out && showResult) out.textContent = "Could not check for updates.";
+    if (showResult) {
+      if (out) out.textContent = "Could not check for updates.";
+      if (toolsOut) toolsOut.textContent = "Could not check for updates.";
+    }
     return;
   }
-  if (out && showResult) {
-    if (!data.checked) {
-      out.textContent = "Could not reach GitHub to check.";
-    } else if (data.update_available) {
-      out.textContent = "Update available: " + data.latest_version
-        + " (you have " + data.current_version + ")";
-    } else {
-      out.textContent = "Up to date (" + data.current_version + ").";
-    }
+  if (showResult) {
+    const msg = !data.checked
+      ? "Could not reach GitHub to check."
+      : data.update_available
+        ? "Update available: " + data.latest_version + " (you have " + data.current_version + ")"
+        : "Up to date (" + data.current_version + ").";
+    if (out) out.textContent = msg;
+    if (toolsOut) toolsOut.textContent = msg;
   }
   if (actions) actions.style.display = data.update_available ? "block" : "none";
-  if (data.update_available && typeof pushNotif === "function") {
-    const actionButtons = data.download_url
-      ? [{ label: "Download update", fn: () => downloadUpdate() }]
-      : (data.release_url
-        ? [{ label: "View release", fn: () => window.open(data.release_url, "_blank") }]
-        : null);
-    pushNotif(
-      "Update available",
-      "SVCS " + data.latest_version + " is out - you're on " + data.current_version + ".",
-      "info",
-      actionButtons,
-      0,
-    );
+  if (data.update_available) {
+    _showUpdateNotif(data);
   }
 }
 window.checkForUpdate = () => _checkForUpdate(true);
 window.addEventListener("DOMContentLoaded", () => _checkForUpdate(false));
 
-// ── Fall 3.18: download + verify + install ("Download update" / "Install &
-// restart" buttons in the help-update-actions block above) ─────────────────
+// -- Fall 3.18: download + verify + install, tracked in a toast notification
+// (the Help panel's Download/Install buttons still work directly, but the
+// notification is the primary progress display since it stays visible no
+// matter which tab is open) -------------------------------------------------
 
 let _updatePollTimer = null;
+let _updateNotifCard = null;
 
 function _stopUpdatePolling() {
   if (_updatePollTimer) {
@@ -263,45 +273,89 @@ function _formatBytes(n) {
   return mb >= 1 ? mb.toFixed(1) + " MB" : Math.round(n / 1024) + " KB";
 }
 
-// Renders one /api/update/status snapshot. Shared by the initial POST
-// /api/update/download response and every subsequent poll tick.
-function _renderUpdateStatus(status) {
+// Puts up the toast that starts the flow. Its button kicks off
+// downloadUpdate(); once the checksum verifies, installUpdate() runs on its
+// own (see _renderUpdateStatus's "ready" case below), so this is the only
+// click the whole update ever needs.
+function _showUpdateNotif(info) {
+  if (_updateNotifCard && _updateNotifCard.parentNode) return;
+  if (typeof pushNotif !== "function") return;
+  const actionButtons = info.download_url
+    ? [{ label: "Update now", fn: () => downloadUpdate() }]
+    : (info.release_url
+      ? [{ label: "View release", fn: () => window.open(info.release_url, "_blank") }]
+      : null);
+  _updateNotifCard = pushNotif(
+    "Update available",
+    "SVCS " + info.latest_version + " is out - you have " + info.current_version + ".",
+    "info",
+    actionButtons,
+    0,
+  );
+}
+
+// Writes progress into whichever surfaces are visible: the toast (if the
+// flow started from one) and the Help panel's own progress line (for anyone
+// who started it from that button instead, or who wants to keep watching
+// after the toast is gone).
+function _setUpdateMessage(text, opts) {
+  opts = opts || {};
   const prog = document.getElementById("help-update-progress");
+  if (prog) prog.textContent = text;
+  if (_updateNotifCard && _updateNotifCard.parentNode) {
+    const msg = _updateNotifCard.querySelector(".notif-msg");
+    if (msg) msg.textContent = text;
+    if (opts.clearActions) {
+      const actionsEl = _updateNotifCard.querySelector(".notif-actions");
+      if (actionsEl) actionsEl.remove();
+    }
+  }
+}
+
+function _renderUpdateStatus(status) {
   const dlBtn = document.getElementById("help-update-download-btn");
   const instBtn = document.getElementById("help-update-install-btn");
-  if (!prog) return;
   switch (status.phase) {
     case "downloading": {
       const pct = status.bytes_total
         ? Math.min(100, Math.round((100 * status.bytes_downloaded) / status.bytes_total))
         : null;
-      prog.textContent = "Downloading" + (pct !== null ? " " + pct + "%" : "")
+      _setUpdateMessage(
+        "Downloading" + (pct !== null ? " " + pct + "%" : "")
         + " (" + _formatBytes(status.bytes_downloaded)
-        + (status.bytes_total ? " / " + _formatBytes(status.bytes_total) : "") + ")";
+        + (status.bytes_total ? " / " + _formatBytes(status.bytes_total) : "") + ")",
+      );
       if (dlBtn) dlBtn.disabled = true;
       break;
     }
     case "verifying":
-      prog.textContent = "Verifying download...";
+      _setUpdateMessage("Verifying download...");
       break;
     case "ready":
-      prog.textContent = "Update " + (status.latest_version || "") + " verified and ready to install.";
-      if (dlBtn) dlBtn.style.display = "none";
-      if (instBtn) instBtn.style.display = "inline-block";
       _stopUpdatePolling();
+      _setUpdateMessage(
+        "Verified. Installing " + (status.latest_version || "") + " and restarting...",
+        { clearActions: true },
+      );
+      if (dlBtn) dlBtn.style.display = "none";
+      if (instBtn) instBtn.style.display = "none";
+      // A verified download is safe by construction (its checksum matched
+      // the release's own SHA256SUMS.txt), so chain straight into the
+      // restart the user already asked for - no second click.
+      installUpdate();
       break;
     case "installing":
-      prog.textContent = "Installing - SVCS will close and restart shortly...";
+      _setUpdateMessage("Installing - SVCS will close and restart shortly...");
       _stopUpdatePolling();
       break;
     case "error":
-      prog.textContent = "Update failed: " + (status.error || "unknown error");
+      _setUpdateMessage("Update failed: " + (status.error || "unknown error"));
       if (dlBtn) { dlBtn.disabled = false; dlBtn.style.display = "inline-block"; }
       if (instBtn) instBtn.style.display = "none";
       _stopUpdatePolling();
       break;
     default:
-      prog.textContent = "";
+      _setUpdateMessage("");
   }
 }
 
@@ -310,8 +364,8 @@ async function _pollUpdateStatus() {
   try {
     status = await (await fetch("/api/update/status")).json();
   } catch (e) {
-    // The server may be mid-restart after an install; just stop quietly
-    // rather than showing a scary error for something that is expected.
+    // The server may be mid-restart after an install; stop quietly rather
+    // than showing a scary error for something that is expected.
     return;
   }
   _renderUpdateStatus(status);
@@ -323,12 +377,12 @@ async function _pollUpdateStatus() {
 async function downloadUpdate() {
   const actions = document.getElementById("help-update-actions");
   if (actions) actions.style.display = "block";
+  _setUpdateMessage("Starting download...");
   let status;
   try {
     status = await (await fetch("/api/update/download", { method: "POST" })).json();
   } catch (e) {
-    const prog = document.getElementById("help-update-progress");
-    if (prog) prog.textContent = "Could not start the download.";
+    _setUpdateMessage("Could not start the download.");
     return;
   }
   _renderUpdateStatus(status);
@@ -337,23 +391,21 @@ async function downloadUpdate() {
 }
 window.downloadUpdate = downloadUpdate;
 
-// Only enabled once the download above reaches "ready" (checksum verified).
-// Confirms first since this closes and restarts the app.
+// Called automatically once the download verifies (see _renderUpdateStatus's
+// "ready" case) - installing a checksum-verified build is exactly what the
+// user already asked for by starting the update, so this no longer stops to
+// confirm() a second time.
 async function installUpdate() {
-  if (!window.confirm("Install the update now? SVCS will close and restart automatically.")) {
-    return;
-  }
-  const prog = document.getElementById("help-update-progress");
+  _setUpdateMessage("Installing - SVCS will close and restart shortly...", { clearActions: true });
   try {
     const r = await fetch("/api/update/install", { method: "POST" });
     const body = await r.json();
     if (!r.ok || !body.ok) {
-      if (prog) prog.textContent = "Install failed: " + (body.error || "unknown error");
-      return;
+      _setUpdateMessage("Install failed: " + (body.error || "unknown error"));
     }
-    if (prog) prog.textContent = "Installing - SVCS will close and restart shortly...";
   } catch (e) {
-    if (prog) prog.textContent = "Install failed to start.";
+    // Expected once the app actually exits mid-response for the restart;
+    // the "installing" message above already covers this for the user.
   }
 }
 window.installUpdate = installUpdate;

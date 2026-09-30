@@ -232,3 +232,78 @@ def test_realesrnet_loads_and_upscales_when_weights_present(small_frame):
 def test_custom_scale_stored(small_frame):
     e = Enhancer(model_path="nonexistent.pth", scale=2)
     assert e.scale == 2
+
+# ---------------------------------------------------------------------------
+# Small-crop RRDBNet padding guard (regression: RuntimeError('Padding size
+# should be less than the corresponding input dimension...') on a 10x19px
+# tracked-object ROI, see src/enhancement/enhancer.py::_enhance_rrdbnet)
+# ---------------------------------------------------------------------------
+
+class _FakeRRDBUpsampler:
+    """ Stands in for realesrgan.RealESRGANer without needing weights or
+    torch installed. Mirrors the one behaviour these tests care about:
+    it raises the exact RuntimeError PyTorch's reflect pad raises when a
+    caller feeds it something smaller than MIN_OK on a side, so a test
+    calling _enhance_rrdbnet with an unpadded tiny frame fails loudly if
+    the padding guard ever regresses. """
+
+    MIN_OK = 11  # anything at or below this must never reach .enhance() unpadded
+
+    def enhance(self, img, outscale=4):
+        h, w = img.shape[:2]
+        if h <= self.MIN_OK or w <= self.MIN_OK:
+            raise RuntimeError(
+                "Argument #6: Padding size should be less than the corresponding "
+                "input dimension, but got: padding (0, 0) at dimension 3 of input "
+                f"[1, 3, {h}, {w}]"
+            )
+        out = np.repeat(np.repeat(img, outscale, axis=0), outscale, axis=1)
+        return out, None
+
+
+def _rrdb_enhancer():
+    """ An Enhancer wired to the fake RRDBNet backend above, bypassing
+    _load_rrdbnet entirely so this test needs neither torch nor real
+    weights on disk. """
+    e = Enhancer(model_path="nonexistent_model.pth", scale=4)
+    e._using_nn = True
+    e._active_scale = 4
+    e._rrdb_upsampler = _FakeRRDBUpsampler()
+    return e
+
+
+@pytest.mark.parametrize("h,w", [(10, 19), (1, 1), (5, 40), (40, 5)])
+def test_enhance_rrdbnet_pads_tiny_crops_instead_of_crashing(h, w):
+    """ The exact failure mode reported in the field: a small tracked-"
+    object ROI (10x19px) crashed with RealESRGANer's default pre_pad=10
+    before this fix. Every one of these shapes has a side at or under the
+    fake backend's MIN_OK, so an unguarded call would raise; reaching a
+    correctly-scaled result at all proves _enhance_rrdbnet padded first. """
+    e = _rrdb_enhancer()
+    frame = np.zeros((h, w, 3), dtype=np.uint8)
+    out = e.upscale_frame(frame)
+    assert out.shape == (h * 4, w * 4, 3)
+
+
+def test_enhance_rrdbnet_leaves_large_crops_unpadded():
+    """ A crop already comfortably above the minimum should pass straight
+    through with no padding artefact at the edges. """
+    e = _rrdb_enhancer()
+    frame = np.zeros((32, 48, 3), dtype=np.uint8)
+    out = e.upscale_frame(frame)
+    assert out.shape == (32 * 4, 48 * 4, 3)
+
+
+@pytest.mark.parametrize("model_id", ["realesrgan", "realesrnet"])
+def test_rrdbnet_upscales_a_realworld_tiny_roi_when_weights_present(model_id):
+    """ End-to-end version of the regression above against the real
+    realesrgan/basicsr stack, when it and the weights are actually
+    installed on this machine - skipped otherwise, same convention as the
+    other live-weights tests in this file. """
+    e = Enhancer(model=model_id, scale=4)
+    if e.backend == "bicubic":
+        pytest.skip(f"{model_id} weights not present in models/ on this machine")
+    tiny = np.random.randint(0, 255, (10, 19, 3), dtype=np.uint8)
+    out = e.upscale_frame(tiny)
+    assert out.shape == (40, 76, 3)
+    assert out.dtype == np.uint8

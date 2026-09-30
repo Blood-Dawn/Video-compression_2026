@@ -456,12 +456,21 @@ class Enhancer:
                 scale=4,
             )
             use_half = (resolved_device == "cuda")  # fp16 only on CUDA
+            # pre_pad=0: RealESRGANer's default pre_pad=10 reflect-pads every
+            # side before inference, and PyTorch's reflect pad requires the
+            # pad amount to be strictly less than the dimension it is padding -
+            # a small tracked-object crop (e.g. 10x19px) fails that check and
+            # raises RuntimeError('Padding size should be less than the
+            # corresponding input dimension...'). Dropping pre_pad removes
+            # this failure mode entirely; _enhance_rrdbnet() below adds its
+            # own safe minimum-size padding for genuinely tiny crops instead.
             self._rrdb_upsampler = RealESRGANer(
                 scale=4,
                 model_path=str(weights_path),
                 model=model,
                 device=resolved_device,
                 half=use_half,
+                pre_pad=0,
             )
             self._using_nn  = True
             self._device    = resolved_device
@@ -488,6 +497,7 @@ class Enhancer:
                         model=model2,
                         device="cpu",
                         half=False,
+                        pre_pad=0,
                     )
                     self._using_nn = True
                     self._device   = "cpu"
@@ -530,6 +540,38 @@ class Enhancer:
         return "cpu"
 
     # ------------------------------------------------------------------
+    # A crop under this many pixels on a side gets replicate-padded up to
+    # this size before RealESRGANer sees it, and the matching (scaled)
+    # border is cropped back off the output afterwards - see
+    # _enhance_rrdbnet() below for why.
+    _MIN_RRDBNET_DIM = 16
+
+    def _enhance_rrdbnet(self, frame: np.ndarray) -> np.ndarray:
+        """ Run the loaded RealESRGANer on frame, safely.
+
+        Real-ESRGAN's own preprocessing reflect-pads the image, and
+        PyTorch's reflect pad requires the pad amount to be strictly less
+        than the dimension it pads - a small tracked-object crop (a face,
+        a plate, a distant vehicle) can easily be smaller than that,
+        which is exactly what crashed here with a 10x19px ROI
+        (RuntimeError('Padding size should be less than the corresponding
+        input dimension...')). pre_pad=0 at construction time (see
+        _load_rrdbnet) already removes RealESRGANer's own pad step; this
+        adds a second, independent guard so a genuinely tiny crop is
+        padded to a safe minimum ourselves first (replicate, not reflect -
+        reflect has the same minimum-size problem we are working around)
+        rather than ever reaching that failure mode again.
+        """
+        h, w = frame.shape[:2]
+        pad_h = max(0, self._MIN_RRDBNET_DIM - h)
+        pad_w = max(0, self._MIN_RRDBNET_DIM - w)
+        padded = (cv2.copyMakeBorder(frame, 0, pad_h, 0, pad_w, cv2.BORDER_REPLICATE)
+                  if (pad_h or pad_w) else frame)
+        out, _ = self._rrdb_upsampler.enhance(padded, outscale=self._active_scale)
+        if pad_h or pad_w:
+            out = out[: h * self._active_scale, : w * self._active_scale]
+        return out
+
     # Public API
     # ------------------------------------------------------------------
 
@@ -577,8 +619,7 @@ class Enhancer:
             return self._upsampler.upsample(frame)
 
         if self._using_nn and self._rrdb_upsampler is not None:
-            out, _ = self._rrdb_upsampler.enhance(frame, outscale=self._active_scale)
-            return out
+            return self._enhance_rrdbnet(frame)
 
         target_scale = scale if scale is not None else self.scale
         h, w = frame.shape[:2]

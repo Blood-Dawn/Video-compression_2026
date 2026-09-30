@@ -17,7 +17,7 @@
 
 #define MyAppName "SVCS"
 #define MyAppFullName "SVCS - Selective Video Compression System"
-#define MyAppVersion "2.2.2-beta"
+#define MyAppVersion "2.2.3.dev0"
 #define MyAppPublisher "SVCS Project"
 #define MyAppURL "https://github.com/Blood-Dawn/Video-compression_2026"
 #define MyAppExeName "SVCS.exe"

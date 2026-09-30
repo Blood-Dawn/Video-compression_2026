@@ -91,10 +91,19 @@ def test_silent_switches_present():
     assert "/SUPPRESSMSGBOXES" in sw.get("Silent", "")
 
 
-def test_version_matches_pyproject_across_all_three():
-    want = _pyproject_version()
+# Winget only ever points at a real, already-shipped installer, so its
+# PackageVersion tracks the last version this project actually published
+# for desktop - not pyproject.toml directly, which moves to the NEXT
+# dev-stage version right after each tag (see version.py APP_VERSION
+# comment and tests/test_version_consistency.py). Update this the same
+# moment _LAST_PUBLISHED_DESKTOP_TAG there is updated.
+_LAST_PUBLISHED_DESKTOP_VERSION = "2.2.2-beta"
+
+
+def test_version_matches_last_published_release_across_all_three():
+    want = _LAST_PUBLISHED_DESKTOP_VERSION
     for p in (VERSION_MANIFEST, INSTALLER_MANIFEST, LOCALE_MANIFEST):
-        assert str(_load(p)["PackageVersion"]) == want, f"{p.name} version != pyproject"
+        assert str(_load(p)["PackageVersion"]) == want, f"{p.name} version != last published release"
 
 
 def test_no_unicode_dashes_in_manifests():

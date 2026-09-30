@@ -25,13 +25,13 @@ from pathlib import Path
 from utils.version import APP_VERSION, is_newer
 
 ROOT = Path(__file__).parent.parent
-EXPECTED = "2.2.1.dev0"
+EXPECTED = "2.2.2-beta"
 
 # The last tag this project actually published for the desktop app. Update
 # this the moment a newer desktop tag ships - if you forget, this test
 # starts failing instead of silently letting APP_VERSION fall behind it
 # again, which is exactly how the update-check nag bug happened.
-_LAST_PUBLISHED_DESKTOP_TAG = "v2.2.0-beta"
+_LAST_PUBLISHED_DESKTOP_TAG = "v2.2.1-beta"
 
 
 def _pyproject_version():

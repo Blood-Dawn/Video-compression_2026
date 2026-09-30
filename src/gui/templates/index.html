@@ -2661,9 +2661,9 @@
               <div class="config-field" style="margin-top:0.75rem;">
                 <label class="config-label" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
                   <input type="checkbox" id="object-filter-toggle" onchange="_onObjectFilterChange(this.checked)" />
-                  Smart filter (ignore leaves &amp; shadows)
+                  Smart filter &amp; object detection (recommended)
                 </label>
-                <p class="config-hint">Uses YOLOv8-nano to confirm each moving region is a real target (person, vehicle, animal) before recording. Eliminates false triggers from trees, flags, and lighting changes. Requires <code>ultralytics</code> package.</p>
+                <p class="config-hint">Uses YOLOv8-nano to confirm each moving region is a real target (person, vehicle, animal) before recording, eliminating false triggers from trees, flags, and lighting changes. This is also the only source of the Object Type, Color, and Person/Vehicle Count data shown in Metrics and used by Search - leave it off and every segment will be recorded as type "unknown" regardless of what is actually in the video.</p>
               </div>
               <div class="config-field" style="margin-top:0.75rem;">
                 <label class="config-label" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">

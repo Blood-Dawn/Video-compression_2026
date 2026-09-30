@@ -93,6 +93,7 @@ class YoloOnnxDetector:
         self._session = None
         self._input_name: Optional[str] = None
         self._available = False
+        self._inference_error_logged = False
         self._load(device)
 
     # ------------------------------------------------------------------ load
@@ -111,11 +112,43 @@ class YoloOnnxDetector:
             providers = self._providers_for(ort, device)
             self._session = ort.InferenceSession(str(self.model_path), providers=providers)
             self._input_name = self._session.get_inputs()[0].name
+            self._align_imgsz_to_model()
             self._available = True
-            log.info("ONNX detector loaded: %s (providers=%s)",
-                     self.model_path.name, self._session.get_providers())
+            log.info("ONNX detector loaded: %s (providers=%s, imgsz=%s)",
+                     self.model_path.name, self._session.get_providers(), self.imgsz)
         except Exception as exc:  # noqa: BLE001
             log.warning("Failed to load ONNX detector (%s); falling back.", exc)
+
+    def _align_imgsz_to_model(self) -> None:
+        """Read the model's own fixed input dims and use them for letterboxing.
+
+        A .onnx export bakes in a fixed square size (``yolo export imgsz=N``).
+        If that size does not match ``self.imgsz`` (e.g. the file on disk was
+        exported at 320 while this class still defaults to 640), every
+        inference call fails with an ONNX Runtime shape-mismatch error, which
+        ``infer()`` swallows and turns into a silent empty detection list -
+        object_type/vehicle_count/person_count then look "fine" (no crash)
+        but are always empty/unknown. Trust the model over the constructor
+        default so a differently-sized export just works.
+        """
+        try:
+            dims = list(self._session.get_inputs()[0].shape)
+        except Exception:  # noqa: BLE001
+            return
+        if len(dims) != 4:
+            return
+        h, w = dims[2], dims[3]
+        if not (isinstance(h, int) and isinstance(w, int) and h > 0 and w > 0):
+            return  # dynamic axes (e.g. "height"/"width" or None) - keep the default
+        if h != w:
+            log.warning("ONNX model has a non-square input (%sx%s); letterboxing "
+                        "assumes square and may misbehave.", w, h)
+            return
+        if h != self.imgsz:
+            log.warning("ONNX model %s expects %dx%d input, not the configured "
+                        "imgsz=%d; using %d to match the model.",
+                        self.model_path.name, w, h, self.imgsz, h)
+            self.imgsz = h
 
     @staticmethod
     def _providers_for(ort, device: str) -> Sequence[str]:
@@ -160,7 +193,20 @@ class YoloOnnxDetector:
         try:
             out = self._session.run(None, {self._input_name: blob})[0]
         except Exception as exc:  # noqa: BLE001
-            log.debug("ONNX inference error: %s", exc)
+            # This used to be logged at debug level only, so a persistent
+            # per-frame failure (e.g. an input-shape mismatch) was invisible
+            # in normal operation: every call returned [] "successfully" and
+            # object_type/vehicle_count/person_count silently stayed
+            # unknown/0 for the whole video. Warn once per detector instance
+            # so a systemic failure is never silent again, then drop back to
+            # debug to avoid flooding the log once per frame.
+            if not self._inference_error_logged:
+                log.warning("ONNX inference failed (%s); object detection will "
+                            "return no results until this is fixed. Further "
+                            "occurrences are logged at debug level.", exc)
+                self._inference_error_logged = True
+            else:
+                log.debug("ONNX inference error: %s", exc)
             return []
 
         # YOLOv8 output: (1, 84, N) -> (N, 84): 4 box (cx,cy,w,h) + 80 scores.
@@ -181,6 +227,18 @@ class YoloOnnxDetector:
         boxes_cxcywh = boxes_cxcywh[keep]
         class_ids = class_ids[keep]
         scores = scores[keep]
+
+        # Most YOLOv8 ONNX exports emit box coordinates as absolute pixels in
+        # the letterboxed (self.imgsz x self.imgsz) canvas, which is what the
+        # unletterbox math below assumes. Some export toolchains/opsets
+        # instead emit coordinates normalized to [0, 1] of that canvas. A
+        # real box in a self.imgsz-sized (e.g. 320 or 640) canvas will have
+        # pixel-space coordinates well above 1.0, so if every surviving box's
+        # coordinates are all <= ~1.5 they are essentially certainly
+        # normalized, not pixels - scale them up before undoing the
+        # letterbox, otherwise every box collapses to ~(0,0,0,0).
+        if boxes_cxcywh.size and np.all(boxes_cxcywh <= 1.5):
+            boxes_cxcywh = boxes_cxcywh * self.imgsz
 
         # cx,cy,w,h (letterbox space) -> x1,y1,x2,y2 (original image space).
         cx, cy, bw, bh = boxes_cxcywh.T

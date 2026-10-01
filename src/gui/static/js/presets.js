@@ -44,7 +44,18 @@ function applyPreset(key) {
   _setField("codec-select", cfg.codec || "auto");
   _setField("crf-input", cfg.crf != null ? cfg.crf : "");
   _setField("bg-method", cfg.bg_method || "MOG2");
-  _setField("segment-seconds", cfg.segment_seconds || 60);
+  // Set the hidden field AND move the visible slider + its "Xs"/"Xm"
+  // label - _setField() alone only touched the hidden input, so the
+  // slider kept showing its old position after a preset changed the
+  // segment length (2026-10-01 fix: "options don't seem to change").
+  const _segVal = cfg.segment_seconds || 60;
+  const _segSlider = document.getElementById("segment-seconds-slider");
+  if (_segSlider) _segSlider.value = _segVal;
+  if (typeof _onSegLenChange === "function") {
+    _onSegLenChange(_segVal);
+  } else {
+    _setField("segment-seconds", _segVal);
+  }
   _setField("object-filter-toggle", !!cfg.object_filter);
   // Record the active preset for pipeline.js (it sends preset + background_crf).
   window._svcsPreset = { key: key, background_crf: cfg.background_crf };

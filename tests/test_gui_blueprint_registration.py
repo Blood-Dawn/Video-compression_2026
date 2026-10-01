@@ -132,6 +132,9 @@ EXPECTED = {
     "/api/update/status": "update",
     "/api/update/download": "update",
     "/api/update/install": "update",
+    # 2026-10-01 live-camera/competitive-gap pass: quiet-period timelapse
+    # summary generation.
+    "/api/timelapse": "timelapse",
 }
 
 EXPECTED_BLUEPRINTS = {
@@ -146,6 +149,7 @@ EXPECTED_BLUEPRINTS = {
     "push",            # R6 Track C: closed-app push settings
     "webhook",         # Fall Week 3 TASK 3.9: outbound webhook settings
     "update",          # Fall 3.18: auto-update download + verify + install
+    "timelapse",       # 2026-10-01: quiet-period timelapse summary generation
 }
 
 
@@ -164,9 +168,10 @@ def test_route_count():
     # the Fall Week 3 routes (/api/zones/frame, /api/webhook/config with
     # GET+POST on one rule, /api/webhook/test, /api/setup/update_check), then
     # +3 for the Fall 3.18 auto-update pipeline (/api/update/status,
-    # /api/update/download, /api/update/install).
+    # /api/update/download, /api/update/install), then +1 for the 2026-10-01
+    # competitive-gap pass's /api/timelapse (quiet-period summary generation).
     rules = _rules()
-    assert len(rules) == 94, f"expected 94 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 95, f"expected 95 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_blueprints_registered():

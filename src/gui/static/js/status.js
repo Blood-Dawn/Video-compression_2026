@@ -147,9 +147,45 @@ async function pollStatus() {
 
     // ── HOME hero strip ────────────────────────────────────────
     _updateHeroStrip(data);
+    // Global activity drawer (visible on every tab, 2026-09-30 follow-up)
+    _updateGlobalStatus(data);
 
   } catch(e) { /* ignore network errors during poll */ }
   finally { _statusPollInFlight = false; }
+}
+
+// Mirrors the same status snapshot into the always-mounted global drawer
+// (see index.html #global-drawer / global_status.js) so "what is SVCS
+// doing right now" - including things that never touch the HOME tab at
+// all, like an update check or an auto-compress daemon event logged
+// elsewhere - is visible no matter which tab is open.
+function _updateGlobalStatus(data) {
+  const msgEl = document.getElementById('global-status-msg');
+  const fill  = document.getElementById('global-progress-fill');
+  const pctEl = document.getElementById('global-progress-pct');
+  if (!msgEl || !fill || !pctEl) return;
+
+  const friendly = _friendlyStatus(data);
+  msgEl.textContent = friendly.text;
+  msgEl.style.color = friendly.cls === 'done' ? 'var(--green)'
+                    : data.error ? 'var(--red)' : 'var(--text)';
+
+  if (data.running) {
+    const pct = data.progress_pct;
+    if (pct != null) {
+      fill.classList.remove('running');
+      fill.style.width = pct + '%';
+      pctEl.textContent = pct.toFixed(1) + '%';
+    } else {
+      fill.classList.add('running');
+      fill.style.width = '100%';
+      pctEl.textContent = '';
+    }
+  } else {
+    fill.classList.remove('running');
+    fill.style.width = '0%';
+    pctEl.textContent = '';
+  }
 }
 
 function _updateHeroStrip(data) {

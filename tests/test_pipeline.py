@@ -195,7 +195,7 @@ def mixed_event_frames():
 # ---------------------------------------------------------------------------
 
 class TestEOFBoundaryBehavior:
-    def test_mode0_compresses_background_outside_rois(
+    def test_mode0_does_not_compress_background(
         self, monkeypatch, tmp_path, exact_segment_frames
     ):
         calls = {
@@ -240,7 +240,10 @@ class TestEOFBoundaryBehavior:
             warmup_frames=0,
         )
 
-        assert calls["compress_background"] is True
+        # 2026-10-01: mode0 must stay visually unchanged (just compress it,
+        # do not alter how it looks), so run_pipeline() must never ask
+        # write_frame() to run the background blur for mode0 anymore.
+        assert calls["compress_background"] is False
 
     def test_no_extra_partial_encode_when_video_ends_on_exact_segment_boundary(
         self, monkeypatch, tmp_path, exact_segment_frames

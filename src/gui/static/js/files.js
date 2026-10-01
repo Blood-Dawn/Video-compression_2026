@@ -275,6 +275,14 @@ function showMetricsDetail(s) {
     }
   }
 
+  // Timelapse button (2026-10-01 competitive-gap feature, timelapse.js).
+  const tlBtn = document.getElementById('metrics-timelapse-btn');
+  if (tlBtn) {
+    tlBtn.disabled = !s.file_path;
+    tlBtn.style.opacity = s.file_path ? '1' : '0.4';
+    tlBtn.onclick = () => makeTimelapseForSegment(s.file_path);
+  }
+
   // Meta grid
   const grid = document.getElementById('metrics-meta-grid');
   if (!grid) return;

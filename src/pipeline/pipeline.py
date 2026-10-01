@@ -624,7 +624,15 @@ def run_pipeline(
         _seg_prev_centroids = []
         _seg_brightness   = []
 
-        has_targets = len(first_regions) > 0
+        # Mode 0 (Live Surveillance) must use ONE predictable CRF for its
+        # whole segment, not silently swap to the much heavier background_crf
+        # just because the single frame that happened to open the segment
+        # (timing accident, not content) had zero detections that instant.
+        # Modes 1-3 only ever open a segment on a frame that already has
+        # detections (they skip quiet frames entirely), so this only ever
+        # mattered for mode0 in practice - and for mode0 it must always be
+        # True. Part of the 2026-10-01 "mode0 = just compress it" fix.
+        has_targets = True if mode == "mode0" else len(first_regions) > 0
 
         # Use real YOLO labels if available, otherwise fall back to unknown
         if obj_filter is not None and hasattr(obj_filter, "last_detected_classes"):
@@ -1000,7 +1008,20 @@ def run_pipeline(
                 object_only=object_only,
                 mode_label=mode_label,
                 measure_sharpness=(len(boxes) > 0),
-                compress_background=(mode == "mode0"),
+                # Mode 0 (Live Surveillance) must leave the picture visually
+                # unchanged - it is the just compress it, do not touch how it
+                # looks mode. It used to always run every frame through
+                # _compress_background_outside_bboxes(), an 8x downscale/
+                # upscale blur applied to the whole background regardless of
+                # CRF - that was the original dual-CRF design (see the
+                # 16.6x / PSNR 41.2dB result in docs/RESEARCH.md) but it
+                # visibly blurred the feed, which is not what mode0 is for.
+                # Per explicit product direction (2026-10-01), mode0 now only
+                # ever applies its CRF/codec encode to the raw frame - zero
+                # visual alteration. Mode 2 (Smart Compress) and Mode 3
+                # (Object Only) remain the modes that intentionally trade
+                # background detail for size.
+                compress_background=False,
             )
             frames_in_segment += 1
 

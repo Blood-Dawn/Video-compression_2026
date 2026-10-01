@@ -128,6 +128,8 @@ SAMPLES = [
     ("GET", "/api/update/status"),
     ("POST", "/api/update/download"),
     ("POST", "/api/update/install"),
+    # 2026-10-01: quiet-period timelapse summary generation.
+    ("POST", "/api/timelapse"),
 ]
 
 
@@ -158,5 +160,6 @@ def test_sample_count_matches_route_count():
     # (R5 5.6/5.7), +4 for the R6 chunked-upload routes, +2 for the R6
     # Track C push routes, +4 for the Fall Week 3 routes (zones/frame,
     # webhook config and test, setup/update_check), +3 for the Fall 3.18
-    # auto-update routes (status, download, install).
-    assert len(SAMPLES) == len(rules) == 95
+    # auto-update routes (status, download, install), +1 for the 2026-10-01
+    # /api/timelapse route (quiet-period summary generation).
+    assert len(SAMPLES) == len(rules) == 96

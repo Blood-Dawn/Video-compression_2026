@@ -43,6 +43,36 @@ function selectPreset(card) {
   const mode = card.dataset.mode;
   document.getElementById('mode-select').value = mode;
   syncModeChips();
+
+  // 2026-10-01 fix: clicking one of these cards used to ONLY flip the
+  // hidden mode-select value. CRF, codec, background CRF, segment length
+  // and the object-filter toggle all kept whatever a previously applied
+  // named preset left behind (the page applies "Continuous CCTV" - mode2
+  // - by default on load), so clicking e.g. "Object Only" silently kept
+  // mode2's background_crf instead of mode3's own defaults. These cards
+  // are the raw mode picker (see presets.js header comment), not a named
+  // preset, so clicking one now clears any active named preset and resets
+  // every option to that mode's own plain defaults - nothing inherited
+  // from whatever was selected before.
+  window._svcsPreset = null;
+  const presetSelect = document.getElementById('preset-select');
+  if (presetSelect) presetSelect.value = '';
+  if (typeof _setField === 'function') {
+    _setField('crf-input', '');          // '' -> server uses this mode's default CRF
+    _setField('codec-select', 'auto');   // server picks H.264 or AV1 per mode
+    _setField('bg-method', 'MOG2');
+    _setField('object-filter-toggle', true);
+  }
+  // 2026-10-01 live-camera default: segment length defaults to 10 min when
+  // the current input is a live camera/stream, 60s for a file - matching
+  // whatever _onInputSourceChange would already set for this source. This\n  // only overwrites the slider if the user has not manually dragged it\n  // (_segLenUserTouched), so an explicit choice survives a preset click.
+  if (!_segLenUserTouched) {
+    const segSlider = document.getElementById('segment-seconds-slider');
+    const srcVal = (document.getElementById('input-source') || {}).value || '';
+    const defSeg = _defaultSegLenForSource(srcVal);
+    if (segSlider) segSlider.value = defSeg;
+    _onSegLenChange(defSeg);
+  }
 }
 
 // ── Advanced panel toggle ──────────────────────────────────────
@@ -77,6 +107,27 @@ function _onObjectFilterChange(enabled) {
 }
 
 // ── Segment length slider ──────────────────────────────────────
+let _segLenUserTouched = false;
+
+// True once the operator connects a camera/stream (vs. a file): the live-
+// camera ask is 'auto-compress once the clip reaches 10 min by default'
+// while file-based runs keep the historical 60s default.
+
+// Returns the right default segment length (seconds) for a given raw
+// #input-source value: 600 (10 min) for a live camera/stream, 60s for a file.
+function _defaultSegLenForSource(val) {
+  return _isLiveSource(String(val || '')) ? 600 : 60;
+}
+
+// oninput handler wired to the visible slider: marks the length as an
+// explicit user choice so later preset/source-switch defaulting leaves it
+// alone, per the 'can be a different mode/length if they switch it before
+// starting' requirement.
+function _onSegLenUserChange(val) {
+  _segLenUserTouched = true;
+  _onSegLenChange(val);
+}
+
 function _onSegLenChange(val) {
   const v = parseInt(val);
   document.getElementById('segment-seconds').value = v;
@@ -231,6 +282,18 @@ function _onInputSourceChange(val) {
     field.style.display = 'none'; // hide for file sources
     // Store the auto-derived ID in the hidden field
     document.getElementById('camera-id-auto').value = _autoCamera(val);
+  }
+  // 2026-10-01: connecting a camera should auto-compress once the clip
+  // reaches 10 min by default (the product's 'just compress it' live-camera
+  // ask), while a file source keeps the old 60s default. Only apply the
+  // auto-default when the user has not manually dragged the segment slider
+  // this session, so an explicit choice they made before switching sources
+  // is never silently overwritten.
+  if (!_segLenUserTouched) {
+    const segSlider = document.getElementById('segment-seconds-slider');
+    const defSeg = _defaultSegLenForSource(val);
+    if (segSlider) segSlider.value = defSeg;
+    _onSegLenChange(defSeg);
   }
   // Keep DEMO tab source display in sync
   _syncDemoSrcDisplay();
@@ -690,14 +753,29 @@ function startSSE() {
 }
 
 function appendLog(line) {
-  const el = document.getElementById('log-terminal');
+  const level = getLogLevel(line);
+  _appendLogTo('log-terminal', line, level, true);
+  // Same live line, mirrored into the global activity drawer (visible on
+  // every tab) so watching for server activity never requires switching
+  // to HOME or the console window. See global_status.js.
+  _appendLogTo('global-log-terminal', line, level, false);
+}
+
+function _appendLogTo(elId, line, level, alwaysScroll) {
+  const el = document.getElementById(elId);
+  if (!el) return;
   const span = document.createElement('span');
-  span.className = 'log-line ' + getLogLevel(line);
+  span.className = 'log-line ' + level;
   span.textContent = line + '\n';
   el.appendChild(span);
   // cap at 600 lines
   while (el.children.length > 600) { el.removeChild(el.firstChild); }
-  el.scrollTop = el.scrollHeight;
+  // The HOME panel always autoscrolls; the drawer only autoscrolls while
+  // actually open, so an operator scrolled up to read history on a
+  // background tab doesn't get yanked back down by every new line.
+  const drawer = document.getElementById('global-drawer');
+  const shouldScroll = alwaysScroll || (drawer && drawer.classList.contains('open'));
+  if (shouldScroll) el.scrollTop = el.scrollHeight;
 }
 
 function getLogLevel(line) {

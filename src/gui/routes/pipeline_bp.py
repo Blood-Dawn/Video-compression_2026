@@ -203,11 +203,22 @@ def api_start():
                      "(a run would otherwise silently write unencrypted output)"
         }), 400
 
+    # 2026-10-01: a connected camera/stream should auto-compress once the
+    # clip reaches 10 min by default (the live-camera product ask); a file
+    # input keeps the historical 60s default. Only applies when the caller
+    # omits segment_seconds entirely - an explicit value (e.g. the GUI
+    # slider, or the user switching it before starting) always wins.
+    _is_live_input = isinstance(resolved_input, int) or (
+        isinstance(resolved_input, str)
+        and bool(_re.match(r"^(rtsp|rtsps|rtmp|http|https)://", resolved_input, _re.I))
+    )
+    _default_segment_seconds = 600 if _is_live_input else 60
+
     config = {
         "input_source": resolved_input,
         "camera_id": camera_id,
         "output_dir": output_dir,
-        "segment_seconds": data.get("segment_seconds", 60),
+        "segment_seconds": data.get("segment_seconds", _default_segment_seconds),
         "bg_method": data.get("bg_method", "MOG2"),
         "warmup_frames": data.get("warmup_frames", 120),
         "mode": data.get("mode", "mode0"),

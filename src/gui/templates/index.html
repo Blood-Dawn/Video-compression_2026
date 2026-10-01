@@ -2195,6 +2195,51 @@
 
 
   </style>
+<style>
+  /* ── Global server-activity drawer (2026-09-30 follow-up) ──────────────
+     Visible on every tab, not just Home - fed by the same /api/status
+     poll and /api/logs SSE stream that already run continuously from page
+     load (see status.js _updateGlobalStatus() and pipeline.js
+     appendLog()). Author: Bloodawn (KheivenD), 2026-09-30. */
+  .global-activity-toggle {
+    background:none;border:1px solid var(--border);border-radius:50%;
+    width:26px;height:26px;color:var(--text-dim);font-family:var(--mono);
+    font-size:0.85rem;cursor:pointer;display:flex;align-items:center;
+    justify-content:center;flex-shrink:0;transition:border-color 0.15s,color 0.15s;
+    margin-right:6px;
+  }
+  .global-activity-toggle:hover,
+  .global-activity-toggle.lit { border-color:var(--teal); color:var(--teal); }
+  #global-drawer {
+    position:fixed; left:0; right:0; bottom:0; z-index:1200;
+    background:#0d1520; border-top:2px solid var(--border);
+    display:flex; flex-direction:column;
+    max-height:0; overflow:hidden;
+    transition:max-height 0.22s ease;
+    box-shadow:0 -6px 18px rgba(0,0,0,0.35);
+  }
+  #global-drawer.open { max-height:300px; }
+  .global-drawer-head {
+    flex-shrink:0; display:flex; align-items:center; gap:0.6rem;
+    padding:0.4rem 0.75rem; border-bottom:1px solid var(--border);
+  }
+  .global-drawer-title {
+    font-family:var(--mono); font-size:0.65rem; letter-spacing:0.06em;
+    color:var(--text-dim); text-transform:uppercase; flex-shrink:0;
+  }
+  #global-status-msg {
+    font-family:var(--mono); font-size:0.68rem; color:var(--text);
+    flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    max-width:32vw;
+  }
+  .global-progress-row { display:flex; align-items:center; gap:0.4rem; flex:1; min-width:120px; }
+  #global-drawer-body { flex:1; overflow-y:auto; }
+  .global-log-terminal {
+    font-family:var(--mono); font-size:0.66rem; padding:0.4rem 0.75rem;
+    display:flex; flex-direction:column; white-space:pre-wrap;
+  }
+  body.global-drawer-open #notif-dock { bottom: 320px; }
+</style>
 </head>
 
 <body>
@@ -2219,6 +2264,8 @@
         <span class="pill-dot"></span>
         <span id="status-text">OFFLINE</span>
       </div>
+      <button class="global-activity-toggle" id="global-activity-toggle"
+              onclick="toggleGlobalStatus()" title="Server activity: live status and log">&#8801;</button>
       <button onclick="sendFeedback()" title="Send feedback"
               style="background:none;border:1px solid var(--border);border-radius:50%;
                      width:26px;height:26px;color:var(--text-dim);font-family:var(--mono);
@@ -2511,12 +2558,12 @@
           <label class="config-label" for="segment-seconds">Segment Length
             <span style="color:var(--amber);font-size:0.7rem;margin-left:4px;" id="seg-len-val">60s</span>
           </label>
-          <input type="range" id="segment-seconds-slider" min="10" max="300" step="10" value="60"
-                 oninput="_onSegLenChange(this.value)" />
+          <input type="range" id="segment-seconds-slider" min="10" max="1800" step="10" value="60"
+                 oninput="_onSegLenUserChange(this.value)" />
           <input type="hidden" id="segment-seconds" value="60" />
           <div class="slider-endpoints">
             <span>10s (many small files)</span>
-            <span>5min (few large files)</span>
+            <span>30min (few large files)</span>
           </div>
         </div>
       </div>
@@ -3669,6 +3716,7 @@
               <div style="display:flex;gap:0.5rem;margin-top:0.1rem;">
                 <button class="btn btn-ghost" style="flex:1;font-size:0.65rem;" id="metrics-enc-btn"
                         onclick="_metricsEncryptBtn()">[Lock] Encrypt this segment</button>
+                <button class="btn btn-ghost" style="flex:1;font-size:0.65rem;" id="metrics-timelapse-btn">[FF] Make timelapse</button>
               </div>
             </div>
 
@@ -4462,6 +4510,7 @@
   <script src="{{ url_for('static', filename='js/setup.js') }}"></script>
   <script src="{{ url_for('static', filename='js/pipeline.js') }}"></script>
   <script src="{{ url_for('static', filename='js/status.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/global_status.js') }}"></script>
   <script src="{{ url_for('static', filename='js/files.js') }}"></script>
   <script src="{{ url_for('static', filename='js/demo.js') }}"></script>
   <script src="{{ url_for('static', filename='js/encryption.js') }}"></script>
@@ -4482,6 +4531,26 @@
   <script src="{{ url_for('static', filename='js/zone_editor.js') }}"></script>
   <script src="{{ url_for('static', filename='js/webhook.js') }}"></script>
   <script src="{{ url_for('static', filename='js/devices.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/timelapse.js') }}"></script>
+
+<!-- Global server-activity drawer: visible on every tab (not just Home),
+     fed by the same /api/status poll and /api/logs SSE stream that already
+     run continuously in the background. Author: Bloodawn (KheivenD), 2026-09-30. -->
+<div id="global-drawer">
+  <div class="global-drawer-head">
+    <span class="global-drawer-title">Server activity</span>
+    <span id="global-status-msg">Idle.</span>
+    <div class="global-progress-row">
+      <div class="progress-track"><div class="progress-fill" id="global-progress-fill"></div></div>
+      <span class="progress-pct" id="global-progress-pct"></span>
+    </div>
+    <button class="log-clear-btn" onclick="clearGlobalLog()">CLEAR</button>
+    <button class="log-clear-btn" onclick="toggleGlobalStatus()">CLOSE</button>
+  </div>
+  <div id="global-drawer-body">
+    <div class="global-log-terminal" id="global-log-terminal"></div>
+  </div>
+</div>
 
 <!-- AI Plate Reader modal - Bloodawn (KheivenD), 2026-05-02 -->
 <div id="plate-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center;">

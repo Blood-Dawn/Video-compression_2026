@@ -35,7 +35,7 @@ from typing import Optional
 # this to the NEXT version number in dev stage right after tagging, e.g.
 # 2.2.0-beta -> "2.2.1.dev0" here. tests/test_version_consistency.py pins
 # this file's value and includes a tripwire against the last published tag.
-APP_VERSION = "2.2.3-beta"
+APP_VERSION = "2.2.4.dev0"
 
 # Release-stage ordering for comparison purposes. Anything not recognized
 # (including a fully final release, no suffix at all) ranks highest, so

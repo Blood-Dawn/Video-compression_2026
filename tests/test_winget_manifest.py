@@ -97,7 +97,7 @@ def test_silent_switches_present():
 # dev-stage version right after each tag (see version.py APP_VERSION
 # comment and tests/test_version_consistency.py). Update this the same
 # moment _LAST_PUBLISHED_DESKTOP_TAG there is updated.
-_LAST_PUBLISHED_DESKTOP_VERSION = "2.2.2-beta"
+_LAST_PUBLISHED_DESKTOP_VERSION = "2.2.3-beta"
 
 
 def test_version_matches_last_published_release_across_all_three():

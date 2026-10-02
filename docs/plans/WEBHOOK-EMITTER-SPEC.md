@@ -54,20 +54,29 @@ addresses that drift apart the first time someone adds one. Instead, 4.9
 makes one small, behavior-preserving refactor in `push_notify.py`:
 
 ```python
-def check_outbound_url(url, *, require_path: bool, noun: str) -> "tuple[bool, str]":
-    """The shared SSRF guard. `noun` is used in messages ("topic URL", "webhook URL")."""
-    ...  # the current body of is_safe_push_url, parameterised
+def check_outbound_url(url, *, require_path: bool, noun: str,
+                       credential_field: str) -> "tuple[bool, str]":
+    """The shared SSRF guard. `noun` and `credential_field` are used in messages."""
+    ...  # the current body of is_safe_push_url, parameterised for both
 
 def is_safe_push_url(url) -> "tuple[bool, str]":
-    return check_outbound_url(url, require_path=True, noun="topic URL")
+    return check_outbound_url(url, require_path=True, noun="topic URL",
+                              credential_field="token field")
 ```
 
 `event_webhook.py` then defines:
 
 ```python
 def is_safe_webhook_url(url) -> "tuple[bool, str]":
-    return push_notify.check_outbound_url(url, require_path=False, noun="webhook URL")
+    return push_notify.check_outbound_url(url, require_path=False, noun="webhook URL",
+                                          credential_field="secret field")
 ```
+
+Every message that names the feature has to come from these two parameters,
+not only the ones that say "topic URL". Today that includes "credentials in
+the URL are not allowed, use the token field" and "topic host does not
+resolve". Left as is, a webhook URL with `user:pass@` in it would tell the
+operator to fill in a push token the webhook form does not have.
 
 **Acceptance for the refactor:** `tests/test_push_notify.py` passes
 unchanged. Every existing push error message stays byte-for-byte the same,
@@ -129,9 +138,18 @@ Rules:
 * **Field allowlist, not a copy.** Each event is rebuilt from only these keys:
   `kind`, `camera_id`, `t`, `wall_time`, `track_id`, `label`, `geometry_id`,
   `direction`, `dwell_s`. Anything else a future detector attaches (plate
-  text, crops, file paths, stream URLs) is dropped. This keeps the
-  "no PII beyond the class label" rule from `event_log.py` true even if the
-  event dict grows later.
+  text, crops, file paths, stream URLs) is dropped before it leaves the
+  machine.
+
+  **Scope of this filter:** it protects outbound delivery only. It does
+  **not** protect `events.jsonl`. `append_events` currently persists every
+  key it is given (`rec = dict(ev)`), so the "no PII beyond the class label"
+  rule in `event_log.py` holds today only because no current producer sends
+  extra keys. Recommended follow-up, separate from 4.9: move this allowlist
+  into `event_log.py` as a shared `EVENT_FIELDS` constant, apply it in
+  `append_events` before writing, and have both `push_notify` and
+  `event_webhook` import it, so disk and network share one definition. Until
+  that lands it should be recorded in `docs/plans/BLOCKERS.md`.
 * **At most 20 events per POST.** Extra events are counted in `dropped`
   rather than sent, and are still in `events.jsonl` on disk.
 * **Body capped at 64 KB.** Twenty allowlisted events are far below this; the
@@ -184,18 +202,25 @@ Copied in spirit from `push_notify`, tightened where D4 asks:
 
 In `utils/event_log.append_events`, directly after the existing push call and
 in its **own** `try/except`, so a failure in one notifier cannot skip the
-other:
+other. The import sits **inside** that block: an `ImportError` or any
+exception raised while `event_webhook` (or something it imports) loads must
+be swallowed just like a delivery failure, or it would escape
+`append_events` and reach the encode loop.
 
 ```python
 try:
-    from utils.event_webhook import emit_events as _emit
-except ModuleNotFoundError:  # pragma: no cover - import path shim
-    from src.utils.event_webhook import emit_events as _emit
-try:
+    try:
+        from utils.event_webhook import emit_events as _emit
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.utils.event_webhook import emit_events as _emit
     _emit(events, camera_id=camera_id)
 except Exception:  # noqa: BLE001 - best effort, always
     pass
 ```
+
+The existing push hook just above it has the same shape (its import is
+outside the `try`). 4.9 should move that import inside its `try` as well, so
+both notifiers follow the same rule.
 
 When the webhook is disabled the cost is one config read, the same as push.
 
@@ -248,7 +273,8 @@ monkeypatched to a temp directory so a developer's real webhook is never hit.
 | 6 | No secret | No signature header |
 | 7 | Secret never echoed | `GET` config shows `has_secret: true`, no `secret` key |
 | 8 | Receiver returns 302 | Not followed, logged as redirect refused |
-| 9 | Receiver hangs | Call returns within about 2 seconds; encode is not blocked |
+| 9a | Receiver hangs, caller side | `emit_events` returns immediately (well under the timeout), proving the caller never waits on the socket |
+| 9b | Receiver hangs, worker side | `flush(timeout=4)` returns `True`: the worker gave up after its 2 second socket timeout and drained. A worker with no timeout stays stuck and this fails |
 | 10 | Receiver down | Warning logged, nothing raised |
 | 11 | Queue full | Delivery dropped, `emit_events` returns immediately |
 | 12 | Allowed URLs | loopback, `192.168.x.x`, `10.x`, `172.16.x`, `[::1]`, and a URL with no path |

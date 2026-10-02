@@ -3884,7 +3884,7 @@ wheels = [
 
 [[package]]
 name = "video-compression"
-version = "2.2.3.dev0"
+version = "2.2.3b0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },

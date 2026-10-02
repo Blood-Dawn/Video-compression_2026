@@ -248,3 +248,7 @@ mobile/android/build_log.txt
 # only by noticing `git status` didn't list a file that should have been
 # there).
 !web/**/*.ts
+
+# Local-only benchmark/footage scratch runs (see DEV.md Section 13)
+data/samples/mode_benchmark/
+data/samples/varied_footage_test/

@@ -18,7 +18,7 @@
 # until you rebuild the installer and run `pwsh scripts/winget_validate.ps1
 # -Recompute`. Tracked in docs/BLOCKERS.md.
 PackageIdentifier: Blood-Dawn.SVCS
-PackageVersion: 2.2.2-beta
+PackageVersion: 2.2.3-beta
 InstallerType: inno
 Scope: machine
 InstallModes:
@@ -30,10 +30,10 @@ InstallerSwitches:
 # Inno registers its uninstall key as {AppId}_is1; this lets winget match the
 # installed package for upgrade/uninstall.
 ProductCode: '{8E2C1F4A-3B6D-4E2A-9C7F-5A1D0B2E6C44}_is1'
-ReleaseDate: 2026-06-20
+ReleaseDate: 2026-10-01
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v2.2.2-beta/SVCS-Setup-2.2.2-beta.exe
-    InstallerSha256: 31D2DD3E152A915B17CCE29D8EE83A04F1B2352761C9761A80AC05BD1AF4441A
+    InstallerUrl: https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v2.2.3-beta/SVCS-Setup-2.2.3-beta.exe
+    InstallerSha256: DC774CE92F2DCB8A9C4BD6B994840514CFBB0352AAF333EBBDE90B3FAB6DA238
 ManifestType: installer
 ManifestVersion: 1.6.0

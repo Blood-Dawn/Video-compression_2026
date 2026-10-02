@@ -25,7 +25,7 @@ from pathlib import Path
 from utils.version import APP_VERSION, is_newer
 
 ROOT = Path(__file__).parent.parent
-EXPECTED = "2.2.3.dev0"
+EXPECTED = "2.2.3-beta"
 
 # The last tag this project actually published for the desktop app. Update
 # this the moment a newer desktop tag ships - if you forget, this test

@@ -15,12 +15,14 @@ Author: Bloodawn (KheivenD), 2026-06-02 (autonomous v2 build).
 
 From `docs/security/PENTEST-2026-10-03.md`. None is reachable without a
 credential. Re-check with `uv run python scripts/pentest_probe.py`, which
-exits non-zero while any of these is open.
+exits non-zero while any of these is open. PT-01 and PT-02 are fixed, with
+regression tests in `tests/test_reset.py` and `tests/test_security_headers.py`;
+PT-03 and PT-04 remain open.
 
 | Item | Severity | Why open | Proposed approach |
 |------|----------|----------|-------------------|
-| PT-01: a device token can factory-reset, revoking every paired phone | Medium | `/api/setup/reset` lacks the password-only check `/api/auth/tokens` has, and `reset_state()` deletes `device_tokens.json`. Breaks the rule stated in `auth.py`. | Call `tokens_bp._require_password_auth()` at the top of `api_setup_reset`; add a Bearer-reset-is-403 test. |
-| PT-02: no anti-framing or `nosniff` headers (clickjacking past SEC-001) | Medium | A framed dashboard's requests are same-origin, so the Origin-based CSRF guard lets them through. | One `after_request` in `create_app()`: `X-Frame-Options: DENY`, `CSP frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`. |
+| ~~PT-01: a device token can factory-reset, revoking every paired phone~~ **FIXED 2026-10-03** | Medium | `/api/setup/reset` lacks the password-only check `/api/auth/tokens` has, and `reset_state()` deletes `device_tokens.json`. Breaks the rule stated in `auth.py`. | Call `tokens_bp._require_password_auth()` at the top of `api_setup_reset`; add a Bearer-reset-is-403 test. |
+| ~~PT-02: no anti-framing or `nosniff` headers (clickjacking past SEC-001)~~ **FIXED 2026-10-03** | Medium | A framed dashboard's requests are same-origin, so the Origin-based CSRF guard lets them through. | One `after_request` in `create_app()`: `X-Frame-Options: DENY`, `CSP frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`. |
 | PT-03: oversized `path` is an unhandled `OSError` 500 | Low | `library_bp._safe_video` calls `is_file()` unguarded; the traceback (with the install path) goes to the log. | Catch `OSError`/`ValueError` in `_safe_video` and treat it as not found. |
 | PT-04: no body cap on single-shot `/api/upload` | Low | `MAX_CONTENT_LENGTH` unset; the chunked path caps at 8 GB but this route does not. Authenticated disk fill. | Set `MAX_CONTENT_LENGTH` to the same 8 GB. |
 

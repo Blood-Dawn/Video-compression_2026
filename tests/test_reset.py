@@ -100,3 +100,49 @@ def test_reset_route_returns_to_first_run(client, monkeypatch, restore_status):
     st = client.get("/api/setup/state").get_json()
     assert st["setup_complete"] is False
     assert st["output_dir"] == ""
+
+
+# ── PT-01: a device token cannot factory-reset (pentest 2026-10-03) ──────────
+# reset_state() deletes device_tokens.json, so a token that could reset would
+# be a stolen phone unpairing every other phone. The route must demand the
+# PASSWORD, the same rule the token-management routes already enforce.
+
+@pytest.fixture()
+def guarded_reset(tmp_path, monkeypatch, restore_status):
+    """setup_bp behind the real auth guard, with the destructive helper stubbed."""
+    import base64
+    from flask import Flask
+    from gui import device_tokens
+    from gui.auth import install_basic_auth
+    import gui.routes.setup_bp as sbp
+
+    monkeypatch.setattr(device_tokens, "token_path", lambda: tmp_path / "device_tokens.json")
+    calls = []
+    monkeypatch.setattr(sbp, "reset_state", lambda: calls.append("reset") or ["device_tokens.json"])
+    monkeypatch.setattr(sbp, "reset_mode_avgs", lambda: None)
+    with gui_state._state_lock:
+        gui_state._status["setup_complete"] = True
+
+    app = Flask(__name__)
+    app.register_blueprint(sbp.setup_bp)
+    install_basic_auth(app, "admin", "secret")
+    basic = {"Authorization": "Basic " + base64.b64encode(b"admin:secret").decode("ascii")}
+    secret, _ = device_tokens.mint_token("stolen phone")
+    return app.test_client(), basic, {"Authorization": f"Bearer {secret}"}, calls
+
+
+def test_a_device_token_cannot_factory_reset(guarded_reset):
+    client, _basic, bearer, calls = guarded_reset
+    resp = client.post("/api/setup/reset", headers=bearer)
+    assert resp.status_code == 403
+    assert "password" in resp.get_json()["error"]
+    assert calls == [], "reset_state ran for a device token"
+    assert gui_state._status["setup_complete"] is True
+
+
+def test_the_password_can_still_factory_reset(guarded_reset):
+    client, basic, _bearer, calls = guarded_reset
+    resp = client.post("/api/setup/reset", headers=basic)
+    assert resp.status_code == 200
+    assert calls == ["reset"]
+    assert gui_state._status["setup_complete"] is False

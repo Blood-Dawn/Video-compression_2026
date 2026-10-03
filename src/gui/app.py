@@ -286,6 +286,15 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.csrf import install_csrf_protection
 install_csrf_protection(app)
 
+# ── Browser hardening headers (PT-02) ────────────────────────────────────────
+# Anti-framing closes the clickjacking path the Origin-based CSRF guard above
+# cannot see. Installed on the module app for the same reason as the guard.
+try:
+    from gui.security_headers import install_security_headers
+except ModuleNotFoundError:  # pragma: no cover - import path shim
+    from src.gui.security_headers import install_security_headers
+install_security_headers(app)
+
 
 # ── Rebound-global forwarding (REFACTOR-PLAN §5) ─────────────────────────────
 # Most state names are mutable containers re-exported from gui.state as the

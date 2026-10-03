@@ -24,6 +24,7 @@ if str(SRC) not in sys.path:
 
 from utils.db import initialize_database, insert_segment  # noqa: E402
 from utils import push_notify as _push_notify  # noqa: E402
+from utils import event_webhook as _event_webhook  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -55,6 +56,12 @@ def _isolate_push_config(_push_config_dir, monkeypatch):
     if path.exists():
         path.unlink()
     monkeypatch.setattr(_push_notify, "config_path", lambda: path)
+    # Planner 4.9: the event webhook hangs off the same append_events call,
+    # so it gets the same treatment. Same directory, its own file.
+    hook_path = _push_config_dir / _event_webhook.CONFIG_FILENAME
+    if hook_path.exists():
+        hook_path.unlink()
+    monkeypatch.setattr(_event_webhook, "config_path", lambda: hook_path)
     yield
 
 

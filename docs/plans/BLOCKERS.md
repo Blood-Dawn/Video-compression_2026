@@ -11,6 +11,19 @@ Author: Bloodawn (KheivenD), 2026-06-02 (autonomous v2 build).
 
 ## Open items
 
+### Event webhook (planner 4.9) - known gaps (2026-10-03)
+
+`src/utils/event_webhook.py` landed with the SSRF guard shared with push
+(`push_notify.check_outbound_url`). This closes the "outbound webhook" gap in
+the R4 Phase 3 table below for behavior events. Config routes and UI are 4.10.
+Two gaps are recorded here rather than left unwritten, per
+`docs/plans/WEBHOOK-EMITTER-SPEC.md`.
+
+| Item | Severity | Why open | Proposed approach |
+|------|----------|----------|-------------------|
+| DNS rebinding between validation and connect (push AND webhook) | Low | The guard resolves the host, then `urllib` resolves it again on connect. A hostile DNS server could answer safe first and `169.254.169.254` second. Exploiting it needs dashboard access to set the URL plus an attacker-run DNS server. | Resolve once, validate, connect to that exact IP with the original `Host` header and TLS SNI. One shared fix in `push_notify` covers both notifiers. |
+| `events.jsonl` persists every key it is given | Low (latent) | `event_log.append_events` does `rec = dict(ev)`. The webhook allowlist protects outbound delivery only. "No PII beyond the class label" holds today only because no producer sends extra keys. | Move `event_webhook.EVENT_FIELDS` into `event_log.py`, apply it before writing, and import it from both notifiers. |
+
 ### R4 Phase 5 - ONNX plate reader: install recipe + maintenance (2026-07-04)
 
 The plate reader now defaults to the ONNX ALPR stack (fast-plate-ocr +

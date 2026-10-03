@@ -49,12 +49,24 @@ def append_events(output_dir, events: list, camera_id: str = "") -> int:
     # costs one config read when nothing is configured. The publisher
     # queues onto its own worker and swallows its own failures, because a
     # notification must never be able to fail the encode that raised it.
+    # The import sits INSIDE the try: an exception while a notifier module
+    # loads must be swallowed exactly like a delivery failure.
     try:
-        from utils.push_notify import publish_events as _publish
-    except ModuleNotFoundError:  # pragma: no cover - import path shim
-        from src.utils.push_notify import publish_events as _publish
-    try:
+        try:
+            from utils.push_notify import publish_events as _publish
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.utils.push_notify import publish_events as _publish
         _publish(events, camera_id=camera_id)
+    except Exception:  # noqa: BLE001 - best effort, always
+        pass
+    # Planner 4.9: machine-readable webhook. Own try, so a failure in one
+    # notifier can never skip the other.
+    try:
+        try:
+            from utils.event_webhook import emit_events as _emit
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.utils.event_webhook import emit_events as _emit
+        _emit(events, camera_id=camera_id)
     except Exception:  # noqa: BLE001 - best effort, always
         pass
     return written

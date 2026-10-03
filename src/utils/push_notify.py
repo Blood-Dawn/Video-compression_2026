@@ -191,7 +191,7 @@ def save_config(data: dict) -> "tuple[bool, str, dict]":
 # ── URL safety ───────────────────────────────────────────────────────────────
 
 
-def _addresses_for(host: str) -> "tuple[list, str]":
+def _addresses_for(host: str, label: str = "topic") -> "tuple[list, str]":
     """Every IP a host resolves to, or ([], reason). Literals skip DNS."""
     try:
         return [ipaddress.ip_address(host)], ""
@@ -200,7 +200,7 @@ def _addresses_for(host: str) -> "tuple[list, str]":
     try:
         infos = socket.getaddrinfo(host, None)
     except (OSError, UnicodeError):
-        return [], "topic host does not resolve"
+        return [], f"{label} host does not resolve"
     out = []
     for info in infos:
         try:
@@ -208,7 +208,7 @@ def _addresses_for(host: str) -> "tuple[list, str]":
         except (ValueError, IndexError):
             continue
     if not out:
-        return [], "topic host does not resolve"
+        return [], f"{label} host does not resolve"
     return out, ""
 
 
@@ -235,40 +235,48 @@ def _address_refused(ip) -> str:
     return ""
 
 
-def is_safe_push_url(url) -> "tuple[bool, str]":
-    """Validate an ntfy topic URL. Returns (ok, reason).
+def check_outbound_url(url, *, require_path: bool, label: str,
+                       credential_field: str) -> "tuple[bool, str]":
+    """The shared outbound-URL SSRF guard. Returns (ok, reason).
+
+    Used by both the ntfy push (``is_safe_push_url``) and the event webhook
+    (``event_webhook.is_safe_webhook_url``) so there is exactly one list of
+    refused metadata hosts and addresses. ``label`` names the feature in
+    messages ("topic", "webhook") and ``credential_field`` names the form
+    field that holds the secret instead, so each caller's operator is told
+    about a field that actually exists on their form.
 
     Allows http and https to loopback, RFC1918 / unique-local, and public
-    hosts, because a self-hosted ntfy is legitimately any of those. Refuses
-    other schemes, URL-embedded credentials, a missing topic path, the
-    cloud-metadata hostnames and addresses, and anything whose DNS answer
-    lands on a refused address.
+    hosts, because a self-hosted receiver is legitimately any of those.
+    Refuses other schemes, URL-embedded credentials, the cloud-metadata
+    hostnames and addresses, and anything whose DNS answer lands on a
+    refused address. ``require_path`` additionally refuses a bare host.
     """
     s = str(url or "").strip()
     if not s:
-        return False, "empty topic URL"
+        return False, f"empty {label} URL"
     if len(s) > 2048:
-        return False, "topic URL is too long"
+        return False, f"{label} URL is too long"
     try:
         parsed = urlparse(s)
     except ValueError:
-        return False, "topic URL could not be parsed"
+        return False, f"{label} URL could not be parsed"
     scheme = (parsed.scheme or "").lower()
     if scheme not in ("http", "https"):
         return False, f"scheme not allowed: {scheme or 'none'}"
     if parsed.username or parsed.password:
-        return False, "credentials in the URL are not allowed, use the token field"
+        return False, f"credentials in the URL are not allowed, use the {credential_field}"
     try:
         host = (parsed.hostname or "").lower()
     except ValueError:
-        return False, "topic URL host could not be parsed"
+        return False, f"{label} URL host could not be parsed"
     if not host:
-        return False, "no host in the topic URL"
+        return False, f"no host in the {label} URL"
     if host in _BLOCKED_HOSTS:
         return False, "blocked cloud-metadata host"
-    if not (parsed.path or "").strip("/"):
+    if require_path and not (parsed.path or "").strip("/"):
         return False, "no topic in the URL path, for example http://192.168.1.50:8080/svcs-alerts"
-    addrs, why = _addresses_for(host)
+    addrs, why = _addresses_for(host, label)
     if why:
         return False, why
     for ip in addrs:
@@ -276,6 +284,16 @@ def is_safe_push_url(url) -> "tuple[bool, str]":
         if refused:
             return False, refused
     return True, ""
+
+
+def is_safe_push_url(url) -> "tuple[bool, str]":
+    """Validate an ntfy topic URL. Returns (ok, reason).
+
+    A thin wrapper over ``check_outbound_url``: an ntfy URL with no topic in
+    its path is meaningless, so the path is required here.
+    """
+    return check_outbound_url(url, require_path=True, label="topic",
+                              credential_field="token field")
 
 
 # ── posting ──────────────────────────────────────────────────────────────────

@@ -54,13 +54,13 @@ addresses that drift apart the first time someone adds one. Instead, 4.9
 makes one small, behavior-preserving refactor in `push_notify.py`:
 
 ```python
-def check_outbound_url(url, *, require_path: bool, noun: str,
+def check_outbound_url(url, *, require_path: bool, label: str,
                        credential_field: str) -> "tuple[bool, str]":
-    """The shared SSRF guard. `noun` and `credential_field` are used in messages."""
+    """The shared SSRF guard. `label` and `credential_field` are used in messages."""
     ...  # the current body of is_safe_push_url, parameterised for both
 
 def is_safe_push_url(url) -> "tuple[bool, str]":
-    return check_outbound_url(url, require_path=True, noun="topic URL",
+    return check_outbound_url(url, require_path=True, label="topic",
                               credential_field="token field")
 ```
 
@@ -68,7 +68,7 @@ def is_safe_push_url(url) -> "tuple[bool, str]":
 
 ```python
 def is_safe_webhook_url(url) -> "tuple[bool, str]":
-    return push_notify.check_outbound_url(url, require_path=False, noun="webhook URL",
+    return push_notify.check_outbound_url(url, require_path=False, label="webhook",
                                           credential_field="secret field")
 ```
 

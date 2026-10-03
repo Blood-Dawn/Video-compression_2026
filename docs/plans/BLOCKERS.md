@@ -11,6 +11,19 @@ Author: Bloodawn (KheivenD), 2026-06-02 (autonomous v2 build).
 
 ## Open items
 
+### Pentest findings (planner 3.14, 2026-10-03)
+
+From `docs/security/PENTEST-2026-10-03.md`. None is reachable without a
+credential. Re-check with `uv run python scripts/pentest_probe.py`, which
+exits non-zero while any of these is open.
+
+| Item | Severity | Why open | Proposed approach |
+|------|----------|----------|-------------------|
+| PT-01: a device token can factory-reset, revoking every paired phone | Medium | `/api/setup/reset` lacks the password-only check `/api/auth/tokens` has, and `reset_state()` deletes `device_tokens.json`. Breaks the rule stated in `auth.py`. | Call `tokens_bp._require_password_auth()` at the top of `api_setup_reset`; add a Bearer-reset-is-403 test. |
+| PT-02: no anti-framing or `nosniff` headers (clickjacking past SEC-001) | Medium | A framed dashboard's requests are same-origin, so the Origin-based CSRF guard lets them through. | One `after_request` in `create_app()`: `X-Frame-Options: DENY`, `CSP frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: same-origin`. |
+| PT-03: oversized `path` is an unhandled `OSError` 500 | Low | `library_bp._safe_video` calls `is_file()` unguarded; the traceback (with the install path) goes to the log. | Catch `OSError`/`ValueError` in `_safe_video` and treat it as not found. |
+| PT-04: no body cap on single-shot `/api/upload` | Low | `MAX_CONTENT_LENGTH` unset; the chunked path caps at 8 GB but this route does not. Authenticated disk fill. | Set `MAX_CONTENT_LENGTH` to the same 8 GB. |
+
 ### R4 Phase 5 - ONNX plate reader: install recipe + maintenance (2026-07-04)
 
 The plate reader now defaults to the ONNX ALPR stack (fast-plate-ocr +
@@ -44,7 +57,7 @@ cheap Medium/Low findings this session. Genuinely-deferred items:
 | Item | Severity | Why deferred | Proposed approach |
 |------|----------|--------------|-------------------|
 | Dev/notebook dependency CVEs | Medium | `pip-audit` flagged jupyter-server, jupyterlab, mistune, notebook, tornado, bleach, basicsr, idna - all DEV/notebook-only deps, not imported by the runtime app or shipped in the installer. The runtime ones (cryptography, urllib3) were bumped (SEC-008). | Bump the notebook stack in a dedicated `uv lock --upgrade-package` pass when the notebooks are next touched; they are not in the frozen app. |
-| External network penetration test | n/a (process) | Requires a live LAN bind + an external tester; not a pytest-coverable, CI-safe activity. | Owner runs a pentest against a real deployment before any public/production rollout. |
+| External network penetration test | n/a (process) | **First pass done 2026-10-03 (planner 3.14)**, in-process against the real auth + CSRF guards: `docs/security/PENTEST-2026-10-03.md`, findings PT-01 to PT-04 in the table at the top of this file. Still open: the TCP-layer half (slow-client DoS, a real second machine). | Re-run the four `curl` checks in that report from a second machine on a real LAN bind before any public/production rollout. |
 | Fuzzing the video-ingest / ffmpeg path | n/a (process) | A real fuzzing campaign (AFL/boofuzz) needs dedicated tooling + time and is not deterministic in CI. | Owner runs a fuzzing pass on the upload/watch-folder/thumbnail path with malformed media corpora. |
 | Live RTSP/ONVIF camera-path testing | n/a (process) | Needs a real camera or a running MediaMTX server; hardware/timing dependent. | Owner exercises the live camera path manually (see `docs/testing/FEATURE-AUDIT.md`). |
 

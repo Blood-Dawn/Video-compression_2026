@@ -2924,6 +2924,33 @@
               </div>
             </div>
           </details>
+                     <!-- R6 / Week 3: desktop behavior events panel -->
+          <details class="source-advanced" id="events-panel" style="margin-bottom:0.8rem;">
+            <summary style="cursor:pointer;font-family:var(--display);font-size:0.95rem;letter-spacing:0.08em;color:var(--text-dim);">
+              BEHAVIOR EVENTS
+            </summary>
+
+            <div style="padding:0.5rem 0 0;">
+              <div id="events-status"
+                   style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.5rem;">
+                Loading behavior events...
+              </div>
+
+              <div id="events-table-wrap" style="overflow-x:auto;">
+                <table id="events-table" class="archive-results-table" style="width:100%;display:none;">
+                  <thead>
+                    <tr>
+                      <th>Kind</th>
+                      <th>Camera</th>
+                      <th>Headline</th>
+                      <th>Wall Time</th>
+                    </tr>
+                  </thead>
+                  <tbody id="events-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -4164,6 +4191,8 @@
   <script src="{{ url_for('static', filename='js/hls.js') }}"></script>
   <script src="{{ url_for('static', filename='js/rtsp.js') }}"></script>
   <script src="{{ url_for('static', filename='js/tools.js') }}"></script>
+<script src="{{ url_for('static', filename='js/events.js') }}"></script>
+
   <script src="{{ url_for('static', filename='js/library.js') }}"></script>
   <script src="{{ url_for('static', filename='js/autocompress.js') }}"></script>
   <script src="{{ url_for('static', filename='js/metrics.js') }}"></script>

@@ -681,6 +681,21 @@ function startSSE() {
   logEventSource.onmessage = (ev) => {
     const line = JSON.parse(ev.data);
     appendLog(line);
+
+    // R6 / Week 4: show one toast for behavior events.
+    if (
+      typeof line === 'string' &&
+      line.includes(' EVENT ') &&
+      typeof pushNotif === 'function'
+    ) {
+      pushNotif(
+        'BEHAVIOR EVENT',
+        line.slice(line.indexOf('EVENT ') + 6),
+        'info',
+        null,
+        5000
+      );
+    }
   };
   logEventSource.onerror = () => {
     // reconnect after 3s

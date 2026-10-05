@@ -118,3 +118,39 @@ def test_segments_route_filters_are_parameterized(tmp_path, monkeypatch):
                 fb._status.get("config", {}).pop("output_dir", None)
             else:
                 fb._status["config"]["output_dir"] = prev
+
+def test_segments_route_supports_multiple_object_types(tmp_path):
+    """The /api/segments route accepts a comma-separated object_type filter."""
+    import gui.routes.files_bp as fb
+    from gui.app import app
+
+    out = tmp_path / "out"
+    out.mkdir()
+    db = out / "metadata.db"
+    initialize_database(str(db))
+    _seed(str(db))
+
+    with fb._state_lock:
+        cfg = fb._status.setdefault("config", {})
+        prev = cfg.get("output_dir", None)
+        cfg["output_dir"] = str(out)
+
+    try:
+        client = app.test_client()
+
+        body = client.get(
+            "/api/segments",
+            query_string={"object_type": "vehicle,person"},
+        ).get_json()
+
+        segments = body.get("segments", [])
+        object_types = {segment["object_type"] for segment in segments}
+
+        assert object_types == {"vehicle", "person"}
+        assert len(segments) == 2
+    finally:
+        with fb._state_lock:
+            if prev is None:
+                fb._status.get("config", {}).pop("output_dir", None)
+            else:
+                fb._status["config"]["output_dir"] = prev

@@ -3502,15 +3502,16 @@
         <div class="archive-filters">
           <div class="archive-filter-group">
             <label>Object Type</label>
-            <select id="arc-object-type">
-              <option value="">Any type</option>
+            <select id="arc-object-type" multiple size="5">
               <option value="vehicle">Vehicle</option>
               <option value="person">Person</option>
-              <option value="person+vehicle">Person + Vehicle</option>
               <option value="animal">Animal</option>
               <option value="other">Other</option>
               <option value="unknown">Unknown</option>
             </select>
+            <small style="display:block;color:var(--text-dim);font-size:0.55rem;">
+              Hold ⌘ to select multiple
+            </small>
           </div>
           <div class="archive-filter-group">
             <label>Color</label>

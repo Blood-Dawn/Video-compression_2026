@@ -320,7 +320,9 @@ async function runArchiveSearch() {
     <th>Vehicles</th><th>People</th><th>Play</th>`;
 
   const params = new URLSearchParams();
-  const ot  = document.getElementById('arc-object-type').value;
+  const ot  = Array.from(document.getElementById('arc-object-type').selectedOptions)
+    .map(option => option.value)
+    .filter(Boolean);
   const col = document.getElementById('arc-color').value;
   const sc  = document.getElementById('arc-scene').value;
   const tod = document.getElementById('arc-tod').value;
@@ -330,7 +332,7 @@ async function runArchiveSearch() {
   const mr  = document.getElementById('arc-min-rois').value;
   const enc = document.getElementById('arc-enc-only').checked;
 
-  if (ot)  params.set('object_type', ot);
+  if (ot.length) params.set('object_type', ot.join(','));
   if (col) params.set('color', col);
   if (sc)  params.set('scene_type', sc);
   if (tod) params.set('time_of_day', tod);

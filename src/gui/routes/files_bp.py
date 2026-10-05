@@ -117,7 +117,16 @@ def api_segments():
     f_enc_only  = request.args.get("encrypted_only", "").strip() == "1"
 
     if f_type:
-        filters.append("COALESCE(object_type,'unknown') = ?"); params.append(f_type)
+        types = [value.strip() for value in f_type.split(",") if value.strip()]
+        if len(types) == 1:
+            filters.append("COALESCE(object_type,'unknown') = ?")
+            params.append(types[0])
+        elif types:
+            placeholders = ",".join("?" for _ in types)
+            filters.append(
+                f"COALESCE(object_type,'unknown') IN ({placeholders})"
+            )
+            params.extend(types)
     if f_color:
         filters.append("dominant_color = ?"); params.append(f_color)
     if f_scene:

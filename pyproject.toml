@@ -172,6 +172,11 @@ crash-reporting = [
     "sentry-sdk>=2.0.0",
 ]
 
+# Optional semantic search. The real model is never downloaded automatically.
+semantic-search = [
+    "sentence-transformers>=3.0.0",
+]
+
 [project.scripts]
 run-gui = "src.gui.run_gui:main"
 

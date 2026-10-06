@@ -121,6 +121,9 @@ EXPECTED = {
     # R6 Track C: closed-app push settings.
     "/api/push/config": "push",
     "/api/push/test": "push",
+    # Planner 4.10: event webhook settings.
+    "/api/webhook/config": "webhook",
+    "/api/webhook/test": "webhook",
 }
 
 EXPECTED_BLUEPRINTS = {
@@ -133,6 +136,7 @@ EXPECTED_BLUEPRINTS = {
     "events",          # R5 5.6/5.7: zones config + behavior events
     "ingest",          # R6 Track B: chunked resumable upload
     "push",            # R6 Track C: closed-app push settings
+    "webhook",         # Planner 4.10: event webhook settings
 }
 
 
@@ -147,9 +151,10 @@ def test_route_count():
     # then +1 for /api/nl_search (R5 TASK 5.4, 2026-08-16), then +2 for
     # /api/zones (GET+POST, one rule) and /api/events/recent (R5 5.6/5.7),
     # then +4 for the R6 chunked-upload routes, then +2 for the R6 Track C
-    # push routes (/api/push/config carries GET+POST on one rule).
+    # push routes (/api/push/config carries GET+POST on one rule), then +2
+    # for the planner 4.10 webhook routes (same shape as push).
     rules = _rules()
-    assert len(rules) == 87, f"expected 87 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 89, f"expected 89 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_blueprints_registered():

@@ -2924,6 +2924,47 @@
               </div>
             </div>
           </details>
+
+          <!-- Machine-readable event webhook (planner 4.10). Off by default:
+               with no URL the server never opens a socket. The signing secret
+               is write-only, exactly like the push token above. -->
+          <details class="source-advanced" id="webhook-panel" style="margin-bottom:0.8rem;" ontoggle="if(this.open)webhookCfgRefresh()">
+            <summary style="cursor:pointer;font-family:var(--display);font-size:0.95rem;letter-spacing:0.08em;color:var(--text-dim);">
+              SEND EVENTS TO ANOTHER SYSTEM (WEBHOOK)
+            </summary>
+            <div style="padding:0.5rem 0 0;">
+              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
+                Posts each batch of line crossings and loitering events as <b>JSON</b> to a URL you
+                choose, so another system (Home Assistant, Node-RED, a VMS, a security log) can act
+                on them. See docs/plans/WEBHOOK-EMITTER-SPEC.md for the payload.
+              </div>
+              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.64rem;cursor:pointer;margin-bottom:0.5rem;">
+                <input type="checkbox" id="webhook-enabled" />
+                Send events to my webhook
+              </label>
+              <div class="config-field">
+                <label class="config-label" for="webhook-url">Webhook URL</label>
+                <input type="text" id="webhook-url" placeholder="http://192.168.1.20:8123/api/webhook/svcs"
+                       style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
+              </div>
+              <div class="config-field" style="margin-top:0.4rem;">
+                <label class="config-label" for="webhook-secret">Signing secret</label>
+                <input type="password" id="webhook-secret" autocomplete="new-password"
+                       placeholder="optional, signs each delivery (X-SVCS-Signature)"
+                       style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
+              </div>
+              <div style="margin-top:0.6rem;display:flex;gap:0.4rem;flex-wrap:wrap;">
+                <button class="btn btn-ghost" id="webhook-test-btn" onclick="webhookCfgTest()">Send test</button>
+                <button class="btn btn-primary" id="webhook-save-btn" onclick="webhookCfgSave()">Save</button>
+              </div>
+              <div id="webhook-status" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
+              <div style="font-size:0.55rem;color:var(--text-dim);margin-top:0.4rem;font-family:var(--mono);">
+                Each event carries its kind, camera id, time, track id, class label, and zone only. No
+                plate text, no file paths, no camera credentials. Loopback and LAN addresses are
+                accepted; cloud metadata endpoints are refused and redirects are never followed.
+              </div>
+            </div>
+          </details>
         </div>
       </div>
 
@@ -4172,6 +4213,7 @@
   <script src="{{ url_for('static', filename='js/cameras.js') }}"></script>
   <script src="{{ url_for('static', filename='js/usage.js') }}"></script>
   <script src="{{ url_for('static', filename='js/push.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/webhook.js') }}"></script>
 
 <!-- AI Plate Reader modal - Bloodawn (KheivenD), 2026-05-02 -->
 <div id="plate-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center;">

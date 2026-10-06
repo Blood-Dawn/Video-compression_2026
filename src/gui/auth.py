@@ -59,6 +59,16 @@ SCHEME_BEARER = "bearer"
 SCHEME_NONE = "none"
 
 
+def current_device_id() -> Optional[str]:
+    """The id of the device token that authenticated this request, or None.
+
+    None for a Basic (password) request and for the open localhost case:
+    neither has a device identity. Routes that act on "this device" must use
+    this, never an id supplied in the request (planner 6.9/6.10).
+    """
+    return getattr(g, "svcs_device_id", None)
+
+
 def current_auth_scheme() -> str:
     """Which credential authenticated this request.
 
@@ -378,8 +388,10 @@ def install_basic_auth(app: Flask, username: str, password: str) -> None:
             except ModuleNotFoundError:  # pragma: no cover - import path shim
                 from src.gui.device_tokens import verify_token
             # Never log `presented`, and never echo it in the response.
-            if verify_token(presented) is not None:
+            rec = verify_token(presented)
+            if rec is not None:
                 g.svcs_auth_scheme = SCHEME_BEARER
+                g.svcs_device_id = rec.id
                 _record_success(ip)
                 return None
             return _fail(ip)

@@ -36,6 +36,8 @@ class _Receiver(BaseHTTPRequestHandler):
     received = []
     mode = "ok"            # "ok" | "redirect" | "hang" | "error"
     hang_s = 5.0
+    location = "/moved"    # where "redirect" mode points
+    redirect_status = 302
 
     def do_POST(self):  # noqa: N802 - BaseHTTPRequestHandler's spelling
         length = int(self.headers.get("Content-Length") or 0)
@@ -48,8 +50,8 @@ class _Receiver(BaseHTTPRequestHandler):
             "headers": {k.lower(): v for k, v in self.headers.items()},
         })
         if _Receiver.mode == "redirect" and self.path != "/moved":
-            self.send_response(302)
-            self.send_header("Location", "/moved")
+            self.send_response(_Receiver.redirect_status)
+            self.send_header("Location", _Receiver.location)
             self.end_headers()
             return
         code = 500 if _Receiver.mode == "error" else 200
@@ -85,6 +87,8 @@ def receiver():
     _Receiver.received = []
     _Receiver.mode = "ok"
     _Receiver.hang_s = 5.0
+    _Receiver.location = "/moved"
+    _Receiver.redirect_status = 302
     srv = _Server(("127.0.0.1", 0), _Receiver)
     t = threading.Thread(target=srv.serve_forever, daemon=True)
     t.start()
@@ -399,3 +403,91 @@ def test_a_broken_webhook_import_cannot_escape_append_events(monkeypatch, tmp_pa
     monkeypatch.setitem(sys.modules, "utils.event_webhook", broken)
     assert event_log.append_events(tmp_path, _events()) == 1
     assert (tmp_path / event_log.EVENTS_FILENAME).exists()
+
+
+# ── 5.10: URL rejection, the bypass shapes (planner 5.10) ────────────────────
+# The cases above are the plain spellings. These are the spellings real SSRF
+# payload lists use to slip a metadata address past a naive string check.
+
+
+@pytest.mark.parametrize("url,fragment", [
+    # 169.254.169.254 written every other way an IPv4 address can be written
+    ("http://2852039166/hook", "link-local"),              # one decimal integer
+    ("http://0xa9fea9fe/hook", "link-local"),              # one hex integer
+    ("http://0xa9.0xfe.0xa9.0xfe/hook", "link-local"),     # dotted hex
+    ("http://0251.0376.0251.0376/hook", "link-local"),     # dotted octal
+    ("http://169.254.43518/hook", "link-local"),           # short form
+    ("http://169.254.169.254./hook", "link-local"),        # trailing dot
+    ("HTTP://169.254.169.254/hook", "link-local"),         # scheme case
+    ("http://169.254.169.254:80/hook", "link-local"),      # explicit port
+    # the same address through IPv6
+    ("http://[::ffff:a9fe:a9fe]/hook", "link-local"),
+    ("http://[0:0:0:0:0:ffff:169.254.169.254]/hook", "link-local"),
+    ("http://[fe80::1%25eth0]/hook", "link-local"),        # with a zone id
+    # every major cloud's metadata endpoint, not only AWS's
+    ("http://100.100.100.200/hook", "metadata"),           # Alibaba Cloud
+    ("http://192.0.0.192/hook", "metadata"),               # Oracle Cloud (classic)
+    ("http://168.63.129.16/hook", "metadata"),             # Azure WireServer
+    ("http://[fd00:ec2::254]/hook", "metadata"),           # AWS IMDS over IPv6
+    ("http://METADATA.GOOGLE.INTERNAL/hook", "metadata"),  # name case
+    ("http://metadata.google.internal./hook", "metadata"), # FQDN trailing dot
+    # parser-confusion: which part is the host?
+    ("http://192.168.1.5@169.254.169.254/hook", "credentials"),
+    ("http://169.254.169.254\\@192.168.1.5/hook", "credentials"),
+    ("http://169.254.169.254#@192.168.1.5/hook", "link-local"),
+    # nothing-addresses
+    ("http://0.0.0.0/hook", "unspecified"),
+    ("http://[::]/hook", "unspecified"),
+    ("http:///hook", "no host"),
+    ("javascript:alert(1)", "scheme"),
+])
+def test_guard_refuses_ssrf_bypass_spellings(url, fragment):
+    ok, why = event_webhook.is_safe_webhook_url(url)
+    assert not ok, f"{url} should have been refused"
+    assert fragment in why, f"reason {why!r} should mention {fragment!r}"
+
+
+def test_a_redirect_to_metadata_is_not_followed(enabled):
+    """An allowed receiver must not be able to bounce us onto 169.254.169.254."""
+    _Receiver.mode = "redirect"
+    _Receiver.location = "http://169.254.169.254/latest/meta-data/"
+    ok, detail = event_webhook.send_test()
+    assert not ok and "redirect refused" in detail
+    assert len(_Receiver.received) == 1
+
+
+def test_a_redirect_to_another_host_never_reaches_it(enabled):
+    """Proved from the other end: the second server is never contacted."""
+    second = []
+
+    class _Second(BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802
+            second.append(self.path)
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *args):
+            return
+
+    srv = _Server(("127.0.0.1", 0), _Second)
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    try:
+        _Receiver.mode = "redirect"
+        _Receiver.location = f"http://127.0.0.1:{srv.server_port}/elsewhere"
+        for status in (301, 302, 303, 307, 308):
+            _Receiver.received = []
+            _Receiver.redirect_status = status
+            ok, detail = event_webhook.send_test()
+            assert not ok and detail == f"HTTP {status} redirect refused"
+        assert second == [], "a redirect was followed to the second host"
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_embedded_credentials_are_refused_on_save_and_never_stored():
+    ok, err, _ = event_webhook.save_config(
+        {"enabled": True, "url": "http://admin:hunter2@192.168.1.20/hook"})
+    assert not ok and "secret field" in err
+    assert "hunter2" not in json.dumps(event_webhook.load_config())

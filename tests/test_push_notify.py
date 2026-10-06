@@ -106,6 +106,10 @@ def test_guard_allows_the_self_hosted_targets(url):
 @pytest.mark.parametrize("url,fragment", [
     ("http://169.254.169.254/latest", "link-local"),
     ("http://100.100.100.100/topic", "metadata"),
+    ("http://100.100.100.200/topic", "metadata"),      # Alibaba (planner 5.10)
+    ("http://192.0.0.192/topic", "metadata"),          # Oracle Cloud classic
+    ("http://168.63.129.16/topic", "metadata"),        # Azure WireServer
+    ("http://metadata.google.internal./topic", "metadata"),  # trailing dot
     ("http://[fd00:ec2::254]/topic", "metadata"),
     ("http://[::ffff:169.254.169.254]/topic", "link-local"),
     ("http://metadata.google.internal/topic", "metadata"),

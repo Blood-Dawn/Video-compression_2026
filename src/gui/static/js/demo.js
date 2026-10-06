@@ -135,6 +135,7 @@ async function runDemo() {
   // Send empty string when blank - backend will resolve to OneDrive or local outputs/.
   const outputRoot = document.getElementById('demo-output-dir').value.trim();
   const noBoxes    = document.getElementById('demo-no-boxes').checked;
+  const noTint     = document.getElementById('demo-no-tint').checked;
   // Camera ID priority for demo runs:
   //   1. Live source (webcam idx / RTSP URL) → use the visible #camera-id field
   //   2. File source                          → use the filename stem (auto-derived)

@@ -93,6 +93,11 @@ class DeviceToken:
     last_used_at: Optional[str] = None
     expires_at: Optional[str] = None
     revoked: bool = False
+    # Planner 6.9: where the server should post a native (UnifiedPush) alert
+    # for THIS device. Set only by the device itself, through its own token.
+    # It is a capability (anyone holding it can push to the phone), so it is
+    # stored here but never returned by to_public().
+    push_endpoint: Optional[str] = field(default=None, repr=False)
 
     def is_expired(self, now: Optional[str] = None) -> bool:
         """True if an expiry was set and it has passed."""
@@ -117,6 +122,7 @@ class DeviceToken:
             "expires_at": self.expires_at,
             "revoked": self.revoked,
             "expired": self.is_expired(),
+            "has_push_endpoint": bool(self.push_endpoint),
         }
 
     def to_record(self) -> Dict[str, Any]:
@@ -128,6 +134,7 @@ class DeviceToken:
             "last_used_at": self.last_used_at,
             "expires_at": self.expires_at,
             "revoked": self.revoked,
+            "push_endpoint": self.push_endpoint,
         }
 
     @staticmethod
@@ -150,6 +157,9 @@ class DeviceToken:
                 last_used_at=rec.get("last_used_at") or None,
                 expires_at=rec.get("expires_at") or None,
                 revoked=bool(rec.get("revoked", False)),
+                push_endpoint=(str(rec["push_endpoint"])
+                               if isinstance(rec.get("push_endpoint"), str)
+                               and rec.get("push_endpoint") else None),
             )
         except (KeyError, TypeError, ValueError):
             return None
@@ -310,6 +320,7 @@ def revoke_token(token_id: str) -> bool:
         for t in tokens:
             if t.id == token_id and not t.revoked:
                 t.revoked = True
+                t.push_endpoint = None   # a revoked device gets no more alerts
                 hit = True
         if hit:
             _write_all(tokens)
@@ -324,6 +335,7 @@ def revoke_all() -> int:
         for t in tokens:
             if not t.revoked:
                 t.revoked = True
+                t.push_endpoint = None
                 n += 1
         if n:
             _write_all(tokens)
@@ -361,6 +373,43 @@ def verify_token(presented: str, touch: bool = True) -> Optional[DeviceToken]:
             found.last_used_at = _utc_now_iso()
             _write_all(tokens)
         return found
+
+
+def set_push_endpoint(token_id: str, endpoint: Optional[str]) -> bool:
+    """Set (or clear, with None) the push endpoint of ONE usable token.
+
+    Planner 6.9. The caller passes the id of the token that authenticated the
+    request, never an id taken from the request itself, which is what keeps
+    one device from writing another device's endpoint. Validation of the URL
+    is the route's job. Returns False when the token is unknown or no longer
+    usable.
+    """
+    with _LOCK:
+        tokens = _read_all_strict()   # read-modify-write; see mint_token
+        for t in tokens:
+            if t.id == token_id and t.is_usable():
+                t.push_endpoint = endpoint or None
+                _write_all(tokens)
+                return True
+        return False
+
+
+def get_push_endpoint(token_id: str) -> Optional[str]:
+    """The push endpoint of one usable token, or None."""
+    for t in list_tokens():
+        if t.id == token_id and t.is_usable():
+            return t.push_endpoint
+    return None
+
+
+def push_targets() -> List[tuple]:
+    """(token_id, endpoint) for every usable token that registered one.
+
+    The input for the week 8 fan-out. Revoked and expired devices are never
+    included, even if a stale endpoint survived on disk.
+    """
+    return [(t.id, t.push_endpoint) for t in list_tokens()
+            if t.is_usable() and t.push_endpoint]
 
 
 def any_tokens_configured() -> bool:

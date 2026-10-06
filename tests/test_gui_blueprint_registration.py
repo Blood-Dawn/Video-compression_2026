@@ -121,6 +121,7 @@ EXPECTED = {
     # R6 Track C: closed-app push settings.
     "/api/push/config": "push",
     "/api/push/test": "push",
+    "/api/push/endpoint": "push",   # planner 6.9
     # Planner 4.10: event webhook settings.
     "/api/webhook/config": "webhook",
     "/api/webhook/test": "webhook",
@@ -152,9 +153,10 @@ def test_route_count():
     # /api/zones (GET+POST, one rule) and /api/events/recent (R5 5.6/5.7),
     # then +4 for the R6 chunked-upload routes, then +2 for the R6 Track C
     # push routes (/api/push/config carries GET+POST on one rule), then +2
-    # for the planner 4.10 webhook routes (same shape as push).
+    # for the planner 4.10 webhook routes (same shape as push), then +1 for
+    # the planner 6.9 /api/push/endpoint (GET+PUT+DELETE on one rule).
     rules = _rules()
-    assert len(rules) == 89, f"expected 89 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 90, f"expected 90 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_blueprints_registered():

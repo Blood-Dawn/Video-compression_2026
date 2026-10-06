@@ -119,6 +119,7 @@ SAMPLES = [
     # R6 Track C: closed-app push settings.
     ("GET", "/api/push/config"),
     ("POST", "/api/push/test"),
+    ("PUT", "/api/push/endpoint"),   # planner 6.9
     # Planner 4.10: event webhook settings.
     ("GET", "/api/webhook/config"),
     ("POST", "/api/webhook/test"),
@@ -150,5 +151,6 @@ def test_sample_count_matches_route_count():
     rules = [r for r in flask_app.url_map.iter_rules() if r.endpoint != "static"]
     # +1 for /api/nl_search (R5 5.4), +2 for /api/zones and /api/events/recent
     # (R5 5.6/5.7), +4 for the R6 chunked-upload routes, +2 for the R6
-    # Track C push routes, +2 for the planner 4.10 webhook routes.
-    assert len(SAMPLES) == len(rules) == 90
+    # Track C push routes, +2 for the planner 4.10 webhook routes, +1 for the
+    # planner 6.9 push endpoint.
+    assert len(SAMPLES) == len(rules) == 91

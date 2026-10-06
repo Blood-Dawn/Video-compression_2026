@@ -88,10 +88,17 @@ _BLOCKED_HOSTS = {
 }
 
 # Literals that sit INSIDE otherwise-allowed ranges and so need naming.
-# 100.100.100.100 is Alibaba's metadata service inside CGNAT space;
 # fd00:ec2::254 is the AWS IMDS IPv6 address inside unique-local space.
+# 100.100.100.200 is Alibaba Cloud's metadata service inside CGNAT space;
+# 100.100.100.100 was the original entry and is kept, refusing it costs
+# nothing. 192.0.0.192 is Oracle Cloud's (classic) metadata service and
+# 168.63.129.16 is Azure's WireServer, reachable from every Azure VM. None
+# of these is ever a legitimate push or webhook receiver (planner 5.10).
 _BLOCKED_IPS = {
     ipaddress.ip_address("100.100.100.100"),
+    ipaddress.ip_address("100.100.100.200"),
+    ipaddress.ip_address("192.0.0.192"),
+    ipaddress.ip_address("168.63.129.16"),
     ipaddress.ip_address("fd00:ec2::254"),
 }
 
@@ -267,7 +274,10 @@ def check_outbound_url(url, *, require_path: bool, label: str,
     if parsed.username or parsed.password:
         return False, f"credentials in the URL are not allowed, use the {credential_field}"
     try:
-        host = (parsed.hostname or "").lower()
+        # A trailing dot is the fully-qualified spelling of the same name
+        # ("metadata.google.internal."), so it must not slip past the
+        # hostname blocklist below.
+        host = (parsed.hostname or "").lower().rstrip(".")
     except ValueError:
         return False, f"{label} URL host could not be parsed"
     if not host:

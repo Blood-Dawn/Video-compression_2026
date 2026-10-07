@@ -152,6 +152,15 @@ android {
             isIncludeAndroidResources = true
         }
     }
+    // Planner 6.1: test doubles that both the JVM unit tests (src/test) and
+    // the on-device instrumented tests (src/androidTest) need live in
+    // src/sharedTest, which is added to both source sets, so FakeSvcsApi is
+    // written once instead of copied.
+    sourceSets {
+        getByName("test").java.srcDir("src/sharedTest/java")
+        getByName("androidTest").java.srcDir("src/sharedTest/java")
+    }
+
     packaging {
         resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }

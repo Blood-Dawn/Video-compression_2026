@@ -137,10 +137,10 @@ independently discovering and reading Help.
 
 | ID | Task | Owner | Outcome | Status |
 | --- | --- | --- | --- | --- |
-| 3.11 | Fresh-install walkthrough on a clean machine: install `SVCS-Setup.exe`, complete first-run Setup, run one compression, all without opening the source code | All, each on their own machine | A written note per person of every point of confusion or friction, with the worst three filed as fixes | Not started |
+| 3.11 | Fresh-install walkthrough on a clean machine: install `SVCS-Setup.exe`, complete first-run Setup, run one compression, all without opening the source code | All, each on their own machine | A written note per person of every point of confusion or friction, with the worst three filed as fixes | Complete Oct 7 |
 | 3.12 | Test the Compact install path with no FFmpeg on PATH | Riley | Confirmation of whether the app warns before Start is clickable, or fails silently on the first compression, plus a fix if it is silent | Complete Sep 22 |
 | 3.13 | Add a folder-browse button to the Setup destination field, reusing the Library folder-browser modal | Ashleyn | Setup no longer requires typing a raw folder path from memory | Complete Sep 22 |
-| 3.14 | External network penetration test against a running SVCS instance | Victor | Written findings against the threat model in `docs/SECURITY.md`; anything found gets a severity-rated entry in `docs/plans/BLOCKERS.md`, matching the pentest item already deferred there | Not started |
+| 3.14 | External network penetration test against a running SVCS instance | Victor | Written findings against the threat model in `docs/SECURITY.md`; anything found gets a severity-rated entry in `docs/plans/BLOCKERS.md`, matching the pentest item already deferred there | Complete Oct 7 |
 | 3.15 | Fuzz the video-ingest and upload path with malformed media | Victor | A clean rejection or a filed crash report for each malformed file tried, closing the fuzzing item already deferred in `docs/plans/BLOCKERS.md` | Complete Sep 22 |
 | 3.16 | Verify the Docker install path end to end on a fresh clone, then fix `docs/getting-started.md` | Kheiven | `docker compose up --build` either succeeds from a clean checkout, or the missing `yolov8n.onnx` prerequisite is documented plainly (or the build fetches it automatically); the getting-started guide reflects whichever is true | Complete Sep 22 |
 | 3.17 | Add an in-app auto-update check for the desktop exe | Kheiven | Owner task, not delegated: dashboard checks a version endpoint and shows a Setup-page notice with a download link when a newer installer build exists | Complete Sep 22 |
@@ -163,8 +163,8 @@ work) to week 4 rather than rushing the security testing.
 | 4.6 | Write browser tests for the EVENTS panel | Ashleyn | Rows render from a seeded events file; empty state verified | Not started |
 | 4.7 | Implement drag-to-draw for exclude rectangles and crossing lines | Riley | Zones round-trip through POST and GET with normalized coordinates intact | Not started |
 | 4.8 | Implement loiter zones and the SAVE and CLEAR actions | Riley | Full toolbar working, banner states that changes apply to the next run | Not started |
-| 4.9 | Implement `utils/event_webhook.py` with the SSRF guard | Victor | Events post to a configured URL, fire and forget, two second timeout. Marked done 2026-09-27: duplicated 3.9/3.10, already Completed | Completed |
-| 4.10 | Add the webhook configuration UI next to the push panel | Victor | Off by default, write-only secret field, refuses metadata endpoints. Marked done 2026-09-27: UI already wired in src/gui | Completed |
+| 4.9 | Implement `utils/event_webhook.py` with the SSRF guard | Victor | Events post to a configured URL, fire and forget, two second timeout. Marked done 2026-09-27: duplicated 3.9/3.10, already Completed | Complete Sep 27 |
+| 4.10 | Add the webhook configuration UI next to the push panel | Victor | Off by default, write-only secret field, refuses metadata endpoints. Marked done 2026-09-27: UI already wired in src/gui | Complete Sep 27 |
 | 4.11 | Cut a mobile-only GitHub release: build and publish just the APK | Kheiven | A new GitHub Release exists tagged separately from desktop releases (e.g. `mobile-v0.9.0-beta`), carrying only the built `.apk` as its asset, no desktop installer | Complete Sep 22 |
 
 ### Week 5: September 28 to October 4
@@ -179,8 +179,8 @@ work) to week 4 rather than rushing the security testing.
 | 5.6 | Write an integration test for event and query interaction | Ashleyn | Pipeline run produces events that the query interface can retrieve | Not started |
 | 5.7 | Add the camera id datalist from library folder labels | Riley | Zone editor offers real camera ids rather than free text | Not started |
 | 5.8 | Browser-verify the zone editor against a real backdrop frame | Riley | Screenshot evidence of a zone drawn over actual footage | Not started |
-| 5.9 | Review the mobile credential storage path end to end | Victor | Written finding on whether a failed decrypt fails closed or returns a stale credential | Not started |
-| 5.10 | Write tests for webhook URL rejection cases | Victor | Metadata endpoints, redirects, and embedded credentials all refused | Not started |
+| 5.9 | Review the mobile credential storage path end to end | Victor | Written finding on whether a failed decrypt fails closed or returns a stale credential | Complete Oct 7 |
+| 5.10 | Write tests for webhook URL rejection cases | Victor | Metadata endpoints, redirects, and embedded credentials all refused | Complete Oct 7 |
 
 ### Week 6: October 5 to October 11
 
@@ -196,8 +196,9 @@ work) to week 4 rather than rushing the security testing.
 | 6.6 | Build the semantic search skeleton with a stub embedder | Ashleyn | Opt-in extra; no model downloaded in CI | Not started |
 | 6.7 | Run the CDnet corpus with and without exclude zones | Riley | Measured file size difference from zone masking | Not started |
 | 6.8 | Write up the zone compression benefit with numbers | Riley | Table for the final report; the claim is either confirmed or corrected | Not started |
-| 6.9 | Add the server endpoint for registering a push endpoint per device | Victor | Device tokens can carry a push endpoint for the native path | Not started |
-| 6.10 | Security review of the new endpoint registration | Victor | Confirmation that one device cannot register or read another device's endpoint | Not started |
+| 6.9 | Add the server endpoint for registering a push endpoint per device | Victor | Device tokens can carry a push endpoint for the native path | Complete Oct 7 |
+| 6.10 | Security review of the new endpoint registration | Victor | Confirmation that one device cannot register or read another device's endpoint | Complete Oct 7 |
+| 6.11 | Add YOLO pose-based person/vehicle classification to detection | Kheiven | Detections tagged person or vehicle from YOLO pose output, not motion alone; metrics search can filter to one or the other | Not started |
 
 ### Weeks 7 to 14: outline
 

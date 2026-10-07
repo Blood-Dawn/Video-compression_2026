@@ -198,7 +198,7 @@ work) to week 4 rather than rushing the security testing.
 | 6.8 | Write up the zone compression benefit with numbers | Riley | Table for the final report; the claim is either confirmed or corrected | Not started |
 | 6.9 | Add the server endpoint for registering a push endpoint per device | Victor | Device tokens can carry a push endpoint for the native path | Complete Oct 7 |
 | 6.10 | Security review of the new endpoint registration | Victor | Confirmation that one device cannot register or read another device's endpoint | Complete Oct 7 |
-| 6.11 | Add YOLO pose-based person/vehicle classification to detection | Kheiven | Detections tagged person or vehicle from YOLO pose output, not motion alone; metrics search can filter to one or the other | Not started |
+| 6.11 | Add YOLO pose-based person/vehicle classification to detection | Kheiven | Detections tagged person or vehicle from YOLO pose output, not motion alone; metrics search can filter to one or the other | Complete Oct 7 |
 
 ### Weeks 7 to 14: outline
 

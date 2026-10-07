@@ -213,6 +213,8 @@ def run_pipeline(
     roi_qp: bool = False,
     gop_seconds: int = 20,
     target_vmaf: Optional[float] = None,
+    use_pose_classification: bool = False,
+    pose_confidence: float = 0.25,
 ):
     """
     Main pipeline loop.
@@ -522,7 +524,10 @@ def run_pipeline(
 
     obj_filter: Optional[ObjectFilter] = None
     if object_filter:
-        obj_filter = ObjectFilter(confidence=filter_confidence, device="auto")
+        obj_filter = ObjectFilter(
+            confidence=filter_confidence, device="auto",
+            use_pose=use_pose_classification, pose_confidence=pose_confidence,
+        )
         if obj_filter.active:
             log.info(
                 "ObjectFilter active (YOLOv8-nano, conf=%.2f). "
@@ -613,16 +618,18 @@ def run_pipeline(
     _seg_motion_vecs:   list  = []      # (dx, dy) vectors for scene-type heuristic
     _seg_prev_centroids: list = []      # centroids from previous frame for motion deltas
     _seg_brightness:    list  = []      # per-frame mean brightness, for real time-of-day
+    _seg_pose_confirmed: int  = 0       # pose-verified person detections this segment (6.11)
 
     def _open_new_segment(first_frame, first_regions):
         """Open FFmpeg pipe for a new segment.  Returns the background frame used."""
-        nonlocal segment_start_background, _seg_all_classes, _seg_colors, _seg_motion_vecs, _seg_prev_centroids, _seg_brightness
+        nonlocal segment_start_background, _seg_all_classes, _seg_colors, _seg_motion_vecs, _seg_prev_centroids, _seg_brightness, _seg_pose_confirmed
         # Reset per-segment accumulators
         _seg_all_classes  = set()
         _seg_colors       = []
         _seg_motion_vecs  = []
         _seg_prev_centroids = []
         _seg_brightness   = []
+        _seg_pose_confirmed = 0
 
         # Mode 0 (Live Surveillance) must use ONE predictable CRF for its
         # whole segment, not silently swap to the much heavier background_crf
@@ -727,6 +734,7 @@ def run_pipeline(
             time_of_day    = _tod,
             vehicle_count  = _vcount,
             person_count   = _pcount,
+            pose_verified_person_count = _seg_pose_confirmed,
         )
         log.info("Saved segment %d: %s [type=%s color=%s scene=%s %s]",
                  segment_index + 1, out["file_path"],
@@ -789,6 +797,9 @@ def run_pipeline(
                 if segment_open and hasattr(obj_filter, "last_detected_classes"):
                     for labels in obj_filter.last_detected_classes.values():
                         _seg_all_classes |= labels
+                    # Pose-verified subset of person detections (planner 6.11).
+                    if hasattr(obj_filter, "pose_confirmed_count"):
+                        _seg_pose_confirmed += obj_filter.pose_confirmed_count()
             else:
                 regions = raw_regions
 

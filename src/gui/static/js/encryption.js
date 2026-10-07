@@ -156,6 +156,7 @@ function clearArchiveFilters() {
     document.getElementById(id).value = '';
   });
   document.getElementById('arc-enc-only').checked = false;
+  document.getElementById('arc-pose-only').checked = false;
   _showArchiveStatus('Filters cleared. Press SEARCH to run a new query.');
 }
 
@@ -259,7 +260,7 @@ function _renderArchiveSegments(segments, showToast) {
       <td style="color:var(--text-dim)">${s.duration_s}s</td>
       <td style="color:var(--text-dim)">${sizeMb} MB</td>
       <td style="color:var(--teal);text-align:center">${(s.vehicle_count > 0) ? s.vehicle_count : (typeLower.includes('vehicle') ? '<span title="Detected (legacy segment)" style="opacity:0.6">+</span>' : '<span style="color:var(--text-dim)"> - </span>')}</td>
-      <td style="color:var(--yellow);text-align:center">${(s.person_count > 0) ? s.person_count : (typeLower.includes('person') ? '<span title="Detected (legacy segment)" style="opacity:0.6">+</span>' : '<span style="color:var(--text-dim)"> - </span>')}</td>
+      <td style="color:var(--yellow);text-align:center">${(s.person_count > 0) ? s.person_count : (typeLower.includes('person') ? '<span title="Detected (legacy segment)" style="opacity:0.6">+</span>' : '<span style="color:var(--text-dim)"> - </span>')}${(s.pose_verified_person_count > 0) ? `<span title="${s.pose_verified_person_count} pose-verified (YOLO keypoints confirmed a human skeleton)" style="color:var(--teal);margin-left:0.25rem;">[P]</span>` : ''}</td>
       <td>${playBtn}</td>
     </tr>`;
   }).join('');
@@ -329,6 +330,7 @@ async function runArchiveSearch() {
   const dt  = document.getElementById('arc-date-to').value;
   const mr  = document.getElementById('arc-min-rois').value;
   const enc = document.getElementById('arc-enc-only').checked;
+  const poseOnly = document.getElementById('arc-pose-only').checked;
 
   if (ot)  params.set('object_type', ot);
   if (col) params.set('color', col);
@@ -339,6 +341,7 @@ async function runArchiveSearch() {
   if (dt)  params.set('end_time',   dt.replace(/-/g,'') + 'T235959Z');
   if (mr)  params.set('min_roi_count', mr);
   if (enc) params.set('encrypted_only', '1');
+  if (poseOnly) params.set('pose_verified_only', '1');
 
   try {
     const res  = await fetch('/api/segments?' + params);

@@ -33,6 +33,7 @@ def insert_segment(
     time_of_day: Optional[str] = None,      # day | night | dusk_dawn
     vehicle_count: int = 0,
     person_count: int = 0,
+    pose_verified_person_count: int = 0,
     db_path: Union[str, Path] = DB_NAME,
 ) -> None:
     """Insert one encoded segment into the metadata index.
@@ -59,6 +60,12 @@ def insert_segment(
         time_of_day: One of day / night / dusk_dawn.
         vehicle_count: Tally of vehicle-class detections in this segment.
         person_count: Tally of person-class detections in this segment.
+        pose_verified_person_count: Tally of person detections in this
+            segment whose bounding box was additionally confirmed by
+            YOLO pose/keypoint estimation (planner 6.11), not just the
+            bbox classifier. Counts pose-confirmed person regions summed
+            across frames, so use it as a yes/no filter (> 0), not as a
+            comparison against person_count.
         db_path: Path to the SQLite database file.
     """
     with get_connection(db_path) as conn:
@@ -69,9 +76,10 @@ def insert_segment(
                 roi_count, file_size, duration, file_path, object_type,
                 avg_sharpness, sharpness_label,
                 object_classes, dominant_color, scene_type,
-                time_of_day, vehicle_count, person_count
+                time_of_day, vehicle_count, person_count,
+                pose_verified_person_count
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 timestamp,
@@ -90,6 +98,7 @@ def insert_segment(
                 time_of_day,
                 vehicle_count,
                 person_count,
+                pose_verified_person_count,
             ),
         )
         conn.commit()
@@ -198,10 +207,24 @@ def query_by_type(
     ``object_type`` may be a single string or a list of strings for
     multi-type queries.
     """
+    # A single base class (person/vehicle/animal) must also match combo
+    # labels ("person+vehicle", "vehicle+animal", "person+animal" - the
+    # only combos _label_from_classes() ever produces), not just an exact
+    # object_type equality. That equality check used to silently hide
+    # every mixed-type segment from a "people only"/"vehicles only" query
+    # (planner 6.11). An explicit combo string (e.g. "person+vehicle") or
+    # a multi-type list still gets the exact-match/IN behaviour.
+    _base_classes = {"person", "vehicle", "animal"}
     if isinstance(object_type, list):
         placeholders = ",".join(["?"] * len(object_type))
         query = f"SELECT * FROM segments WHERE object_type IN ({placeholders})"
         params: list = list(object_type)
+    elif object_type in _base_classes:
+        query = (
+            "SELECT * FROM segments WHERE (object_type = ?"
+            " OR object_type LIKE ? OR object_type LIKE ?)"
+        )
+        params = [object_type, f"{object_type}+%", f"%+{object_type}"]
     else:
         query = "SELECT * FROM segments WHERE object_type = ?"
         params = [object_type]

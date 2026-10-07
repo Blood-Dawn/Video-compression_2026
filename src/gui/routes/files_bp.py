@@ -120,9 +120,29 @@ def api_segments():
     f_end       = request.args.get("end_time", "").strip()
     f_min_rois  = request.args.get("min_roi_count", "").strip()
     f_enc_only  = request.args.get("encrypted_only", "").strip() == "1"
+    # Planner 6.11: restrict to persons whose bbox was additionally
+    # confirmed by YOLO pose/keypoint estimation, not just the bbox
+    # classifier - see detection/pose_onnx_backend.py.
+    f_pose_only = request.args.get("pose_verified_only", "").strip() == "1"
 
     if f_type:
-        filters.append("COALESCE(object_type,'unknown') = ?"); params.append(f_type)
+        if f_type in ("person", "vehicle", "animal"):
+            # A single-class pick must also match combo labels
+            # ("person+vehicle", "vehicle+animal", "person+animal" - the
+            # only combos _label_from_classes() ever produces). A strict
+            # equality check here used to silently hide every mixed-type
+            # segment from a "Person"/"Vehicle"/"Animal" filter pick, which
+            # is exactly the "search only people/vehicles" gap flagged for
+            # planner 6.11. An explicit combo pick (e.g. "person+vehicle")
+            # still falls through to the exact-match branch below.
+            filters.append(
+                "(COALESCE(object_type,'unknown') = ?"
+                " OR COALESCE(object_type,'unknown') LIKE ?"
+                " OR COALESCE(object_type,'unknown') LIKE ?)"
+            )
+            params.extend([f_type, f"{f_type}+%", f"%+{f_type}"])
+        else:
+            filters.append("COALESCE(object_type,'unknown') = ?"); params.append(f_type)
     if f_color:
         filters.append("dominant_color = ?"); params.append(f_color)
     if f_scene:
@@ -143,8 +163,10 @@ def api_segments():
     if f_enc_only:
         filters.append("file_path LIKE ?")
         params.append("%.enc")
+    if f_pose_only:
+        filters.append("COALESCE(pose_verified_person_count, 0) > 0")
 
-    has_filters = any([f_type, f_color, f_scene, f_tod, f_cam, f_start, f_end, f_min_rois, f_enc_only])
+    has_filters = any([f_type, f_color, f_scene, f_tod, f_cam, f_start, f_end, f_min_rois, f_enc_only, f_pose_only])
     row_limit   = 500 if has_filters else 200
 
     where = " AND ".join(filters)
@@ -158,7 +180,8 @@ def api_segments():
                COALESCE(scene_type, 'unknown')   AS scene_type,
                time_of_day,
                COALESCE(vehicle_count, 0)        AS vehicle_count,
-               COALESCE(person_count, 0)         AS person_count
+               COALESCE(person_count, 0)         AS person_count,
+               COALESCE(pose_verified_person_count, 0) AS pose_verified_person_count
         FROM segments
         WHERE {where}
         ORDER BY timestamp DESC
@@ -230,6 +253,7 @@ def api_segments():
             "time_of_day":     r[13],
             "vehicle_count":   r[14],
             "person_count":    r[15],
+            "pose_verified_person_count": r[16],
             # Per-clip CPU stats (None if no sampler ran for this output dir).
             "cpu_avg":         cpu_stats.get("avg") if cpu_stats else None,
             "cpu_max":         cpu_stats.get("max") if cpu_stats else None,

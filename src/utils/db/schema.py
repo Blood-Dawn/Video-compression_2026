@@ -133,6 +133,15 @@ def initialize_database(db_path: Union[str, Path] = DB_NAME) -> None:
         if "person_count" not in columns:
             conn.execute("ALTER TABLE segments ADD COLUMN person_count INTEGER DEFAULT 0")
 
+        # pose_verified_person_count: person regions (summed across frames)
+        # additionally confirmed by YOLO pose/keypoint estimation, not just
+        # the bbox classifier (planner 6.11, detection/pose_onnx_backend.py).
+        if "pose_verified_person_count" not in columns:
+            conn.execute(
+                "ALTER TABLE segments ADD COLUMN pose_verified_person_count "
+                "INTEGER DEFAULT 0"
+            )
+
         # Index on (camera_id, timestamp) makes query_recent_targets O(log n).
         # Without this, every query is a full table scan. A problem after
         # weeks of footage accumulate thousands of rows.

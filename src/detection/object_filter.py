@@ -280,12 +280,23 @@ class ObjectFilter:
         use_suppression: bool = True,
         suppress_after: int = 30,
         backend: str = "auto",
+        use_pose: bool = False,
+        pose_confidence: float = _DEFAULT_CONFIDENCE,
+        pose_min_keypoints: int = 4,
     ) -> None:
         self.confidence = confidence
         self.target_classes = target_classes if target_classes is not None else DEFAULT_TARGET_CLASSES
         self.min_box_px = min_box_px
         self.use_suppression = use_suppression
         self.suppress_after = suppress_after
+        # Pose confirmation (planner 6.11): an additive, independent signal
+        # on top of the existing bbox classifier - see pose_onnx_backend.py's
+        # module docstring for why. Off by default; enabling it never
+        # changes which boxes are kept, only whether a kept "person" box is
+        # also flagged pose-verified.
+        self.use_pose = bool(use_pose)
+        self.pose_confidence = pose_confidence
+        self.pose_min_keypoints = pose_min_keypoints
         # Inference backend selector (M2 TASK 2.1/2.2):
         #   "auto"  - DEFAULT (TASK 2.2): ONNX Runtime if its model+runtime are
         #             available, else PyTorch. The slim install has no torch, so
@@ -311,6 +322,11 @@ class ObjectFilter:
         self._backend = "none"    # which backend actually loaded
         self._available = False
         self._load_model()
+
+        self._pose = None          # YoloPoseOnnxDetector (pose confirmation)
+        self._pose_available = False
+        if self.use_pose:
+            self._load_pose()
 
         # Suppression state: grid of counters, built lazily on first frame
         self._suppress_grid: Optional[np.ndarray] = None  # (rows, cols) int16
@@ -373,6 +389,35 @@ class ObjectFilter:
         except Exception as exc:
             log.warning("ObjectFilter: failed to load YOLOv8-nano (%s) (pass-through mode).", exc)
 
+    def _load_pose(self) -> None:
+        """Load the pose-confirmation detector (planner 6.11).
+
+        Independent of which main backend loaded above: pose confirmation
+        only ever runs on crops the main backend already classified as
+        "person", so it is only useful alongside a working main backend,
+        but its own availability is tracked separately and it always
+        degrades gracefully (no pose model -> pose_confirmed always False,
+        never an error, never a dropped detection).
+        """
+        try:
+            from detection.pose_onnx_backend import YoloPoseOnnxDetector
+        except ImportError:
+            try:
+                from src.detection.pose_onnx_backend import YoloPoseOnnxDetector  # type: ignore
+            except ImportError:
+                log.warning("ObjectFilter: pose_onnx_backend unavailable; "
+                            "pose confirmation disabled.")
+                return
+        det = YoloPoseOnnxDetector(confidence=self.pose_confidence, device=self._device)
+        if not det.available:
+            log.warning("ObjectFilter: pose confirmation requested but the pose "
+                        "ONNX model/runtime is unavailable (person boxes are still "
+                        "kept; they just won't be flagged pose-verified).")
+            return
+        self._pose = det
+        self._pose_available = True
+        log.info("ObjectFilter: YOLOv8-nano-pose confirmation loaded on %s", self._device.upper())
+
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
@@ -399,11 +444,13 @@ class ObjectFilter:
         """
         # Reset per-frame label tracking
         self.last_detected_classes: dict[int, set[str]] = {}
+        self.last_pose_confirmed: dict[int, bool] = {}
 
         if not self._available or not regions:
             # Pass-through: annotate every region as "unknown"
             for i in range(len(regions)):
                 self.last_detected_classes[i] = set()
+                self.last_pose_confirmed[i] = False
             return regions
 
         if self.use_suppression:
@@ -421,12 +468,14 @@ class ObjectFilter:
             if w < self.min_box_px or h < self.min_box_px:
                 # Too small to classify - pass through, label unknown
                 self.last_detected_classes[len(kept)] = set()
+                self.last_pose_confirmed[len(kept)] = False
                 kept.append(region)
                 continue
 
-            labels = self._classify_box_labels(frame, x, y, w, h)
+            labels, pose_confirmed = self._classify_box_labels(frame, x, y, w, h)
             if labels is not None:
                 self.last_detected_classes[len(kept)] = labels
+                self.last_pose_confirmed[len(kept)] = pose_confirmed
                 kept.append(region)
                 if self.use_suppression:
                     self._reset_suppression(x, y, w, h)
@@ -452,6 +501,15 @@ class ObjectFilter:
             all_classes |= labels
         return _label_from_classes(all_classes)
 
+    def pose_confirmed_count(self) -> int:
+        """Count of regions from the last filter() call with a confirmed pose.
+
+        0 whenever use_pose is False or the pose model/runtime is
+        unavailable - this is purely additive metadata on top of
+        classify_detected_objects(), never a substitute for it.
+        """
+        return sum(1 for v in self.last_pose_confirmed.values() if v)
+
     def reset_suppression(self) -> None:
         """Clear the suppression mask. Call when the source changes."""
         self._suppress_grid = None
@@ -464,18 +522,26 @@ class ObjectFilter:
 
     def _classify_box_labels(
         self, frame: np.ndarray, x: int, y: int, w: int, h: int
-    ) -> Optional[set]:
+    ) -> Tuple[Optional[set], bool]:
         """Run YOLO on the bbox crop.
 
-        Returns the set of target-class names found (may be empty if only
-        non-target classes appeared), or None if no target was found at all
-        and the box should be discarded.
+        Returns (found, pose_confirmed):
+          found:          the set of target-class names found (may be empty
+                          if only non-target classes appeared), or None if
+                          no target was found at all and the box should be
+                          discarded.
+          pose_confirmed: True only when pose verification is enabled,
+                          available, "person" is among the found classes,
+                          and a coherent human skeleton (planner 6.11) was
+                          found in the same crop. Always False otherwise -
+                          this never widens what counts as a detection,
+                          only narrows what counts as pose-verified.
         """
         fh, fw = frame.shape[:2]
         x1 = max(0, x); y1 = max(0, y)
         x2 = min(fw, x + w); y2 = min(fh, y + h)
         if x2 <= x1 or y2 <= y1:
-            return None
+            return None, False
 
         crop = frame[y1:y2, x1:x2]
         found: set[str] = set()
@@ -496,9 +562,23 @@ class ObjectFilter:
                             found.add(cls_name)
         except Exception as exc:
             log.debug("YOLO classify error: %s", exc)
-            return found  # on error pass through
+            return found, False  # on error pass through
 
-        return found if found else None  # None → discard box
+        if not found:
+            return None, False  # None → discard box
+
+        pose_confirmed = False
+        if self._pose_available and "person" in found:
+            try:
+                pose_confirmed = self._pose.person_confirmed_in(
+                    crop, conf=self.pose_confidence,
+                    min_visible_keypoints=self.pose_min_keypoints,
+                )
+            except Exception as exc:
+                log.debug("Pose classify error: %s", exc)
+                pose_confirmed = False
+
+        return found, pose_confirmed
 
     # ------------------------------------------------------------------
     # Suppression grid helpers

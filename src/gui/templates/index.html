@@ -3881,6 +3881,17 @@
               <span style="font-size:0.62rem;color:var(--yellow);"> Encrypted only</span>
             </label>
           </div>
+          <!-- Planner 6.11: restrict "person" results to boxes YOLO pose
+               (keypoint) estimation additionally confirmed as a real human
+               skeleton, not just the bbox classifier. -->
+          <div class="archive-filter-group" style="justify-content:flex-end;">
+            <label>&nbsp;</label>
+            <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;margin-top:auto;"
+                   title="Only segments with at least one person detection YOLO pose estimation additionally confirmed">
+              <input type="checkbox" id="arc-pose-only" style="accent-color:var(--teal);width:12px;height:12px;" />
+              <span style="font-size:0.62rem;color:var(--teal);"> Pose-verified people only</span>
+            </label>
+          </div>
         </div>
 
         <div class="archive-action-row">

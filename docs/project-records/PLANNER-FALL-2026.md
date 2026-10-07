@@ -189,7 +189,7 @@ work) to week 4 rather than rushing the security testing.
 | ID | Task | Owner | Outcome | Status |
 | --- | --- | --- | --- | --- |
 | 6.1 | Add instrumented tests for the pairing and settings flows | Kheiven | `gradlew connectedDebugAndroidTest` green on the physical device | Complete Oct 7 |
-| 6.2 | Research the UnifiedPush distributor registration flow | Kheiven | Written design for native push replacing the separate ntfy app | Not started |
+| 6.2 | Research the UnifiedPush distributor registration flow | Kheiven | Written design for native push replacing the separate ntfy app | Complete Oct 7 |
 | 6.3 | Implement the per-camera HLS registry | Jorge | Two cameras stream simultaneously without one blocking the other | Not started |
 | 6.4 | Update the HLS idle watchdog for multiple streams | Jorge | Each stream reaped independently on abandonment | Not started |
 | 6.5 | Write the semantic search research document | Ashleyn | `docs/RESEARCH-SEMANTIC-SEARCH.md` covering model choice, storage, offline story | Not started |

@@ -121,6 +121,8 @@ EXPECTED = {
     # R6 Track C: closed-app push settings.
     "/api/push/config": "push",
     "/api/push/test": "push",
+    # Planner 6.9: a device registers its OWN push endpoint.
+    "/api/push/endpoint": "push",
     # Fall Week 3: zone-editor still (3.6), outbound webhook settings (3.9),
     # desktop update check (3.17).
     "/api/zones/frame": "events",
@@ -165,13 +167,13 @@ def test_route_count():
     # /api/zones (GET+POST, one rule) and /api/events/recent (R5 5.6/5.7),
     # then +4 for the R6 chunked-upload routes, then +2 for the R6 Track C
     # push routes (/api/push/config carries GET+POST on one rule), then +4 for
-    # the Fall Week 3 routes (/api/zones/frame, /api/webhook/config with
+    # planner 6.9's /api/push/endpoint, the Fall Week 3 routes (/api/zones/frame, /api/webhook/config with
     # GET+POST on one rule, /api/webhook/test, /api/setup/update_check), then
     # +3 for the Fall 3.18 auto-update pipeline (/api/update/status,
     # /api/update/download, /api/update/install), then +1 for the 2026-10-01
     # competitive-gap pass's /api/timelapse (quiet-period summary generation).
     rules = _rules()
-    assert len(rules) == 95, f"expected 95 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 96, f"expected 96 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_blueprints_registered():

@@ -181,7 +181,7 @@ cheap Medium/Low findings this session. Genuinely-deferred items:
 | Item | Severity | Why deferred | Proposed approach |
 |------|----------|--------------|-------------------|
 | Dev/notebook dependency CVEs | Medium | `pip-audit` flagged jupyter-server, jupyterlab, mistune, notebook, tornado, bleach, basicsr, idna - all DEV/notebook-only deps, not imported by the runtime app or shipped in the installer. The runtime ones (cryptography, urllib3) were bumped (SEC-008). | Bump the notebook stack in a dedicated `uv lock --upgrade-package` pass when the notebooks are next touched; they are not in the frozen app. |
-| External network penetration test | n/a (process) | Requires a live LAN bind + an external tester; not a pytest-coverable, CI-safe activity. A sandboxed code-level pass ran 2026-09-25 in an isolated container (no live network, no production instance touched) and found SEC-017 (see below); the live-network component is still unmet. | Owner runs a pentest against a real deployment before any public/production rollout. |
+| External network penetration test | n/a (process) | A sandboxed code-level pass ran 2026-09-25 in an isolated container (no live network, no production instance touched) and found SEC-017 (see below). A second pass, 2026-10-03, used a repeatable local probe (`scripts/pentest_probe.py`) against the app's own HTTP surface rather than a live LAN bind, and found two more: PT-01 (a device token could factory-reset the server via `/api/setup/reset`) and PT-02 (no anti-framing headers, so a hostile page could iframe the dashboard and ride the browser's cached Basic-Auth credential). Both are fixed - see `docs/security/PENTEST-2026-10-03.md`. A pentest against a real, live-network deployment is still unmet. | Owner runs a pentest against a real deployment before any public/production rollout. |
 | Fuzzing the video-ingest / ffmpeg path | n/a (process) | A real fuzzing campaign (AFL/boofuzz) needs dedicated tooling + time and is not deterministic in CI. | Owner runs a fuzzing pass on the upload/watch-folder/thumbnail path with malformed media corpora. |
 | Live RTSP/ONVIF camera-path testing | n/a (process) | Needs a real camera or a running MediaMTX server; hardware/timing dependent. | Owner exercises the live camera path manually (see `docs/testing/FEATURE-AUDIT.md`). |
 
@@ -205,6 +205,24 @@ Re-verified as still holding with no regressions: CSRF coverage of the
 update/webhook routes, SEC-002/003/004 path-traversal fixes, the
 auth failed-login lockout, and device-token privilege separation. See
 `docs/SECURITY.md` for the full list.
+
+#### External pentest pass + PT-01/PT-02 fixes (2026-10-03)
+
+Follow-up external-facing pass (planner 3.14), using a repeatable probe script
+(`scripts/pentest_probe.py`) run against the app's own HTTP surface rather
+than a live network target. Full write-up: `docs/security/PENTEST-2026-10-03.md`.
+Two findings, both fixed the same day:
+
+| Item | Severity | Why open | Fix |
+|------|----------|----------|-----|
+| PT-01: a device token could factory-reset the server | High | `/api/setup/reset` deletes `device_tokens.json` (every paired phone's credential) but, unlike the token-management routes, accepted a Bearer device token instead of requiring the dashboard password. A stolen or leaked phone token could unpair every other phone. | `api_setup_reset` now calls the same `_require_password_auth()` guard the token-management routes already use, refusing a Bearer token with 403. See `tests/test_reset.py`. |
+| PT-02: no anti-framing headers | Medium | The SEC-001 CSRF guard checks the request's Origin, which a same-origin clickjack (the dashboard loaded in a hidden iframe on a hostile page) never fails, so a tricked click could still ride the browser's cached Basic-Auth credential. | `src/gui/security_headers.py` sets `X-Frame-Options: DENY`, `Content-Security-Policy: frame-ancestors 'none'`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy: same-origin` on every response. See `tests/test_security_headers.py`. |
+
+One further item this pass surfaced that is NOT yet fixed:
+
+| Item | Severity | Why open | Proposed approach |
+|------|----------|----------|-------------------|
+| `events.jsonl` persists every key it is given | Low (latent) | `event_log.append_events()` does `rec = dict(ev)` and writes it verbatim; there is no allowlist, so any extra field a caller (or a future detector) attaches to an event dict is written to disk unfiltered. Nothing exploits this today, since every current caller only ever attaches the documented fields, but it is a latent trap for whatever reads events next. | Give `event_log.py` its own explicit field allowlist (mirroring the one `event_webhook.py` already applies before sending a payload off-box) and apply it in `append_events()` before the `json.dumps` call, so the on-disk log and the outbound payload are both bounded by the same contract. |
 
 #### R3.2 distribution - owner-gated / owner-verified (2026-06-21)
 

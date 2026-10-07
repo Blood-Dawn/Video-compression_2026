@@ -119,6 +119,8 @@ SAMPLES = [
     # R6 Track C: closed-app push settings.
     ("GET", "/api/push/config"),
     ("POST", "/api/push/test"),
+    # Planner 6.9: a device registers its OWN push endpoint.
+    ("GET", "/api/push/endpoint"),
     # Fall Week 3: zone-editor still, outbound webhook settings, update check.
     ("GET", "/api/zones/frame"),
     ("GET", "/api/webhook/config"),
@@ -162,4 +164,4 @@ def test_sample_count_matches_route_count():
     # webhook config and test, setup/update_check), +3 for the Fall 3.18
     # auto-update routes (status, download, install), +1 for the 2026-10-01
     # /api/timelapse route (quiet-period summary generation).
-    assert len(SAMPLES) == len(rules) == 96
+    assert len(SAMPLES) == len(rules) == 97

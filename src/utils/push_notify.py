@@ -18,12 +18,16 @@ Rules this module keeps:
   127.0.0.1 or a 192.168.x.x box, so the pipeline's input-source guard
   (SEC-013) is exactly backwards here: loopback and RFC1918 are the
   LEGITIMATE targets. What stays refused is the cloud-metadata surface
-  (link-local 169.254.0.0/16 and fe80::/10, the Alibaba 100.100.100.100
-  literal, the AWS IPv6 IMDS address, the metadata.* hostnames), every
-  scheme that is not http or https, and credentials smuggled into the URL.
-  Redirects are never followed, so a permitted host cannot bounce the
-  request onto a refused one, and hostnames are checked AFTER resolution so
-  a friendly name pointing at 169.254.169.254 is refused too.
+  (link-local 169.254.0.0/16 and fe80::/10, the Alibaba 100.100.100.100/
+  100.100.100.200 literals, the Oracle Cloud 192.0.0.192 literal, the Azure
+  WireServer 168.63.129.16 literal, the AWS IPv6 IMDS address, the
+  metadata.* hostnames), every scheme that is not http or https, and
+  credentials smuggled into the URL. Redirects are never followed, so a
+  permitted host cannot bounce the request onto a refused one, and hostnames
+  are checked AFTER resolution so a friendly name pointing at
+  169.254.169.254 is refused too. A trailing dot on the hostname (the
+  fully-qualified spelling of the same name) is stripped before that check,
+  so it cannot be used to slip past the blocklist.
 * Never blocks a run. Publishing happens on one daemon worker behind a
   bounded queue; a full queue drops the message rather than slowing the
   encode that raised it. An ntfy server that is down costs a log line.
@@ -38,6 +42,12 @@ may hold an ntfy access token and gui_state.json's contract is "paths, no
 secrets". The file is written 0o600 the same way device_tokens.json is.
 
 Author: Bloodawn (KheivenD), 2026-08-17 (R6 TRACK C1).
+Updated: 2026-10-07 - three more blocked metadata addresses, a trailing-dot
+hostname normalization, and ``check_outbound_url`` (a shared, label-aware
+version of this guard for callers that are not the ntfy topic itself, such
+as a device's own push endpoint) folded in from planner 5.10/6.9's review,
+on top of the existing SEC-017 DNS-rebinding fix below, which they do not
+replace.
 """
 
 from __future__ import annotations
@@ -93,15 +103,21 @@ _BLOCKED_HOSTS = {
 }
 
 # Literals that sit INSIDE otherwise-allowed ranges and so need naming.
-# 100.100.100.100 is Alibaba's metadata service inside CGNAT space;
-# fd00:ec2::254 is the AWS IMDS IPv6 address inside unique-local space.
+# 100.100.100.100 and 100.100.100.200 are Alibaba's metadata service inside
+# CGNAT space; 192.0.0.192 is Oracle Cloud's (classic) metadata service;
+# 168.63.129.16 is Azure's WireServer, reachable from every Azure VM;
+# fd00:ec2::254 is the AWS IMDS IPv6 address inside unique-local space. None
+# of these is ever a legitimate push or webhook receiver (planner 5.10).
 _BLOCKED_IPS = {
     ipaddress.ip_address("100.100.100.100"),
+    ipaddress.ip_address("100.100.100.200"),
+    ipaddress.ip_address("192.0.0.192"),
+    ipaddress.ip_address("168.63.129.16"),
     ipaddress.ip_address("fd00:ec2::254"),
 }
 
 
-# ── config ───────────────────────────────────────────────────────────────────
+# -- config -------------------------------------------------------------------
 
 
 def config_path() -> Path:
@@ -193,10 +209,10 @@ def save_config(data: dict) -> "tuple[bool, str, dict]":
     return True, "", public_config(cfg)
 
 
-# ── URL safety ───────────────────────────────────────────────────────────────
+# -- URL safety -----------------------------------------------------------------
 
 
-def _addresses_for(host: str) -> "tuple[list, str]":
+def _addresses_for(host: str, label: str = "topic") -> "tuple[list, str]":
     """Every IP a host resolves to, or ([], reason). Literals skip DNS."""
     try:
         return [ipaddress.ip_address(host)], ""
@@ -205,7 +221,7 @@ def _addresses_for(host: str) -> "tuple[list, str]":
     try:
         infos = socket.getaddrinfo(host, None)
     except (OSError, UnicodeError):
-        return [], "topic host does not resolve"
+        return [], f"{label} host does not resolve"
     out = []
     for info in infos:
         try:
@@ -213,7 +229,7 @@ def _addresses_for(host: str) -> "tuple[list, str]":
         except (ValueError, IndexError):
             continue
     if not out:
-        return [], "topic host does not resolve"
+        return [], f"{label} host does not resolve"
     return out, ""
 
 
@@ -247,7 +263,9 @@ def validate_push_url(url) -> "tuple[bool, str, list, str]":
     hosts, because a self-hosted ntfy is legitimately any of those. Refuses
     other schemes, URL-embedded credentials, a missing topic path, the
     cloud-metadata hostnames and addresses, and anything whose DNS answer
-    lands on a refused address.
+    lands on a refused address. A trailing dot on the hostname is stripped
+    before any of these checks, so the fully-qualified spelling of a blocked
+    name cannot slip past the blocklist.
 
     ``addrs`` and ``host`` are the exact addresses this call resolved and
     approved, and the hostname they belong to. A caller that goes on to
@@ -271,7 +289,10 @@ def validate_push_url(url) -> "tuple[bool, str, list, str]":
     if parsed.username or parsed.password:
         return False, "credentials in the URL are not allowed, use the token field", [], ""
     try:
-        host = (parsed.hostname or "").lower()
+        # A trailing dot is the fully-qualified spelling of the same name
+        # ("metadata.google.internal."), so it must not slip past the
+        # hostname blocklist below.
+        host = (parsed.hostname or "").lower().rstrip(".")
     except ValueError:
         return False, "topic URL host could not be parsed", [], ""
     if not host:
@@ -301,6 +322,59 @@ def is_safe_push_url(url) -> "tuple[bool, str]":
     """
     ok, why, _addrs, _host = validate_push_url(url)
     return ok, why
+
+
+def check_outbound_url(url, *, require_path: bool, label: str,
+                        credential_field: str) -> "tuple[bool, str]":
+    """A shared, label-aware (ok, reason) SSRF guard for one-off checks.
+
+    ``validate_push_url``/``pin_resolution`` above are the pinned, DNS-
+    rebinding-safe guard for a URL this module is about to POST to itself,
+    and remain the only path used for that. This function is for a caller
+    that needs the SAME blocklist and address checks but is not making the
+    request yet and so has nothing to pin a connection to today - right now
+    that is a device registering its own push endpoint (planner 6.9): the
+    server validates the URL at registration time and will post to it, with
+    its own pinned resolution, once the week 8 delivery path exists.
+
+    ``label`` names the feature in messages ("push endpoint", "webhook") and
+    ``credential_field`` names the form field that holds a secret instead,
+    so each caller's operator is told about a field that actually exists on
+    their form. ``require_path`` additionally refuses a bare host, which
+    matters for an ntfy-style topic URL and not for others.
+    """
+    s = str(url or "").strip()
+    if not s:
+        return False, f"empty {label} URL"
+    if len(s) > 2048:
+        return False, f"{label} URL is too long"
+    try:
+        parsed = urlparse(s)
+    except ValueError:
+        return False, f"{label} URL could not be parsed"
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in ("http", "https"):
+        return False, f"scheme not allowed: {scheme or 'none'}"
+    if parsed.username or parsed.password:
+        return False, f"credentials in the URL are not allowed, use the {credential_field}"
+    try:
+        host = (parsed.hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False, f"{label} URL host could not be parsed"
+    if not host:
+        return False, f"no host in the {label} URL"
+    if host in _BLOCKED_HOSTS:
+        return False, "blocked cloud-metadata host"
+    if require_path and not (parsed.path or "").strip("/"):
+        return False, "no topic in the URL path, for example http://192.168.1.50:8080/svcs-alerts"
+    addrs, why = _addresses_for(host, label)
+    if why:
+        return False, why
+    for ip in addrs:
+        refused = _address_refused(ip)
+        if refused:
+            return False, refused
+    return True, ""
 
 
 @contextlib.contextmanager
@@ -362,7 +436,7 @@ def pin_resolution(host: str, addrs: list):
             socket.getaddrinfo = original_getaddrinfo
 
 
-# ── posting ──────────────────────────────────────────────────────────────────
+# -- posting --------------------------------------------------------------------
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -422,7 +496,7 @@ def _post(cfg: dict, title: str, message: str, tags: str = "",
         return False, f"could not reach the topic: {exc}"
 
 
-# ── the fire-and-forget worker ───────────────────────────────────────────────
+# -- the fire-and-forget worker ---------------------------------------------------
 
 _queue: "queue.Queue" = queue.Queue(maxsize=_MAX_QUEUE)
 _worker_lock = threading.Lock()
@@ -509,7 +583,7 @@ def send_test(topic_url: str = None, token: str = None) -> "tuple[bool, str]":
                  "from your SVCS server.", tags="white_check_mark")
 
 
-# ── message shaping ──────────────────────────────────────────────────────────
+# -- message shaping --------------------------------------------------------------
 
 
 def _event_message(ev: dict) -> "tuple[str, str, str]":
@@ -565,7 +639,7 @@ def _job_message(entry: dict) -> "tuple[str, str, str]":
             "white_check_mark")
 
 
-# ── the two publish entry points ─────────────────────────────────────────────
+# -- the two publish entry points --------------------------------------------------
 
 
 def publish_events(events: list, camera_id: str = "") -> int:

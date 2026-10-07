@@ -73,7 +73,8 @@ def test_public_view_withholds_the_hash(isolated_store):
     pub = rec.to_public()
     assert "sha256" not in pub
     assert set(pub) == {"id", "label", "created_at", "last_used_at",
-                        "expires_at", "revoked", "expired"}
+                        "expires_at", "revoked", "expired",
+                        "has_push_endpoint"}
 
 
 def test_wrong_token_does_not_verify(isolated_store):

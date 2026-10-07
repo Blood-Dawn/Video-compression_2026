@@ -33,6 +33,7 @@ try:
     from gui.services import update_manager
     from gui.state import _state_lock, _status
     from utils.paths import reset_state
+    from gui.routes.tokens_bp import _require_password_auth
     # APP_VERSION is re-exported here (unused directly below) because
     # tests/test_setup.py asserts setup_bp.APP_VERSION; the actual current-
     # version value returned by /api/setup/update_check now comes from
@@ -47,6 +48,7 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.services import update_manager
     from src.gui.state import _state_lock, _status
     from src.utils.paths import reset_state
+    from src.gui.routes.tokens_bp import _require_password_auth
     from src.utils.version import APP_VERSION
 
 setup_bp = Blueprint("setup", __name__)
@@ -204,7 +206,15 @@ def api_setup_reset():
     Flask secret), clears the in-memory CPU-per-mode panel, and forgets the
     destination choice so the Setup page shows again on reload. The user's
     compressed output folders are NOT deleted.
+
+    Requires the dashboard PASSWORD, never a device token (PT-01, pentest
+    2026-10-03). reset_state() deletes device_tokens.json, so a token that
+    could reset would be a stolen phone unpairing every other phone, which is
+    exactly what the token-management routes already refuse.
     """
+    denied = _require_password_auth()
+    if denied is not None:
+        return denied
     removed = reset_state()
     reset_mode_avgs()
     with _state_lock:

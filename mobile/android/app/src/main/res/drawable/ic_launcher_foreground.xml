@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Adaptive icon foreground: the SVCS mark only (four teal corner brackets
+  around a ring of six amber triangles). The mark is drawn as vector paths
+  traced from the brand icon (installer/svcs.ico) so it stays sharp at every
+  density and sits inside the 66dp safe zone of the 108dp canvas, which means
+  no launcher mask (circle, squircle, teardrop) can clip it. The dark card
+  that used to be baked into a PNG here now lives in ic_launcher_background.
+
+  Path data is in the original 432-unit artwork space; the group below scales
+  it by 0.27 and centers it on the canvas (216 * 0.27 - 4.32 = 54).
+
+  Author: Bloodawn (KheivenD), 2026-10-07 (planner 5.2).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.27"
+        android:scaleY="0.27"
+        android:translateX="-4.32"
+        android:translateY="-4.32">
+
+        <!-- Corner brackets (teal), round caps. -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#22C597"
+            android:strokeWidth="8"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M149,122 L121,122 L121,150
+                              M283,122 L310,122 L310,150
+                              M121,280 L121,309 L149,309
+                              M310,280 L310,309 L283,309" />
+
+        <!-- Six triangles (amber) pointing at the center. -->
+        <path
+            android:fillColor="#F2A900"
+            android:strokeColor="#F2A900"
+            android:strokeWidth="3"
+            android:strokeLineJoin="round"
+            android:pathData="M215,144 L196,179 L235,179 Z
+                              M277,181 L243,201 L278,222 Z
+                              M243,232 L242,274 L277,253 Z
+                              M196,253 L216,287 L235,253 Z
+                              M153,209 L154,251 L188,230 Z
+                              M188,158 L154,179 L189,200 Z" />
+
+        <!-- Center ring (amber). -->
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#F2A900"
+            android:strokeWidth="4"
+            android:pathData="M216,192 A24,24 0 1,1 215.99,192 Z" />
+    </group>
+</vector>

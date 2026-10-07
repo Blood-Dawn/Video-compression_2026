@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Themed (monochrome) layer for Android 13+ themed icons. Same geometry as
+  ic_launcher_foreground, but a single opaque color: the launcher reads only
+  the alpha channel and tints it to the user's wallpaper palette. The old
+  setup pointed this layer at the full-color raster tile, which themed
+  launchers turned into a solid blob.
+
+  Author: Bloodawn (KheivenD), 2026-10-07 (planner 5.2).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.27"
+        android:scaleY="0.27"
+        android:translateX="-4.32"
+        android:translateY="-4.32">
+
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#000000"
+            android:strokeWidth="8"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:pathData="M149,122 L121,122 L121,150
+                              M283,122 L310,122 L310,150
+                              M121,280 L121,309 L149,309
+                              M310,280 L310,309 L283,309" />
+
+        <path
+            android:fillColor="#000000"
+            android:strokeColor="#000000"
+            android:strokeWidth="3"
+            android:strokeLineJoin="round"
+            android:pathData="M215,144 L196,179 L235,179 Z
+                              M277,181 L243,201 L278,222 Z
+                              M243,232 L242,274 L277,253 Z
+                              M196,253 L216,287 L235,253 Z
+                              M153,209 L154,251 L188,230 Z
+                              M188,158 L154,179 L189,200 Z" />
+
+        <path
+            android:fillColor="#00000000"
+            android:strokeColor="#000000"
+            android:strokeWidth="4"
+            android:pathData="M216,192 A24,24 0 1,1 215.99,192 Z" />
+    </group>
+</vector>

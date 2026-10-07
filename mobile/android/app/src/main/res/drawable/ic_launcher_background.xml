@@ -1,14 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Adaptive icon background. Matches the navy card fill baked into the
-     brand icon (installer/svcs.ico, also used for the class press
-     release) so the raster foreground blends seamlessly under any
-     launcher mask shape (circle, squircle, rounded square). -->
+<!-- Adaptive icon background: the dark navy of the SVCS brand card
+     (installer/svcs.ico), as a flat fill so every launcher mask shape shows
+     one uniform field behind the vector mark in ic_launcher_foreground.
+     Planner 5.2 (2026-10-07): the previous value (#212F48) did not match the
+     card color baked into the old raster foreground, which showed as a
+     lighter frame around a darker tile under any mask. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="#212F48"
+        android:fillColor="#0E1320"
         android:pathData="M0,0 h108 v108 h-108 z" />
 </vector>

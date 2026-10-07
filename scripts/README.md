@@ -13,6 +13,7 @@ own tooling under `mobile/android/` (Gradle, `verify-toolchain.ps1`).
 | `start.ps1` | Launch the dashboard from source with the `enhance` extra. |
 | `demo.sh` | Run the pipeline CLI on a test clip with a live preview. |
 | `run_tests.ps1`, `run_tests.sh` | The reference full test run: sync extras, run pytest, log to a file. |
+| `verify_mobile.ps1` | Build the Android debug APK, install it on a device or emulator, launch it, and fail non-zero unless the app reaches MainActivity and stays up with a clean logcat. `-StartEmulator` boots the `svcs_test` AVD for you. Exit codes are documented in the script header. |
 | `install_plates.ps1` | Install the ONNX plate reader into the core environment with `--no-deps` (see the pyproject `[plates]` note). |
 
 ## Repo maintenance

@@ -171,7 +171,7 @@ work) to week 4 rather than rushing the security testing.
 
 | ID | Task | Owner | Outcome | Status |
 | --- | --- | --- | --- | --- |
-| 5.1 | Build `scripts/verify_mobile.ps1` end to end | Kheiven | Build, install, launch, assert, exit non-zero on failure, no human input | Not started |
+| 5.1 | Build `scripts/verify_mobile.ps1` end to end | Kheiven | Build, install, launch, assert, exit non-zero on failure, no human input | Complete Oct 7 |
 | 5.2 | Design and produce the real Android launcher icon | Kheiven | Adaptive icon at every density replacing the template robot | Not started |
 | 5.3 | Begin the per-camera HLS registry refactor | Jorge | Design written; the single global stream slot is identified and scoped | Not started |
 | 5.4 | Add regression tests for the existing single-camera HLS behavior | Jorge | Existing behavior pinned before the refactor changes it | Not started |

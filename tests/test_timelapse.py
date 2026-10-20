@@ -125,7 +125,6 @@ class TestTimelapseRoute:
     @pytest.fixture
     def allowed_clip(self, tmp_path, monkeypatch):
         """A clip inside the repo's data/ dir - one of allowed_media_roots()."""
-        from gui.services import path_safety
         data_dir = Path(__file__).parent.parent / "data" / "samples" / "_timelapse_test"
         data_dir.mkdir(parents=True, exist_ok=True)
         clip = data_dir / "route_test_source.mp4"
@@ -161,7 +160,6 @@ class TestTimelapseRoute:
         assert "error" in resp.get_json()
 
     def test_nonexistent_allowed_path_is_400(self, client):
-        from gui.services import path_safety
         root = Path(__file__).parent.parent / "data"
         resp = client.post("/api/timelapse", json={"path": str(root / "does_not_exist.mp4")})
         assert resp.status_code == 400

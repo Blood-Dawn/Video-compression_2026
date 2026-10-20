@@ -55,6 +55,11 @@ except FileNotFoundError:
         pass
     app.config["SECRET_KEY"] = _sk
 
+# Hard cap on any request body, so the single shot /api/upload cannot fill the
+# disk. It matches the chunked upload cap (ingest_bp._MAX_SIZE); a chunk body
+# is far below it.
+app.config["MAX_CONTENT_LENGTH"] = 8 * 1024 * 1024 * 1024
+
 # State globals live in gui.state and logging in gui.logging_setup. They are
 # re-exported here because the gui.app.* test contract reaches into them.
 # Importing gui.logging_setup wires the root logger and registers the atexit

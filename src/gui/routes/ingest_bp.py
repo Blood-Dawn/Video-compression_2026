@@ -47,7 +47,9 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 ingest_bp = Blueprint("ingest", __name__)
 
 _ID_RE = _re.compile(r"^[a-f0-9]{16,32}$")
-_MAX_SIZE = 8 * 1024 * 1024 * 1024  # 8 GB cap per upload
+# 8 GB cap per upload. gui/app.py sets MAX_CONTENT_LENGTH to the same value for
+# the single shot /api/upload route; keep the two in step.
+_MAX_SIZE = 8 * 1024 * 1024 * 1024
 CHUNK_HINT = 1024 * 1024
 
 # Two guards:

@@ -108,7 +108,11 @@ def _safe_video(raw: str, context_folder: str = ""):
     # Must be an existing video file AND confined to one of the operator's media
     # folders (SEC-003); without the confinement /api/library/file could stream
     # any video on the host.
-    if not (p.is_file() and p.suffix.lower() in VIDEO_EXTS):
+    try:
+        is_video = p.is_file() and p.suffix.lower() in VIDEO_EXTS
+    except OSError:  # name too long and similar: not a video, not a 500
+        return None
+    if not is_video:
         return None
     if _ps.is_path_allowed(p, _ps.allowed_media_roots()):
         return p

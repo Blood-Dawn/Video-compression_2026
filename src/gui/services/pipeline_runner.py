@@ -364,6 +364,24 @@ def _record_compressed_outputs(config: dict) -> None:
         log.warning("Compressed-index recording skipped: %s", exc)
 
 
+NO_FRAMES_NOTE = (
+    "No frames could be read from the source, so nothing was compressed. "
+    "Check that the path is right and the file is a supported video."
+)
+NO_CLIPS_NOTE = (
+    "The video was read, but no clips were written. Modes 1 to 3 only keep "
+    "footage where a moving target is detected, and none was found. Lower the "
+    "sensitivity, or use Mode 0 to keep every frame."
+)
+
+
+def no_output_note(status, frames, segments):
+    """Plain-language reason a finished run produced nothing, else None."""
+    if status != "completed" or segments:
+        return None
+    return NO_CLIPS_NOTE if frames else NO_FRAMES_NOTE
+
+
 def _record_job_history(config, stop_event, started, error, frames, segments):
     """Persist this run to the job history (R4 Phase 1). Never raises."""
     try:
@@ -393,7 +411,8 @@ def _record_job_history(config, stop_event, started, error, frames, segments):
                     "mode": config.get("mode", "mode0"),
                     # M4 job registry: lets a client correlate this history
                     # entry with the job_id it got back from /api/start.
-                    "job_id": config.get("job_id")},
+                    "job_id": config.get("job_id"),
+                    "note": no_output_note(status, frames, segments)},
             error=error,
         )
     except Exception:  # noqa: BLE001 - history must never affect the pipeline

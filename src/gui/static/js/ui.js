@@ -307,11 +307,12 @@ function showJobSummaryModal(job) {
     rows.push(_jobSumRow('Frames processed', fmtNum(c.frames || 0)));
     rows.push(_jobSumRow('Segments written', String(c.segments ?? 0)));
     if (c.mode) rows.push(_jobSumRow('Mode', String(c.mode)));
+    if (c.note) rows.push(_jobSumRow('Why no output', String(c.note)));
   }
   if (job.error) rows.push(_jobSumRow('Error', String(job.error)));
   const title = job.status === 'error' ? 'JOB FAILED'
               : job.status === 'stopped' ? 'JOB STOPPED'
-              : 'JOB COMPLETE';
+              : (c.note ? 'JOB COMPLETE, NO OUTPUT' : 'JOB COMPLETE');
   svcsModalShow(title, rows.join(''));
 }
 

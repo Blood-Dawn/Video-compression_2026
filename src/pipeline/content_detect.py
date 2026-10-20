@@ -164,11 +164,9 @@ def analyze_video(
         fg_fracs = []          # foreground fraction per analyzed (post-warmup) frame
         src_idx = 0
         warmed = 0
-        while True:
+        while src_idx < max_src_frames:
             ok, frame = src.read()
             if not ok or frame is None:
-                break
-            if src_idx >= max_src_frames:
                 break
             if src_idx % step == 0:
                 if width == 0 or height == 0:

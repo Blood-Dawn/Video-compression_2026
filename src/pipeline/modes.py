@@ -84,35 +84,12 @@ def get_mode_decision(mode: str, regions: Iterable[object]) -> ModeDecision:
 
     if mode == "mode0":
         # Baseline: keep every post-warmup frame, regardless of detections.
-        return ModeDecision(
-            buffer_frame=True,
-            target_detected=has_targets,
-        )
+        return ModeDecision(buffer_frame=True, target_detected=has_targets)
 
-    if mode == "mode1":
-        # Event recording: only keep frames where detections exist.
-        return ModeDecision(
-            buffer_frame=has_targets,
-            target_detected=has_targets,
-        )
-
-    if mode == "mode2":
-        # Background keyframe plus object patches: keep event frames only.
-        return ModeDecision(
-            buffer_frame=has_targets,
-            target_detected=has_targets,
-        )
-
-    if mode == "mode3":
-        # Object-only segment: normal MP4 output, black outside bbox regions.
-        return ModeDecision(
-            buffer_frame=has_targets,
-            target_detected=has_targets,
-            store_foreground_layer=False,
-        )
-
-    # Defensive fallback; validate_mode() should make this unreachable.
-    raise ValueError(f"Unhandled mode: {mode}")
+    # mode1 (event recording), mode2 (background keyframe plus patches) and
+    # mode3 (object-only) all keep event frames only; they differ in how the
+    # encoder renders those frames, not in which frames are kept.
+    return ModeDecision(buffer_frame=has_targets, target_detected=has_targets)
 
 
 def describe_mode(mode: str) -> str:

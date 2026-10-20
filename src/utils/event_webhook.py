@@ -109,6 +109,9 @@ def public_config(cfg: dict = None) -> dict:
     return cfg
 
 
+_config_lock = threading.Lock()
+
+
 def save_config(data: dict) -> "tuple[bool, str, dict]":
     """Validate and persist a config. Returns (ok, error, public_config).
 
@@ -118,11 +121,21 @@ def save_config(data: dict) -> "tuple[bool, str, dict]":
     """
     if not isinstance(data, dict):
         return False, "Request body must be a JSON object", public_config()
+    for key in ("enabled", "on_jobs", "on_events"):
+        # bool("false") is True, so a string would silently turn this on.
+        if key in data and not isinstance(data[key], bool):
+            return False, f"{key} must be true or false", public_config()
+    with _config_lock:
+        return _save_config_locked(data)
+
+
+def _save_config_locked(data: dict) -> "tuple[bool, str, dict]":
+    """The read-merge-write half of save_config, run under _config_lock."""
     current = load_config()
-    enabled = bool(data.get("enabled", current["enabled"]))
+    enabled = data.get("enabled", current["enabled"])
     url = str(data.get("url", current["url"]) or "").strip()
-    on_jobs = bool(data.get("on_jobs", current["on_jobs"]))
-    on_events = bool(data.get("on_events", current["on_events"]))
+    on_jobs = data.get("on_jobs", current["on_jobs"])
+    on_events = data.get("on_events", current["on_events"])
     if "secret" in data:
         secret = str(data.get("secret") or "").strip()
     else:
@@ -142,11 +155,21 @@ def save_config(data: dict) -> "tuple[bool, str, dict]":
         path.parent.mkdir(parents=True, exist_ok=True)
         payload = dict(cfg)
         payload["saved_at"] = time.time()
-        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        # Write a temp file in the same folder, then swap it in, so a crash
+        # mid-write can never leave a half-written config behind.
+        tmp = path.with_name(path.name + f".{os.getpid()}.{threading.get_ident()}.tmp")
         try:
-            os.chmod(path, 0o600)   # may be a no-op on Windows; best effort
-        except OSError:
-            pass
+            tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            try:
+                os.chmod(tmp, 0o600)   # may be a no-op on Windows; best effort
+            except OSError:
+                pass
+            os.replace(tmp, path)
+        finally:
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
     except OSError as exc:
         return False, f"could not save webhook config: {exc}", public_config(current)
     return True, "", public_config(cfg)

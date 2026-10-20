@@ -68,6 +68,7 @@ function _webhookBody() {
   // the key is what tells the server to keep the stored secret.
   const secret = (document.getElementById("webhook-secret")?.value || "").trim();
   if (secret) body.secret = secret;
+  else if (document.getElementById("webhook-clear-secret")?.checked) body.secret = "";
   return body;
 }
 
@@ -82,12 +83,15 @@ async function webhookCfgSave() {
     });
     const data = await res.json();
     if (!res.ok || data.error) {
+      // Do not re-apply the stored config here: it would untick what the
+      // operator just ticked, and the corrected save would go through OFF.
       _webhookSay(data.error || "Could not save.", "error");
-      _webhookApply(data.config);
       return;
     }
     const secretEl = document.getElementById("webhook-secret");
     if (secretEl) secretEl.value = "";
+    const clearEl = document.getElementById("webhook-clear-secret");
+    if (clearEl) clearEl.checked = false;
     _webhookApply(data.config);
     _webhookSay(data.config && data.config.enabled
       ? "Saved. Deliveries are on."

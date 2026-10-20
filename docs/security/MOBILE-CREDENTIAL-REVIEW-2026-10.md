@@ -11,9 +11,23 @@ fails, does the app **fail closed**, or can it hand back a **stale credential**?
 
 ## Answer
 
-**It fails closed.** No path in the app returns an old or cached credential
-after a failed decrypt. Every reader treats the failure as "not paired" and
-stops using the server.
+**It fails closed, with two caveats.** No path in the app returns an old or
+cached credential **from the store** after a failed decrypt. Every reader treats
+the failure as "not paired" and stops using the server. The caveats, both
+found in a second look on 2026-10-20:
+
+* **An `SvcsApi` client that was already built keeps its plaintext token until
+  it is rebuilt.** `TokenStore.token()` has no cache, but `SvcsApp` holds the
+  client it built from an earlier successful read, and only replaces it when
+  the pairing effect re-runs (`sessionEpoch`). A decrypt that starts failing
+  after launch therefore does not stop that client mid-session. The server
+  still refuses a revoked token, so this is a matter of how long the phone
+  keeps using a credential it can no longer re-read, not of a new exposure.
+* **A cancelled re-pair can leave the old token in place.** The settings
+  screen's `save()` writes the server URL and then the token as two separate
+  DataStore edits. If the coroutine is cancelled between them (for example the
+  screen is left), the new URL is stored next to the previous token, and the
+  previous token is what `token()` returns from then on.
 
 This was established by reading every caller of the token store, not by running
 the app: this review was done without an Android SDK, so nothing here was
@@ -65,7 +79,18 @@ suspend fun token(): String? {
 
 There is no in-memory cache inside `TokenStore`. Every call re-reads DataStore
 and re-decrypts. On any failure it returns `null`. It cannot return a previous
-value because it never holds one.
+value because it never holds one. (The caller-side copies are covered in
+section 3.)
+
+**Correction, fixed on the integration branch.** As reviewed at `ce38779`, the
+DataStore read (`context.settingsStore.data.first()[TOKEN_BLOB]`) sat **outside**
+the `try`, as in the listing above. An `IOException` or a corrupt preferences
+file there would have thrown out of `token()` instead of meaning "not paired",
+so the claim that every failure returns `null` did not hold for the read. The
+integration branch moves the read inside the `try` (it goes through a
+`readBlob` parameter, so a JVM test can make it fail) and rethrows
+`CancellationException` so coroutine cancellation is not swallowed as "not
+paired".
 
 What makes decrypt fail in practice:
 
@@ -121,7 +146,12 @@ which mints a **new** token on the server, while the old token is still valid
 there. The phone cannot revoke it (token management needs the password, by
 design), so it stays live until the operator removes it from the device list.
 That is token sprawl, not a leak: the old token is still encrypted on that
-phone and nowhere else. The server caps stored tokens at 50.
+phone and nowhere else. The server caps **live** tokens at 50
+(`tokens_bp._MAX_TOKENS`, counted over `is_usable()` tokens). That does not
+bound the number of stored records: revoked and expired entries stay in
+`device_tokens.json` (`device_tokens.list_tokens()` returns "every stored
+token, including revoked and expired ones") and nothing prunes them, so the
+file grows by one record per pairing for as long as the install lives.
 
 This may also be worth checking against the pairing persistence defect in
 planner 4.1/4.2, since a phone that "forgets" its pairing after a restart is
@@ -151,11 +181,16 @@ review and **have not been compiled or run**.
 fun aTamperedBlobFailsClosedNotStale() = runBlocking {
     val store = TokenStore(context)
     store.setToken("dev_real_token")
-    // Overwrite the ciphertext with valid base64 that is not a valid blob.
-    context.settingsStore.edit {
-        it[stringPreferencesKey("token_blob")] = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-    }
-    assertNull(TokenStore(context).token())
+    // Take the REAL stored ciphertext and flip one bit in its body (past the
+    // 12-byte IV), so the blob is well formed and only the GCM tag check can
+    // catch it. Arbitrary base64 would mostly test the length check instead.
+    val real = store.rawBlobForTest()!!
+    val bytes = Base64.decode(real, Base64.NO_WRAP)
+    bytes[bytes.size - 1] = (bytes[bytes.size - 1].toInt() xor 1).toByte()
+    val tampered = Base64.encodeToString(bytes, Base64.NO_WRAP)
+    // readBlob is the seam the JVM tests already use, so no second DataStore
+    // is needed.
+    assertNull(TokenStore(context, readBlob = { tampered }).token())
 }
 
 @Test
@@ -168,17 +203,25 @@ fun losingTheKeystoreKeyFailsClosedNotStale() = runBlocking {
 }
 ```
 
-`settingsStore` is `private` in `TokenStore.kt`, so the first test needs either
-a small `internal` test hook or a second `preferencesDataStore` delegate with
-the same name in the test file. The JVM tests can also cover the same rule
+`settingsStore` is `private` in `TokenStore.kt`. Do **not** declare a second
+`preferencesDataStore(name = "svcs_settings")` delegate in the test file:
+DataStore allows one instance per file in a process, so a second delegate for
+the same name throws "There are multiple DataStores active for the same file"
+the first time both are touched. Use a small `internal` hook such as the
+`rawBlobForTest()` assumed above (it would return the current `TOKEN_BLOB`), and
+the existing `readBlob` constructor parameter to feed the mutated blob back in. The JVM tests can also cover the same rule
 without a device, through the existing `TokenCipher` seam: a cipher whose
 `decrypt` always throws must make `token()` return `null`.
 
 ## 6. Summary for the progress report
 
-The mobile credential path fails closed: a token that cannot be decrypted is
-treated as "not paired" by all three readers, and no code path returns a
-previous or cached credential. Backups exclude the encrypted store entirely.
+The mobile credential path fails closed in the store: a token that cannot be
+decrypted is treated as "not paired" by all three readers, and `TokenStore`
+returns no previous or cached credential. Two caveats apply (see the Answer):
+an already built `SvcsApi` client keeps its plaintext token until it is rebuilt,
+and a cancelled re-pair can leave the old token next to a new URL. The
+`token()` read of DataStore used to sit outside its `try` and is fixed on the
+integration branch. Backups exclude the encrypted store entirely.
 Three low-severity follow-ups: a doc comment that promises a cleanup the code
 does not do (MC-1), transient Keystore errors being indistinguishable from a
 lost pairing (MC-2), and no test for the failure path (MC-3, tests proposed

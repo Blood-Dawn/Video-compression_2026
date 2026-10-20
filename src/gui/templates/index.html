@@ -3071,6 +3071,10 @@
                        placeholder="optional, adds an X-SVCS-Signature header"
                        style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
               </div>
+              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.64rem;cursor:pointer;margin-top:0.4rem;">
+                <input type="checkbox" id="webhook-clear-secret" />
+                Clear the stored signing secret on save
+              </label>
               <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.64rem;cursor:pointer;margin-top:0.5rem;">
                 <input type="checkbox" id="webhook-on-jobs" checked />
                 Tell it when a compression finishes or fails

@@ -6,6 +6,12 @@
 **Implements:** D4 in `docs/plans/DESKTOP-ZONES-EVENTS-PLAN.md`
 **Feeds:** 3.10 (test harness), 4.9 (implementation), 4.10 (config UI), 5.10 (URL rejection tests)
 
+> **Status (2026-10-20): implemented, with differences from this spec.** The
+> code now exists: `src/utils/event_webhook.py`, `src/gui/routes/webhook_bp.py`
+> and `tests/test_event_webhook.py`. This document is the design record, so
+> where it disagrees with the code, the code wins. The differences to know
+> about are listed in section 13.
+
 ---
 
 ## 1. Purpose
@@ -54,13 +60,13 @@ addresses that drift apart the first time someone adds one. Instead, 4.9
 makes one small, behavior-preserving refactor in `push_notify.py`:
 
 ```python
-def check_outbound_url(url, *, require_path: bool, noun: str,
+def check_outbound_url(url, *, require_path: bool, label: str,
                        credential_field: str) -> "tuple[bool, str]":
-    """The shared SSRF guard. `noun` and `credential_field` are used in messages."""
+    """The shared SSRF guard. `label` and `credential_field` are used in messages."""
     ...  # the current body of is_safe_push_url, parameterised for both
 
 def is_safe_push_url(url) -> "tuple[bool, str]":
-    return check_outbound_url(url, require_path=True, noun="topic URL",
+    return check_outbound_url(url, require_path=True, label="topic",
                               credential_field="token field")
 ```
 
@@ -68,7 +74,7 @@ def is_safe_push_url(url) -> "tuple[bool, str]":
 
 ```python
 def is_safe_webhook_url(url) -> "tuple[bool, str]":
-    return push_notify.check_outbound_url(url, require_path=False, noun="webhook URL",
+    return push_notify.check_outbound_url(url, require_path=False, label="webhook",
                                           credential_field="secret field")
 ```
 
@@ -196,7 +202,10 @@ Copied in spirit from `push_notify`, tightened where D4 asks:
   that changed since saving is caught.
 * Success is any 2xx. Everything else is one `log.warning` line with the
   status or error, and nothing else happens.
-* `flush(timeout)` test helper, same contract as `push_notify.flush`.
+* `flush(timeout)` test helper, same contract as `push_notify.flush`. A test
+  that wants to know the worker gave up on a hanging receiver must wait on
+  `flush()`; asserting only that `emit_events` returned proves the caller did
+  not block, not that the worker recovered.
 
 ## 8. Hook point
 
@@ -224,9 +233,9 @@ both notifiers follow the same rule.
 
 When the webhook is disabled the cost is one config read, the same as push.
 
-## 9. API routes (for 4.10)
+## 9. API routes
 
-A new `routes/webhook_bp.py`, registered like `push_bp`. It inherits the same
+`src/gui/routes/webhook_bp.py` (as built), registered like `push_bp`. It inherits the same
 dashboard auth policy (SEC-010, Basic-Auth on a LAN bind) and the same-origin
 CSRF guard (SEC-001, `gui/csrf.py`) that every other `/api/*` POST gets:
 
@@ -243,7 +252,12 @@ policy and the CSRF guard, so a random web page cannot drive it, and (c) the res
 receiver's response body. The body must never be echoed, or the route becomes
 a way to read internal pages.
 
-## 10. Known limitation: DNS rebinding
+## 10. DNS rebinding (fixed on main)
+
+> **Status:** fixed. `push_notify.validate_push_url` returns the validated
+> addresses and `push_notify.pin_resolution` pins the connection to them, and
+> `event_webhook._post` uses both, so the host is no longer resolved a second
+> time on connect. The text below is the original analysis.
 
 The guard resolves the hostname, and then `urllib` resolves it **again** when
 it connects. A hostile DNS server can answer with a safe address the first
@@ -290,3 +304,17 @@ monkeypatched to a temp directory so a developer's real webhook is never hit.
   behind an `on_jobs` flag if a sponsor use case appears).
 * Multiple webhook URLs.
 * mTLS or custom CA bundles for the receiver.
+
+## 13. As built: differences from this spec
+
+Checked against `origin/main` on 2026-10-20.
+
+| Spec says | Code does |
+|---|---|
+| `emit_events(events, camera_id=...)` | `publish_events(events, camera_id="")`, plus `publish_job(entry)` for job completion and a generic `publish(event_type, payload)`. Job webhooks are therefore **not** out of scope any more. They are gated by an `on_jobs` flag, and behavior events by `on_events`. |
+| Field allowlist rebuilds each event | On `origin/main`, `publish_events` copies the whole event (`payload = dict(ev)`) and there is no allowlist. The "no PII beyond the class label" rule holds only because current producers send no extra keys. The allowlist and the shared `EVENT_FIELDS` follow-up in section 5 were still open at that point. |
+| At most 20 events per POST, one POST per call | At most 5 events per call (`_MAX_PER_BATCH`), and one POST per event. |
+| 2 second timeout | 3 seconds (`_POST_TIMEOUT_S`). |
+| Config fields `enabled`, `url`, `secret` | Also `on_jobs` and `on_events`. |
+| The guard is `check_outbound_url` | `push_notify.check_outbound_url` exists for one-off checks, for example a device registering its own push endpoint. The webhook sender uses the pinned `validate_push_url` and `pin_resolution` pair instead. |
+| Config routes sit behind dashboard auth only | Saving the config and the test route should require the dashboard password, never a device token, like the token routes. Closing that gap is part of the integration branch. |

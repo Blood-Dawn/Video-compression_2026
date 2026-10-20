@@ -215,6 +215,15 @@ def _addresses_for(host: str, label: str = "topic") -> "tuple[list, str]":
         return [ipaddress.ip_address(host)], ""
     except ValueError:
         pass
+    # Legacy IPv4 spellings (one decimal or hex integer, dotted hex or octal,
+    # short forms such as 169.254.43518) are all 169.254.169.254 to a C
+    # resolver. Judge them as the address they denote instead of leaving it
+    # to whatever the platform's getaddrinfo happens to do with them.
+    if all(c in "0123456789abcdefx." for c in host) and any(c.isdigit() for c in host):
+        try:
+            return [ipaddress.IPv4Address(socket.inet_aton(host))], ""
+        except (OSError, ValueError):
+            pass
     try:
         infos = socket.getaddrinfo(host, None)
     except (OSError, UnicodeError):

@@ -55,21 +55,24 @@ def append_events(output_dir, events: list, camera_id: str = "") -> int:
     # costs one config read when nothing is configured. The publisher
     # queues onto its own worker and swallows its own failures, because a
     # notification must never be able to fail the encode that raised it.
+    # The import sits INSIDE the try: an exception while a notifier module
+    # loads must be swallowed exactly like a delivery failure.
     try:
-        from utils.push_notify import publish_events as _publish
-    except ModuleNotFoundError:  # pragma: no cover - import path shim
-        from src.utils.push_notify import publish_events as _publish
-    try:
+        try:
+            from utils.push_notify import publish_events as _publish
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.utils.push_notify import publish_events as _publish
         _publish(events, camera_id=camera_id)
     except Exception:  # noqa: BLE001 - best effort, always
         pass
     # Week 3 TASK 3.9: the generic webhook is a separate opt-in sibling of
     # the ntfy push above, same best-effort contract.
+    # Own try, so a failure in one notifier can never skip the other.
     try:
-        from utils.event_webhook import publish_events as _publish_hook
-    except ModuleNotFoundError:  # pragma: no cover - import path shim
-        from src.utils.event_webhook import publish_events as _publish_hook
-    try:
+        try:
+            from utils.event_webhook import publish_events as _publish_hook
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.utils.event_webhook import publish_events as _publish_hook
         _publish_hook(events, camera_id=camera_id)
     except Exception:  # noqa: BLE001 - best effort, always
         pass

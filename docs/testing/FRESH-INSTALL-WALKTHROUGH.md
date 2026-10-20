@@ -60,7 +60,7 @@ Start at the GitHub repo page, as if a friend just sent you the link.
 - [ ] Could you find how to download it without scrolling around?
 - [ ] Did you use the PowerShell `irm ... | iex` command or the `.exe` from Releases? Why that one?
 - [ ] Did you follow the "verify the checksum" advice? Was it clear how?
-- [ ] Click the "Full options" install link in the README. Did it work?
+- [ ] Click the "Full instructions" link at the end of the README Download section (it opens `docs/releases/INSTALL.md`). Did it work?
 
 **Minutes for this section:**
 

@@ -207,6 +207,7 @@ _INPUT_BLOCKED_SCHEMES = {"file", "gopher", "dict", "ftp", "sftp", "smb",
 _INPUT_ALLOWED_SCHEMES = {"", "rtsp", "rtsps", "rtp", "rtmp", "rtmps",
                           "http", "https", "udp", "tcp", "mms", "srt"}
 _INPUT_BLOCKED_HOSTS = {"169.254.169.254", "100.100.100.100",
+                        "100.100.100.200", "192.0.0.192", "168.63.129.16",
                         "metadata.google.internal", "metadata"}
 
 
@@ -269,13 +270,28 @@ def is_safe_input_source(src) -> "tuple[bool, str]":
         return False, f"scheme not allowed: {scheme}"
     if scheme not in _INPUT_ALLOWED_SCHEMES:
         return False, f"scheme not allowed: {scheme}"
-    host = (parsed.hostname or "").lower()
+    # A trailing dot is the fully-qualified spelling of the same name.
+    host = (parsed.hostname or "").lower().rstrip(".")
     if host in _INPUT_BLOCKED_HOSTS:
         return False, "blocked internal host"
+    ip = None
     try:
         ip = ipaddress.ip_address(host)
+    except ValueError:
+        # Legacy IPv4 spellings (0xa9fea9fe, 2852039166, 0251.0376.0251.0376,
+        # 169.254.43518) all denote an address to a C resolver.
+        if host and any(c.isdigit() for c in host) and all(
+                c in "0123456789abcdefx." for c in host):
+            try:
+                import socket
+                ip = ipaddress.IPv4Address(socket.inet_aton(host))
+            except (OSError, ValueError):
+                ip = None                  # a hostname, not a literal IP
+    if ip is not None:
+        if getattr(ip, "ipv4_mapped", None):
+            ip = ip.ipv4_mapped
+        if str(ip) in _INPUT_BLOCKED_HOSTS:
+            return False, "blocked internal host"
         if ip.is_link_local:               # 169.254.0.0/16, fe80::/10 (metadata)
             return False, "blocked link-local host"
-    except ValueError:
-        pass                               # a hostname, not a literal IP
     return True, ""

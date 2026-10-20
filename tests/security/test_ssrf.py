@@ -78,3 +78,21 @@ def test_hls_start_route_rejects_ssrf(client, src):
     resp = client.post("/api/hls/start", json={"input_source": src})
     assert resp.status_code == 400
     assert b"input_source not allowed" in resp.data
+
+
+@pytest.mark.parametrize("src", [
+    "http://100.100.100.200/latest/meta-data/",    # Alibaba Cloud
+    "http://192.0.0.192/latest/",                  # Oracle Cloud classic
+    "http://168.63.129.16/machine?comp=goalstate", # Azure WireServer
+    "http://metadata.google.internal./computeMetadata/v1/",  # trailing dot
+    "http://169.254.169.254./latest/meta-data/",
+    "http://0xa9fea9fe/latest/meta-data/",
+    "http://2852039166/latest/meta-data/",
+    "http://0251.0376.0251.0376/latest/meta-data/",
+    "http://169.254.43518/latest/meta-data/",
+    "http://[::ffff:169.254.169.254]/latest/meta-data/",
+    "http://[::ffff:100.100.100.200]/latest/meta-data/",
+])
+def test_guard_blocks_more_cloud_metadata_spellings(src):
+    ok, _why = is_safe_input_source(src)
+    assert ok is False, f"{src} should be blocked"

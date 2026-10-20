@@ -35,6 +35,8 @@ from utils import event_webhook  # noqa: E402
 class _Recorder(BaseHTTPRequestHandler):
     received = []
     redirect_once = False
+    location = "/moved"
+    redirect_status = 302
 
     def do_POST(self):  # noqa: N802 - BaseHTTPRequestHandler's spelling
         length = int(self.headers.get("Content-Length") or 0)
@@ -45,8 +47,8 @@ class _Recorder(BaseHTTPRequestHandler):
             "headers": {k.lower(): v for k, v in self.headers.items()},
         })
         if _Recorder.redirect_once and self.path != "/moved":
-            self.send_response(302)
-            self.send_header("Location", "/moved")
+            self.send_response(_Recorder.redirect_status)
+            self.send_header("Location", _Recorder.location)
             self.end_headers()
             return
         self.send_response(200)
@@ -63,6 +65,8 @@ def listener():
     """A throwaway HTTP server; yields its base URL."""
     _Recorder.received = []
     _Recorder.redirect_once = False
+    _Recorder.location = "/moved"
+    _Recorder.redirect_status = 302
     srv = HTTPServer(("127.0.0.1", 0), _Recorder)
     t = threading.Thread(target=srv.serve_forever, daemon=True)
     t.start()
@@ -328,3 +332,139 @@ def test_blueprint_test_route_reports_failure_without_500(listener):
     result = resp.get_json()
     assert result["ok"] is False
     assert "could not reach" in result["detail"]
+
+
+# ── URL rejection: the bypass spellings (ported from planner 5.10) ──────────
+# The plain spellings are covered by test_push_notify.py. These are the
+# spellings real SSRF payload lists use to slip a metadata address past a
+# naive string check.
+
+
+@pytest.mark.parametrize("url,fragment", [
+    # 169.254.169.254 written every other way an IPv4 address can be written
+    ("http://2852039166/hook", "link-local"),              # one decimal integer
+    ("http://0xa9fea9fe/hook", "link-local"),              # one hex integer
+    ("http://0xa9.0xfe.0xa9.0xfe/hook", "link-local"),     # dotted hex
+    ("http://0251.0376.0251.0376/hook", "link-local"),     # dotted octal
+    ("http://169.254.43518/hook", "link-local"),           # short form
+    ("http://169.254.169.254./hook", "link-local"),        # trailing dot
+    ("HTTP://169.254.169.254/hook", "link-local"),         # scheme case
+    ("http://169.254.169.254:80/hook", "link-local"),      # explicit port
+    # the same address through IPv6
+    ("http://[::ffff:a9fe:a9fe]/hook", "link-local"),
+    ("http://[0:0:0:0:0:ffff:169.254.169.254]/hook", "link-local"),
+    ("http://[fe80::1%25eth0]/hook", "link-local"),        # with a zone id
+    # every major cloud's metadata endpoint, not only AWS's
+    ("http://100.100.100.200/hook", "metadata"),           # Alibaba Cloud
+    ("http://192.0.0.192/hook", "metadata"),               # Oracle Cloud classic
+    ("http://168.63.129.16/hook", "metadata"),             # Azure WireServer
+    ("http://[fd00:ec2::254]/hook", "metadata"),           # AWS IMDS over IPv6
+    ("http://METADATA.GOOGLE.INTERNAL/hook", "metadata"),  # name case
+    ("http://metadata.google.internal./hook", "metadata"), # FQDN trailing dot
+    # parser confusion: which part is the host?
+    ("http://192.168.1.5@169.254.169.254/hook", "credentials"),
+    ("http://169.254.169.254\\@192.168.1.5/hook", "credentials"),
+    ("http://169.254.169.254/x#@192.168.1.5/hook", "link-local"),  # fragment
+    # nothing-addresses and bad schemes
+    ("http://0.0.0.0/hook", "unspecified"),
+    ("http://[::]/hook", "unspecified"),
+    ("http:///hook", "host"),
+    ("javascript:alert(1)", "scheme"),
+])
+def test_guard_refuses_ssrf_bypass_spellings(url, fragment):
+    ok, why = event_webhook.is_safe_push_url(url)
+    assert not ok, f"{url} should have been refused"
+    assert fragment in why, f"reason {why!r} should mention {fragment!r}"
+
+
+def test_a_redirect_to_metadata_is_not_followed(enabled):
+    """An allowed receiver must not be able to bounce us onto 169.254.169.254."""
+    _Recorder.redirect_once = True
+    _Recorder.location = "http://169.254.169.254/latest/meta-data/"
+    ok, detail = event_webhook.send_test()
+    assert not ok and "redirect refused" in detail
+    assert len(_Recorder.received) == 1
+
+
+def test_a_redirect_to_another_host_never_reaches_it(enabled):
+    """Proved from the other end: the second server is never contacted."""
+    second = []
+
+    class _Second(BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802
+            second.append(self.path)
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *args):
+            return
+
+    srv = HTTPServer(("127.0.0.1", 0), _Second)
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    try:
+        _Recorder.redirect_once = True
+        _Recorder.location = f"http://127.0.0.1:{srv.server_port}/elsewhere"
+        for status in (301, 302, 303, 307, 308):
+            _Recorder.received = []
+            _Recorder.redirect_status = status
+            ok, detail = event_webhook.send_test()
+            assert not ok and "redirect refused" in detail
+        assert second == [], "a redirect was followed to the second host"
+    finally:
+        srv.shutdown()
+        srv.server_close()
+
+
+def test_embedded_credentials_are_refused_on_save_and_never_stored():
+    ok, err, _ = event_webhook.save_config(
+        {"enabled": True, "url": "http://admin:hunter2@192.168.1.20/hook"})
+    assert not ok and "credentials" in err
+    assert "hunter2" not in json.dumps(event_webhook.load_config())
+
+
+# ── the two notifiers are independent inside append_events ──────────────────
+
+
+def _loaded_stub(monkeypatch, name, fn):
+    """Install a fake notifier module exposing ``publish_events``."""
+    import types
+    mod = types.ModuleType(name)
+    mod.publish_events = fn
+    monkeypatch.setitem(sys.modules, name, mod)
+
+
+@pytest.mark.parametrize("broken", ["utils.push_notify", "utils.event_webhook"])
+def test_a_broken_notifier_import_cannot_escape_append_events(
+        monkeypatch, tmp_path, broken):
+    """A module without publish_events makes the import itself fail."""
+    import types
+    from utils import event_log
+    seen = []
+    other = ("utils.event_webhook" if broken == "utils.push_notify"
+             else "utils.push_notify")
+    _loaded_stub(monkeypatch, other,
+                 lambda ev, camera_id="": seen.append(len(ev)) or 1)
+    monkeypatch.setitem(sys.modules, broken, types.ModuleType(broken))
+    ev = [{"kind": "line_crossing", "label": "person"}]
+    assert event_log.append_events(tmp_path, ev) == 1
+    assert (tmp_path / event_log.EVENTS_FILENAME).exists()
+    assert seen == [1], "the healthy notifier must still run"
+
+
+@pytest.mark.parametrize("failing", ["utils.push_notify", "utils.event_webhook"])
+def test_a_raising_notifier_does_not_stop_the_other(monkeypatch, tmp_path, failing):
+    from utils import event_log
+    seen = []
+
+    def boom(*_a, **_k):
+        raise RuntimeError("notifier exploded")
+
+    other = ("utils.event_webhook" if failing == "utils.push_notify"
+             else "utils.push_notify")
+    _loaded_stub(monkeypatch, failing, boom)
+    _loaded_stub(monkeypatch, other,
+                 lambda ev, camera_id="": seen.append(len(ev)) or 1)
+    ev = [{"kind": "line_crossing", "label": "person"}]
+    assert event_log.append_events(tmp_path, ev) == 1
+    assert seen == [1]

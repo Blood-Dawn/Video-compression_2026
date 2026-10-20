@@ -6,6 +6,7 @@ import android.security.keystore.KeyProperties
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import java.security.KeyStore
 import javax.crypto.Cipher
@@ -43,6 +44,11 @@ private val Context.settingsStore by preferencesDataStore(name = "svcs_settings"
 class TokenStore(
     private val context: Context,
     private val cipher: TokenCipher = KeystoreTokenCipher,
+    // Reads the stored blob. A parameter only so a JVM test can make the
+    // DataStore read fail; every real use takes the default.
+    private val readBlob: suspend () -> String? = {
+        context.settingsStore.data.first()[TOKEN_BLOB]
+    },
 ) {
 
     private companion object {
@@ -99,9 +105,13 @@ class TokenStore(
      * on a screen with no way forward.
      */
     suspend fun token(): String? {
-        val blob = context.settingsStore.data.first()[TOKEN_BLOB] ?: return null
+        // The DataStore read is inside the try on purpose: an IOException or
+        // corruption there must also mean "not paired", not a crash.
         return try {
+            val blob = readBlob() ?: return null
             cipher.decrypt(blob)
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             null
         }

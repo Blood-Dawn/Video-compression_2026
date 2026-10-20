@@ -110,6 +110,10 @@ def test_guard_allows_the_self_hosted_targets(url):
     ("http://[::ffff:169.254.169.254]/topic", "link-local"),
     ("http://metadata.google.internal/topic", "metadata"),
     ("http://metadata/topic", "metadata"),
+    ("http://100.100.100.200/topic", "metadata"),      # Alibaba
+    ("http://192.0.0.192/topic", "metadata"),          # Oracle Cloud classic
+    ("http://168.63.129.16/topic", "metadata"),        # Azure WireServer
+    ("http://metadata.google.internal./topic", "metadata"),  # trailing dot
     ("file:///etc/passwd", "scheme"),
     ("ftp://192.168.1.5/topic", "scheme"),
     ("gopher://192.168.1.5/topic", "scheme"),

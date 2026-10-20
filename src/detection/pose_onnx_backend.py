@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, NamedTuple, Optional, Sequence, Tuple
+from typing import NamedTuple, Sequence
 
 import cv2
 import numpy as np
@@ -45,7 +45,7 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 # The 17 COCO keypoints, in the order YOLOv8-pose emits them.
-COCO_KEYPOINT_NAMES: Tuple[str, ...] = (
+COCO_KEYPOINT_NAMES: tuple[str, ...] = (
     "nose", "left_eye", "right_eye", "left_ear", "right_ear",
     "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
     "left_wrist", "right_wrist", "left_hip", "right_hip",
@@ -56,8 +56,8 @@ _NUM_KEYPOINTS = len(COCO_KEYPOINT_NAMES)  # 17
 
 class PoseDetection(NamedTuple):
     score: float
-    xyxy: Tuple[int, int, int, int]                  # original image coords
-    keypoints: Tuple[Tuple[float, float, float], ...]  # (x, y, vis) x 17, original coords
+    xyxy: tuple[int, int, int, int]                  # original image coords
+    keypoints: tuple[tuple[float, float, float], ...]  # (x, y, vis) x 17, original coords
 
 
 def _default_model_path() -> Path:
@@ -81,7 +81,7 @@ class YoloPoseOnnxDetector:
 
     def __init__(
         self,
-        model_path: Optional[str] = None,
+        model_path: str | None = None,
         confidence: float = 0.25,
         iou: float = 0.45,
         imgsz: int = 640,
@@ -92,7 +92,7 @@ class YoloPoseOnnxDetector:
         self.imgsz = int(imgsz)
         self.model_path = Path(model_path) if model_path else _default_model_path()
         self._session = None
-        self._input_name: Optional[str] = None
+        self._input_name: str | None = None
         self._available = False
         self._inference_error_logged = False
         self._load(device)
@@ -158,7 +158,7 @@ class YoloPoseOnnxDetector:
         return self._available
 
     # ------------------------------------------------------- pre/post-process
-    def _letterbox(self, img: np.ndarray) -> Tuple[np.ndarray, float, Tuple[int, int]]:
+    def _letterbox(self, img: np.ndarray) -> tuple[np.ndarray, float, tuple[int, int]]:
         """Resize keeping aspect ratio, pad to a square self.imgsz.
 
         Identical approach to YoloOnnxDetector._letterbox - kept as a
@@ -175,16 +175,18 @@ class YoloPoseOnnxDetector:
         canvas[pad_y:pad_y + nh, pad_x:pad_x + nw] = resized
         return canvas, r, (pad_x, pad_y)
 
-    def infer(self, image_bgr: np.ndarray) -> List[PoseDetection]:
+    def infer(self, image_bgr: np.ndarray) -> list[PoseDetection]:
         """Run pose estimation on a BGR image; return detections in original coords."""
         if not self._available or image_bgr is None or image_bgr.size == 0:
             return []
         h0, w0 = image_bgr.shape[:2]
         canvas, ratio, (pad_x, pad_y) = self._letterbox(image_bgr)
 
-        blob = canvas[:, :, ::-1].astype(np.float32) / 255.0
-        blob = np.transpose(blob, (2, 0, 1))[None, ...]
-        blob = np.ascontiguousarray(blob)
+        # BGR->RGB, HWC->CHW and /255 into one preallocated NCHW float32 blob
+        # (float32 math, same values as astype-then-divide, one pass not three).
+        blob = np.empty((1, 3, self.imgsz, self.imgsz), dtype=np.float32)
+        np.divide(canvas[:, :, ::-1].transpose(2, 0, 1), 255.0, out=blob[0],
+                  dtype=np.float32)
 
         try:
             out = self._session.run(None, {self._input_name: blob})[0]
@@ -245,7 +247,7 @@ class YoloPoseOnnxDetector:
             return []
         idxs = np.array(idxs).flatten()
 
-        dets: List[PoseDetection] = []
+        dets: list[PoseDetection] = []
         for i in idxs:
             kx = (kpts[i, :, 0] - pad_x) / ratio
             ky = (kpts[i, :, 1] - pad_y) / ratio
@@ -265,7 +267,7 @@ class YoloPoseOnnxDetector:
     def person_confirmed_in(
         self,
         image_bgr: np.ndarray,
-        conf: Optional[float] = None,
+        conf: float | None = None,
         min_visible_keypoints: int = 4,
         keypoint_conf: float = 0.3,
     ) -> bool:

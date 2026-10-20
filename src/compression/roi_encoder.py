@@ -16,7 +16,6 @@ import numpy as np
 import subprocess
 from pathlib import Path
 from datetime import datetime
-from typing import List, Optional, Tuple
 
 # Encryption is imported lazily in finish_segment so the encoder still works
 # on machines where the `cryptography` package is not installed.
@@ -40,14 +39,11 @@ log = logging.getLogger(__name__)
 
 
 def _ffmpeg_pipe_process(args: list) -> subprocess.Popen:
-    """Spawn an FFmpeg process with stdin as a pipe and stdout/stderr discarded.
+    """Spawn FFmpeg with stdin as a pipe and stdout/stderr discarded.
 
-    ffmpeg-python's quiet=True routes both stdout AND stderr to subprocess.PIPE.
-    If nothing reads those pipes, FFmpeg blocks when the OS pipe buffer fills
-    (~65 KB on Windows). This causes process.wait() to deadlock.
-
-    Fix: pass stdout=DEVNULL, stderr=DEVNULL so FFmpeg can always write without
-    blocking, while we still get stdin as a pipe for frame input.
+    ffmpeg-python's quiet=True pipes stdout and stderr too. Nothing reads them,
+    so FFmpeg blocks once the OS pipe buffer fills (~65 KB on Windows) and
+    process.wait() deadlocks. DEVNULL lets FFmpeg always write.
     """
     try:
         return subprocess.Popen(
@@ -57,15 +53,9 @@ def _ffmpeg_pipe_process(args: list) -> subprocess.Popen:
             stderr=subprocess.DEVNULL,
         )
     except FileNotFoundError as exc:
-        # Fall 3.12: on a "Compact" install (installer/svcs.iss's "compact"
-        # component explicitly skips bundling FFmpeg and expects it on
-        # PATH), a machine with no system FFmpeg used to fail here with a
-        # bare "[WinError 2] The system cannot find the file specified" (or
-        # "[Errno 2] No such file or directory" on Linux/macOS) - technically
-        # surfaced to the dashboard (the pipeline thread's broad except
-        # catches it and /api/status reports it), but the message named no
-        # culprit, so a non-technical user had no idea what to actually do
-        # about it. Re-raise with the actual problem and the two fixes.
+        # A "Compact" install (installer/svcs.iss) does not bundle FFmpeg. On a
+        # machine without a system FFmpeg the bare "[WinError 2]" names no
+        # culprit, so say what is missing and how to fix it.
         raise RuntimeError(
             "FFmpeg was not found (looked for it bundled with this install, "
             "then on PATH). This SVCS install does not bundle FFmpeg -- "
@@ -113,10 +103,14 @@ def draw_corner_overlay(frame: np.ndarray, mode_label: str, elapsed_s: int) -> N
     bx1, by1 = 8, 8
     bx2, by2 = bx1 + box_w, by1 + box_h
 
-    # Semi-transparent black background
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (bx1, by1), (bx2, by2), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, dst=frame)
+    # Darken only the box (corners inclusive, like a filled cv2.rectangle).
+    # Blending a black copy of the whole frame gives the same pixels, since
+    # 0.55*p + 0.45*p == p outside the box, but costs a full-frame copy and
+    # blend on every frame.
+    box = frame[by1:by2 + 1, bx1:bx2 + 1]
+    if box.size:
+        frame[by1:by2 + 1, bx1:bx2 + 1] = cv2.addWeighted(
+            np.zeros_like(box), 0.55, box, 0.45, 0)
 
     y = by1 + padding + line_h - 4
     for ln in lines:
@@ -169,7 +163,6 @@ _ROI_GRID_H = 9
 # cell (>= threshold) is always protected at full quality.
 _ROI_ACTIVE_THRESH = 0.5
 
-# ── Background-reference mode (R5 TASK 5.2) ──────────────────────────────────
 # ── Static-scene measurement (R5 TASK 5.2) ────────────────────────────────────
 # Is the camera ACTUALLY static? The R4 ROI cannot tell: if the camera shakes or
 # hunts exposure, "background" cells are not really background. This measures
@@ -208,7 +201,6 @@ def _ffmpeg_has_encoder(name: str) -> bool:
         return False
     if name in _ENCODER_CACHE:
         return _ENCODER_CACHE[name]
-    import subprocess
     try:
         out = subprocess.check_output(
             [ffmpeg_path(), "-hide_banner", "-encoders"],
@@ -225,10 +217,10 @@ def _ffmpeg_has_encoder(name: str) -> bool:
 # Hardware encoders are listed by `ffmpeg -encoders` whenever FFmpeg was BUILT
 # with them, which says nothing about the machine: Ubuntu's stock ffmpeg and
 # the common Windows builds list h264_nvenc on a laptop with no NVIDIA GPU at
-# all. Choosing one there used to pass the check above, then die mid-segment
-# with a BrokenPipeError when ffmpeg failed to open the device, instead of
-# taking the libx264 fallback. For these, "usable" means a tiny real encode
-# succeeds. Author: Bloodawn (KheivenD), 2026-09-24 (cleanup sweep).
+# all. Choosing one there passes the check above and then dies mid-segment
+# with a BrokenPipeError when ffmpeg cannot open the device. For these,
+# "usable" means a tiny real encode succeeds.
+# Author: Bloodawn (KheivenD), 2026-09-24 (cleanup sweep).
 _HW_ENCODERS = {"h264_nvenc", "hevc_nvenc", "av1_nvenc"}
 _USABLE_CACHE: dict = {}
 
@@ -248,7 +240,6 @@ def _ffmpeg_encoder_usable(name: str) -> bool:
         return True
     if name in _USABLE_CACHE:
         return _USABLE_CACHE[name]
-    import subprocess
     try:
         proc = subprocess.run(
             [ffmpeg_path(), "-hide_banner", "-loglevel", "error",
@@ -261,6 +252,16 @@ def _ffmpeg_encoder_usable(name: str) -> bool:
         usable = False
     _USABLE_CACHE[name] = usable
     return usable
+
+
+def _clip_box(box, w: int, h: int) -> tuple[int, int, int, int] | None:
+    """(x1, y1, x2, y2) of an (x, y, w, h) box clipped to the frame, or None if empty."""
+    bx, by, bw, bh = (int(v) for v in box)
+    x1, y1 = max(0, bx), max(0, by)
+    x2, y2 = min(w, bx + bw), min(h, by + bh)
+    if x2 > x1 and y2 > y1:
+        return x1, y1, x2, y2
+    return None
 
 
 class ROIEncoder:
@@ -393,9 +394,9 @@ class ROIEncoder:
         initialize_database(db_path)
 
         # Streaming API state. None when no segment is open
-        self._stream_process: Optional[object] = None
-        self._stream_path: Optional[Path] = None
-        self._stream_timestamp: Optional[str] = None
+        self._stream_process: object | None = None
+        self._stream_path: Path | None = None
+        self._stream_timestamp: str | None = None
         self._stream_camera_id: str = "cam_unknown"
         self._stream_fps: float = 30.0
         self._stream_object_type: str = "unknown"
@@ -406,30 +407,25 @@ class ROIEncoder:
 
         # Encryption state (set by begin_segment, applied in finish_segment)
         self._stream_encrypt: bool = False
-        self._stream_encrypt_password: Optional[str] = None
-        self._stream_encrypt_key_file: Optional[str] = None
-        # Segments where encrypt=True was requested but the output was
-        # written as plaintext instead (missing credential, missing
-        # cryptography package, unreadable key file, or encrypt_file()
-        # itself raising - see the three warning branches in
-        # finish_segment()). gui.services.pipeline_runner reads this off the
-        # live instance so /api/status can report it honestly instead of
-        # the caller trusting config.encrypt, which only reflects what was
-        # requested. 2026-09-24 dishonesty audit (task #86).
+        self._stream_encrypt_password: str | None = None
+        self._stream_encrypt_key_file: str | None = None
+        # Segments where encrypt=True was requested but the output stayed
+        # plaintext. gui.services.pipeline_runner reads this so /api/status
+        # reports what happened, not what config.encrypt asked for.
         self.encryption_failures: int = 0
 
         # Cache the audio-presence check so we don't probe every segment.
         # Surveillance cameras virtually never have audio; probing is wasted I/O.
         # Set to None = not yet determined; probe lazily on first encode call.
-        self._source_has_audio: Optional[bool] = None
+        self._source_has_audio: bool | None = None
 
         # Streaming API audio state
-        self._stream_source_path: Optional[str] = None
+        self._stream_source_path: str | None = None
 
     @staticmethod
     def _copy_bboxes_to_black_frame(
         frame: np.ndarray,
-        boxes: List[Tuple[int, int, int, int]],
+        boxes: list[tuple[int, int, int, int]],
     ) -> np.ndarray:
         """
         Return a full-size black frame with only bbox rectangles copied through.
@@ -439,12 +435,10 @@ class ROIEncoder:
         """
         object_only = np.zeros_like(frame)
         h, w = frame.shape[:2]
-        for bx, by, bw, bh in boxes:
-            x1 = max(0, int(bx))
-            y1 = max(0, int(by))
-            x2 = min(w, int(bx) + int(bw))
-            y2 = min(h, int(by) + int(bh))
-            if x2 > x1 and y2 > y1:
+        for box in boxes:
+            clipped = _clip_box(box, w, h)
+            if clipped:
+                x1, y1, x2, y2 = clipped
                 object_only[y1:y2, x1:x2] = frame[y1:y2, x1:x2]
         return object_only
 
@@ -452,7 +446,7 @@ class ROIEncoder:
     def _copy_bboxes_to_background_frame(
         background_frame: np.ndarray,
         frame: np.ndarray,
-        boxes: List[Tuple[int, int, int, int]],
+        boxes: list[tuple[int, int, int, int]],
     ) -> np.ndarray:
         """
         Return a frame made from one background keyframe plus current bbox patches.
@@ -462,19 +456,17 @@ class ROIEncoder:
         """
         composed = background_frame.copy()
         h, w = frame.shape[:2]
-        for bx, by, bw, bh in boxes:
-            x1 = max(0, int(bx))
-            y1 = max(0, int(by))
-            x2 = min(w, int(bx) + int(bw))
-            y2 = min(h, int(by) + int(bh))
-            if x2 > x1 and y2 > y1:
+        for box in boxes:
+            clipped = _clip_box(box, w, h)
+            if clipped:
+                x1, y1, x2, y2 = clipped
                 composed[y1:y2, x1:x2] = frame[y1:y2, x1:x2]
         return composed
 
     @staticmethod
     def _compress_background_outside_bboxes(
         frame: np.ndarray,
-        boxes: List[Tuple[int, int, int, int]],
+        boxes: list[tuple[int, int, int, int]],
         *,
         downscale: int = 8,
     ) -> np.ndarray:
@@ -493,21 +485,55 @@ class ROIEncoder:
         small_w = max(1, w // downscale)
         small_h = max(1, h // downscale)
         low_detail = cv2.resize(frame, (small_w, small_h), interpolation=cv2.INTER_AREA)
-        low_detail = cv2.resize(low_detail, (w, h), interpolation=cv2.INTER_LINEAR)
-        out = low_detail
-
-        for bx, by, bw, bh in boxes:
-            x1 = max(0, int(bx))
-            y1 = max(0, int(by))
-            x2 = min(w, int(bx) + int(bw))
-            y2 = min(h, int(by) + int(bh))
-            if x2 > x1 and y2 > y1:
+        out = cv2.resize(low_detail, (w, h), interpolation=cv2.INTER_LINEAR)
+        for box in boxes:
+            clipped = _clip_box(box, w, h)
+            if clipped:
+                x1, y1, x2, y2 = clipped
                 out[y1:y2, x1:x2] = frame[y1:y2, x1:x2]
         return out
 
-    # ------------------------------------------------------------------
-    # Primary API: encode raw numpy frames (no lossy intermediate file)
-    # ------------------------------------------------------------------
+    def _render_frame(
+        self,
+        frame: np.ndarray,
+        boxes,
+        *,
+        object_only: bool,
+        background_frame: np.ndarray | None,
+        compress_background: bool,
+        draw_boxes: bool,
+        mode_label: str,
+        elapsed_s: int,
+    ) -> np.ndarray:
+        """Apply mode compositing, green ROI boxes and the corner overlay.
+
+        Never modifies ``frame``: the compositing helpers return new arrays and
+        the pass-through case is copied before anything is drawn on it.
+        """
+        if object_only:
+            out = self._copy_bboxes_to_black_frame(frame, boxes)
+        elif background_frame is not None:
+            out = self._copy_bboxes_to_background_frame(background_frame, frame, boxes)
+        elif compress_background:
+            out = self._compress_background_outside_bboxes(frame, boxes)
+        else:
+            out = frame
+
+        draw_boxes = draw_boxes and bool(boxes)
+        if (draw_boxes or mode_label) and out is frame:
+            out = frame.copy()
+
+        if draw_boxes:
+            h, w = frame.shape[:2]
+            for bx, by, bw, bh in boxes:
+                x1, y1 = max(0, bx), max(0, by)
+                x2, y2 = min(w, bx + bw), min(h, by + bh)
+                if x2 > x1 and y2 > y1:
+                    cv2.rectangle(out, (x1, y1), (x2, y2), (0, 255, 0), 2)
+
+        if mode_label:
+            draw_corner_overlay(out, mode_label, elapsed_s)
+        return out
 
     # ------------------------------------------------------------------
     # Output-argument builders (R4 Phase 2, docs/RESEARCH-COMPRESSION.md).
@@ -520,7 +546,7 @@ class ROIEncoder:
         return self._build_output_kwargs(self.foreground_crf, fps)
 
     def _build_output_kwargs(self, crf: int, fps: float,
-                             codec: Optional[str] = None) -> dict:
+                             codec: str | None = None) -> dict:
         """FFmpeg output kwargs for one segment: codec, quality, long GOP,
         optional capped-CRF rate bound."""
         codec = (codec or self.codec or "libx264").lower()
@@ -570,9 +596,9 @@ class ROIEncoder:
                 kw["bufsize"] = f"{2 * kbps}k"
         return kw
 
-    def _build_vf(self, frame_w: int, frame_h: int) -> Optional[str]:
+    def _build_vf(self, frame_w: int, frame_h: int) -> str | None:
         """The -vf chain for one segment: optional denoise, then ROI rects."""
-        parts: List[str] = []
+        parts: list[str] = []
         if self.denoise:
             parts.append(self.denoise)
         parts.extend(self._build_roi_filters(frame_w, frame_h))
@@ -592,7 +618,7 @@ class ROIEncoder:
         qoff = (self.background_crf - self.foreground_crf) / 51.0
         return max(0.05, min(0.6, qoff))
 
-    def _build_roi_filters(self, frame_w: int, frame_h: int) -> List[str]:
+    def _build_roi_filters(self, frame_w: int, frame_h: int) -> list[str]:
         """addroi filter instances degrading long-static grid cells.
 
         Only for libx264/libx265 (verified: libsvtav1/libaom and the FFmpeg
@@ -618,7 +644,7 @@ class ROIEncoder:
         gh, gw = grid.shape
         cell_w = frame_w / gw
         cell_h = frame_h / gh
-        filters: List[str] = []
+        filters: list[str] = []
         for row in range(gh):
             run_start = None
             for col in range(gw + 1):
@@ -687,18 +713,18 @@ class ROIEncoder:
 
     def encode_segment(
         self,
-        frames: List[np.ndarray],
-        bboxes_per_frame: Optional[List[List[Tuple[int, int, int, int]]]] = None,
+        frames: list[np.ndarray],
+        bboxes_per_frame: list[list[tuple[int, int, int, int]]] | None = None,
         camera_id: str = "cam_unknown",
         fps: float = 30.0,
         object_type="unknown",
-        draw_roi_boxes: Optional[bool] = None,
+        draw_roi_boxes: bool | None = None,
         object_only: bool = False,
-        background_frame: Optional[np.ndarray] = None,
+        background_frame: np.ndarray | None = None,
         mode_label: str = "",
-        avg_sharpness: Optional[float] = None,
-        sharpness_label: Optional[str] = None,
-        source_path: Optional[str] = None,
+        avg_sharpness: float | None = None,
+        sharpness_label: str | None = None,
+        source_path: str | None = None,
     ) -> dict:
         """
         Encode a list of raw BGR numpy frames into a compressed MP4.
@@ -761,11 +787,6 @@ class ROIEncoder:
         output_path = self.output_dir / f"{camera_id}_{timestamp}.mp4"
 
         h, w = shape[:2]
-        # Pipe raw BGR frames to FFmpeg. Input format is rawvideo (BGR24).
-        # FFmpeg encodes to H.264 (libx264) at the chosen CRF.
-        # Use _ffmpeg_pipe_process instead of run_async(quiet=True) to avoid
-        # a Windows deadlock: quiet=True routes stderr to PIPE but nothing reads
-        # it, so when the buffer fills FFmpeg blocks and process.wait() deadlocks.
         _ffmpeg_args = (
             ffmpeg
             .input(
@@ -785,113 +806,91 @@ class ROIEncoder:
             .compile()
         )
         process = _ffmpeg_pipe_process(_ffmpeg_args)
-        # Guard the buffered output from retention while it is being written too.
+        # Guard the output from retention while it is written. Cleared in the
+        # finally so a failed encode does not stay "active" (undeletable) forever.
         if _active_outputs is not None:
             _active_outputs.mark_active(output_path)
-
-        should_draw_boxes = self.draw_roi_boxes if draw_roi_boxes is None else draw_roi_boxes
-        safe_fps = fps if fps and fps > 0 else 30.0
-
         try:
-            for frame_idx, (frame, boxes) in enumerate(zip(frames, bboxes_per_frame)):
-                # Step 1: apply mode-specific compositing.
-                # _copy_bboxes_* functions always return a NEW writable array,
-                # so mode2/3 frames are safe to draw on without an extra copy.
-                if object_only:
-                    frame_to_write = self._copy_bboxes_to_black_frame(frame, boxes)
-                elif background_frame is not None:
-                    frame_to_write = self._copy_bboxes_to_background_frame(
-                        background_frame, frame, boxes
-                    )
-                else:
-                    frame_to_write = frame  # still aliased to original; copy below if needed
+            return_code = self._pipe_frames(
+                process, frames, bboxes_per_frame,
+                object_only=object_only,
+                background_frame=background_frame,
+                draw_boxes=self.draw_roi_boxes if draw_roi_boxes is None else draw_roi_boxes,
+                mode_label=mode_label,
+                fps=fps,
+            )
+            if return_code != 0:
+                raise RuntimeError(
+                    f"FFmpeg failed while encoding segment {timestamp} "
+                    f"(exit code {return_code})."
+                )
+            if not output_path.exists() or output_path.stat().st_size == 0:
+                raise RuntimeError(
+                    f"FFmpeg produced no output for segment {timestamp}. "
+                    "Check that ffmpeg is installed and on PATH."
+                )
 
-                # Step 2: draw green ROI boxes if requested.
-                # For mode 0/1 (frame_to_write is frame) we need a copy before
-                # drawing. For mode 2/3 the compositing above already produced a
-                # fresh array, no re-composite needed.
-                if should_draw_boxes and boxes:
-                    if frame_to_write is frame:
-                        frame_to_write = frame.copy()
-                    for bx, by, bw, bh in boxes:
-                        x1 = max(0, bx)
-                        y1 = max(0, by)
-                        x2 = min(w, bx + bw)
-                        y2 = min(h, by + bh)
-                        if x2 > x1 and y2 > y1:
-                            cv2.rectangle(frame_to_write, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            # The pipe carries video only; re-attach the source's audio.
+            if source_path:
+                self._mux_audio_from_source(output_path, source_path)
 
-                # Step 3: burn mode label + elapsed timer into top-left corner.
-                if mode_label:
-                    if frame_to_write is frame:
-                        frame_to_write = frame.copy()
-                    elapsed_s = int(frame_idx / safe_fps)
-                    draw_corner_overlay(frame_to_write, mode_label, elapsed_s)
-
-                process.stdin.write(frame_to_write.tobytes())
-
-            process.stdin.close()
-            try:
-                return_code = process.wait(timeout=30.0)
-            except Exception:
-                process.kill()
-                process.wait()
-                raise RuntimeError("FFmpeg timed out encoding segment") from None
-        except (BrokenPipeError, OSError) as exc:
-            try:
-                process.stdin.close()
-            except Exception:
-                pass
-            try:
-                process.kill()
-            except Exception:
-                pass
-            process.wait()
+            insert_segment(
+                timestamp=timestamp,
+                camera_id=camera_id,
+                target_detected=has_targets,
+                roi_count=roi_count,
+                file_size=output_path.stat().st_size,
+                duration=len(frames) / fps,
+                file_path=str(output_path),
+                object_type=object_type,
+                avg_sharpness=avg_sharpness,
+                sharpness_label=sharpness_label,
+                db_path=self.db_path,
+            )
+        finally:
             if _active_outputs is not None:
                 _active_outputs.mark_done(output_path)
-            raise RuntimeError("FFmpeg pipe closed while encoding segment") from exc
-
-        if return_code != 0:
-            raise RuntimeError(
-                f"FFmpeg failed while encoding segment {timestamp} "
-                f"(exit code {return_code})."
-            )
-
-        if not output_path.exists() or output_path.stat().st_size == 0:
-            raise RuntimeError(
-                f"FFmpeg produced no output for segment {timestamp}. "
-                "Check that ffmpeg is installed and on PATH."
-            )
-
-        file_size = output_path.stat().st_size
-        duration = len(frames) / fps
-
-        # Mux audio from source file (if it has audio). The pipeline pipes video only
-        if source_path:
-            self._mux_audio_from_source(output_path, source_path)
-            file_size = output_path.stat().st_size  # update after mux
-
-        insert_segment(
-            timestamp=timestamp,
-            camera_id=camera_id,
-            target_detected=has_targets,
-            roi_count=roi_count,
-            file_size=file_size,
-            duration=duration,
-            file_path=str(output_path),
-            object_type=object_type,
-            avg_sharpness=avg_sharpness,
-            sharpness_label=sharpness_label,
-            db_path=self.db_path,
-        )
-
-        if _active_outputs is not None:
-            _active_outputs.mark_done(output_path)
         return {
             "file_path": str(output_path),
             "avg_sharpness": avg_sharpness,
             "sharpness_label": sharpness_label,
         }
+
+    def _pipe_frames(self, process, frames, bboxes_per_frame, *, object_only,
+                     background_frame, draw_boxes, mode_label, fps) -> int:
+        """Render and write every buffered frame, then wait for FFmpeg's exit code."""
+        safe_fps = fps if fps and fps > 0 else 30.0
+        try:
+            for frame_idx, (frame, boxes) in enumerate(zip(frames, bboxes_per_frame)):
+                out = self._render_frame(
+                    frame, boxes,
+                    object_only=object_only,
+                    background_frame=background_frame,
+                    compress_background=False,
+                    draw_boxes=draw_boxes,
+                    mode_label=mode_label,
+                    elapsed_s=int(frame_idx / safe_fps),
+                )
+                # Writing the array's buffer skips the full-frame copy tobytes() makes.
+                process.stdin.write(np.ascontiguousarray(out))
+            process.stdin.close()
+            try:
+                return process.wait(timeout=30.0)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+                raise RuntimeError("FFmpeg timed out encoding segment") from None
+        except OSError as exc:  # BrokenPipeError when FFmpeg dies mid-write
+            try:
+                process.stdin.close()
+            except (OSError, ValueError):
+                pass
+            try:
+                process.kill()
+            except OSError:
+                pass
+            process.wait()
+            raise RuntimeError("FFmpeg pipe closed while encoding segment") from exc
 
     # ------------------------------------------------------------------
     # Streaming API: open → write frames one-by-one → close
@@ -906,10 +905,10 @@ class ROIEncoder:
         camera_id: str = "cam_unknown",
         has_targets: bool = True,
         object_type: str = "unknown",
-        source_path: Optional[str] = None,
+        source_path: str | None = None,
         encrypt: bool = False,
-        encrypt_password: Optional[str] = None,
-        encrypt_key_file: Optional[str] = None,
+        encrypt_password: str | None = None,
+        encrypt_key_file: str | None = None,
     ) -> None:
         """Open an FFmpeg pipe and start a new streaming segment.
 
@@ -981,11 +980,11 @@ class ROIEncoder:
     def write_frame(
         self,
         frame: np.ndarray,
-        boxes: Optional[List[Tuple[int, int, int, int]]] = None,
-        background_frame: Optional[np.ndarray] = None,
+        boxes: list[tuple[int, int, int, int]] | None = None,
+        background_frame: np.ndarray | None = None,
         object_only: bool = False,
         mode_label: str = "",
-        draw_roi_boxes: Optional[bool] = None,
+        draw_roi_boxes: bool | None = None,
         measure_sharpness: bool = True,
         compress_background: bool = False,
     ) -> None:
@@ -1002,52 +1001,34 @@ class ROIEncoder:
             boxes = []
 
         h, w = frame.shape[:2]
-        should_draw = self.draw_roi_boxes if draw_roi_boxes is None else draw_roi_boxes
+        frame_out = self._render_frame(
+            frame, boxes,
+            object_only=object_only,
+            background_frame=background_frame,
+            compress_background=compress_background,
+            draw_boxes=self.draw_roi_boxes if draw_roi_boxes is None else draw_roi_boxes,
+            mode_label=mode_label,
+            elapsed_s=int(self._stream_frame_count / self._stream_fps),
+        )
 
-        # Step 1: mode compositing
-        if object_only:
-            frame_out = self._copy_bboxes_to_black_frame(frame, boxes)
-        elif background_frame is not None:
-            frame_out = self._copy_bboxes_to_background_frame(background_frame, frame, boxes)
-        elif compress_background:
-            frame_out = self._compress_background_outside_bboxes(frame, boxes)
-        else:
-            frame_out = frame
-
-        # Step 2: green ROI boxes
-        if should_draw and boxes:
-            if frame_out is frame:
-                frame_out = frame.copy()
-            for bx, by, bw, bh in boxes:
-                x1 = max(0, bx); y1 = max(0, by)
-                x2 = min(w, bx + bw); y2 = min(h, by + bh)
-                if x2 > x1 and y2 > y1:
-                    cv2.rectangle(frame_out, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
-        # Step 3: corner overlay
-        if mode_label:
-            if frame_out is frame:
-                frame_out = frame.copy()
-            elapsed_s = int(self._stream_frame_count / self._stream_fps)
-            draw_corner_overlay(frame_out, mode_label, elapsed_s)
-
-        # Step 4: optional sharpness measurement on target ROI crops
         if measure_sharpness and boxes:
+            # Lazy: utils.metrics pulls in scikit-image.
             from utils.metrics import compute_sharpness  # type: ignore
             for bx, by, bw, bh in boxes:
-                x1 = max(0, bx); y1 = max(0, by)
-                x2 = min(w, bx + bw); y2 = min(h, by + bh)
+                x1, y1 = max(0, bx), max(0, by)
+                x2, y2 = min(w, bx + bw), min(h, by + bh)
                 if x2 > x1 and y2 > y1:
                     self._stream_sharpness_scores.append(
                         compute_sharpness(frame[y1:y2, x1:x2])
                     )
 
-        # Step 5: teach the activity grid where motion happens this session, so
-        # the NEXT segment's addroi can degrade only long-static cells (R4 P2).
+        # Teach the activity grid where motion happens this session, so the
+        # NEXT segment's addroi degrades only long-static cells.
         if self.roi_qp:
             self._note_roi_activity(boxes, w, h)
 
-        self._stream_process.stdin.write(frame_out.tobytes())
+        # Writing the array's buffer skips the full-frame copy tobytes() makes.
+        self._stream_process.stdin.write(np.ascontiguousarray(frame_out))
         self._stream_frame_count += 1
         self._stream_roi_count   += len(boxes)
         if boxes:
@@ -1062,13 +1043,14 @@ class ROIEncoder:
         proc = self._stream_process
         if proc is None:
             return
+        # ValueError: another thread may be mid-write on the same pipe.
         try:
             proc.stdin.close()
-        except Exception:
+        except (OSError, ValueError):
             pass
         try:
             proc.kill()
-        except Exception:
+        except OSError:
             pass
 
     def finish_segment(
@@ -1121,18 +1103,19 @@ class ROIEncoder:
         proc = self._stream_process
         try:
             proc.stdin.close()
-        except Exception:
+        except (OSError, ValueError):
             pass
 
         try:
             return_code = proc.wait(timeout=timeout)
         except Exception:
-            # Timed out or other error. Kill FFmpeg and give up on this segment
+            # Broad on purpose: whatever went wrong, the segment must be closed
+            # out below or the next begin_segment() refuses to start.
             log.warning("FFmpeg did not exit within %.0fs. Killing process.", timeout)
             try:
                 proc.kill()
                 proc.wait()
-            except Exception:
+            except OSError:
                 pass
             self._stream_process = None
             raise RuntimeError(
@@ -1149,8 +1132,7 @@ class ROIEncoder:
         if not output_path.exists() or output_path.stat().st_size == 0:
             raise RuntimeError(f"FFmpeg produced no output for segment {self._stream_timestamp}")
 
-        # Mux audio from the original source file (AAC 128k) if it has audio.
-        # The streaming pipe sends only raw video bytes. Audio must be re-attached here.
+        # The pipe carries video only; re-attach the source's audio.
         if self._stream_source_path:
             self._mux_audio_from_source(output_path, self._stream_source_path)
 
@@ -1166,60 +1148,12 @@ class ROIEncoder:
             avg_sharpness = None
             sharpness_label = None
 
-        # ── Encryption ───────────────────────────────────────────────────────────
-        # Encrypt AFTER audio mux so the final .mp4 is what gets locked.
-        # The plaintext .mp4 is deleted by encrypt_file (delete_original=True).
-        # On failure we keep the plaintext and log a warning - never lose footage.
         final_path = output_path
         if self._stream_encrypt:
-            if not _CRYPTO_AVAILABLE:
-                log.warning(
-                    "encrypt=True but the `cryptography` package is not installed. "
-                    "Segment %s will not be encrypted. "
-                    "Install it with: pip install cryptography",
-                    output_path.name,
-                )
-                self.encryption_failures += 1
-            else:
-                _raw_key: Optional[bytes] = None
-                if self._stream_encrypt_key_file:
-                    try:
-                        with open(self._stream_encrypt_key_file, "rb") as _kf:
-                            _raw_key = _kf.read()
-                    except OSError as _e:
-                        log.warning(
-                            "Could not read key file %s: %s. Segment will not be encrypted.",
-                            self._stream_encrypt_key_file, _e,
-                        )
-
-                _can_encrypt = (
-                    self._stream_encrypt_password is not None
-                    or _raw_key is not None
-                )
-                if not _can_encrypt:
-                    log.warning(
-                        "encrypt=True but neither password nor valid key file provided. "
-                        "Segment %s will not be encrypted.",
-                        output_path.name,
-                    )
-                    self.encryption_failures += 1
-                else:
-                    try:
-                        enc_path = _encrypt_file(
-                            output_path,
-                            password=self._stream_encrypt_password,
-                            key=_raw_key,
-                            delete_original=True,    # removes plaintext .mp4
-                        )
-                        final_path = enc_path
-                        file_size  = enc_path.stat().st_size   # update to encrypted size
-                        log.info("Encrypted segment → %s", enc_path.name)
-                    except Exception as _enc_err:
-                        log.warning(
-                            "Encryption failed for %s: %s. Keeping plaintext output.",
-                            output_path.name, _enc_err,
-                        )
-                        self.encryption_failures += 1
+            enc_path = self._encrypt_output(output_path)
+            if enc_path is not None:
+                final_path = enc_path
+                file_size = enc_path.stat().st_size
 
         insert_segment(
             timestamp       = self._stream_timestamp,
@@ -1249,6 +1183,60 @@ class ROIEncoder:
             "encrypted":       final_path.suffix == ".enc",
         }
 
+    def _encrypt_output(self, output_path: Path) -> Path | None:
+        """AES-encrypt the finished segment; None means it stays plaintext.
+
+        Runs after the audio mux so the final .mp4 is what gets locked, and
+        encrypt_file deletes the plaintext. Every failure keeps the plaintext
+        (never lose footage) and is counted in encryption_failures.
+        """
+        if not _CRYPTO_AVAILABLE:
+            log.warning(
+                "encrypt=True but the `cryptography` package is not installed. "
+                "Segment %s will not be encrypted. "
+                "Install it with: pip install cryptography",
+                output_path.name,
+            )
+            self.encryption_failures += 1
+            return None
+
+        raw_key: bytes | None = None
+        if self._stream_encrypt_key_file:
+            try:
+                with open(self._stream_encrypt_key_file, "rb") as kf:
+                    raw_key = kf.read()
+            except OSError as exc:
+                log.warning(
+                    "Could not read key file %s: %s. Segment will not be encrypted.",
+                    self._stream_encrypt_key_file, exc,
+                )
+
+        if self._stream_encrypt_password is None and raw_key is None:
+            log.warning(
+                "encrypt=True but neither password nor valid key file provided. "
+                "Segment %s will not be encrypted.",
+                output_path.name,
+            )
+            self.encryption_failures += 1
+            return None
+
+        try:
+            enc_path = _encrypt_file(
+                output_path,
+                password=self._stream_encrypt_password,
+                key=raw_key,
+                delete_original=True,
+            )
+        except Exception as exc:  # any crypto/IO failure: keep the plaintext
+            log.warning(
+                "Encryption failed for %s: %s. Keeping plaintext output.",
+                output_path.name, exc,
+            )
+            self.encryption_failures += 1
+            return None
+        log.info("Encrypted segment -> %s", enc_path.name)
+        return enc_path
+
     # ------------------------------------------------------------------
     # Legacy API: encode from a pre-written video file path
     # ------------------------------------------------------------------
@@ -1256,7 +1244,7 @@ class ROIEncoder:
     def encode_frame_sequence(
         self,
         input_path: str,
-        regions_per_frame: List[List[ForegroundRegion]],
+        regions_per_frame: list[list[ForegroundRegion]],
         camera_id: str = "cam_unknown",
         segment_duration_s: int = 60,
     ) -> str:
@@ -1334,29 +1322,11 @@ class ROIEncoder:
             return False
 
     def _mux_audio_from_source(self, video_path: Path, source_path: str) -> None:
-        """
-        Mux audio from source_path into video_path (in-place replacement).
+        """Re-attach source_path's audio to the video-only video_path, in place.
 
-        The pipeline pipes only raw video frames to FFmpeg. Audio is stripped
-        at that stage.  This post-processing step re-attaches the original audio
-        track so output segments contain sound.
-
-        Strategy:
-          1. Probe source to check for an audio stream (cached per session).
-          2. Build an FFmpeg command:
-               ffmpeg -i video_only.mp4 -i source_file
-                      -c:v copy -c:a aac -b:a 128k
-                      -map 0:v:0 -map 1:a:0 -shortest
-                      temp_with_audio.mp4
-          3. Replace video_path with the muxed file.
-
-        AAC at 128 kbps is chosen for universal browser compatibility.
-        most MP4/H.264 files served from a web app need AAC audio to play
-        inline in Chrome/Safari/Firefox without extra codec installs.
-
-        Args:
-            video_path:  Path to the video-only MP4 just written by FFmpeg.
-            source_path: Path to the original input file that has audio.
+        The frame pipe carries video only. The audio probe is cached per
+        session. AAC 128k because browsers play it inline without extra codecs.
+        On any failure the video-only output is kept.
         """
         if self._source_has_audio is None:
             self._source_has_audio = self._probe_has_audio(source_path)
@@ -1367,16 +1337,12 @@ class ROIEncoder:
         temp_path = video_path.with_suffix(".audio_tmp.mp4")
         try:
             mux_args = [
-                ffmpeg_path(),
-                "-y",                         # overwrite temp
-                "-i", str(video_path),        # input 0 (video only)
-                "-i", str(source_path),       # input 1 (source with audio)
-                "-map", "0:v:0",              # take video stream from input 0
-                "-map", "1:a:0",              # take audio stream from input 1
-                "-c:v", "copy",               # copy video bitstream unchanged
-                "-c:a", "aac",                # re-encode audio to AAC
-                "-b:a", "128k",               # 128 kbps (good quality, small size)
-                "-shortest",                  # trim to shorter of the two streams
+                ffmpeg_path(), "-y",
+                "-i", str(video_path),
+                "-i", str(source_path),
+                "-map", "0:v:0", "-map", "1:a:0",
+                "-c:v", "copy", "-c:a", "aac", "-b:a", "128k",
+                "-shortest",
                 str(temp_path),
             ]
             proc = subprocess.run(
@@ -1397,7 +1363,6 @@ class ROIEncoder:
                     temp_path.unlink()
                 return
 
-            # Atomically replace the video-only file with the muxed version
             temp_path.replace(video_path)
             log.debug("Audio muxed into %s (AAC 128k from %s)", video_path.name, source_path)
 
@@ -1409,7 +1374,7 @@ class ROIEncoder:
             if temp_path.exists():
                 try:
                     temp_path.unlink()
-                except Exception:
+                except OSError:
                     pass
 
     def get_storage_report(self) -> dict:

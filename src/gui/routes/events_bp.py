@@ -1,18 +1,15 @@
 """
-src/gui/routes/events_bp.py - zones config + behavior events API
-(R5 TASKS 5.6 + 5.7).
+src/gui/routes/events_bp.py - zones config + behavior events API.
 
 * GET  /api/zones?camera_id=X   - the stored zones/lines/loiter config
 * POST /api/zones               - {"camera_id": X, ...config} validate + save
 * GET  /api/zones/frame?camera_id=X - a JPEG still for the zone editor's
-                                  background, black placeholder if nothing has
-                                  been captured for this camera yet (3.7)
+                                  background, black placeholder if none yet
 * GET  /api/events/recent       - newest-first behavior events from the
                                   configured output folder's events.jsonl
 
-The pipeline reads the same config (utils.zones_config) at run start, so a
-saved change applies to the NEXT run; the response says so rather than
-letting a user think a running encode re-reads it live.
+The pipeline reads the zones config (utils.zones_config) at run start, so a
+saved change applies to the next run; the response says so.
 
 Author: Bloodawn (KheivenD), 2026-08-17 (R5 TASKS 5.6/5.7).
 """
@@ -59,10 +56,8 @@ def api_zones():
 def api_zones_frame():
     """A JPEG still for one camera: the zone editor's background image.
 
-    Serves whatever a live run last cached (throttled writes, see
-    camera_frame_cache.py + pipeline.py's main loop) or a solid black
-    placeholder of the same nominal size when nothing has been captured
-    for this camera_id yet. Same camera_id guard as the other zones routes.
+    Serves the frame a live run last cached (throttled writes, see
+    camera_frame_cache.py) or a black placeholder when none exists yet.
     """
     camera_id = (request.args.get("camera_id", "") or "").strip()
     if not _CAM_RE.match(camera_id):
@@ -71,7 +66,7 @@ def api_zones_frame():
     if data is None:
         data = camera_frame_cache.placeholder_jpeg_bytes()
     resp = Response(data, mimetype="image/jpeg")
-    resp.headers["Cache-Control"] = "no-store"  # this camera's newest frame, never stale
+    resp.headers["Cache-Control"] = "no-store"  # never serve a stale frame
     return resp
 
 

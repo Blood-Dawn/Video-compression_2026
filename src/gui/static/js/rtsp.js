@@ -102,12 +102,17 @@ function _rtspApplyState(d) {
   }
 }
 
+// Returns the status it applied, or null when it could not be fetched.
 async function _rtspRefresh() {
   try {
     const r = await fetch('/api/rtsp/status');
-    if (!r.ok) return;
-    _rtspApplyState(await r.json());
-  } catch (_) {}
+    if (!r.ok) return null;
+    const d = await r.json();
+    _rtspApplyState(d);
+    return d;
+  } catch (_) {
+    return null;
+  }
 }
 
 async function rtspDownload() {
@@ -124,12 +129,15 @@ async function rtspDownload() {
       document.getElementById('btn-rtsp-dl').disabled = false;
       return;
     }
-    // Poll status every second until download is done
+    // Poll status every second until the download is done. One request per
+    // tick: the status _rtspRefresh applied also says whether to stop.
     if (_rtspPollTimer) clearInterval(_rtspPollTimer);
+    let failures = 0;
     _rtspPollTimer = setInterval(async () => {
-      await _rtspRefresh();
-      const st = await (await fetch('/api/rtsp/status')).json();
-      if (!st.downloading) clearInterval(_rtspPollTimer);
+      const st = await _rtspRefresh();
+      failures = st ? 0 : failures + 1;
+      // Stop when the download is done, or after 5 failed status fetches in a row.
+      if ((st && !st.downloading) || failures >= 5) clearInterval(_rtspPollTimer);
     }, 1000);
   } catch (e) {
     document.getElementById('rtsp-dl-label').textContent = '[!] ' + e.message;
@@ -226,7 +234,7 @@ window.addEventListener('DOMContentLoaded', () => {
   _rtspRefresh();
 });
 
-// Auto-detect Google Drive and set as default output on page load
+// Reset the cloud-folder status line on load (see _initGDriveOutput).
 window.addEventListener('DOMContentLoaded', () => { _initGDriveOutput(); });
 
 // ── Home tab resizable vertical divider ──────────────────────
@@ -322,10 +330,8 @@ window.addEventListener('DOMContentLoaded', () => { _initGDriveOutput(); });
     const panes   = document.querySelector('.metrics-panes');
     if (!divider || !left || !panes) return;
 
-    // Restore saved width on first load - clamped both directions so a
-    // tiny saved value (which produces the "jumbled metrics" look the
-    // user reported) gets normalized to something readable. We require
-    // at least 400px now; if the saved value is narrower we wipe it.
+    // Restore the saved width, clamped both ways: a saved width under 400px
+    // squeezes the table into an unreadable jumble, so it is discarded.
     // Author: Bloodawn (KheivenD), 2026-05-03 (jumbled-metrics guard).
     try {
       const saved = parseInt(localStorage.getItem('svcs.metrics.leftWidth') || '0', 10);

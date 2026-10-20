@@ -1,12 +1,10 @@
 """
 src/gui/routes/timelapse_bp.py
 
-POST /api/timelapse - generate a sped-up timelapse/summary clip from an
-already-recorded segment. Closes the "quiet-period summary" gap found in the
-2026-10-01 competitive review (Reolink/Synology-style smart summaries): an
-operator reviewing a long, mostly-quiet recording gets a short fast-forward
-version instead of scrubbing the whole file. Purely a convenience post-process
-over utils.timelapse - it never touches the live pipeline.
+POST /api/timelapse - generate a sped-up summary clip from an already-recorded
+segment, so a long, mostly-quiet recording can be reviewed quickly. A
+convenience post-process over utils.timelapse; it never touches the live
+pipeline.
 
 Author: Bloodawn (KheivenD), 2026-10-01.
 """
@@ -29,16 +27,13 @@ def api_timelapse():
     """Generate a sped-up timelapse of an existing segment.
 
     POST body (JSON):
-        path  - absolute path to the source segment. Must resolve inside one
-                of the operator's allowed media roots (the same confinement
-                every other file-reading route uses) so this can't be used
-                to run ffmpeg over an arbitrary path on the host.
+        path  - absolute path to the source segment. Must resolve inside an
+                allowed media root (the confinement every file-reading route
+                uses) so ffmpeg cannot be run over an arbitrary host path.
         speed - playback speed multiplier, default 8x, clamped to [2, 60].
 
-    Output is written beside the source as "<stem>_timelapse_<speed>x<ext>"
-    and is a derived convenience file - it is not registered in the
-    compressed index or job history, the same way an RTSP push or a manual
-    export isn't.
+    Output is written beside the source as "<stem>_timelapse_<speed>x<ext>" and
+    is not registered in the compressed index or job history.
     """
     data = request.get_json(force=True) or {}
     raw_path = str(data.get("path", "")).strip()
@@ -51,7 +46,7 @@ def api_timelapse():
         log.warning("api_timelapse: rejected path outside allowed roots: %s", raw_path)
         return jsonify({"error": "path must be inside an allowed media folder"}), 403
 
-    if not src.exists() or not src.is_file():
+    if not src.is_file():
         return jsonify({"error": f"File not found: {src.name}"}), 400
 
     speed = clamp_speed(data.get("speed", DEFAULT_SPEED))

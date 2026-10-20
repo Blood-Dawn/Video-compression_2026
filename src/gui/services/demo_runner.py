@@ -41,10 +41,6 @@ def _build_demo_result_from_manifest(manifest_path: Path) -> dict:
 
     Mirrors the per-run shaping in routes/demo_bp.py::api_demo_history so a
     just-finished run and a historical run present an identical structure.
-
-    Originally defined in gui/app.py; dropped during an earlier refactor, which
-    left _run_demo_thread calling an undefined name (NameError on any full demo
-    run). Restored here. -- 2026-06-02.
     """
     with open(manifest_path, encoding="utf-8") as f:
         manifest = json.load(f)
@@ -88,13 +84,12 @@ def _run_demo_thread(config: dict) -> None:
         """Receive step updates from run_all_demos and push to demo state.
 
         Also drives the per-mode CPU sampler so the "CPU Usage by Mode"
-        card on the metrics tab actually populates from demo runs (was
-        only hooked into /api/start, which the user rarely invokes).
+        card on the metrics tab populates from demo runs, not only /api/start.
         Author: Bloodawn (KheivenD), 2026-05-03 (cpu-by-mode demo wire-up).
         """
         phase = detail.get("phase", "")
         mode = detail.get("mode", "")
-        mode_dir = detail.get("mode_dir", "")  # populated by run_demo as of 2026-05-03
+        mode_dir = detail.get("mode_dir", "")
         mode_index = detail.get("mode_index")
         mode_total = detail.get("mode_total")
         done       = detail.get("done", None)
@@ -114,7 +109,6 @@ def _run_demo_thread(config: dict) -> None:
         except Exception as exc:  # noqa: BLE001
             log.debug("cpu sampler hook failed: %s", exc)
 
-        # Build a concise progress string for the UI
         if mode_total and mode_index is not None:
             step_label = f"({mode_index + 1}/{mode_total})"
         else:
@@ -156,20 +150,19 @@ def _run_demo_thread(config: dict) -> None:
 
     _update(progress="Locating manifest…")
 
-    # Find the manifest written by run_all_demos(). It picks a suffix to avoid
-    # overwriting previous runs, so we glob for the newest one.
+    # run_all_demos() picks a fresh suffix per run so it never overwrites an
+    # older one; the newest manifest is this run's.
     output_root = Path(config["output_root"]).resolve()
-    manifests = sorted(
+    manifest_path = max(
         output_root.glob("demo_comp*/manifest.json"),
         key=lambda p: p.stat().st_mtime,
-        reverse=True,
+        default=None,
     )
-    if not manifests:
+    if manifest_path is None:
         _update(running=False, status="error", error="manifest.json not found after demo run")
         return
 
     try:
-        manifest_path = manifests[0]
         result = _build_demo_result_from_manifest(manifest_path)
     except Exception as exc:
         _update(running=False, status="error", error=f"Could not read manifest: {exc}")

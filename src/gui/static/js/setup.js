@@ -81,15 +81,20 @@ async function _populateDestinations() {
   };
   sel.onchange();
   // Keep the encrypted default in sync when the user edits the output path.
+  // openSetup() runs this on every open, so bind the listeners only once.
   const outEl = document.getElementById("setup-output-dir");
-  if (outEl) {
+  if (outEl && !outEl.dataset.syncBound) {
+    outEl.dataset.syncBound = "1";
     outEl.addEventListener("input", () => {
       const encEl = document.getElementById("setup-encrypted-dir");
       if (encEl && (!encEl.dataset.touched)) encEl.value = _defaultEncryptedFor(outEl.value);
     });
   }
   const encEl = document.getElementById("setup-encrypted-dir");
-  if (encEl) encEl.addEventListener("input", () => { encEl.dataset.touched = "1"; });
+  if (encEl && !encEl.dataset.syncBound) {
+    encEl.dataset.syncBound = "1";
+    encEl.addEventListener("input", () => { encEl.dataset.touched = "1"; });
+  }
 }
 
 async function _saveSetup(skip) {
@@ -129,10 +134,8 @@ async function _saveSetup(skip) {
 }
 window.saveSetup = _saveSetup;
 
-// Folder-browse buttons (Week 3 TASK 3.13): reuses the Library tab's own
-// folder picker (native OS dialog first, in-app server-side browser as the
-// remote/headless fallback) rather than standing up a second one just for
-// Setup. See library.js's browseFolderInto() for the shared implementation.
+// Folder-browse buttons reuse the Library tab's picker, browseFolderInto()
+// in library.js (native OS dialog first, in-app browser as the fallback).
 function setupBrowseOutputDir() {
   browseFolderInto("setup-output-dir");
 }
@@ -195,28 +198,17 @@ async function checkDependencies() {
 }
 window.checkDependencies = checkDependencies;
 
-// In-app update check (Fall 3.17): check + notify only - never downloads or
-// installs anything itself. Runs once automatically on dashboard load (silent
-// unless something is actually newer, so it never nags on every reload when
-// you're already current); the Help > "Check for updates" and Tools >
-// "Check for updates" buttons re-run it on demand and always report their
-// result, including "up to date".
+// In-app update check (Fall 3.17): check + notify only. Runs once on
+// dashboard load, silently unless something is newer, so it never nags when
+// you are current; the Help and Tools "Check for updates" buttons re-run it
+// and always report the result, including "up to date".
 //
-// Fall 3.18 adds the actual pipeline behind /api/update/{status,download,
-// install} (gui.services.update_manager) - downloadUpdate()/installUpdate()
-// below drive it. The check above still only ever reports; nothing here
-// downloads or installs without the user starting it from a button or the
-// update notification.
-//
-// Fall 3.18 UX follow-up (2026-09-30): progress used to live only in a
-// hidden help-update-progress span inside the Help glossary panel, so if you
-// were not looking at that one tab you would never see it move, and
-// installing needed a second manual click plus a confirm() dialog after the
-// download had already finished verifying. Now: (1) an update notification
-// tracks its own download/verify/install progress in place, visible from any
-// tab, and (2) once the download is verified, install starts on its own -
-// clicking the notification (or "Check for updates" in Help or Tools) is the
-// one click the whole update needs.
+// downloadUpdate()/installUpdate() below drive the Fall 3.18 pipeline behind
+// /api/update/{status,download,install} (gui.services.update_manager). Nothing
+// downloads or installs until the user starts it from a button or the update
+// notification. That notification tracks download/verify/install progress in
+// place, visible from any tab, and a verified download installs on its own,
+// so one click is the whole update.
 async function _checkForUpdate(showResult) {
   const out = document.getElementById("help-update-result");
   const toolsOut = document.getElementById("tools-update-result");
@@ -253,9 +245,8 @@ window.checkForUpdate = () => _checkForUpdate(true);
 window.addEventListener("DOMContentLoaded", () => _checkForUpdate(false));
 
 // -- Fall 3.18: download + verify + install, tracked in a toast notification
-// (the Help panel's Download/Install buttons still work directly, but the
-// notification is the primary progress display since it stays visible no
-// matter which tab is open) -------------------------------------------------
+// (the Help panel's buttons work too, but the toast stays visible on every
+// tab) -----------------------------------------------------------------------
 
 let _updatePollTimer = null;
 let _updateNotifCard = null;
@@ -392,9 +383,8 @@ async function downloadUpdate() {
 window.downloadUpdate = downloadUpdate;
 
 // Called automatically once the download verifies (see _renderUpdateStatus's
-// "ready" case) - installing a checksum-verified build is exactly what the
-// user already asked for by starting the update, so this no longer stops to
-// confirm() a second time.
+// "ready" case): installing a checksum-verified build is exactly what the
+// user asked for by starting the update, so there is no second confirm().
 async function installUpdate() {
   _setUpdateMessage("Installing - SVCS will close and restart shortly...", { clearActions: true });
   try {

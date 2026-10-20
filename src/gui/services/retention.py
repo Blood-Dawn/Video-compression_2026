@@ -28,7 +28,6 @@ from __future__ import annotations
 import shutil
 import time
 from pathlib import Path
-from typing import List, Optional
 
 try:
     from gui.logging_setup import log
@@ -70,8 +69,8 @@ _DEFAULT_POLICY = {
 }
 
 
-def _finite_int(value, default: int, lo: int, hi: int) -> int:
-    """Coerce to an int in [lo, hi], rejecting inf/nan/garbage to ``default``.
+def _finite_float(value, default: float, lo: float, hi: float) -> float:
+    """Coerce to a float in [lo, hi], rejecting inf/nan/garbage to ``default``.
 
     int(float("inf")) raises OverflowError (an ArithmeticError, not a
     ValueError), so a naive int(float(x)) can escape as a 500. This never
@@ -83,21 +82,14 @@ def _finite_int(value, default: int, lo: int, hi: int) -> int:
         f = float(value)
         if f != f or f in (float("inf"), float("-inf")):
             return default
-        return max(lo, min(hi, int(f)))
-    except (TypeError, ValueError, OverflowError):
-        return default
-
-
-def _finite_float(value, default: float, lo: float, hi: float) -> float:
-    try:
-        if value is None or (isinstance(value, str) and not value.strip()):
-            return default
-        f = float(value)
-        if f != f or f in (float("inf"), float("-inf")):
-            return default
         return max(lo, min(hi, f))
     except (TypeError, ValueError, OverflowError):
         return default
+
+
+def _finite_int(value, default: int, lo: int, hi: int) -> int:
+    f = _finite_float(value, None, lo, hi)
+    return default if f is None else int(f)
 
 
 # ── policy persistence (mirrors autocompress config in gui_state.json) ─────────
@@ -147,7 +139,7 @@ def set_policy(cfg: dict) -> dict:
 
 # ── helpers ────────────────────────────────────────────────────────────────────
 
-def _compressed_dir(output_dir: str) -> Optional[Path]:
+def _compressed_dir(output_dir: str) -> Path | None:
     """Resolve ``<output_dir>/compressed`` WITHOUT creating it, with guards.
 
     Returns None if the path is missing, is a drive root, or somehow escapes the
@@ -168,9 +160,9 @@ def _compressed_dir(output_dir: str) -> Optional[Path]:
     return comp
 
 
-def _purgeable_files(comp_dir: Path) -> List[Path]:
+def _purgeable_files(comp_dir: Path) -> list[Path]:
     """Regular compressed-media files directly in / under comp_dir, resolved."""
-    out: List[Path] = []
+    out: list[Path] = []
     try:
         for p in comp_dir.rglob("*"):
             try:
@@ -210,8 +202,8 @@ def _delete(path: Path, comp_dir: Path) -> int:
 
 # ── purge ──────────────────────────────────────────────────────────────────────
 
-def purge_once(output_dir: str, policy: Optional[dict] = None,
-               now: Optional[float] = None) -> dict:
+def purge_once(output_dir: str, policy: dict | None = None,
+               now: float | None = None) -> dict:
     """Enforce the retention policy over ``<output_dir>/compressed`` once.
 
     Deletes over-age files first (by mtime), then, if a size budget is set and
@@ -311,7 +303,7 @@ def _notify_purge(summary: dict, output_dir: str) -> None:
 
 # ── estimate (days = disk / bitrate) ────────────────────────────────────────────
 
-def estimate(output_dir: str, policy: Optional[dict] = None) -> dict:
+def estimate(output_dir: str, policy: dict | None = None) -> dict:
     """Estimate retention headroom: free disk, current footage size, and days.
 
     The daily growth rate is taken from recent auto-compress job history
@@ -373,7 +365,7 @@ def estimate(output_dir: str, policy: Optional[dict] = None) -> dict:
     return out
 
 
-def _bytes_per_day_from_history() -> Optional[float]:
+def _bytes_per_day_from_history() -> float | None:
     """Recent auto-compress output throughput in bytes/day, or None if unknown."""
     try:
         jobs = [j for j in _jh.recent_jobs(limit=50)

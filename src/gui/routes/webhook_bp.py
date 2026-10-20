@@ -1,5 +1,5 @@
 """
-src/gui/routes/webhook_bp.py - outbound webhook settings (Week 3 TASK 3.9).
+src/gui/routes/webhook_bp.py - outbound webhook settings.
 
 Same three-route shape as push_bp.py, over utils.event_webhook instead of
 utils.push_notify:
@@ -52,6 +52,5 @@ def api_webhook_test():
         url=str(url) if url is not None else None,
         secret=str(secret) if secret is not None else None,
     )
-    # A failed test is a normal, expected answer to "does this URL work",
-    # not a server error, so it stays a 200 with ok=False and the reason.
+    # A failed test is an expected answer, so it stays a 200 with ok=False.
     return jsonify({"ok": ok, "detail": detail})

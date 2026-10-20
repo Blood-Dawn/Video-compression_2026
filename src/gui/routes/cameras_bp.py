@@ -1,7 +1,7 @@
 """
 src/gui/routes/cameras_bp.py
 
-Camera-setup routes: ONVIF discovery + RTSP URL building (M-CAM TASK 1).
+Camera-setup routes: ONVIF discovery + RTSP URL building.
 
 Two endpoints back the dashboard's "Add camera" flow:
   * GET  /api/cameras/discover  - WS-Discovery scan of the LAN; returns the

@@ -136,13 +136,9 @@ async function runDemo() {
   const outputRoot = document.getElementById('demo-output-dir').value.trim();
   const noBoxes    = document.getElementById('demo-no-boxes').checked;
   const noTint     = document.getElementById('demo-no-tint').checked;
-  // Camera ID priority for demo runs:
-  //   1. Live source (webcam idx / RTSP URL) → use the visible #camera-id field
-  //   2. File source                          → use the filename stem (auto-derived)
-  // The visible #camera-id field is HIDDEN for file sources, so reading it
-  // unconditionally was always falling through to "cam_00" - that's why
-  // every recording from a file showed up as "cam_00" in the metrics table.
-  // Fixed 2026-05-03 (UI fix pass). Author: Bloodawn (KheivenD).
+  // Live sources use the visible #camera-id field; file sources use the
+  // filename stem, since #camera-id is hidden (and would read "cam_00") then.
+  // Author: Bloodawn (KheivenD), 2026-05-03 (UI fix pass).
   const cameraId = _isLiveSource(inputPath)
     ? (document.getElementById('camera-id').value.trim() || 'cam_00')
     : (document.getElementById('camera-id-auto').value || _autoCamera(inputPath));
@@ -283,17 +279,14 @@ function _demoRenderResults(result) {
     return;
   }
 
-  let html = '';
-  items.forEach(function(it) {
-    // decode for the label fallback so we can show a filename if needed
+  list.innerHTML = items.map(function(it) {
     const safeUrl   = it.url.replace(/'/g, "\\'");
     const safeLabel = it.label.replace(/'/g, "\\'");
-    html += '<div style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.6rem;">' +
-              '<span style="flex:1;color:var(--text);">' + it.label + '</span>' +
-              '<button class="btn-play-sm" onclick="_demoPlayResult(\'' + safeUrl + '\',\'' + safeLabel + '\')">&#9654; PLAY</button>' +
-            '</div>';
-  });
-  list.innerHTML = html;
+    return '<div style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.6rem;">' +
+             '<span style="flex:1;color:var(--text);">' + it.label + '</span>' +
+             '<button class="btn-play-sm" onclick="_demoPlayResult(\'' + safeUrl + '\',\'' + safeLabel + '\')">&#9654; PLAY</button>' +
+           '</div>';
+  }).join('');
   panel.style.display = '';
 }
 
@@ -329,10 +322,8 @@ function _demoNotifyDone(result) {
   const modeStr  = modesRan.map(function(m) { return m.toUpperCase(); }).join(' + ');
   const dir      = result.dir || '';
 
-  // Build the in-sidebar results panel so the operator has a permanent list
-  // of every rendered video for this run, with one-click inline playback.
-  // This is the core of ROADMAP 5.3 - Cody's "watching the output still
-  // required opening a file locally" complaint from the April 22 demo.
+  // A permanent in-sidebar list of every rendered video for this run, with
+  // one-click inline playback, so nobody has to open files locally (ROADMAP 5.3).
   // Author: Bloodawn (KheivenD)
   try { _demoRenderResults(result); } catch (e) { console.warn('demo result render failed', e); }
 
@@ -424,19 +415,16 @@ async function loadSearchDemoVideos() {
 
     if (count) count.textContent = allVids.length + ' video' + (allVids.length !== 1 ? 's' : '') + ' in ' + runs.length + ' run' + (runs.length !== 1 ? 's' : '');
 
-    let html = '<table class="demo-history-table" style="width:100%;">';
-    html += '<thead><tr><th>Run</th><th>Modes</th><th>Video</th><th>Date</th><th></th></tr></thead><tbody>';
-    allVids.forEach(v => {
-      html += `<tr>
+    const rows = allVids.map(v => `<tr>
         <td style="color:var(--text-dim);font-size:0.6rem;">${v.run}</td>
         <td>${(v.modes || []).map(m => m.toUpperCase()).join(', ')}</td>
         <td style="color:var(--teal);">${v.label}</td>
         <td style="color:var(--text-dim);font-size:0.6rem;">${v.date}</td>
         <td><button class="btn-play-sm" onclick="playSearchDemoVid(${JSON.stringify(v.url)})">▶ PLAY</button></td>
-      </tr>`;
-    });
-    html += '</tbody></table>';
-    body.innerHTML = html;
+      </tr>`).join('');
+    body.innerHTML = '<table class="demo-history-table" style="width:100%;">' +
+      '<thead><tr><th>Run</th><th>Modes</th><th>Video</th><th>Date</th><th></th></tr></thead><tbody>' +
+      rows + '</tbody></table>';
   } catch(e) {
     body.innerHTML = '<div style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);padding:0.5rem 0;">[!] Error loading demo videos: ' + e.message + '</div>';
   }
@@ -447,7 +435,7 @@ function playSearchDemoVid(url) {
   const video = document.getElementById('search-preview-video');
   if (!wrap || !video) return;
   wrap.style.display = '';
-  video.src = url;
+  _setVideoSrc(video, url);
   video.load();
   video.play().catch(() => {});
   wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });

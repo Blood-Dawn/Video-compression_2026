@@ -1,19 +1,15 @@
 """
 src/gui/routes/push_bp.py - closed-app push settings (R6 TRACK C1).
 
-Two routes over utils.push_notify:
+Routes over utils.push_notify:
 
   * GET  /api/push/config  - the current settings, token replaced by a boolean
   * POST /api/push/config  - validate and save them
-  * POST /api/push/test    - post a test message NOW and report what happened,
-                             optionally against a URL that has not been saved
-                             yet, so an operator can prove a topic works before
-                             committing to it
+  * POST /api/push/test    - post a test message now and report the outcome,
+                             optionally against a URL not yet saved
 
-The token is never echoed back. A client that wants to change the other
-fields simply omits the key and the stored token survives; sending
-``"token": ""`` clears it. That is the only way the dashboard can offer a
-settings form without ever holding the secret it is editing.
+The token is never echoed back. Omitting the key keeps the stored token;
+``"token": ""`` clears it, so the settings form never holds the secret it edits.
 
 Author: Bloodawn (KheivenD), 2026-08-17 (R6 TRACK C1).
 """
@@ -58,25 +54,20 @@ def api_push_test():
         topic_url=str(topic_url) if topic_url is not None else None,
         token=str(token) if token is not None else None,
     )
-    # A failed test is a normal, expected answer to "does this URL work",
-    # not a server error, so it stays a 200 with ok=False and the reason.
+    # A failed test is an expected answer, so it stays a 200 with ok=False.
     return jsonify({"ok": ok, "detail": detail})
 
 
-# ── Planner 6.9: a device registers its OWN native push endpoint ─────────────
+# A device registers its OWN native push endpoint (UnifiedPush): a URL that,
+# when POSTed to, wakes that phone.
 #
-# Native push (UnifiedPush) gives each phone a URL that, when POSTed to, wakes
-# that phone. The server will post to it in week 8, so the phone has to tell
-# the server what it is.
-#
-# The rule that matters (6.10): one device can never register, read, or clear
-# another device's endpoint. That is enforced by construction, not by a check:
-# these routes take NO device id from the request. The device is whichever
-# token authenticated it, via current_device_id(). A Basic (password) request
-# has no device identity, so it is refused rather than guessed at.
+# One device can never register, read, or clear another device's endpoint, by
+# construction: these routes take no device id from the request. The device is
+# whichever token authenticated it, via current_device_id(). A Basic (password)
+# request has no device identity and is refused.
 #
 # The URL goes through the same SSRF guard as push and the webhook, because
-# the server is the one that will send to it.
+# the server is the one that sends to it.
 
 _NOT_A_DEVICE = ("Only a paired device can manage its own push endpoint. "
                  "Sign in with that device's token, not the dashboard password.")

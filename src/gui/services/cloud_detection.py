@@ -17,6 +17,9 @@ suite never exercises (it always sets an explicit output_dir).
 Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - cloud-detection extraction).
 """
 
+import glob
+import os
+import string
 from pathlib import Path
 
 try:
@@ -108,10 +111,8 @@ def _detect_icloud_root() -> "Path | None":
 
 def _windows_drive_roots() -> "list[Path]":
     """Return existing drive roots on Windows (C:\\, D:\\, ...). Empty elsewhere."""
-    import os as _os
-    if _os.name != "nt":
+    if os.name != "nt":
         return []
-    import string
     roots = []
     for letter in string.ascii_uppercase:
         p = Path(f"{letter}:\\")
@@ -254,11 +255,9 @@ def _detect_onedrive_root(prefer_business: bool = True) -> tuple[Path, str] | tu
             if p:
                 return p, p.name
 
-    # Fallback: scan home directory for OneDrive folders
-    import glob as _glob
-    # School/org accounts: "OneDrive - OrgName"
+    # Fallback: scan the home directory. School/org accounts are "OneDrive - OrgName".
     if prefer_business:
-        for match in _glob.glob(str(home / "OneDrive - *")):
+        for match in glob.glob(str(home / "OneDrive - *")):
             p = Path(match)
             if p.is_dir():
                 return p, p.name
@@ -267,7 +266,7 @@ def _detect_onedrive_root(prefer_business: bool = True) -> tuple[Path, str] | tu
     if plain.exists():
         return plain, "OneDrive (Personal)"
     # macOS / any remaining
-    for match in _glob.glob(str(home / "OneDrive*")):
+    for match in glob.glob(str(home / "OneDrive*")):
         p = Path(match)
         if p.is_dir():
             label = "OneDrive (Personal)" if p.name == "OneDrive" else p.name
@@ -298,7 +297,7 @@ def _detect_gdrive_root() -> Path | None:
                                         mount, _ = winreg.QueryValueEx(sub, val_name)
                                         p = Path(mount)
                                         for candidate in (p / "My Drive", p):
-                                            if candidate.exists() and candidate.is_dir():
+                                            if candidate.is_dir():
                                                 return candidate
                                     except FileNotFoundError:
                                         pass
@@ -310,33 +309,30 @@ def _detect_gdrive_root() -> Path | None:
     except Exception:
         pass
 
-    import string
     for letter in string.ascii_uppercase:
         for sub in ("My Drive", ""):
             p = Path(f"{letter}:\\{sub}") if sub else Path(f"{letter}:\\")
             try:
-                if p.exists() and p.is_dir():
+                if p.is_dir():
                     # Confirm it's Google Drive by looking for 'Shared drives' sibling
                     parent = p.parent if sub else p
                     if (parent / "My Drive").exists() and (parent / "Shared drives").exists():
                         return parent / "My Drive"
                     if sub == "My Drive":
                         return p
-            except (PermissionError, OSError):
+            except OSError:
                 pass
 
     for p in (home / "Google Drive" / "My Drive", home / "Google Drive", home / "My Drive"):
         try:
             if p.exists():
                 return p
-        except (PermissionError, OSError):
+        except OSError:
             pass
 
-    import glob as _glob
-    for pattern in (str(home / "Library/CloudStorage/GoogleDrive-*/My Drive"),):
-        matches = _glob.glob(pattern)
-        if matches:
-            return Path(matches[0])
+    matches = glob.glob(str(home / "Library/CloudStorage/GoogleDrive-*/My Drive"))
+    if matches:
+        return Path(matches[0])
 
     return None
 

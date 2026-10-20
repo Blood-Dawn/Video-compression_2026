@@ -1,8 +1,8 @@
 """
 src/gui/routes/presets_bp.py
 
-presets routes blueprint, carved from gui/app.py (TASK 1.3).
-Pure relocation: every URL, method, and response shape is unchanged.
+Encoding presets, content detection, config import/export and Google
+Drive detection.
 Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - blueprints).
 """
 
@@ -29,11 +29,11 @@ presets_bp = Blueprint("presets", __name__)
 
 @presets_bp.route("/api/presets", methods=["GET"])
 def api_presets():
-    """Named surveillance presets for the dashboard (M3 TASK 3.1).
+    """Named surveillance presets for the dashboard.
 
     Returns the ordered catalog the UI shows (modes are hidden behind these
-    names), the default selection, and the fully-resolved encode config for
-    each so the front-end can apply a preset to the form without a round-trip.
+    names), the default selection, and the resolved encode config for each so
+    the front-end can apply a preset without a round-trip.
     """
     resolved = {key: resolve_preset(key) for key in PRESETS}
     return jsonify({
@@ -44,12 +44,11 @@ def api_presets():
 
 @presets_bp.route("/api/detect_content", methods=["POST"])
 def api_detect_content():
-    """Recommend a preset by analyzing a clip's first ~30s (M3 TASK 3.2).
+    """Recommend a preset by analyzing a clip's first ~30s.
 
-    Body: {"path": "<local video file>"} (a file already on disk - an upload or
-    a scanned recording). Returns the recommended preset key, its label, a
-    one-line human reason, the resolved encode config, and the raw signals so
-    the UI can show *why* and let the operator override.
+    Body: {"path": "<local video file>"} (an upload or a scanned recording).
+    Returns the preset key, its label, a one-line reason, the resolved encode
+    config, and the raw signals so the UI can show why.
 
     Returns:
         {"ok": true, "preset": "continuous_cctv", "label": "...",
@@ -64,13 +63,11 @@ def api_detect_content():
     if not raw:
         return jsonify({"error": "Missing 'path' to a local video file"}), 400
 
-    # Resolve and guard: must be an existing regular file, no traversal tricks.
+    # resolve() collapses any ".." before the existence check.
     try:
         p = Path(raw).resolve()
     except (OSError, ValueError):
         return jsonify({"error": "Invalid path"}), 400
-    if ".." in p.parts:
-        return jsonify({"error": "Path traversal not allowed"}), 400
     if not p.is_file():
         return jsonify({"error": f"No such file: {raw}"}), 400
 
@@ -80,7 +77,7 @@ def api_detect_content():
         return jsonify({"error": f"No such file: {raw}"}), 400
     except ValueError as exc:
         return jsonify({"error": f"Could not analyze video: {exc}"}), 400
-    except Exception as exc:  # pragma: no cover - defensive
+    except Exception as exc:  # pragma: no cover  # noqa: BLE001 - OpenCV raises cv2.error
         log.warning("detect_content failed for %s: %s", raw, exc)
         return jsonify({"error": "Content detection failed"}), 400
 
@@ -99,10 +96,9 @@ def api_detect_content():
 def api_config_import():
     """Accept a previously exported SVCS config JSON and store it as last_config.
 
-    The front-end reads the returned ``config`` object and applies each value
-    to the appropriate form field.  Fields not present in the JSON are left at
-    their current defaults.  Credentials (encrypt_password, encrypt_key_file)
-    are never stored by this route even if the client accidentally sends them.
+    The front-end applies each returned ``config`` value to its form field;
+    absent fields keep their defaults. Credentials (encrypt_password,
+    encrypt_key_file) are never stored, even if the client sends them.
 
     Returns:
         {"ok": true, "config": { ... normalised fields ... }}
@@ -119,9 +115,9 @@ def api_config_import():
     def _str(key, default=""):
         return str(data.get(key, default)).strip() or default
 
-    def _int(key, default, lo=None, hi=None):
+    def _number(cast, key, default, lo=None, hi=None):
         try:
-            v = int(data[key])
+            v = cast(data[key])
         except (KeyError, TypeError, ValueError):
             return default
         if lo is not None:
@@ -130,16 +126,11 @@ def api_config_import():
             v = min(hi, v)
         return v
 
+    def _int(key, default, lo=None, hi=None):
+        return _number(int, key, default, lo, hi)
+
     def _float(key, default, lo=None, hi=None):
-        try:
-            v = float(data[key])
-        except (KeyError, TypeError, ValueError):
-            return default
-        if lo is not None:
-            v = max(lo, v)
-        if hi is not None:
-            v = min(hi, v)
-        return v
+        return _number(float, key, default, lo, hi)
 
     def _bool(key, default=False):
         val = data.get(key, default)
@@ -169,14 +160,12 @@ def api_config_import():
         "object_filter":    _bool("object_filter"),
         "filter_confidence":_float("filter_confidence", 0.30, lo=0.05, hi=0.95),
         "encrypt":          _bool("encrypt"),
-        # Preset + per-mode codec/CRF (M3 TASK 3.1). preset is the named preset
-        # key (or None for a hand-tuned config); crf None means "use the mode
-        # default". background_crf drives the dual-CRF background stream.
+        # preset is the named preset key (None for a hand-tuned config); crf
+        # None means the mode default.
         "preset":           (str(data.get("preset")) if str(data.get("preset", "")) in PRESETS else None),
         "codec":            _choice("codec", VALID_CODECS, "auto"),
         "crf":              _int("crf", None, lo=0, hi=63),
         "background_crf":   _int("background_crf", 45, lo=0, hi=63),
-        # NOTE: credentials (encrypt_password, encrypt_key_file) are never stored
     }
 
     with _state_lock:
@@ -216,7 +205,6 @@ def api_config_export():
         "object_filter": cfg.get("object_filter", False),
         "filter_confidence": cfg.get("filter_confidence", 0.30),
         "encrypt": cfg.get("encrypt", False),
-        # Preset + per-mode codec/CRF (M3 TASK 3.1).
         "preset": cfg.get("preset"),
         "codec": cfg.get("codec", "auto"),
         "crf": cfg.get("crf"),
@@ -231,12 +219,6 @@ def api_config_export():
     )
     response.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
-
-
-# ── Cloud storage helpers ─────────────────────────────────────────────────────
-# _detect_onedrive_root / _detect_gdrive_root / _detect_cloud_root and
-# _default_output_dir now live in gui.services.cloud_detection (imported at the
-# top). _CLOUD_SUBFOLDER lives in gui.state.
 
 
 @presets_bp.route("/api/gdrive/detect", methods=["GET"])
@@ -273,5 +255,3 @@ def api_gdrive_detect():
         "output_path": str(output_path),
         "web_url": web_url,
     })
-
-

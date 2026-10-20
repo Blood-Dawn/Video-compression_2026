@@ -1,14 +1,14 @@
 """
 src/gui/routes/sse_bp.py
 
-sse routes blueprint, carved from gui/app.py (TASK 1.3).
-Pure relocation: every URL, method, and response shape is unchanged.
+Live log stream over Server-Sent Events.
 Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - blueprints).
 """
 
-import queue
 import json
-from flask import Blueprint, request, Response
+import queue
+
+from flask import Blueprint, Response, request
 
 try:
     from gui.state import (_log_queue, _log_history, _log_lock)
@@ -16,6 +16,7 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.state import (_log_queue, _log_history, _log_lock)
 
 sse_bp = Blueprint("sse", __name__)
+
 
 @sse_bp.route("/api/logs")
 def api_logs():
@@ -34,14 +35,13 @@ def api_logs():
     def generate():
         last_sent = initial_last_sent
 
-        # Replay history entries the client hasn't seen yet.
+        # Replay history the client has not seen.
         with _log_lock:
             backlog = [item for item in _log_history if item[0] > last_sent]
         for event_id, line in backlog:
             last_sent = event_id
             yield f"id: {event_id}\ndata: {json.dumps(line)}\n\n"
 
-        # Stream new lines as they arrive.
         while True:
             try:
                 event_id, line = _log_queue.get(timeout=15)
@@ -50,7 +50,7 @@ def api_logs():
                 last_sent = event_id
                 yield f"id: {event_id}\ndata: {json.dumps(line)}\n\n"
             except queue.Empty:
-                # keepalive ping so the browser doesn't close the SSE connection
+                # Keepalive so the browser keeps the connection open.
                 yield ": keepalive\n\n"
 
     return Response(
@@ -58,8 +58,6 @@ def api_logs():
         mimetype="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",   # disable Nginx buffering if behind proxy
+            "X-Accel-Buffering": "no",   # no Nginx buffering behind a proxy
         },
     )
-
-

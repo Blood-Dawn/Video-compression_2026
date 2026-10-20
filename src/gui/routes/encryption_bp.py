@@ -1,8 +1,7 @@
 """
 src/gui/routes/encryption_bp.py
 
-encryption routes blueprint, carved from gui/app.py (TASK 1.3).
-Pure relocation: every URL, method, and response shape is unchanged.
+AES-256 key generation and per-segment encrypt / decrypt.
 Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - blueprints).
 """
 
@@ -24,8 +23,7 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.services.db_helpers import _get_db_path
     from src.utils.db import (get_connection)
 
-# Encryption backend (cryptography). Optional: keygen/encrypt/decrypt degrade to
-# an error when the package is missing. Mirrors the original gui/app.py guard.
+# Optional backend: keygen/encrypt/decrypt return 503 when cryptography is missing.
 try:
     from utils.encryption import (
         decrypt_file as _decrypt_file,
@@ -48,8 +46,12 @@ except ImportError:
     _CRYPTO_AVAILABLE = False
     _decrypt_file = _encrypt_file = _generate_key = None
 
-# Repo root (…/src/gui/routes/<bp>_bp.py -> parents[3]).
+# Repo root (.../src/gui/routes/<bp>_bp.py -> parents[3]).
 _ROOT = Path(__file__).resolve().parents[3]
+
+# Read size for streaming a decrypted clip back to the browser.
+_STREAM_CHUNK = 64 * 1024
+_INLINE_MAX_BYTES = 64 * 1024 * 1024
 
 encryption_bp = Blueprint("encryption", __name__)
 
@@ -86,60 +88,40 @@ def api_keygen():
     key = _generate_key()
     key_path.write_bytes(key)
     try:
-        key_path.chmod(0o600)   # read/write for owner only
-    except Exception:
+        key_path.chmod(0o600)   # owner-only; a no-op on Windows
+    except OSError:
         pass
     log.info("Generated new AES-256 key file: %s", key_path)
     return jsonify({"path": str(key_path), "size": len(key)})
 
 
 def _safe_segment_roots() -> list[Path]:
-    """Return the set of directories the user is allowed to encrypt/decrypt
-    files from. Any of these (or their descendants) is considered trusted.
+    """Directories the user may encrypt/decrypt files from (and descendants).
 
-    Includes:
-      • the configured output_dir (default: <project>/outputs/)
-      • the project root itself (so data/samples/, data/raw/, etc. work
-        - those are the user's own clips checked into the repo)
-      • the auto-detected OneDrive root when present (covers
-        OneDrive/SVCS/, OneDrive/SVCS/Encrypted/, etc.)
+    Includes the configured output_dir (default <project>/outputs/), the
+    project root (so data/samples/ and data/raw/ work), and the auto-detected
+    OneDrive root when present.
 
-    The original validation only allowed output_dir, which broke the
-    common case of decrypting an .enc you have stored alongside your
-    source clips in data/samples/. Author: Bloodawn (KheivenD),
-    2026-05-03 (decrypt path fix).
+    Author: Bloodawn (KheivenD), 2026-05-03 (decrypt path fix).
     """
     roots: list[Path] = []
+    with _state_lock:
+        cfg = _status.get("config", {})
     try:
-        with _state_lock:
-            cfg = _status.get("config", {})
-        out = Path(cfg.get("output_dir", str(_ROOT / "outputs"))).resolve()
-        roots.append(out)
-    except Exception:
+        roots.append(Path(cfg.get("output_dir", str(_ROOT / "outputs"))).resolve())
+    except (OSError, ValueError, RuntimeError, TypeError):
         pass
-    # Project root: lets data/, outputs/, and anything else under the repo
-    # work without requiring the user to fiddle with output_dir first.
-    try:
-        roots.append(_ROOT.resolve())
-    except Exception:
-        pass
-    # OneDrive root (covers files under OneDrive/SVCS/Encrypted/ even if
-    # the configured output_dir points somewhere else).
+    roots.append(_ROOT)  # already resolved
+    # Detection probes the registry and filesystem; a failure there must not
+    # block decrypting a local file.
     try:
         od_root, _ = _detect_onedrive_root(prefer_business=True)
         if od_root is not None:
             roots.append(od_root.resolve())
-    except Exception:
-        pass
-    # De-dup while preserving order
-    seen: set[str] = set()
-    uniq: list[Path] = []
-    for r in roots:
-        s = str(r)
-        if s and s not in seen:
-            seen.add(s)
-            uniq.append(r)
-    return uniq
+    except Exception as exc:  # noqa: BLE001
+        log.debug("OneDrive root detection failed: %s", exc)
+    # De-dup by string, preserving order.
+    return list({str(r): r for r in roots if str(r)}.values())
 
 
 def _path_under_any(p: Path, roots: list[Path]) -> bool:
@@ -148,15 +130,7 @@ def _path_under_any(p: Path, roots: list[Path]) -> bool:
         p_res = p.resolve()
     except OSError:
         return False
-    for r in roots:
-        if p_res == r:
-            return True
-        try:
-            if r in p_res.parents:
-                return True
-        except Exception:
-            continue
-    return False
+    return any(p_res == r or r in p_res.parents for r in roots)
 
 
 @encryption_bp.route("/api/decrypt", methods=["POST"])
@@ -170,8 +144,9 @@ def api_decrypt():
         "key_file":  "/path/to/camera.key"  // mutually exclusive with password
       }
 
-    The decrypted .mp4 is written to a temp file alongside the .enc, streamed
-    to the client, then deleted. The .enc file is NOT deleted.
+    The plaintext is kept at <enc_dir>/Decrypted/<name> and also streamed to
+    the client; its path is returned in the X-Decrypted-Path header. The .enc
+    file is NOT deleted.
 
     Returns the video file as application/octet-stream (or video/mp4) with
     Content-Disposition: attachment so the browser saves/plays it.
@@ -189,11 +164,8 @@ def api_decrypt():
     if not password and not key_file:
         return jsonify({"error": "Either password or key_file is required"}), 400
 
-    # ── Security: restrict file_path to one of the trusted roots ──────────────
-    # Was strictly limited to output_dir, which rejected the common case of
-    # decrypting a file you've stored under data/samples/ or anywhere else
-    # in the repo. Now allows output_dir, project root, OR OneDrive root.
-    # Author: Bloodawn (KheivenD), 2026-05-03 (decrypt path fix).
+    # Security: file_path must sit under output_dir, the project root, or the
+    # OneDrive root (see _safe_segment_roots).
     safe_roots = _safe_segment_roots()
     enc_path = Path(enc_path_raw).resolve()
     if not _path_under_any(enc_path, safe_roots):
@@ -210,7 +182,7 @@ def api_decrypt():
     if enc_path.suffix.lower() != ".enc":
         return jsonify({"error": "Only .enc files can be decrypted via this endpoint"}), 400
 
-    # ── Security: same trust check for the key file ───────────────────────────
+    # Security: same trust check for the key file.
     raw_key = None
     if key_file:
         kf_path = Path(key_file).resolve()
@@ -223,13 +195,9 @@ def api_decrypt():
         except OSError as e:
             return jsonify({"error": f"Cannot read key file: {e}"}), 400
 
-    # ── Save the decrypted plaintext to <enc_dir>/Decrypted/<name>.mp4 ──
-    # Was previously written to a temp file, streamed back, then deleted  - 
-    # which left the user asking "where did the file go?" since browsers
-    # treat the response as a download/play but don't expose the path.
-    # Now we keep a persistent copy on disk AND stream the bytes to the
-    # browser, so the metrics player can play it AND the file is sitting
-    # in a known folder for later use.
+    # The plaintext is kept in <enc_dir>/Decrypted/ as well as streamed: a
+    # browser download never says where the file went, and the metrics player
+    # replays the kept copy through /api/media.
     # Author: Bloodawn (KheivenD), 2026-05-03 (decrypt destination fix).
     dec_dir = enc_path.parent / "Decrypted"
     try:
@@ -237,13 +205,10 @@ def api_decrypt():
     except OSError as e:
         return jsonify({"error": f"Could not create Decrypted/ folder: {e}"}), 500
 
-    # Strip the trailing ".enc" - leaves e.g. "segment.mp4"
     plain_name = enc_path.name[:-4] if enc_path.name.lower().endswith(".enc") else enc_path.stem
     out_path = dec_dir / plain_name
 
-    # If a stale copy already exists (re-decrypt), overwrite it. The user
-    # always wants the freshest plaintext and the original .enc is the
-    # source of truth.
+    # Re-decrypting replaces any stale copy; the .enc is the source of truth.
     try:
         if out_path.exists():
             out_path.unlink()
@@ -262,24 +227,33 @@ def api_decrypt():
     except Exception as e:  # noqa: BLE001
         return jsonify({"error": f"Decryption failed: {e}"}), 500
 
-    # Stream the bytes back AND keep the on-disk copy. The frontend can
-    # also call /api/media?path=<dec_path> later to replay without
-    # re-decrypting.
+    # Small clips are read at once so no file handle outlives the request
+    # (an open handle blocks a re-decrypt replace on Windows). Larger clips
+    # stream in chunks, opening the file lazily and stopping at the size sent.
     try:
-        data = out.read_bytes()
+        size = out.stat().st_size
+        body = out.read_bytes() if size <= _INLINE_MAX_BYTES else None
     except OSError as e:
         return jsonify({"error": f"Could not read decrypted file: {e}"}), 500
 
-    stem = enc_path.stem  # e.g.  cam_01_20260501T120000Z.mp4
-    log.info("Decrypted %s → %s (%d KB)", enc_path.name, out, len(data) // 1024)
+    def _stream():
+        remaining = size
+        with open(out, "rb") as fh:
+            while remaining > 0:
+                chunk = fh.read(min(_STREAM_CHUNK, remaining))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+                yield chunk
+
+    stem = enc_path.stem
+    log.info("Decrypted %s -> %s (%d KB)", enc_path.name, out, size // 1024)
     return Response(
-        data,
+        body if body is not None else _stream(),
         mimetype="video/mp4",
         headers={
             "Content-Disposition": f'attachment; filename="{stem}"',
-            "Content-Length": str(len(data)),
-            # Surface the on-disk path so the frontend can show "saved to"
-            # without parsing the binary body.
+            "Content-Length": str(size),
             "X-Decrypted-Path": str(out),
         },
     )
@@ -296,10 +270,8 @@ def api_encrypt():
         "key_file":  "/path/to/camera.key"  // mutually exclusive with password
       }
 
-    Behavior change 2026-05-03 (Bloodawn / KheivenD): the original .mp4
-    is now PRESERVED. Previously the segment was encrypted in-place and
-    the original was deleted, which meant a typo in the password
-    permanently lost the recording. Now we:
+    The original .mp4 is preserved, because encrypting in place meant a
+    mistyped password permanently lost the recording. Steps:
 
       1. Create ``<src_dir>/Encrypted/``  (mkdir -p)
       2. Encrypt to ``<src_dir>/Encrypted/<segment>.mp4.enc``
@@ -327,9 +299,7 @@ def api_encrypt():
 
     src_path = Path(raw_path).resolve()
 
-    # Same trust check the decrypt route uses - only allow encrypting
-    # files inside the trusted roots so a misclick can't read arbitrary
-    # files off disk.
+    # Same trust check as decrypt: only files inside the trusted roots.
     safe_roots = _safe_segment_roots()
     if not _path_under_any(src_path, safe_roots):
         log.warning("api_encrypt: rejected path outside trusted roots: %s", src_path)
@@ -344,7 +314,6 @@ def api_encrypt():
     if src_path.suffix.lower() == ".enc":
         return jsonify({"error": "File is already encrypted (.enc)"}), 400
 
-    # ── Load key file if provided ─────────────────────────────────────────────
     raw_key = None
     if key_file:
         kf_path = Path(key_file).resolve()
@@ -359,11 +328,9 @@ def api_encrypt():
         except OSError as e:
             return jsonify({"error": f"Cannot read key file: {e}"}), 400
 
-    # ── Pick the destination folder (don't overwrite source) ──────────────────
-    # FIX 1: use the user's CHOSEN encrypted-output folder from Setup if set.
-    # Otherwise fall back to a sibling "Encrypted/" folder next to the source
-    # clip. We no longer silently redirect to OneDrive: a cloud destination is
-    # only ever used when the user explicitly chose one in Setup.
+    # Destination: the encrypted-output folder chosen in Setup, else a sibling
+    # "Encrypted/" next to the source. A cloud destination is only ever used
+    # when the user chose it.
     with _state_lock:
         chosen_enc = (_status.get("config", {}).get("encrypted_dir") or "").strip()
     if chosen_enc:
@@ -386,14 +353,13 @@ def api_encrypt():
 
     target_enc = enc_subdir / (src_path.name + ".enc")
 
-    # ── Encrypt to the target path, KEEPING the original ─────────────────────
     try:
         enc_path = _encrypt_file(
             src_path,
             password=password,
             key=raw_key,
-            delete_original=False,    # ← KEEP the source mp4
-            output_path=target_enc,   # ← write to the Encrypted/ folder
+            delete_original=False,    # keep the source mp4
+            output_path=target_enc,
         )
     except TypeError:
         # Older _encrypt_file signature without output_path. Fall back to
@@ -417,20 +383,17 @@ def api_encrypt():
     except Exception as e:  # noqa: BLE001
         return jsonify({"error": f"Encryption failed: {e}"}), 500
 
-    # ── DB: ADD a new row for the .enc copy instead of replacing the original.
-    # The metrics table will show both rows so the user can see "this
-    # recording has been locked" without losing the unlocked entry.
-    # Only when a pipeline has already created the database: opening a path
-    # that does not exist makes sqlite create an empty file, and that empty
-    # metadata.db then turned the storage and search routes into 500s ("no such
-    # table: segments") on installs that had encrypted a file before ever
-    # running a job. Author: Bloodawn (KheivenD), 2026-09-24 (cleanup sweep).
+    # Add a row for the .enc copy; the original row stays. Only when a
+    # pipeline has already created the database: opening a missing path makes
+    # sqlite create an empty metadata.db, which turns the storage and search
+    # routes into 500s ("no such table: segments").
+    # Author: Bloodawn (KheivenD), 2026-09-24 (cleanup sweep).
     try:
         db_path = _get_db_path()
         if not db_path.exists():
             raise FileNotFoundError(f"no metadata database at {db_path} yet")
         with get_connection(str(db_path)) as conn:
-            # Check the original row exists so we can clone its metadata
+            # Clone the original row's metadata when it exists.
             row = conn.execute(
                 "SELECT timestamp, camera_id, target_detected, roi_count, "
                 "       file_size, duration, object_type, "
@@ -455,8 +418,7 @@ def api_encrypt():
                      row[10], row[11], row[12], row[13], row[14]),
                 )
             else:
-                # No prior row (file was outside the pipeline). Insert a
-                # minimal row so the .enc still shows up in the dashboard.
+                # File came from outside the pipeline: minimal row.
                 conn.execute(
                     "INSERT INTO segments (timestamp, camera_id, target_detected, "
                     "  roi_count, file_size, duration, file_path, object_type) "
@@ -466,10 +428,10 @@ def api_encrypt():
             conn.commit()
     except Exception as e:  # noqa: BLE001
         log.warning("api_encrypt: DB update failed: %s", e)
-        # Don't fail the request - file was encrypted successfully
+        # The file was encrypted, so the request still succeeds.
 
     size_kb = int(enc_path.stat().st_size / 1024)
-    log.info("Encrypted segment: %s → %s (%d KB)  [original kept]",
+    log.info("Encrypted segment: %s -> %s (%d KB)  [original kept]",
              src_path.name, enc_path, size_kb)
     return jsonify({
         "enc_path": str(enc_path),

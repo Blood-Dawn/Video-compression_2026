@@ -176,9 +176,9 @@ async function _hlsPollStatus() {
 
       if (data.error) {
         // Distinguish connection failures from mid-stream crashes
-        const isConnErr = data.error.toLowerCase().includes('connect')
-                       || data.error.toLowerCase().includes('unreachable')
-                       || data.error.toLowerCase().includes('could not open');
+        const err = data.error.toLowerCase();
+        const isConnErr = err.includes('connect') || err.includes('unreachable')
+                       || err.includes('could not open');
         const prefix = isConnErr ? ' Connection failed' : ' Stream stopped';
         msgEl.textContent = prefix + ': ' + data.error.slice(0, 160);
         msgEl.style.color = 'var(--red)';

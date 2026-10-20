@@ -9,13 +9,12 @@ Device-token management for the mobile client (M0.10).
   * POST   /api/auth/tokens/revoke_all   - revoke every device
 
 Every route here requires the PASSWORD (HTTP Basic), never a Bearer token. A
-stolen phone token must not be able to mint successors or revoke the operator's
-other devices, which would let an attacker both persist and lock the owner out.
-gui.auth records the scheme that authenticated the request on flask.g and
-``current_auth_scheme()`` reads it back.
+stolen phone token must not mint successors or revoke other devices, which
+would let an attacker persist and lock the owner out. gui.auth records the
+authenticating scheme on flask.g; ``current_auth_scheme()`` reads it back.
 
-The minted secret is returned exactly once, in the POST response, and only its
-SHA-256 is ever persisted. There is deliberately no route that can re-reveal it.
+The minted secret is returned once, in the POST response, and only its SHA-256
+is persisted. No route can re-reveal it.
 
 Author: Bloodawn (KheivenD), 2026-07-18 (M0.10 - device tokens).
 """
@@ -33,8 +32,7 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 
 tokens_bp = Blueprint("tokens", __name__)
 
-# Cap on stored tokens. Not a security boundary, just a guard against a runaway
-# client minting without bound and growing the state file forever.
+# Cap on live tokens: a guard against a runaway client, not a security boundary.
 _MAX_TOKENS = 50
 
 
@@ -71,8 +69,8 @@ def api_mint_token():
     data = request.get_json(silent=True) or {}
     label = str(data.get("label") or "").strip() or "device"
 
-    live = [t for t in device_tokens.list_tokens() if t.is_usable()]
-    if len(live) >= _MAX_TOKENS:
+    live = sum(1 for t in device_tokens.list_tokens() if t.is_usable())
+    if live >= _MAX_TOKENS:
         return jsonify({
             "error": f"Token limit reached ({_MAX_TOKENS} live). "
                      "Revoke an unused device first.",
@@ -86,21 +84,20 @@ def api_mint_token():
         except (TypeError, ValueError):
             ttl = None
 
-    # An unreadable store must not be papered over: minting on top of a
-    # failed read would have deleted every other paired device. Report it and
-    # let the operator fix the file.
+    # An unreadable store is reported, not papered over: minting on a failed
+    # read would delete every other paired device.
     try:
         secret, rec = device_tokens.mint_token(label, ttl_days=ttl)
     except device_tokens.StoreUnreadable as exc:
-        log.error(f"Refusing to mint a token: {exc}")
+        log.error("Refusing to mint a token: %s", exc)
         return jsonify({
             "error": "The device-token store could not be read, so pairing a "
                      "new device would have unpaired the existing ones. "
                      "Nothing was changed. Check the server log.",
         }), 503
-    # Log the pairing event but NOT the secret, per the house rule.
-    log.info(f"Device token minted: label={rec.label!r} id={rec.id} "
-             f"expires={rec.expires_at or 'never'}")
+    # Never log the secret.
+    log.info("Device token minted: label=%r id=%s expires=%s",
+             rec.label, rec.id, rec.expires_at or "never")
     return jsonify({
         "token": secret,          # shown once; the client must store it now
         "id": rec.id,
@@ -120,14 +117,14 @@ def api_revoke_token(token_id):
     try:
         ok = device_tokens.revoke_token(str(token_id))
     except device_tokens.StoreUnreadable as exc:
-        log.error(f"Refusing to revoke a token: {exc}")
+        log.error("Refusing to revoke a token: %s", exc)
         return jsonify({
             "error": "The device-token store could not be read. Nothing was "
                      "changed. Check the server log.",
         }), 503
     if not ok:
         return jsonify({"error": "No live token with that id."}), 404
-    log.info(f"Device token revoked: id={token_id}")
+    log.info("Device token revoked: id=%s", token_id)
     return jsonify({"revoked": True, "id": token_id})
 
 
@@ -140,10 +137,10 @@ def api_revoke_all_tokens():
     try:
         n = device_tokens.revoke_all()
     except device_tokens.StoreUnreadable as exc:
-        log.error(f"Refusing to revoke all tokens: {exc}")
+        log.error("Refusing to revoke all tokens: %s", exc)
         return jsonify({
             "error": "The device-token store could not be read. Nothing was "
                      "changed. Check the server log.",
         }), 503
-    log.info(f"All device tokens revoked ({n}).")
+    log.info("All device tokens revoked (%d).", n)
     return jsonify({"revoked": True, "count": n})

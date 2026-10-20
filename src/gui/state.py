@@ -1,18 +1,15 @@
 """
 src/gui/state.py
 
-Pure in-memory state for the Flask dashboard, extracted from the former
-``gui/app.py`` monolith. This module holds *only* data: the shared locks,
-the status/power/demo/HLS dictionaries, the live-log ring buffers, and the
-small validator / constant tables. It imports nothing from the rest of the
-``gui`` package, so it is the base layer of the import graph:
+Pure in-memory state for the Flask dashboard: the shared locks, the
+status/power/demo/HLS dictionaries, the live-log ring buffers, and the small
+validator tables. It imports nothing from the rest of the ``gui`` package, so
+it is the base layer of the import graph:
 
     state  <-  logging_setup  <-  services  <-  routes  <-  app
 
-Nothing here starts a thread, opens a file, or touches the network - that
-work stays in ``logging_setup``, the ``services`` layer, and the route
-blueprints. Keeping the data flat and side-effect-free is what lets every
-other module import these names safely at module load.
+Nothing here starts a thread, opens a file, or touches the network, so every
+other module can import these names safely at load time.
 
 Mutation contract: the dictionaries / deques / queues below are mutated
 *in place* under their paired lock and are re-exported from ``gui.app`` as
@@ -39,18 +36,13 @@ _status: dict = {
     "segment_count": 0,
     "total_frames": 0,   # 0 = live/unknown, >0 = video file with known length
     "error": None,
-    # Real, resolved SR backend for the current/last run: "realesrgan-<device>"
-    # or "bicubic". Set by gui.services.pipeline_runner once the Enhancer is
-    # constructed, so the UI can show what actually ran instead of trusting
-    # the requested enhance_model (which may have silently fallen back).
+    # Resolved SR backend of the current/last run ("realesrgan-<device>" or
+    # "bicubic"), so the UI shows what ran, not the requested enhance_model
+    # (which may have fallen back).
     "enhancer_backend": None,
-    # Count of segments this run requested encryption for but wrote as
-    # plaintext instead (no password/key file, cryptography missing, an
-    # unreadable key file, or encrypt_file() itself raising). Set by
-    # gui.services.pipeline_runner from the live ROIEncoder instance so the
-    # UI can show what actually happened instead of trusting config.encrypt,
-    # which only reflects what was REQUESTED and stays true even when every
-    # segment silently fell back to plaintext. 2026-09-24 dishonesty audit.
+    # Segments that were requested encrypted but written as plaintext, taken
+    # from the live ROIEncoder because config.encrypt only says what was
+    # requested.
     "encryption_failures": 0,
 }
 
@@ -95,37 +87,32 @@ _hls_state: dict = {
     "error": None,
     "stream_start_time": None,   # epoch float: when FFmpeg process launched
     "ingest_latency_s": None,    # float: seconds from FFmpeg launch to first .ts segment
-    # Monotonic timestamp of the most recent .ts fetch by ANY client, or None
-    # before the first one. Drives the idle watchdog: there is a single
-    # process-wide stream slot, so a stream nobody is watching does not just
-    # burn CPU, it 409s every later start for everyone. Monotonic, not epoch,
-    # so a system clock change cannot make a live stream look abandoned.
+    # Monotonic time of the latest .ts fetch by any client (None before the
+    # first). Drives the idle watchdog: the stream slot is process-wide, so an
+    # unwatched stream 409s every later start. Monotonic so a clock change
+    # cannot make a live stream look abandoned.
     "last_segment_fetch": None,
-    # ─── Rolling end-to-end latency (ROADMAP 5.1) ──────────────────────────────
+    # Rolling end-to-end latency: how long a frame read off RTSP takes to land
+    # in a playable .ts chunk. Operators size hardware with it.
     # Author: Bloodawn (KheivenD)
-    # ingest→HLS latency: how long does a frame read off RTSP take to land in
-    # a .ts chunk that the browser can play? Cody asked for this explicitly in
-    # the April 22 sponsor meeting - operators need it for hardware sizing.
     "latency_avg_s":   None,     # float: rolling avg over last N segments (None until 1+ samples)
     "latency_last_s":  None,     # float: latency of the most recent segment
     "latency_samples": 0,        # int:   how many segments contributed to the average
     "latency_window":  20,       # int:   how many segments are kept in the rolling window
 }
 
-# Bounded deques used by the latency watcher (ROADMAP 5.1).
-# `_hls_frame_ts_dq` holds frame-read timestamps in arrival order; the watcher
-# pops ~(hls_time × fps) entries each time a new .ts segment is detected and
-# computes the median age. `_hls_segment_latencies` keeps a rolling window of
-# per-segment latencies so the API can report a stable average.
-# maxlen on _hls_frame_ts_dq prevents unbounded growth if FFmpeg stalls.
+# Bounded deques for the latency watcher. `_hls_frame_ts_dq` holds frame-read
+# timestamps in arrival order; the watcher pops ~(hls_time * fps) entries per
+# new .ts segment and computes the median age. `_hls_segment_latencies` is the
+# rolling window behind the API average. The maxlen stops unbounded growth if
+# FFmpeg stalls.
 # Author: Bloodawn (KheivenD)
 _hls_frame_ts_dq: "collections.deque[float]" = collections.deque(maxlen=10000)
 _hls_segment_latencies: "collections.deque[float]" = collections.deque(maxlen=20)
 
 # ── Log capture ───────────────────────────────────────────────────────────────
-# Live log ring buffers. `_log_id` is the only *rebound* scalar in this module
-# (incremented under `_log_lock` by the SSE log handler in logging_setup); it is
-# forwarded from `gui.app` so external `gui.app._log_id` reads/writes round-trip.
+# Live log ring buffers. `_log_id` is the only rebound scalar here (incremented
+# under `_log_lock` by the SSE log handler); gui.app forwards it.
 _log_queue: queue.Queue = queue.Queue(maxsize=1000)
 _log_history: collections.deque = collections.deque(maxlen=300)  # (event_id, line)
 _log_id = 0
@@ -135,15 +122,9 @@ _log_lock = threading.Lock()
 _VALID_MODES   = {"mode0", "mode1", "mode2", "mode3"}
 _VALID_BG      = {"MOG2", "KNN", "GMG"}
 _VALID_DEVICES = {"auto", "cuda", "mps", "cpu"}
-# All 6 are now real, working backends (src/enhancement/enhancer.py):
-# espcn/fsrcnn/edsr/lapsrn run through cv2.dnn_superres against real
-# downloaded weights; realesrgan/realesrnet run through basicsr's RRDBNet.
-# They were briefly removed earlier the same day (2026-09-24) after being
-# offered with no backing code behind them at all - picking any of them
-# silently ran plain bicubic upscaling while the label implied a real AI
-# model. Re-added the same day once each had real code and was verified
-# end-to-end against real downloaded weights, not left as a permanent
-# removal.
+# Every name must map to a real backend in src/enhancement/enhancer.py
+# (cv2.dnn_superres or basicsr's RRDBNet), or bicubic would silently run
+# under an AI model's label.
 _VALID_MODELS  = {"espcn", "fsrcnn", "edsr", "lapsrn", "realesrgan", "realesrnet", "bicubic"}
 
 # Subfolder created inside whichever cloud root (OneDrive / Google Drive) is found.
@@ -152,10 +133,8 @@ _CLOUD_SUBFOLDER = "SVCS"
 # Filenames allowed by `_safe_filename` (path-safety service).
 _SAFE_FILENAME_RE = re.compile(r"^[a-zA-Z0-9_\-\.]+$")
 
-# Upload extensions accepted by the /api/upload route. R4 Phase 6: widened to
-# the universal ingest set (standard + vendor/DVR containers) so operators can
-# upload whatever their camera exported; FrameSource decodes vendor containers
-# via the FFmpeg fallback.
+# Upload extensions accepted by /api/upload: the universal ingest set (standard
+# plus vendor/DVR containers, decoded by FrameSource's FFmpeg fallback).
 try:
     from utils.video_formats import ALL_INGEST_EXTS as _ALL_INGEST_EXTS
 except ModuleNotFoundError:  # pragma: no cover - import path shim

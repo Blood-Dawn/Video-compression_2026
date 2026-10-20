@@ -2,9 +2,8 @@
 src/gui/routes/ingest_bp.py - chunked, resumable upload (R6 Track B, the M4
 ingest tail).
 
-Why not the existing /api/upload: a phone on flaky Wi-Fi that retries a plain
-multipart POST restarts at byte 0 (the MOBILE-ARCHITECTURE M4 note). This
-protocol lets a client resume exactly where the connection died:
+Why not /api/upload: a phone on flaky Wi-Fi that retries a plain multipart POST
+restarts at byte 0. This protocol resumes where the connection died:
 
     POST /api/upload/begin   {"name": "clip.mp4", "size": N}
         -> {"upload_id": hex, "offset": 0, "chunk_hint": 1048576}
@@ -51,31 +50,23 @@ _ID_RE = _re.compile(r"^[a-f0-9]{16,32}$")
 _MAX_SIZE = 8 * 1024 * 1024 * 1024  # 8 GB cap per upload
 CHUNK_HINT = 1024 * 1024
 
-# Fall 3.4 audit (2026-09-22) found two real gaps here, both closed below:
+# Two guards:
 #
-# 1. No locking: two concurrent /api/upload/chunk requests for the SAME
-#    upload_id both read current=stat().st_size before either had written,
-#    both passed the offset check, and both appended - the file ends up
-#    larger than either response reported, silently desyncing the client's
-#    notion of its next offset (and letting two chunks jointly exceed the
-#    declared size, defeating the overflow guard at write time). A
-#    per-upload_id lock serializes the whole read-check-write section.
+# 1. A per-upload_id lock around the chunk route's read-check-write. Without
+#    it, two concurrent chunks both read the same size, both pass the offset
+#    check and both append, so the file can exceed the declared size.
 #
-# 2. No cleanup for abandoned uploads: a client that calls /begin and never
-#    follows up (killed app, picker cancelled after mint, network gone for
-#    good) left its empty-or-partial .part/.json pair on disk forever - a
-#    slow, unbounded disk leak. _sweep_stale_uploads() is called, best
-#    effort, at the top of every /begin so the leak self-heals over time
-#    without needing a background scheduler thread.
+# 2. Abandoned uploads (killed app, picker cancelled after /begin) would leave
+#    their .part/.json pair forever. _sweep_stale_uploads() runs at the top of
+#    every /begin, so no scheduler thread is needed.
 _UPLOAD_TTL_SECONDS = 48 * 60 * 60  # an abandoned upload is stale after 2 days
 _locks_guard = threading.Lock()
 _upload_locks: dict[str, threading.Lock] = {}
 
 
 def _lock_for(upload_id: str) -> threading.Lock:
-    """One lock per upload_id, created on first use. The dict itself is
-    guarded by _locks_guard so two requests minting the same new id's lock
-    at once can't each get a different Lock object."""
+    """One lock per upload_id, created under _locks_guard so two requests
+    cannot create different Locks for the same id."""
     with _locks_guard:
         lock = _upload_locks.get(upload_id)
         if lock is None:
@@ -85,9 +76,7 @@ def _lock_for(upload_id: str) -> threading.Lock:
 
 
 def _forget_lock(upload_id: str) -> None:
-    """Drop a finished/discarded upload's lock so the dict doesn't grow
-    forever. Safe to call even if nothing is waiting on it - the lock
-    object itself stays alive for anyone still holding a reference."""
+    """Drop a finished upload's lock so the dict stays bounded."""
     with _locks_guard:
         _upload_locks.pop(upload_id, None)
 
@@ -118,21 +107,15 @@ def _sweep_stale_uploads() -> None:
 
 def _safe_leaf_name(raw: str, fallback: str = "upload.mp4") -> str:
     """Return just the filename component of an untrusted client-supplied
-    name, treating BOTH '/' and '\\' as directory separators regardless of
-    the host OS.
+    name, treating BOTH '/' and '\\' as directory separators on every OS.
 
-    Path(...).name only strips the separator the *host* OS recognizes: on a
-    POSIX host (Linux/Docker/AppImage builds, which this project also ships)
-    a Windows-style payload like "..\\..\\escape\\clip.mp4" has no '/' in
-    it, so Path.name returns it unchanged (a literal, ugly filename - it does
-    not escape the upload dir, but it is not the clean, cross-platform-safe
-    behavior this endpoint is supposed to guarantee either). Normalizing the
-    separator first makes the check identical on every platform we ship.
+    Path(...).name only strips the host's separator, so on a POSIX host
+    (Docker/AppImage builds) "..\\..\\escape\\clip.mp4" would come back
+    unchanged as one literal filename.
     """
     normalized = str(raw).replace("\\", "/")
     leaf = Path(normalized).name.strip()
-    # Path.name is empty for "", ".", "..", or a string that is all
-    # separators (e.g. "////"); fall back to a safe default in that case.
+    # Path.name is empty for "", ".", ".." and all-separator strings.
     return leaf if leaf not in ("", ".", "..") else fallback
 
 
@@ -157,6 +140,13 @@ def _load_meta(upload_id: str):
         return None
 
 
+def _discard(upload_id: str, part: Path) -> None:
+    """Delete an upload's part file and sidecar and forget its lock."""
+    part.unlink(missing_ok=True)
+    _paths(upload_id)[1].unlink(missing_ok=True)
+    _forget_lock(upload_id)
+
+
 def _verify_video(path: Path) -> bool:
     """ffprobe decode check, same bar every other ingest path applies."""
     try:
@@ -174,7 +164,7 @@ def _verify_video(path: Path) -> bool:
 def api_upload_begin():
     _sweep_stale_uploads()
     data = request.get_json(silent=True) or {}
-    name = _safe_leaf_name(data.get("name", ""), fallback="")  # strip any path components, either separator style
+    name = _safe_leaf_name(data.get("name", ""), fallback="")
     try:
         size = int(data.get("size", 0))
     except (TypeError, ValueError):
@@ -215,17 +205,12 @@ def api_upload_chunk():
     blob = request.get_data(cache=False)
     if not blob:
         return jsonify({"error": "empty chunk"}), 400
-    # The whole read-check-write sequence is the critical section: without
-    # this lock, two concurrent requests for the same upload_id can both
-    # read the same current offset, both pass the check, and both append,
-    # leaving the file larger than either response reported. See the Fall
-    # 3.4 audit note above _lock_for's definition.
+    # The read-check-write sequence is the critical section.
     with _lock_for(upload_id):
         current = part.stat().st_size if part.exists() else 0
         if offset != current:
-            # Stale offset after a dropped connection. Telling the client
-            # where we actually are IS the resume protocol; it reseeks and
-            # continues.
+            # Stale offset after a dropped connection: the 409 is the resume
+            # protocol.
             return jsonify({"offset": current}), 409
         if current + len(blob) > int(meta.get("size", 0)):
             return jsonify({"error": "more bytes than declared at begin"}), 413
@@ -255,24 +240,20 @@ def api_upload_finish():
         for block in iter(lambda: fh.read(1024 * 1024), b""):
             h.update(block)
     if not claimed or h.hexdigest() != claimed:
-        # A hash mismatch means corruption somewhere in transit; the part is
-        # not trustworthy at ANY offset, so it is discarded rather than left
-        # for a resume that would preserve the corruption.
-        part.unlink(missing_ok=True)
-        _paths(upload_id)[1].unlink(missing_ok=True)
-        _forget_lock(upload_id)
+        # Corruption in transit makes the part untrustworthy at any offset, so
+        # discard it instead of letting a resume preserve the damage.
+        _discard(upload_id, part)
         return jsonify({"error": "sha256 mismatch; upload discarded, start over"}), 400
     if not _verify_video(part):
-        part.unlink(missing_ok=True)
-        _paths(upload_id)[1].unlink(missing_ok=True)
-        _forget_lock(upload_id)
+        _discard(upload_id, part)
         return jsonify({"error": "not a decodable video; upload discarded"}), 400
     upload_dir = _upload_dir()
     safe_name = _safe_leaf_name(meta.get("name", "upload.mp4"))
+    stem, suffix = Path(safe_name).stem, Path(safe_name).suffix
     dest = upload_dir / safe_name
     counter = 1
     while dest.exists():
-        dest = upload_dir / f"{Path(safe_name).stem}_{counter}{Path(safe_name).suffix}"
+        dest = upload_dir / f"{stem}_{counter}{suffix}"
         counter += 1
     part.replace(dest)
     _paths(upload_id)[1].unlink(missing_ok=True)

@@ -60,15 +60,6 @@ def _hls_dir_for(camera_id: str, output_dir: str) -> Path:
     return Path(output_dir) / "hls" / camera_id
 
 
-def _draw_corner_overlay(frame, mode_label: str, elapsed_s: int) -> None:
-    """Thin wrapper: delegates to the shared roi_encoder.draw_corner_overlay.
-
-    Kept as a module-level name so the HLS annotator thread can call it
-    without changes.
-    """
-    draw_corner_overlay(frame, mode_label, elapsed_s)
-
-
 def _hls_annotator_thread(
     input_source: str,
     hls_dir: Path,
@@ -81,21 +72,18 @@ def _hls_annotator_thread(
         cv2.VideoCapture  →  BackgroundSubtractor  →  green ROI rectangles
         + corner overlay  →  proc.stdin (rawvideo bgr24)  →  FFmpeg HLS muxer
     """
-    import numpy as np  # noqa: F401 (needed for tobytes on numpy array)
-
     try:
         from background_subtraction.background_subtraction import BackgroundSubtractor
     except ModuleNotFoundError:
         from src.background_subtraction.background_subtraction import BackgroundSubtractor
 
-    # ── open input ────────────────────────────────────────────────────────────
     try:
         cap_src = int(input_source)
     except ValueError:
         cap_src = input_source
 
     is_rtsp = isinstance(cap_src, str) and cap_src.lower().startswith("rtsp://")
-    CONNECT_TIMEOUT = 10  # seconds (Python-level timeout for VideoCapture.open()
+    CONNECT_TIMEOUT = 10  # seconds
 
     # cv2.VideoCapture.open() blocks until the OS-level RTSP timeout fires
     # (~30s on Windows with pip opencv-python).  CAP_PROP_OPEN_TIMEOUT_MSEC is
@@ -108,7 +96,7 @@ def _hls_annotator_thread(
 
     def _do_open():
         c = cv2.VideoCapture()
-        # Try to set the property anyway (no-op on most builds but harmless)
+        # A no-op on the pip build (see above) but honoured by others.
         c.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, CONNECT_TIMEOUT * 1000)
         c.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 5000)
         ok = c.open(cap_src)
@@ -236,12 +224,11 @@ def _hls_annotator_thread(
         _hls_state["stream_start_time"] = ffmpeg_launch_time
         _hls_state["ingest_latency_s"] = None
 
-    # Watch for the first .ts segment to appear and record ingest latency
+    # Ingest latency: how long FFmpeg takes to produce its first .ts segment.
     def _watch_first_segment(hls_dir: Path, launch_time: float) -> None:
-        deadline = launch_time + 30.0  # give up after 30 s
+        deadline = launch_time + 30.0
         while time.time() < deadline:
-            ts_files = list(hls_dir.glob("*.ts"))
-            if ts_files:
+            if any(hls_dir.glob("*.ts")):
                 latency = round(time.time() - launch_time, 2)
                 with _hls_lock:
                     _hls_state["ingest_latency_s"] = latency
@@ -260,18 +247,12 @@ def _hls_annotator_thread(
     # ── Rolling end-to-end latency watcher (ROADMAP 5.1) ─────────────────────
     # Author: Bloodawn (KheivenD)
     #
-    # The first-segment watcher above only tells us how long FFmpeg takes to
-    # produce its initial chunk. Cody actually asked for the *steady-state*
-    # latency: from a frame coming off RTSP, how long until that frame is
-    # inside a .ts chunk the browser can play? For hls_time=2 with fps=25
-    # we expect 50 frames per chunk, so a typical frame waits about 1 s for
-    # its containing chunk to flush. We sample this for every new .ts that
-    # appears and keep a rolling average of the last `_hls_state["latency_window"]`
-    # segments.
-    #
-    # The watcher matches each newly observed .ts to a slice of frame
-    # timestamps from `_hls_frame_ts_dq` so the latency reflects real ingest
-    # → playable-chunk delay instead of the (already-tracked) launch delay.
+    # Steady-state latency: from a frame coming off the camera to that frame
+    # sitting inside a .ts chunk the browser can play. For hls_time=2 at 25 fps
+    # a chunk holds 50 frames, so a typical frame waits about 1 s for its chunk
+    # to flush. Each newly observed .ts is matched to a slice of frame-read
+    # timestamps from `_hls_frame_ts_dq`, and the last
+    # `_hls_state["latency_window"]` samples are averaged.
     def _watch_segment_latency(
         hls_dir: Path,
         seg_fps: float,
@@ -299,31 +280,23 @@ def _hls_annotator_thread(
             try:
                 # mtime-sorted so we process segments in the order FFmpeg wrote them
                 ts_files = sorted(
-                    (p for p in hls_dir.glob("*.ts") if p.is_file()),
+                    (p for p in hls_dir.glob("*.ts") if p.name not in seen and p.is_file()),
                     key=lambda p: p.stat().st_mtime,
                 )
             except OSError:
                 ts_files = []
 
             for p in ts_files:
-                if p.name in seen:
-                    continue
                 seen.add(p.name)
                 try:
                     seg_written_time = p.stat().st_mtime
                 except OSError:
                     seg_written_time = time.time()
 
-                # Pop ~frames_per_seg oldest frame-read timestamps. If the
-                # deque is shorter than that, take whatever is there - this
-                # happens for the very first segment (FFmpeg sometimes
-                # buffers fewer frames before flushing).
-                #
-                # Defensive: belt-and-braces try/except inside the lock in
-                # case len() and popleft() ever observe a different state
-                # (impossible with a single lock, but a future refactor
-                # could break that and silently produce IndexError that the
-                # outer except would then mask). Audit follow-up 2026-05-02.
+                # Pop ~frames_per_seg oldest frame-read timestamps, or whatever
+                # is there: FFmpeg can flush the first segment early. The
+                # IndexError guard keeps the watcher alive if a writer ever
+                # touches the deque without holding _hls_lock.
                 popped: list[float] = []
                 with _hls_lock:
                     n = min(frames_per_seg, len(_hls_frame_ts_dq))
@@ -369,18 +342,10 @@ def _hls_annotator_thread(
     ).start()
 
     # ── idle watchdog (M0.5) ──────────────────────────────────────────────────
-    # Nothing stopped an abandoned stream before this. The stream ended only on
-    # an explicit POST /api/hls/stop, input EOF, a broken pipe, or an exception,
-    # and a healthy camera never reaches EOF. Because there is ONE process-wide
-    # stream slot, an abandoned stream pinned running=True and made every later
-    # /api/hls/start return 409 for every client, not just the one that walked
-    # away. A phone that backgrounds or drops off Wi-Fi is the obvious way to
-    # trigger it, but a closed browser tab already did: the dashboard's only
-    # caller of /api/hls/stop is an explicit button, with no pagehide handler.
-    #
-    # Setting stop_event is all that is needed. The frame loop is
-    # `while not stop_event.is_set()` and its finally block already tears down
-    # FFmpeg and clears running, so this reuses the existing teardown exactly.
+    # There is ONE process-wide stream slot and a healthy camera never reaches
+    # EOF, so a stream nobody watches (closed tab, phone off Wi-Fi) would pin
+    # running=True and make every later /api/hls/start return 409. Setting
+    # stop_event is enough: the frame loop's finally block does the teardown.
     def _hls_idle_watchdog(stop: threading.Event, started: float) -> None:
         while not stop.wait(timeout=5.0):
             with _hls_lock:
@@ -438,14 +403,11 @@ def _hls_annotator_thread(
             with _hls_lock:
                 _hls_frame_ts_dq.append(time.time())
 
-            # Run background subtraction on every frame to build the model
+            # Every frame feeds the background model, even during warm-up.
             mask = subtractor.apply(frame)
 
             if frame_num >= WARMUP_FRAMES:
-                regions = subtractor.get_foreground_regions(mask)
-
-                # Draw green bounding boxes around each detected ROI
-                for region in regions:
+                for region in subtractor.get_foreground_regions(mask):
                     x1 = max(0, region.x)
                     y1 = max(0, region.y)
                     x2 = min(w, region.x + region.w)
@@ -453,14 +415,15 @@ def _hls_annotator_thread(
                     if x2 > x1 and y2 > y1:
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
 
-                # Small corner overlay: mode + elapsed time
                 elapsed = int(time.time() - start_time)
-                _draw_corner_overlay(frame, mode_label, elapsed)
+                draw_corner_overlay(frame, mode_label, elapsed)
 
             frame_num += 1
 
             try:
-                proc.stdin.write(frame.tobytes())
+                # Hand FFmpeg the array's own buffer; tobytes() would copy the
+                # whole frame first. cap.read() frames are C-contiguous.
+                proc.stdin.write(frame)
             except (BrokenPipeError, OSError):
                 break
 
@@ -474,7 +437,7 @@ def _hls_annotator_thread(
             proc.stdin.close()
         except Exception:
             pass
-        # Wait for FFmpeg to finish muxing its last segment
+        # Let FFmpeg finish muxing its last segment.
         try:
             proc.wait(timeout=6)
         except subprocess.TimeoutExpired:

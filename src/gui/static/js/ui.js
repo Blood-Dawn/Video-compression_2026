@@ -77,40 +77,21 @@ function escHtml(s) {
 /**
  * Map a color label coming from the dominant_color DB column to a CSS
  * color so we can render a small swatch next to the label in the
- * Metrics + Search tables. Falls back to the literal label if it's
- * already a valid CSS color, or to grey for unknowns.
+ * Metrics + Search tables. Unknown labels get grey.
  *
  * Author: Bloodawn (KheivenD), 2026-05-03 (UI cleanup pass).
  */
+const _SWATCH_HEX = {
+  red:    '#e76f51', orange:'#f4a261', yellow:'#f1c40f',
+  green:  '#50c878', blue:  '#4e9af1', purple:'#9b59b6',
+  white:  '#f5f7fa', black: '#222222', gray:  '#888888',
+  grey:   '#888888', silver:'#b0b0b0', brown: '#8b5a2b',
+};
+
 function _colorSwatch(label) {
-  const l = String(label || '').toLowerCase();
-  const map = {
-    red:    '#e76f51', orange:'#f4a261', yellow:'#f1c40f',
-    green:  '#50c878', blue:  '#4e9af1', purple:'#9b59b6',
-    white:  '#f5f7fa', black: '#222222', gray:  '#888888',
-    grey:   '#888888', silver:'#b0b0b0', brown: '#8b5a2b',
-  };
-  return map[l] || '#888888';
+  return _SWATCH_HEX[String(label || '').toLowerCase()] || '#888888';
 }
 
-/**
- * Pick a friendly display name for a segment row's "Cam" column.
- *
- * Old segments were all written with the default camera_id "cam_00",
- * which makes the metrics table impossible to scan when the user
- * has 30+ recordings from different source files. This helper
- * derives a meaningful label from the segment's own file path when
- * camera_id is unhelpful, falling back to camera_id as a last resort.
- *
- * Strategy: `<camera_id>_segment_NNN.mp4` → `<camera_id>` is what we
- * already have. So the segment basename doesn't add new info there.
- * BUT - we look at the parent directory name first, because demo runs
- * write to `<output_root>/demo_comp_<source-filename>/...`, and the
- * pipeline's output dir often encodes the source clip too. That gives
- * us the source filename even for cam_00 recordings.
- *
- * Author: Bloodawn (KheivenD), 2026-05-03 (UI fix pass).
- */
 /**
  * Derive the SVCS mode used to encode a segment from its file path.
  * The pipeline writes mode-specific subfolders ("mode0/", "mode1/", ...)
@@ -156,20 +137,46 @@ function _segMode(s) {
   return ' - ';
 }
 
+/** Text color for a _segMode() label, shared by the metrics and search tables. */
+function _segModeColor(mode) {
+  return mode === ' - ' ? 'var(--text-dim)'
+    : mode.startsWith('Split') ? 'var(--purple)'
+    : mode === 'Mode 0' ? 'var(--text)'
+    : mode === 'Mode 1' ? 'var(--teal)'
+    : mode === 'Mode 2' ? 'var(--yellow)'
+    : 'var(--green)';
+}
+
+// Generic folder names that say nothing about which source a segment came from.
+const _GENERIC_SEG_DIRS = new Set([
+  '', 'outputs', 'output', 'data', 'segments', 'mode0', 'mode1',
+  'mode2', 'mode3', 'standard', 'compressed', 'demo', 'cam_00',
+]);
+
+/**
+ * Pick a friendly display name for a segment row's "Cam" column.
+ *
+ * Old segments were all written with the default camera_id "cam_00",
+ * which makes the metrics table impossible to scan when the user
+ * has 30+ recordings from different source files. This helper
+ * derives a meaningful label from the segment's own file path when
+ * camera_id is unhelpful, falling back to camera_id as a last resort.
+ *
+ * The segment basename (`<camera_id>_segment_NNN.mp4`) adds nothing, so the
+ * parent directories are checked first: demo runs write to
+ * `<output_root>/demo_comp_<source-filename>/...`, and the pipeline's output
+ * dir often encodes the source clip too.
+ *
+ * Author: Bloodawn (KheivenD), 2026-05-03 (UI fix pass).
+ */
 function _segDisplayName(s) {
   const fp = String(s.file_path || '');
   if (!fp) return s.camera_id || ' - ';
-  // Split on either Windows or POSIX separator
   const parts = fp.split(/[\\/]/);
   // Walk up looking for a parent dir that smells like a source clip.
-  // Skip generic dirs ("outputs", "data", "segments", ...).
-  const skip = new Set([
-    '', 'outputs', 'output', 'data', 'segments', 'mode0', 'mode1',
-    'mode2', 'mode3', 'standard', 'compressed', 'demo', 'cam_00',
-  ]);
   for (let i = parts.length - 2; i >= 0; i--) {
     const p = parts[i];
-    if (!p || skip.has(p.toLowerCase())) continue;
+    if (!p || _GENERIC_SEG_DIRS.has(p.toLowerCase())) continue;
     // Strip a leading "demo_comp_" prefix that the demo runner adds
     let name = p.replace(/^demo_comp_/i, '').replace(/^run_/i, '');
     // Strip a trailing "_modeN" or "_NNN" suffix
@@ -180,6 +187,11 @@ function _segDisplayName(s) {
   const base = parts[parts.length - 1] || '';
   const stem = base.replace(/\.[^.]+$/, '').replace(/_segment_\d+$/i, '');
   return stem || (s.camera_id || ' - ');
+}
+
+/** Label for a "Camera" cell: the camera_id, unless it is the legacy cam_00 default. */
+function _segCamLabel(s) {
+  return (!s.camera_id || s.camera_id === 'cam_00') ? _segDisplayName(s) : s.camera_id;
 }
 
 /**

@@ -1,29 +1,31 @@
 """
 src/gui/routes/demo_bp.py
 
-demo routes blueprint, carved from gui/app.py (TASK 1.3).
-Pure relocation: every URL, method, and response shape is unchanged.
+Demo runner: start a mode-comparison demo, poll its status, and list
+past runs.
 Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - blueprints).
 """
 
-import threading
 import json
+import threading
 from pathlib import Path
 from urllib.parse import quote
 from flask import Blueprint, jsonify, request
 
 try:
     from gui.state import _state_lock, _status, _demo_lock, _demo_state, _CLOUD_SUBFOLDER
+    from gui.logging_setup import log
     from gui.services.cloud_detection import _default_output_dir, _detect_onedrive_root
     from gui.services.gui_state_persist import _save_gui_state
     from gui.services.demo_runner import _run_demo_thread
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.state import (_state_lock, _status, _demo_lock, _demo_state, _CLOUD_SUBFOLDER)
+    from src.gui.logging_setup import log
     from src.gui.services.cloud_detection import _default_output_dir, _detect_onedrive_root
     from src.gui.services.gui_state_persist import _save_gui_state
     from src.gui.services.demo_runner import _run_demo_thread
 
-# Repo root (…/src/gui/routes/<bp>_bp.py -> parents[3]).
+# Repo root (.../src/gui/routes/<bp>_bp.py -> parents[3]).
 _ROOT = Path(__file__).resolve().parents[3]
 
 demo_bp = Blueprint("demo", __name__)
@@ -50,8 +52,8 @@ def api_demo():
     input_path = data.get("input_path", "").strip()
     output_root = data.get("output_root", "").strip()
     if not output_root:
-        # Unified default - same OneDrive-preferred resolution as api_start
-        # and api_hls_start. Author: Bloodawn (KheivenD), 2026-05-02 audit.
+        # Same default as api_start and api_hls_start.
+        # Author: Bloodawn (KheivenD), 2026-05-02 audit.
         output_root = _default_output_dir()
     modes = data.get("modes", ["mode0", "mode1", "mode2", "mode3"])
 
@@ -75,8 +77,7 @@ def api_demo():
         _demo_state.update(running=True, modes=modes, result=None, error=None, status="queued",
                            last_output_root=resolved_root)
 
-    # Persist the demo output root so /api/segments can still find these
-    # files after a server restart.
+    # Persist the root so /api/segments finds these files after a restart.
     _save_gui_state()
 
     t = threading.Thread(target=_run_demo_thread, args=(config,), daemon=True, name="demo-worker")
@@ -117,7 +118,7 @@ def api_demo_search_debug():
             svcs = (od_root / _CLOUD_SUBFOLDER).resolve()
             roots_info.append({"label": f"OneDrive SVCS ({od_label})", "path": str(svcs), "exists": svcs.exists()})
             roots_info.append({"label": f"OneDrive root ({od_label})", "path": str(od_root.resolve()), "exists": od_root.exists()})
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - a diagnostic route reports any failure
         roots_info.append({"label": "OneDrive detection error", "path": str(e), "exists": False})
 
     manifests_found = []
@@ -144,8 +145,6 @@ def api_demo_history():
     Returns a list of run objects (newest first), each with:
       ts, modes, split_screen (URL or None), videos {mode: {view: url}}, dir (folder name)
     """
-    # Build a de-duplicated list of roots to search for manifests.
-    # Priority: pipeline output_dir → project outputs/ → last demo run root → OneDrive SVCS
     with _state_lock:
         cfg = _status.get("config", {})
     with _demo_lock:
@@ -160,52 +159,44 @@ def api_demo_history():
             seen_roots.add(rp)
             search_roots.append(rp)
 
-    # 1. Pipeline-configured output dir (set when user configures the pipeline)
+    # Roots in priority order: pipeline output_dir, project outputs/, last demo
+    # root, then OneDrive SVCS and the OneDrive root. OneDrive detection probes
+    # the registry and filesystem; a failure only means those are skipped.
     if cfg.get("output_dir"):
         _add_root(Path(cfg["output_dir"]))
-    # 2. Project-relative outputs/ folder (safe absolute reference via _ROOT)
     _add_root(_ROOT / "outputs")
-    # 3. Last demo run's output root (captured when demo was started)
     if last_demo_root:
         _add_root(Path(last_demo_root))
-    # 4. OneDrive SVCS folder
     try:
         od_root, _ = _detect_onedrive_root(prefer_business=True)
         if od_root:
             _add_root(od_root / _CLOUD_SUBFOLDER)
-            # Also search OneDrive root directly (catches non-SVCS outputs)
             _add_root(od_root)
-    except Exception:
-        pass
+    except Exception as exc:  # noqa: BLE001
+        log.debug("OneDrive root detection failed: %s", exc)
 
     manifests: list[tuple[float, Path]] = []
     seen: set[Path] = set()
     for root in search_roots:
-        # New-style: <root>/demo_comp_N/manifest.json
-        for mp in root.glob("demo_comp*/manifest.json"):
-            if mp not in seen:
-                seen.add(mp)
-                try:
-                    manifests.append((mp.stat().st_mtime, mp))
-                except OSError:
-                    pass
-        # Old-style: <root>/demo_comp/demos_stitched_N/manifest.json
-        for mp in root.glob("demo_comp/demos_stitched*/manifest.json"):
-            if mp not in seen:
+        # New style <root>/demo_comp_N/, old style <root>/demo_comp/demos_stitched_N/.
+        for pattern in ("demo_comp*/manifest.json", "demo_comp/demos_stitched*/manifest.json"):
+            for mp in root.glob(pattern):
+                if mp in seen:
+                    continue
                 seen.add(mp)
                 try:
                     manifests.append((mp.stat().st_mtime, mp))
                 except OSError:
                     pass
 
-    manifests.sort(key=lambda x: x[0], reverse=True)  # newest first
+    manifests.sort(key=lambda x: x[0], reverse=True)
 
     runs = []
     for mtime, mp in manifests:
         try:
             with open(mp, encoding="utf-8") as f:
                 manifest = json.load(f)
-        except Exception:
+        except (OSError, ValueError):
             continue
 
         videos: dict = {}

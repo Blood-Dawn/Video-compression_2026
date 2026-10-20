@@ -3,13 +3,9 @@ src/gui/device_tokens.py
 
 Per-device access tokens for the dashboard API (M0.10, mobile port).
 
-TASK 4.4 gave the dashboard a single username+password pair enforced as HTTP
-Basic. That is workable for one operator at one browser, but it does not survive
-contact with phones: a credential typed into a phone is a credential that leaves
-the building, and the only way to cut off a lost phone is to rotate the password
-for every client at once.
-
-This module adds tokens that can be revoked one at a time.
+The dashboard's single Basic username+password cannot be revoked per phone, and
+a credential typed into a phone leaves the building. These tokens can be
+revoked one at a time.
 
 Design notes, and why:
 
@@ -45,35 +41,37 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 try:
     from utils.paths import state_file
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.utils.paths import state_file
 
-# File name under data_dir(). Mirrored in utils.paths.STATE_FILE_NAMES so the
-# factory-reset action revokes every device token.
+# File name under data_dir(); also in utils.paths.STATE_FILE_NAMES so a factory
+# reset revokes every device token.
 TOKEN_FILE_NAME = "device_tokens.json"
 
-# Prefix on every minted token. Recognizable in a log or a paste, and greppable
-# by secret scanners.
+# Prefix on every minted token, for secret scanners and humans.
 TOKEN_PREFIX = "svcs_"
 
-# Bytes of entropy behind each token. 32 bytes = 256 bits, base64url-encoded to
-# 43 characters. Far beyond guessing range for an endpoint with rate limiting.
+# 32 bytes = 256 bits of entropy, base64url-encoded to 43 characters.
 _TOKEN_ENTROPY_BYTES = 32
 
-# Schema version, so a later format change can migrate rather than clobber.
 _SCHEMA_VERSION = 1
 
-# Serializes read-modify-write cycles. Flask runs threaded=True, so two
-# concurrent mint or revoke calls would otherwise race and lose one of them.
+# Serializes read-modify-write cycles (Flask runs threaded=True).
 _LOCK = threading.RLock()
+
+# Parsed token records of the last good read, keyed by (path, mtime_ns, size).
+# The Bearer guard verifies a token on every request (each HLS segment fetch),
+# and re-reading and re-parsing the file each time was the dominant cost.
+# Failed reads are never cached, and _write_all drops it.
+_parsed_cache: "tuple[tuple, list] | None" = None
 
 
 def _utc_now_iso() -> str:
-    """Timestamp in the same fixed-width UTC form the rest of the app uses."""
+    """Fixed-width UTC timestamp, the form the rest of the app uses."""
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
@@ -90,30 +88,25 @@ class DeviceToken:
     label: str
     sha256: str = field(repr=False)
     created_at: str
-    last_used_at: Optional[str] = None
-    expires_at: Optional[str] = None
+    last_used_at: str | None = None
+    expires_at: str | None = None
     revoked: bool = False
-    # Planner 6.9: where the server should post a native (UnifiedPush) alert
-    # for THIS device. Set only by the device itself, through its own token.
-    # It is a capability (anyone holding it can push to the phone), so it is
-    # stored here but never returned by to_public().
-    push_endpoint: Optional[str] = field(default=None, repr=False)
+    # Where the server posts a native (UnifiedPush) alert for THIS device, set
+    # only by the device through its own token. Anyone holding it can push to
+    # the phone, so it is stored here but never returned by to_public().
+    push_endpoint: str | None = field(default=None, repr=False)
 
-    def is_expired(self, now: Optional[str] = None) -> bool:
+    def is_expired(self, now: str | None = None) -> bool:
         """True if an expiry was set and it has passed."""
         if not self.expires_at:
             return False
         return (now or _utc_now_iso()) >= self.expires_at
 
-    def is_usable(self, now: Optional[str] = None) -> bool:
+    def is_usable(self, now: str | None = None) -> bool:
         return not self.revoked and not self.is_expired(now)
 
-    def to_public(self) -> Dict[str, Any]:
-        """The safe-to-return view: everything EXCEPT the hash.
-
-        The hash is withheld so a read-only view of the token list can never be
-        used to mount an offline guessing attack against the secrets.
-        """
+    def to_public(self) -> dict[str, Any]:
+        """The safe-to-return view: everything except the hash and push endpoint."""
         return {
             "id": self.id,
             "label": self.label,
@@ -125,7 +118,7 @@ class DeviceToken:
             "has_push_endpoint": bool(self.push_endpoint),
         }
 
-    def to_record(self) -> Dict[str, Any]:
+    def to_record(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "label": self.label,
@@ -138,11 +131,11 @@ class DeviceToken:
         }
 
     @staticmethod
-    def from_record(rec: Dict[str, Any]) -> Optional["DeviceToken"]:
+    def from_record(rec: dict[str, Any]) -> "DeviceToken" | None:
         """Parse one stored record, or None if it is malformed.
 
-        A single corrupt entry must not take down authentication for every other
-        device, so this returns None instead of raising and the caller skips it.
+        Returns None instead of raising so one corrupt entry cannot take down
+        authentication for every other device.
         """
         try:
             tid = str(rec["id"])
@@ -179,16 +172,13 @@ class StoreUnreadable(Exception):
     """
 
 
-def _read_all() -> List[DeviceToken]:
+def _read_all() -> list[DeviceToken]:
     """Load every readable token. Returns [] when the store is absent or broken.
 
-    Failing open to "no tokens" is the safe direction FOR VERIFICATION: it
-    denies token holders rather than admitting them, and Basic auth still
-    works. Individual corrupt records are skipped so that one bad entry cannot
-    lock out every other device.
-
-    Do NOT use this as the base of a read-modify-write: writing back what it
-    returns deletes whatever it skipped. Use _read_all_strict.
+    Falling back to "no tokens" denies token holders and Basic auth still
+    works. Corrupt records are skipped. Never use this as the base of a
+    read-modify-write (writing back deletes what it skipped); use
+    _read_all_strict.
     """
     try:
         return _load_store()[0]
@@ -196,39 +186,50 @@ def _read_all() -> List[DeviceToken]:
         return []
 
 
-def _load_store() -> "tuple[List[DeviceToken], int]":
+def _load_store() -> "tuple[list[DeviceToken], int]":
     """Load the store. Returns (tokens, number_of_unparseable_records).
 
     Raises StoreUnreadable when the FILE cannot be read or parsed at all. A
-    MISSING file is not an error: that is a first run, and [] is honest.
+    missing file is a first run, so [] is honest.
 
     The dropped-record count is returned rather than raised because the two
-    callers need opposite things from it:
-
-      * verification must still authenticate the records that ARE readable,
-        since one corrupt entry must not lock out every other device;
-      * anything that writes the store back must refuse, because writing what
-        it could parse would delete what it could not.
+    callers need opposite things from it: verification must still
+    authenticate the readable records, while anything that writes the store
+    back must refuse, or it would delete what it could not parse.
 
     Author: Bloodawn (KheivenD), 2026-07-19 (M3).
     """
+    global _parsed_cache
     p = token_path()
     try:
-        text = p.read_text(encoding="utf-8")
+        st = p.stat()
     except FileNotFoundError:
         return [], 0                    # first run: legitimately no tokens
-    except (OSError, UnicodeDecodeError) as exc:
+    except OSError as exc:
         raise StoreUnreadable(f"cannot read {p}: {exc}") from exc
-    try:
-        raw = json.loads(text)
-    except json.JSONDecodeError as exc:
-        raise StoreUnreadable(f"cannot parse {p}: {exc}") from exc
-    if not isinstance(raw, dict):
-        raise StoreUnreadable(f"{p} is not a JSON object")
+    key = (str(p), st.st_mtime_ns, st.st_size)
+    cached = _parsed_cache
+    if cached is not None and cached[0] == key:
+        records = cached[1]
+    else:
+        try:
+            text = p.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return [], 0
+        except (OSError, UnicodeDecodeError) as exc:
+            raise StoreUnreadable(f"cannot read {p}: {exc}") from exc
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise StoreUnreadable(f"cannot parse {p}: {exc}") from exc
+        if not isinstance(raw, dict):
+            raise StoreUnreadable(f"{p} is not a JSON object")
+        records = raw.get("tokens", []) or []
+        _parsed_cache = (key, records)
 
-    out: List[DeviceToken] = []
+    out: list[DeviceToken] = []
     dropped = 0
-    for rec in raw.get("tokens", []) or []:
+    for rec in records:
         parsed = DeviceToken.from_record(rec) if isinstance(rec, dict) else None
         if parsed is None:
             dropped += 1
@@ -237,15 +238,13 @@ def _load_store() -> "tuple[List[DeviceToken], int]":
     return out, dropped
 
 
-def _read_all_strict() -> List[DeviceToken]:
+def _read_all_strict() -> list[DeviceToken]:
     """Every token, or raise if rewriting the store would lose anything.
 
-    This is what read-modify-write callers must use. The lenient reader was
-    silently destructive for them: one transient read error (a sharing
-    violation from an antivirus scanner or a sync client is the everyday
-    version on Windows) turned into a write containing only the new token, and
-    every other paired device was unpaired with no error on the server or on
-    the devices. Reproduced in tests/test_device_tokens_durability.py.
+    Read-modify-write callers must use this. With the lenient reader, one
+    transient read error (an antivirus or sync-client sharing violation on
+    Windows) became a write holding only the new token and silently unpaired
+    every other device (tests/test_device_tokens_durability.py).
     """
     tokens, dropped = _load_store()
     if dropped:
@@ -255,8 +254,10 @@ def _read_all_strict() -> List[DeviceToken]:
     return tokens
 
 
-def _write_all(tokens: List[DeviceToken]) -> None:
+def _write_all(tokens: list[DeviceToken]) -> None:
     """Persist the token list atomically, owner-readable only where supported."""
+    global _parsed_cache
+    _parsed_cache = None
     p = token_path()
     payload = {
         "version": _SCHEMA_VERSION,
@@ -265,21 +266,21 @@ def _write_all(tokens: List[DeviceToken]) -> None:
     tmp = p.with_suffix(p.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     try:
-        # Best effort: no-op on Windows, meaningful on POSIX. The file holds
-        # only hashes, but there is no reason to leave it world-readable.
+        # No-op on Windows. The file holds only hashes, but there is no reason
+        # to leave it world-readable.
         os.chmod(tmp, 0o600)
     except OSError:  # pragma: no cover - platform dependent
         pass
     os.replace(tmp, p)
 
 
-def list_tokens() -> List[DeviceToken]:
+def list_tokens() -> list[DeviceToken]:
     """Every stored token, including revoked and expired ones."""
     with _LOCK:
         return _read_all()
 
 
-def mint_token(label: str, ttl_days: Optional[int] = None) -> tuple[str, DeviceToken]:
+def mint_token(label: str, ttl_days: int | None = None) -> tuple[str, DeviceToken]:
     """Create a token. Returns (secret, record).
 
     The secret is returned exactly once and never stored. Callers must show it
@@ -300,8 +301,7 @@ def mint_token(label: str, ttl_days: Optional[int] = None) -> tuple[str, DeviceT
         expires_at=expires,
     )
     with _LOCK:
-        # Strict: if the store cannot be read, appending to what we managed to
-        # read would delete every device we did not. Fail the mint instead.
+        # Strict: appending to a partial read would delete the other devices.
         tokens = _read_all_strict()
         tokens.append(rec)
         _write_all(tokens)
@@ -311,8 +311,8 @@ def mint_token(label: str, ttl_days: Optional[int] = None) -> tuple[str, DeviceT
 def revoke_token(token_id: str) -> bool:
     """Revoke by id. True if a live token was revoked, False if unknown.
 
-    Revocation is a tombstone rather than a delete, so the operator can still
-    see that a device existed and when it was last used.
+    Revocation is a tombstone, so the operator still sees the device and when
+    it was last used.
     """
     with _LOCK:
         tokens = _read_all_strict()   # read-modify-write; see mint_token
@@ -342,7 +342,7 @@ def revoke_all() -> int:
         return n
 
 
-def verify_token(presented: str, touch: bool = True) -> Optional[DeviceToken]:
+def verify_token(presented: str, touch: bool = True) -> DeviceToken | None:
     """Return the matching usable token, or None.
 
     Compares the SHA-256 of the presented value against every stored hash in
@@ -353,36 +353,36 @@ def verify_token(presented: str, touch: bool = True) -> Optional[DeviceToken]:
         return None
     presented_hash = token_hash(presented).encode("ascii")
     with _LOCK:
-        # An unreadable FILE denies: that is the correct direction for auth.
-        # Individual corrupt records do NOT deny, because one bad entry must
-        # not lock out every other device; they only suppress the touch below,
-        # since rewriting the store would delete them.
+        # An unreadable FILE denies. Corrupt records do not deny; they only
+        # suppress the touch below, since rewriting the store would delete them.
         try:
             tokens, dropped = _load_store()
         except StoreUnreadable:
             return None
-        found: Optional[DeviceToken] = None
+        found: DeviceToken | None = None
         for t in tokens:
             if hmac.compare_digest(presented_hash, t.sha256.encode("ascii")):
                 if t.is_usable() and found is None:
                     found = t
         if found is not None and touch and not dropped:
-            # Skipped when records were dropped: _write_all would persist only
-            # what parsed, silently deleting the rest. A missing last_used_at
-            # timestamp is a far smaller loss than a deleted device.
-            found.last_used_at = _utc_now_iso()
-            _write_all(tokens)
+            # Skipped when records were dropped: _write_all would delete them,
+            # a far bigger loss than a missing last_used_at. The stamp has
+            # one-second resolution and HLS authenticates every segment, so
+            # only write when it actually moves.
+            now = _utc_now_iso()
+            if found.last_used_at != now:
+                found.last_used_at = now
+                _write_all(tokens)
         return found
 
 
-def set_push_endpoint(token_id: str, endpoint: Optional[str]) -> bool:
+def set_push_endpoint(token_id: str, endpoint: str | None) -> bool:
     """Set (or clear, with None) the push endpoint of ONE usable token.
 
-    Planner 6.9. The caller passes the id of the token that authenticated the
-    request, never an id taken from the request itself, which is what keeps
-    one device from writing another device's endpoint. Validation of the URL
-    is the route's job. Returns False when the token is unknown or no longer
-    usable.
+    The caller passes the id of the token that authenticated the request,
+    never an id taken from the request body, so one device cannot write
+    another's endpoint. URL validation is the route's job. Returns False when
+    the token is unknown or no longer usable.
     """
     with _LOCK:
         tokens = _read_all_strict()   # read-modify-write; see mint_token
@@ -394,7 +394,7 @@ def set_push_endpoint(token_id: str, endpoint: Optional[str]) -> bool:
         return False
 
 
-def get_push_endpoint(token_id: str) -> Optional[str]:
+def get_push_endpoint(token_id: str) -> str | None:
     """The push endpoint of one usable token, or None."""
     for t in list_tokens():
         if t.id == token_id and t.is_usable():
@@ -402,11 +402,11 @@ def get_push_endpoint(token_id: str) -> Optional[str]:
     return None
 
 
-def push_targets() -> List[tuple]:
+def push_targets() -> list[tuple]:
     """(token_id, endpoint) for every usable token that registered one.
 
-    The input for the week 8 fan-out. Revoked and expired devices are never
-    included, even if a stale endpoint survived on disk.
+    Revoked and expired devices are never included, even if a stale endpoint
+    survived on disk.
     """
     return [(t.id, t.push_endpoint) for t in list_tokens()
             if t.is_usable() and t.push_endpoint]

@@ -34,9 +34,8 @@ def _is_empty_db_error(exc: Exception) -> bool:
 
     sqlite3.connect() creates an empty file for any path whose folder exists,
     so a metadata.db can exist before the pipeline has ever initialized it
-    (a fresh install whose output folder was made by Setup or a script). The
-    read-only stats routes used to answer that with a 500 "no such table:
-    segments"; it just means there is nothing recorded yet.
+    (a fresh install whose output folder was made by Setup or a script). That
+    means "nothing recorded yet", not a server error.
     Author: Bloodawn (KheivenD), 2026-09-24 (cleanup sweep).
     """
     return "no such table" in str(exc).lower()
@@ -68,7 +67,7 @@ def _rows_to_segment_list(rows, base_dir: Path | None = None) -> list:
             abs_path = base_dir / abs_path
         abs_path = abs_path.resolve()
         playable_url = None
-        if abs_path.exists() and abs_path.suffix.lower() in {".mp4", ".webm", ".mov", ".avi"}:
+        if abs_path.suffix.lower() in {".mp4", ".webm", ".mov", ".avi"} and abs_path.exists():
             playable_url = f"/api/media?path={quote(str(abs_path))}"
         segs.append({
             "id": r[0],

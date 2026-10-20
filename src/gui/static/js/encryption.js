@@ -75,9 +75,8 @@ async function doEncryptFile() {
       statusEl.style.color = 'var(--red)';
       return;
     }
-    // 2026-05-03: encrypt now COPIES to <src_dir>/Encrypted/<name>.enc
-    // and leaves the original mp4 untouched. Surface the new path so
-    // the user can see where it landed without digging through OneDrive.
+    // Encrypt writes a copy to <src_dir>/Encrypted/<name>.enc and leaves the
+    // original untouched; show where the copy landed.
     // Author: Bloodawn (KheivenD).
     statusEl.textContent = `Encrypted (${data.size_kb} KB) → ${(data.enc_path || '').split(/[\\/]/).pop()}`;
     statusEl.style.color = 'var(--green)';
@@ -170,6 +169,9 @@ function _showArchiveStatus(msg, isError) {
   document.getElementById('archive-result-count').textContent = '';
 }
 
+const _ARCHIVE_SCENE_TAGS = { highway:'HWY', intersection:'INT', parking:'PKG', street:'STR' };
+const _ARCHIVE_TOD_TAGS = { day:'DAY', night:'NGT', dusk_dawn:'DWN' };
+
 function _renderArchiveSegments(segments, showToast) {
   const status = document.getElementById('archive-status');
   const table  = document.getElementById('archive-results-table');
@@ -215,34 +217,20 @@ function _renderArchiveSegments(segments, showToast) {
       ? `<span class="color-dot" style="background:${dotHex};"></span>${escHtml(colorVal)}`
       : '<span style="color:var(--text-dim)"> - </span>';
 
-    // Scene
-    const sceneIcons = { highway:'HWY', intersection:'INT', parking:'PKG', street:'STR' };
-    const sceneIcon = sceneIcons[s.scene_type] || '';
+    const sceneIcon = _ARCHIVE_SCENE_TAGS[s.scene_type] || '';
     const sceneCell = s.scene_type && s.scene_type !== 'unknown'
       ? `${sceneIcon} ${escHtml(s.scene_type)}`
       : '<span style="color:var(--text-dim)"> - </span>';
 
-    // Time of day
-    const todIcons = { day:'DAY', night:'NGT', dusk_dawn:'DWN' };
     const todCell = s.time_of_day
-      ? `${todIcons[s.time_of_day] || ''} ${escHtml(s.time_of_day)}`
+      ? `${_ARCHIVE_TOD_TAGS[s.time_of_day] || ''} ${escHtml(s.time_of_day)}`
       : '<span style="color:var(--text-dim)"> - </span>';
 
     const sizeMb = (s.file_size_kb / 1024).toFixed(1);
 
-    // Friendly camera label (filename when camera_id is the legacy default)
-    const camDisplay = (!s.camera_id || s.camera_id === 'cam_00')
-      ? _segDisplayName(s)
-      : s.camera_id;
-
-    // Mode column - same derivation as the metrics table
+    const camDisplay = _segCamLabel(s);
     const mode = _segMode(s);
-    const modeColor = mode === ' - ' ? 'var(--text-dim)'
-      : mode.startsWith('Split') ? 'var(--purple)'
-      : mode === 'Mode 0' ? 'var(--text)'
-      : mode === 'Mode 1' ? 'var(--teal)'
-      : mode === 'Mode 2' ? 'var(--yellow)'
-      : 'var(--green)';
+    const modeColor = _segModeColor(mode);
 
     return `<tr class="seg-row" data-seg-idx="${idx}"
       onmouseenter="_onArchiveRowEnter(event, ${idx})"

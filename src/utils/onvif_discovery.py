@@ -30,9 +30,9 @@ Author: Bloodawn (KheivenD), 2026-06-03 (M-CAM TASK 1 - ONVIF discovery).
 from __future__ import annotations
 
 import socket
+import time
 import uuid
 from dataclasses import asdict, dataclass, field
-from typing import Dict, List, Optional, Tuple
 from urllib.parse import quote, urlsplit
 from xml.etree import ElementTree as ET
 
@@ -43,7 +43,7 @@ WSD_MCAST_PORT = 3702
 # Well-known RTSP path templates per brand, keyed by a substring that shows up
 # in the ONVIF "name"/"hardware" scope. Data-driven on purpose: adding a brand
 # is one line, no code branch. {chan}/{stream} are filled with sane defaults.
-VENDOR_RTSP_PATHS: Dict[str, List[str]] = {
+VENDOR_RTSP_PATHS: dict[str, list[str]] = {
     "reolink": ["/h264Preview_01_main", "/h264Preview_01_sub"],
     "amcrest": ["/cam/realmonitor?channel=1&subtype=0"],
     "dahua":   ["/cam/realmonitor?channel=1&subtype=0"],
@@ -55,7 +55,7 @@ VENDOR_RTSP_PATHS: Dict[str, List[str]] = {
     "wyze":    ["/live"],
 }
 # Tried when the brand is unknown - common ONVIF/RTSP defaults.
-GENERIC_RTSP_PATHS: List[str] = ["/stream1", "/onvif1", "/live", "/11", "/0"]
+GENERIC_RTSP_PATHS: list[str] = ["/stream1", "/onvif1", "/live", "/11", "/0"]
 
 DEFAULT_RTSP_PORT = 554
 
@@ -69,9 +69,9 @@ class OnvifDevice:
     hardware: str = ""                # from onvif://.../hardware/<...>
     location: str = ""                # from onvif://.../location/<...>
     endpoint: str = ""                # EndpointReference Address (stable id)
-    scopes: List[str] = field(default_factory=list)
+    scopes: list[str] = field(default_factory=list)
 
-    def vendor_key(self) -> Optional[str]:
+    def vendor_key(self) -> str | None:
         """Best-effort brand key for VENDOR_RTSP_PATHS, from name/hardware."""
         hay = f"{self.name} {self.hardware}".lower()
         for key in VENDOR_RTSP_PATHS:
@@ -88,12 +88,12 @@ def _local_tag(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
-def _findall_local(root: ET.Element, name: str) -> List[ET.Element]:
+def _findall_local(root: ET.Element, name: str) -> list[ET.Element]:
     """Find every descendant whose local (namespace-stripped) tag == name."""
     return [el for el in root.iter() if _local_tag(el.tag) == name]
 
 
-def _parse_scopes(scopes_text: str) -> Tuple[str, str, str, List[str]]:
+def _parse_scopes(scopes_text: str) -> tuple[str, str, str, list[str]]:
     """Pull name/hardware/location out of a space-separated ONVIF scopes string."""
     name = hardware = location = ""
     scopes = [s for s in scopes_text.split() if s]
@@ -111,7 +111,7 @@ def _parse_scopes(scopes_text: str) -> Tuple[str, str, str, List[str]]:
     return unq(name), unq(hardware), unq(location), scopes
 
 
-def parse_probe_matches(xml_data, source_ip: Optional[str] = None) -> List[OnvifDevice]:
+def parse_probe_matches(xml_data, source_ip: str | None = None) -> list[OnvifDevice]:
     """Parse a WS-Discovery ProbeMatch(es) SOAP body into OnvifDevice objects.
 
     Pure and network-free - this is the unit-tested core. Tolerates the
@@ -119,16 +119,13 @@ def parse_probe_matches(xml_data, source_ip: Optional[str] = None) -> List[Onvif
     local tag names. Returns [] on unparseable input.
     """
     if isinstance(xml_data, bytes):
-        try:
-            xml_data = xml_data.decode("utf-8", "replace")
-        except Exception:  # pragma: no cover - decode is very forgiving
-            return []
+        xml_data = xml_data.decode("utf-8", "replace")
     try:
         root = ET.fromstring(xml_data)
     except ET.ParseError:
         return []
 
-    devices: List[OnvifDevice] = []
+    devices: list[OnvifDevice] = []
     for match in _findall_local(root, "ProbeMatch"):
         xaddrs_els = _findall_local(match, "XAddrs")
         xaddrs_text = " ".join((el.text or "") for el in xaddrs_els).strip()
@@ -160,8 +157,8 @@ def build_rtsp_url(
     host: str,
     path: str = "/stream1",
     port: int = DEFAULT_RTSP_PORT,
-    username: Optional[str] = None,
-    password: Optional[str] = None,
+    username: str | None = None,
+    password: str | None = None,
 ) -> str:
     """Build an rtsp:// URL, URL-encoding any credentials.
 
@@ -184,10 +181,10 @@ def build_rtsp_url(
 
 def rtsp_url_candidates(
     device: OnvifDevice,
-    username: Optional[str] = None,
-    password: Optional[str] = None,
+    username: str | None = None,
+    password: str | None = None,
     port: int = DEFAULT_RTSP_PORT,
-) -> List[str]:
+) -> list[str]:
     """Candidate RTSP URLs for a device: brand-specific paths first, then generics.
 
     The exact path varies per model/firmware; we offer the known-good ones for
@@ -223,23 +220,30 @@ def _build_probe_message() -> bytes:
     ).encode("utf-8")
 
 
-def discover(timeout: float = 3.0) -> List[OnvifDevice]:
+def discover(timeout: float = 3.0) -> list[OnvifDevice]:
     """Probe the LAN for ONVIF cameras; return discovered devices (deduped).
 
     Never raises: a blocked multicast (Windows Firewall), no network, or no
     cameras all yield []. The caller then falls back to manual RTSP entry.
     Discovered XAddrs/scopes are safe to log; credentials are never involved
     here (auth happens later when building the stream URL).
+
+    ``timeout`` bounds the whole listen window. A socket timeout alone would
+    restart on every reply, so a busy network could keep this running.
     """
     sock = None
-    found: Dict[str, OnvifDevice] = {}
+    found: dict[str, OnvifDevice] = {}
+    deadline = time.monotonic() + timeout
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
-        sock.settimeout(timeout)
         sock.sendto(_build_probe_message(), (WSD_MCAST_ADDR, WSD_MCAST_PORT))
         while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            sock.settimeout(remaining)
             try:
                 data, addr = sock.recvfrom(65535)
             except socket.timeout:

@@ -57,7 +57,7 @@ from __future__ import annotations
 import logging
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import cv2
 import numpy as np
@@ -82,13 +82,13 @@ class VariantMetrics:
     label: str                              # "no_enhancement" | "full_frame_sr" | "roi_only_sr"
     avg_sharpness_roi:    float = 0.0
     avg_sharpness_full:   float = 0.0       # full-frame variant only; 0 for the others
-    avg_psnr_vs_baseline: Optional[float] = None
-    avg_ssim_vs_baseline: Optional[float] = None
-    avg_ocr_confidence:   Optional[float] = None
-    ocr_reads:            Optional[int] = None
-    sample_texts:         List[str] = field(default_factory=list)
+    avg_psnr_vs_baseline: float | None = None
+    avg_ssim_vs_baseline: float | None = None
+    avg_ocr_confidence:   float | None = None
+    ocr_reads:            int | None = None
+    sample_texts:         list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -98,15 +98,15 @@ class BenchmarkResult:
     video_path:        str
     frames_examined:   int
     frames_total:      int
-    roi_box:           Tuple[int, int, int, int]
+    roi_box:           tuple[int, int, int, int]
     sr_backend:        str
-    ocr_backend:       Optional[str]
-    variants:          Dict[str, VariantMetrics]
-    deltas:            Dict[str, Any]
+    ocr_backend:       str | None
+    variants:          dict[str, VariantMetrics]
+    deltas:            dict[str, Any]
     verdict:           str
-    warnings:          List[str] = field(default_factory=list)
+    warnings:          list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["variants"] = {k: v.to_dict() if isinstance(v, VariantMetrics) else v
                          for k, v in self.variants.items()}
@@ -137,7 +137,7 @@ def measure_sharpness(image: np.ndarray) -> float:
     return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
 
-def measure_psnr(reference: np.ndarray, candidate: np.ndarray) -> Optional[float]:
+def measure_psnr(reference: np.ndarray, candidate: np.ndarray) -> float | None:
     """Peak-signal-to-noise ratio in dB. None when shapes don't match."""
     if reference is None or candidate is None:
         return None
@@ -150,7 +150,7 @@ def measure_psnr(reference: np.ndarray, candidate: np.ndarray) -> Optional[float
     return float(20.0 * np.log10(255.0 / np.sqrt(mse)))
 
 
-def measure_ssim(reference: np.ndarray, candidate: np.ndarray) -> Optional[float]:
+def measure_ssim(reference: np.ndarray, candidate: np.ndarray) -> float | None:
     """SSIM via skimage; None when shapes don't match or skimage missing."""
     if reference is None or candidate is None or reference.shape != candidate.shape:
         return None
@@ -181,7 +181,7 @@ def measure_ssim(reference: np.ndarray, candidate: np.ndarray) -> Optional[float
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _safe_crop(frame: np.ndarray, bbox: Tuple[int, int, int, int]) -> np.ndarray:
+def _safe_crop(frame: np.ndarray, bbox: tuple[int, int, int, int]) -> np.ndarray:
     """Clamp the bbox to the frame and return the cropped region (BGR)."""
     h, w = frame.shape[:2]
     x, y, bw, bh = bbox
@@ -199,28 +199,43 @@ def _bicubic_upscale(image: np.ndarray, scale: int) -> np.ndarray:
     return cv2.resize(image, (w * scale, h * scale), interpolation=cv2.INTER_CUBIC)
 
 
-def _full_frame_sr_then_crop(
-    frame: np.ndarray, bbox: Tuple[int, int, int, int], enhancer, scale: int
-) -> np.ndarray:
-    """Upscale the entire frame with SR, then crop the (scaled) ROI."""
+def _try_full_frame_sr(frame: np.ndarray, enhancer, scale: int) -> np.ndarray | None:
+    """SR-upscale the whole frame, or None when there is no enhancer or it fails."""
     if enhancer is None:
-        return _bicubic_upscale(_safe_crop(frame, bbox), scale)
+        return None
     try:
-        upscaled = enhancer.upscale_frame(frame, scale=scale)
-    except Exception as exc:  # noqa: BLE001
+        return enhancer.upscale_frame(frame, scale=scale)
+    except Exception as exc:  # noqa: BLE001 - any SR backend failure degrades to bicubic
         log.debug("Full-frame SR failed (%s); falling back to bicubic.", exc)
-        return _bicubic_upscale(_safe_crop(frame, bbox), scale)
+        return None
+
+
+def _crop_scaled_roi(
+    upscaled: np.ndarray, bbox: tuple[int, int, int, int], scale: int
+) -> np.ndarray | None:
+    """The ROI cut out of an already-upscaled frame, or None if it falls outside."""
     x, y, bw, bh = bbox
     sx, sy, sw, sh = x * scale, y * scale, bw * scale, bh * scale
     h, w = upscaled.shape[:2]
     sx2, sy2 = min(w, sx + sw), min(h, sy + sh)
     if sx2 <= sx or sy2 <= sy:
-        return _bicubic_upscale(_safe_crop(frame, bbox), scale)
+        return None
     return upscaled[sy:sy2, sx:sx2]
 
 
+def _full_frame_sr_then_crop(
+    frame: np.ndarray, bbox: tuple[int, int, int, int], enhancer, scale: int
+) -> np.ndarray:
+    """Upscale the entire frame with SR, then crop the (scaled) ROI."""
+    upscaled = _try_full_frame_sr(frame, enhancer, scale)
+    roi = _crop_scaled_roi(upscaled, bbox, scale) if upscaled is not None else None
+    if roi is None:
+        return _bicubic_upscale(_safe_crop(frame, bbox), scale)
+    return roi
+
+
 def _roi_only_sr(
-    frame: np.ndarray, bbox: Tuple[int, int, int, int], enhancer, scale: int
+    frame: np.ndarray, bbox: tuple[int, int, int, int], enhancer, scale: int
 ) -> np.ndarray:
     """Crop the ROI from the original frame, then upscale just that crop."""
     crop = _safe_crop(frame, bbox)
@@ -238,7 +253,7 @@ def _roi_only_sr(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _safe_ocr(ocr, image: np.ndarray) -> Tuple[Optional[float], Optional[str]]:
+def _safe_ocr(ocr, image: np.ndarray) -> tuple[float | None, str | None]:
     """Run the OCR backend; return (best_confidence, best_text) or (None, None)."""
     if ocr is None or not getattr(ocr, "available", False):
         return None, None
@@ -248,13 +263,11 @@ def _safe_ocr(ocr, image: np.ndarray) -> Tuple[Optional[float], Optional[str]]:
         return None, None
     if not reads:
         return None, None
-    # Pick the strongest read by confidence
-    reads_sorted = sorted(reads, key=lambda r: r[1], reverse=True)
-    text, conf, _bbox = reads_sorted[0]
+    text, conf, _bbox = max(reads, key=lambda r: r[1])
     return float(conf), str(text)
 
 
-def _verdict(deltas: Dict[str, Any]) -> str:
+def _verdict(deltas: dict[str, Any]) -> str:
     """Plain-English summary the GUI can show."""
     full_gain = deltas.get("roi_sharpness_gain_full_sr_pct") or 0.0
     roi_gain  = deltas.get("roi_sharpness_gain_roi_sr_pct") or 0.0
@@ -278,14 +291,14 @@ def _verdict(deltas: Dict[str, Any]) -> str:
 
 def benchmark_enhancement(
     video_path,
-    roi_box: Tuple[int, int, int, int],
-    enhancer: Optional[Any] = None,
+    roi_box: tuple[int, int, int, int],
+    enhancer: Any | None = None,
     sample_every_n_frames: int = 5,
     max_frames: int = 20,
     sr_scale: int = 4,
     run_ocr: bool = False,
     ocr_backend: str = "auto",
-    device: Optional[str] = None,
+    device: str | None = None,
 ) -> BenchmarkResult:
     """Compare three SR strategies on a saved segment for a given ROI.
 
@@ -303,7 +316,7 @@ def benchmark_enhancement(
         run_ocr:               When True and an OCR backend is installed,
                                also report per-variant OCR confidence.
         ocr_backend:           Forwarded to the plate reader's OCR
-                               selection: "auto" | "paddleocr" | "easyocr".
+                               selection (see plate_reader._select_backend).
         device:                Forwarded to a freshly-constructed Enhancer.
 
     Returns:
@@ -313,7 +326,7 @@ def benchmark_enhancement(
     Author: Bloodawn (KheivenD)
     """
     path = Path(video_path)
-    warnings: List[str] = []
+    warnings: list[str] = []
 
     if not path.exists():
         return BenchmarkResult(
@@ -333,7 +346,6 @@ def benchmark_enhancement(
         )
     frames_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
 
-    # Lazily construct the Enhancer the first time we need it.
     if enhancer is None:
         try:
             try:
@@ -347,9 +359,8 @@ def benchmark_enhancement(
 
     sr_backend = getattr(enhancer, "backend", "bicubic") if enhancer is not None else "bicubic"
 
-    # Lazily construct the OCR backend if requested.
     ocr = None
-    ocr_backend_name: Optional[str] = None
+    ocr_backend_name: str | None = None
     if run_ocr:
         try:
             try:
@@ -368,7 +379,6 @@ def benchmark_enhancement(
             warnings.append(f"OCR setup failed: {exc}")
             ocr = None
 
-    # Per-variant accumulators
     variants = {
         "no_enhancement": VariantMetrics(label="no_enhancement"),
         "full_frame_sr":  VariantMetrics(label="full_frame_sr"),
@@ -385,44 +395,44 @@ def benchmark_enhancement(
     cap_max = max(1, int(max_frames))
 
     while examined < cap_max:
+        if frame_idx % stride != 0:
+            # grab() skips a frame without decoding it into a BGR array.
+            if not cap.grab():
+                break
+            frame_idx += 1
+            continue
         ok, frame = cap.read()
         if not ok or frame is None:
             break
-        if frame_idx % stride != 0:
-            frame_idx += 1
-            continue
 
-        # Build the three variants for this frame.
+        # Build the three variants for this frame. Full-frame SR is by far
+        # the most expensive step, so it runs once and feeds both the cropped
+        # variant and the whole-frame sharpness figure.
         baseline_roi = _bicubic_upscale(_safe_crop(frame, roi_box), sr_scale)
-        full_sr_roi  = _full_frame_sr_then_crop(frame, roi_box, enhancer, sr_scale)
-        roi_sr_roi   = _roi_only_sr(frame, roi_box, enhancer, sr_scale)
+        full_up = _try_full_frame_sr(frame, enhancer, sr_scale)
+        full_sr_roi = _crop_scaled_roi(full_up, roi_box, sr_scale) if full_up is not None else None
+        if full_sr_roi is None:
+            full_sr_roi = baseline_roi
+        roi_sr_roi = _roi_only_sr(frame, roi_box, enhancer, sr_scale)
 
-        # Sharpness inside the ROI for all three variants.
         sums["no_enhancement"]["sharp_roi"] += measure_sharpness(baseline_roi)
         sums["full_frame_sr"]["sharp_roi"]  += measure_sharpness(full_sr_roi)
         sums["roi_only_sr"]["sharp_roi"]    += measure_sharpness(roi_sr_roi)
+        if full_up is not None:
+            sums["full_frame_sr"]["sharp_full"] += measure_sharpness(full_up)
 
-        # Full-frame sharpness only meaningful for the full_frame_sr variant
-        # (compared with the un-upscaled frame for context). We measure the
-        # full upscaled frame's sharpness once.
-        if enhancer is not None:
-            try:
-                full_up = enhancer.upscale_frame(frame, scale=sr_scale)
-                sums["full_frame_sr"]["sharp_full"] += measure_sharpness(full_up)
-            except Exception:  # noqa: BLE001
-                pass
-
-        # PSNR / SSIM of SR variants vs the bicubic baseline. Same shape
-        # because we're comparing inside the same ROI box at the same
-        # scaled size.
+        # PSNR / SSIM of the SR variants against the bicubic baseline; all
+        # three are the same ROI at the same scaled size.
         for key, candidate in (("full_frame_sr", full_sr_roi),
                                ("roi_only_sr", roi_sr_roi)):
             psnr = measure_psnr(baseline_roi, candidate)
             ssim = measure_ssim(baseline_roi, candidate)
             if psnr is not None:
-                sums[key]["psnr"] += psnr; sums[key]["psnr_n"] += 1
+                sums[key]["psnr"] += psnr
+                sums[key]["psnr_n"] += 1
             if ssim is not None:
-                sums[key]["ssim"] += ssim; sums[key]["ssim_n"] += 1
+                sums[key]["ssim"] += ssim
+                sums[key]["ssim_n"] += 1
 
         # Optional OCR pass on each variant.
         if ocr is not None:
@@ -441,7 +451,6 @@ def benchmark_enhancement(
 
     cap.release()
 
-    # Average + populate VariantMetrics
     for key, v in variants.items():
         if examined > 0:
             v.avg_sharpness_roi = round(sums[key]["sharp_roi"] / examined, 2)
@@ -457,7 +466,7 @@ def benchmark_enhancement(
 
     # Deltas - the actually-actionable numbers.
     base = variants["no_enhancement"].avg_sharpness_roi or 1e-6
-    deltas: Dict[str, Any] = {
+    deltas: dict[str, Any] = {
         "roi_sharpness_gain_full_sr_pct": round(
             100.0 * (variants["full_frame_sr"].avg_sharpness_roi - base) / base, 1),
         "roi_sharpness_gain_roi_sr_pct": round(

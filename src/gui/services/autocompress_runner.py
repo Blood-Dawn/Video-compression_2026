@@ -39,7 +39,6 @@ import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import List, Optional
 
 try:
     from gui.logging_setup import log
@@ -73,8 +72,8 @@ _WARMUP_FRAMES = 0
 _RECENT_CAP = 25
 
 # ── Rebindable handles (mirror pipeline_runner) ───────────────────────────────
-_ac_thread: Optional[threading.Thread] = None
-_ac_stop: Optional[threading.Event] = None
+_ac_thread: threading.Thread | None = None
+_ac_stop: threading.Event | None = None
 
 # Monotonic pass id: the newest scan_once pass owns the shared batch-progress
 # fields in _ac_status (guarded by _ac_lock).
@@ -106,10 +105,14 @@ _ac_status = {
 
 # ── small helpers ─────────────────────────────────────────────────────────────
 
-def _is_within(child: Path, parent: Path) -> bool:
-    """True if ``child`` is the same as or nested under ``parent`` (resolved)."""
+def _is_within(child: Path, parent: Path, parent_resolved: bool = False) -> bool:
+    """True if ``child`` is the same as or nested under ``parent`` (resolved).
+
+    Pass ``parent_resolved=True`` when ``parent`` is already resolved, which
+    saves one filesystem round trip per call in a scan loop.
+    """
     try:
-        child.resolve().relative_to(parent.resolve())
+        child.resolve().relative_to(parent if parent_resolved else parent.resolve())
         return True
     except (ValueError, OSError):
         return False
@@ -137,6 +140,17 @@ def _verify_output(path: Path) -> bool:
         return False
 
 
+def _camera_outputs(comp_dir: Path, camera_id: str) -> set:
+    """Resolved files in ``comp_dir`` whose name starts with ``camera_id``.
+
+    Globbing on the prefix keeps the before/after snapshot proportional to this
+    camera's outputs instead of the whole (unbounded, 24/7) compressed folder.
+    camera_id comes from watchfolder._build_camera_id, which strips everything
+    but [A-Za-z0-9_-], so it carries no glob metacharacters.
+    """
+    return {p.resolve() for p in comp_dir.glob(f"{camera_id}*") if p.is_file()}
+
+
 def _record_recent(entry: dict) -> None:
     with _ac_lock:
         _ac_status["recent"].insert(0, entry)
@@ -144,7 +158,7 @@ def _record_recent(entry: dict) -> None:
         _ac_status["compressed_total"] += 1
 
 
-def _encode_kwargs_for(video_path: Path, mode: str, preset: Optional[str]) -> dict:
+def _encode_kwargs_for(video_path: Path, mode: str, preset: str | None) -> dict:
     """Resolve the run_pipeline encode kwargs for one file.
 
     An explicit preset wins (resolved via the watch-folder helper, which returns
@@ -164,12 +178,12 @@ def _process_one(
     src: Path,
     output_dir: str,
     mode: str,
-    preset: Optional[str],
+    preset: str | None,
     delete_original: bool,
     watch_root: Path,
-    stop_event: Optional[threading.Event] = None,
-    errors: Optional[List[str]] = None,
-) -> Optional[dict]:
+    stop_event: threading.Event | None = None,
+    errors: list[str] | None = None,
+) -> dict | None:
     """Compress one already-stable source file. Returns the recorded entry or None.
 
     Skips (returns None) if the file is already compressed or is itself a
@@ -197,7 +211,7 @@ def _process_one(
         src_bytes = 0
 
     # Snapshot the output folder so we can identify exactly what this run wrote.
-    before = {p.resolve() for p in comp_dir.glob("*") if p.is_file()}
+    before = _camera_outputs(comp_dir, camera_id)
 
     wf._mark_processing(src)
     try:
@@ -236,12 +250,12 @@ def _process_one(
     # whose name carries THIS source's camera_id, so a concurrent/leftover file
     # in compressed/ can never be mis-attributed as this source's output (and
     # then gate its deletion).
-    after = {p.resolve() for p in comp_dir.glob("*") if p.is_file()}
+    # The glob is case-insensitive on Windows, so startswith stays the real test.
+    after = _camera_outputs(comp_dir, camera_id)
     new_files = [
         p for p in (after - before)
         if p.suffix.lower() in wf.SUPPORTED_EXTENSIONS and p.name.startswith(camera_id)
     ]
-    new_files.sort(key=lambda p: p.stat().st_mtime if p.exists() else 0, reverse=True)
 
     # This file has now been attempted; mark it ingested so it is not retried in
     # a loop regardless of whether it produced output (e.g. an ROI mode on a
@@ -253,7 +267,7 @@ def _process_one(
         log.info("Auto-compress produced no output for %s (nothing to compress).", src.name)
         return None
 
-    output = new_files[0]
+    output = max(new_files, key=lambda p: p.stat().st_mtime if p.exists() else 0)
     if not _verify_output(output):
         log.warning("Auto-compress output failed verification: %s", output.name)
         with _ac_lock:
@@ -328,13 +342,13 @@ def scan_once(
     folder: str,
     output_dir: str,
     mode: str = DEFAULT_MODE,
-    preset: Optional[str] = None,
-    profile: Optional[str] = None,
+    preset: str | None = None,
+    profile: str | None = None,
     delete_original: bool = False,
-    settle_seconds: Optional[float] = None,
-    stable_checks: Optional[int] = None,
-    stop_event: Optional[threading.Event] = None,
-) -> List[dict]:
+    settle_seconds: float | None = None,
+    stable_checks: int | None = None,
+    stop_event: threading.Event | None = None,
+) -> list[dict]:
     """Scan ``folder`` once and compress every new, stable, uncompressed clip.
 
     Returns the list of entries compressed in this pass. Reuses the watch-folder
@@ -353,6 +367,7 @@ def scan_once(
         stable_checks = prof.stable_checks if prof else 2
 
     comp_dir = cidx.compressed_subdir(output_dir)
+    comp_resolved = comp_dir.resolve()
     walker = watch_root.rglob("*") if recursive else watch_root.iterdir()
     candidates = []
     for f in walker:
@@ -363,7 +378,7 @@ def scan_once(
             continue
         if wf._already_ingested(f):
             continue
-        if _is_within(f, comp_dir) or cidx.classify(f) == "compressed":
+        if _is_within(f, comp_resolved, parent_resolved=True) or cidx.classify(f) == "compressed":
             continue
         if cidx.is_compressed(f):
             continue
@@ -392,8 +407,8 @@ def scan_once(
     pass_started = time.time()
     attempted = 0
     batch_done = 0
-    errors: List[str] = []
-    done: List[dict] = []
+    errors: list[str] = []
+    done: list[dict] = []
     try:
         for f in candidates:
             if stop_event is not None and stop_event.is_set():

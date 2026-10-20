@@ -19,12 +19,12 @@ Usage:
 """
 
 import argparse
+import json
 import logging
-from collections import deque
-from concurrent.futures import ThreadPoolExecutor, Future
-from typing import Optional
 import re
 import sys
+from collections import Counter, deque
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 
 import cv2
@@ -34,15 +34,13 @@ import numpy as np
 # directly (python src/pipeline/pipeline.py) or imported from the project root.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from utils.db import initialize_database                                    # fix: was 'from src.utils.db'
-from utils.frame_source import FrameSource                                  # fix: use FrameSource instead of raw VideoCapture
-from utils.metrics import compute_sharpness, estimate_perceptual_resolution
+from utils.db import initialize_database
+from utils.frame_source import FrameSource
 from background_subtraction.background_subtraction import BackgroundSubtractor
-from compression.roi_encoder import ROIEncoder
+from compression.roi_encoder import ROIEncoder, _MODE_LABELS
 from enhancement.enhancer import Enhancer
 from demo.demo_metadata import DemoMetadataWriter
 from pipeline.modes import get_mode_decision, validate_mode
-from compression.roi_encoder import _MODE_LABELS
 from detection.object_filter import (
     ObjectFilter,
     detect_dominant_color,
@@ -52,44 +50,12 @@ from detection.object_filter import (
 )
 from config import default_codec_for_mode
 
-import json as _json
+# Centroids that moved farther than this between frames are treated as a
+# different blob, not motion.
+_MAX_CENTROID_JUMP_PX = 80
 
 
-def _time_of_day(hour: int) -> str:
-    """Map UTC hour to a time-of-day label.
-
-    Kept for callers/tests that want a pure wall-clock mapping, but the
-    pipeline itself no longer uses this to tag segments - see
-    _time_of_day_from_brightness() below. Using processing wall-clock time
-    as a stand-in for what's actually on screen was the bug: a bright
-    daytime clip dropped in and compressed at 2am local time got tagged
-    "night" regardless of its content, and this misfired identically for
-    every video, not just short/handheld ones.
-    """
-    if 5 <= hour < 8 or 18 <= hour < 21:
-        return "dusk_dawn"
-    if 8 <= hour < 18:
-        return "day"
-    return "night"
-
-
-def _time_of_day_from_brightness(samples: list) -> str:
-    """Classify time-of-day from the segment's OWN footage, not the clock.
-
-    ``samples`` is the list of per-frame mean pixel brightness values (0-255
-    scale, averaged across B/G/R) collected while the segment was open (see
-    the per-frame accumulation loop in run_pipeline()). Thresholds were
-    picked from typical outdoor daylight (bright, >=110), dusk/dawn/indoor
-    or overcast light (mid-range, 40-109), and true low-light/night footage
-    (<40) - the same three labels the old wall-clock heuristic produced, but
-    now driven by what the camera actually saw.
-
-    Returns "unknown" if no frames were sampled (e.g. a zero-length or
-    entirely-skipped segment), which is preferable to guessing.
-    """
-    if not samples:
-        return "unknown"
-    avg = sum(samples) / len(samples)
+def _time_of_day_from_mean(avg: float) -> str:
     if avg >= 110:
         return "day"
     if avg >= 40:
@@ -97,24 +63,58 @@ def _time_of_day_from_brightness(samples: list) -> str:
     return "night"
 
 
+def _time_of_day_from_brightness(samples: list) -> str:
+    """Classify time of day from the segment's own footage, not the clock.
+
+    ``samples`` are per-frame mean brightness values (0-255, averaged over
+    B/G/R). Thresholds: outdoor daylight >= 110, dusk, dawn, indoor or
+    overcast light 40-109, low light or night < 40. The wall clock cannot be
+    used because a daytime clip compressed at 2am would be tagged "night".
+
+    Returns "unknown" when no frames were sampled rather than guessing.
+    """
+    if not samples:
+        return "unknown"
+    return _time_of_day_from_mean(sum(samples) / len(samples))
+
+
+def _mean_brightness(frame: np.ndarray) -> float:
+    """Mean of every pixel value in the frame, same as float(frame.mean())."""
+    # cv2.mean is about 4x faster than ndarray.mean on a full frame. Every
+    # channel has the same pixel count, so the mean of the channel means is
+    # the mean of the whole array.
+    channels = frame.shape[2] if frame.ndim == 3 else 1
+    return sum(cv2.mean(frame)[:channels]) / channels
+
+
+def _match_motion_vectors(curr: list, prev: list) -> list:
+    """Greedy nearest-centroid match of this frame's centroids to the last frame's.
+
+    Returns one (dx, dy) per current centroid whose nearest previous centroid
+    is closer than _MAX_CENTROID_JUMP_PX.
+    """
+    max_d2 = _MAX_CENTROID_JUMP_PX ** 2
+    vecs = []
+    for cx, cy in curr:
+        best_dx, best_dy, best_d2 = 0, 0, float("inf")
+        for px, py in prev:
+            d2 = (cx - px) ** 2 + (cy - py) ** 2
+            if d2 < best_d2:
+                best_d2, best_dx, best_dy = d2, cx - px, cy - py
+        if best_d2 < max_d2:
+            vecs.append((best_dx, best_dy))
+    return vecs
+
+
 def _compensate_camera_motion(frame_vecs: list) -> list:
-    """Subtract a single frame's own median displacement from its object
-    motion vectors before they join the segment-wide list used for scene
-    classification.
+    """Subtract this frame's median (dx, dy) from each object motion vector.
 
-    Why: if the camera pans or shakes (handheld/phone footage), every
-    detected object appears to move together in the pan direction. Fed
-    straight into detect_scene_type()'s direction-diversity heuristic, that
-    shared motion reads as "multiple independent things moving in different
-    directions" and can misclassify a plain handheld pan as an
-    "intersection", even with zero real cross-traffic. Subtracting this
-    frame's median (dx, dy) leaves only how each object moved *relative to
-    the others* - near zero for objects moving together with the camera,
-    non-zero for one that's genuinely moving independently of it.
-
-    With fewer than 2 vectors there's nothing to compare against each other,
-    so they're passed through unchanged (a lone object's motion has no
-    "relative to others" to measure).
+    When a handheld camera pans, every object appears to move together, and
+    detect_scene_type()'s direction-diversity heuristic would read that as
+    independent traffic (an "intersection"). After subtracting the median,
+    objects moving with the camera sit near zero and only motion relative to
+    the others remains. With fewer than 2 vectors there is nothing to compare,
+    so they pass through unchanged.
     """
     if len(frame_vecs) < 2:
         return list(frame_vecs)
@@ -123,34 +123,25 @@ def _compensate_camera_motion(frame_vecs: list) -> list:
     return [(dx - med_dx, dy - med_dy) for dx, dy in frame_vecs]
 
 
-def _compute_segment_sharpness(
-    frames: list,
-    regions_per_frame: list,
-) -> tuple:
-    """
-    Compute average Laplacian sharpness across all detected target ROI crops.
+def _enhance_rois(frame, regions, enhancer):
+    for r in regions:
+        frame = enhancer.upscale_roi(frame, (r.x, r.y, r.w, r.h))
+    return frame
 
-    Only samples frames where at least one detection exists, and only samples
-    the ROI crops themselves (not the full frame) so background blur doesn't
-    dilute the score.
 
-    Returns:
-        (avg_sharpness, sharpness_label). Both are None if no targets detected.
-    """
-    scores = []
-    for frame, regions in zip(frames, regions_per_frame):
-        for r in regions:
-            x, y, w, h = r.x, r.y, r.w, r.h
-            fh, fw = frame.shape[:2]
-            x1 = max(0, x); y1 = max(0, y)
-            x2 = min(fw, x + w); y2 = min(fh, y + h)
-            if x2 > x1 and y2 > y1:
-                crop = frame[y1:y2, x1:x2]
-                scores.append(compute_sharpness(crop))
-    if not scores:
-        return None, None
-    avg = sum(scores) / len(scores)
-    return round(avg, 1), estimate_perceptual_resolution(avg)
+def _source_bitrate_kbps(input_source, total_frames: int, fps: float) -> int:
+    """Average bitrate of a source file in kbps, or 0 when it cannot be measured."""
+    try:
+        path = Path(str(input_source))
+        if not (path.is_file() and total_frames > 0 and fps > 0):
+            return 0
+        size = path.stat().st_size
+    except (OSError, ValueError):
+        return 0
+    duration_s = total_frames / fps
+    if duration_s <= 0 or size <= 0:
+        return 0
+    return int(size * 8 / 1000 / duration_s)
 
 
 def _stop_requested(stop_event) -> bool:
@@ -193,8 +184,8 @@ def run_pipeline(
     demo: bool = False,
     enhance_model: str = "bicubic",
     encrypt: bool = False,
-    encrypt_password: Optional[str] = None,
-    encrypt_key_file: Optional[str] = None,
+    encrypt_password: str | None = None,
+    encrypt_key_file: str | None = None,
     mode2_clean_seconds: float = 1.0,
     mode2_background_lag_seconds: float = 1.5,
     enhance_every_n: int = 5,
@@ -204,15 +195,15 @@ def run_pipeline(
     object_filter: bool = False,
     filter_confidence: float = 0.30,
     stop_event=None,
-    codec: Optional[str] = None,
+    codec: str | None = None,
     crf: int = None,
-    background_crf: Optional[int] = None,
+    background_crf: int | None = None,
     verbose: bool = False,
     max_bitrate_kbps: int = 0,
     denoise: str = "",
     roi_qp: bool = False,
     gop_seconds: int = 20,
-    target_vmaf: Optional[float] = None,
+    target_vmaf: float | None = None,
     use_pose_classification: bool = False,
     pose_confidence: float = 0.25,
 ):
@@ -235,9 +226,8 @@ def run_pipeline(
     for encoding. Encoding only begins after warmup is complete.
 
     INTERMEDIATE FORMAT:
-    Frames are buffered in memory as a list of numpy arrays and piped directly to
-    FFmpeg via stdin. This avoids the lossy XVID intermediate AVI that was used
-    previously, which degraded quality before the final encode step.
+    Frames are piped to FFmpeg via stdin as they are read. There is no lossy
+    intermediate file and no in-memory segment buffer.
 
     MODES:
     mode0 (default): All post-warmup frames are buffered and encoded. Baseline
@@ -315,18 +305,14 @@ def run_pipeline(
     fps = src.fps
     frame_w = src.width
     frame_h = src.height
-    # Total source frames if known (files report it; live streams are 0). Used
-    # for the percent-done progress logging (FIX 7).
+    # 0 for live streams. Used for percent-done logging and the bitrate cap.
     total_frames = int(getattr(src, "total_frames", 0) or 0)
     frames_per_segment = max(1, int(fps * segment_seconds))
     mode2_clean_frames = max(1, int(round(fps * mode2_clean_seconds)))
     mode2_background_lag_frames = max(0, int(round(fps * mode2_background_lag_seconds)))
     mode2_post_warmup_guard_frames = max(1, int(round(fps * 1.0)))
 
-    # Single consistent database path: output_dir/metadata.db.
-    # Previously pipeline.py called initialize_database() with no args, which
-    # defaulted to "metadata.db" in the cwd (a different file than the encoder's
-    # "outputs/metadata.db". Now both use the same explicit path.
+    # The encoder writes to the same file, so segments and metadata share one DB.
     db_path = str(Path(output_dir) / "metadata.db")
 
     log.info(f"Source: {input_source} | {frame_w}x{frame_h} @ {fps:.1f}fps")
@@ -461,32 +447,15 @@ def run_pipeline(
     # background compression. Author: Bloodawn (KheivenD), 2026-06-03.
     _bg_crf = int(background_crf) if background_crf is not None else 40
 
-    # Auto safety cap (2026-09 bug report, paired with the same failure mode
-    # in the mobile app): CRF-based encoding adapts to content, but on hard
-    # or noisy footage - or with mode2/mode3's ultrafast preset, which trades
-    # compression efficiency for encode speed - it can still land above what
-    # the source itself already used, especially once a mode ends up keeping
-    # most or all frames (e.g. a scene where background subtraction rarely
-    # reports "idle"). The result is a "compressed" file bigger than the
-    # original, defeating the entire point. When the caller hasn't set an
-    # explicit --max-bitrate-kbps, cap the encode at the source FILE's own
-    # average bitrate so it can shrink or match the source but never exceed
-    # it. Skipped for: mode0 (the one mode whose surveillance preset,
-    # Archive, is explicitly "quality matters more than size" - capping it
-    # would silently defeat that choice), a live source (camera index /
-    # rtsp:// has no file to measure), and whenever the caller already gave
-    # an explicit cap (their number wins, even if it's above source rate).
+    # Auto safety cap: on hard or noisy footage, or with the ultrafast preset
+    # of modes 2 and 3, CRF encoding can land above the source's own bitrate
+    # and produce a "compressed" file bigger than the original. Without an
+    # explicit --max-bitrate-kbps, cap at the source file's average bitrate.
+    # Skipped for mode0 (its Archive preset is "quality over size"), for live
+    # sources (no file to measure), and when the caller gave a cap (theirs
+    # wins, even above the source rate).
     if not max_bitrate_kbps and mode != "mode0":
-        _auto_cap_kbps = 0
-        try:
-            _src_path = Path(str(input_source))
-            if _src_path.is_file() and total_frames > 0 and fps > 0:
-                _src_duration_s = total_frames / fps
-                _src_bytes = _src_path.stat().st_size
-                if _src_duration_s > 0 and _src_bytes > 0:
-                    _auto_cap_kbps = int(_src_bytes * 8 / 1000 / _src_duration_s)
-        except (OSError, ValueError):
-            _auto_cap_kbps = 0
+        _auto_cap_kbps = _source_bitrate_kbps(input_source, total_frames, fps)
         if _auto_cap_kbps > 0:
             log.info(
                 "No max-bitrate-kbps given: capping at the source file's own "
@@ -522,7 +491,7 @@ def run_pipeline(
              getattr(encoder, "roi_qp", False), mode)
     initialize_database(db_path)
 
-    obj_filter: Optional[ObjectFilter] = None
+    obj_filter: ObjectFilter | None = None
     if object_filter:
         obj_filter = ObjectFilter(
             confidence=filter_confidence, device="auto",
@@ -540,9 +509,9 @@ def run_pipeline(
                 "running in pass-through mode (all boxes kept)."
             )
 
-    enhancer: Optional[Enhancer] = None
-    _enhance_executor: Optional[ThreadPoolExecutor] = None
-    _enhance_future: Optional[Future] = None
+    enhancer: Enhancer | None = None
+    _enhance_executor: ThreadPoolExecutor | None = None
+    _enhance_future: Future | None = None
     _enhance_frame_counter = 0          # counts post-warmup frames for N-frame sampling
     _last_enhanced_frame = None         # cached result from the last enhancement pass
     if enhance or upscale_output:
@@ -590,16 +559,15 @@ def run_pipeline(
             _kmode = "key file" if encrypt_key_file else "password"
             log.info("Encryption enabled (AES-256-GCM, %s mode).", _kmode)
 
-    demo_writer: Optional[DemoMetadataWriter] = None
+    demo_writer: DemoMetadataWriter | None = None
     if demo:
         demo_jsonl = Path(output_dir) / f"{camera_id}_{mode}_demo_frames.jsonl"
         demo_writer = DemoMetadataWriter(demo_jsonl)
         log.info(f"Demo metadata enabled: {demo_jsonl}")
 
     # ── Streaming state ───────────────────────────────────────────────────────
-    # No frame buffer. FFmpeg is opened at segment start and frames are piped
-    # one-by-one as they come from the camera. Encoding and decoding run in
-    # parallel. No wait-then-burst, no 9GB of RAM copies.
+    # FFmpeg is opened at segment start and frames are piped one by one as they
+    # are read, so encoding and decoding overlap and nothing is buffered.
     last_clean_background = None
     clean_frame_streak    = 0
     clean_frame_buffer    = deque(maxlen=max(1, mode2_background_lag_frames + 1))
@@ -613,32 +581,33 @@ def run_pipeline(
     object_only           = (mode == "mode3")
 
     # ── Per-segment metadata accumulators ────────────────────────────────────
-    _seg_all_classes:   set   = set()   # union of YOLO classes seen this segment
-    _seg_colors:        list  = []      # dominant_color strings sampled this segment
-    _seg_motion_vecs:   list  = []      # (dx, dy) vectors for scene-type heuristic
-    _seg_prev_centroids: list = []      # centroids from previous frame for motion deltas
-    _seg_brightness:    list  = []      # per-frame mean brightness, for real time-of-day
-    _seg_pose_confirmed: int  = 0       # pose-verified person detections this segment (6.11)
+    # Colors and brightness are running tallies, not per-frame lists: in modes
+    # 1-3 a segment stays open until it has enough *buffered* frames, which on
+    # a quiet live camera can mean hours of skipped frames in between.
+    _seg_all_classes: set = set()        # union of YOLO classes seen
+    _seg_colors: Counter = Counter()     # dominant_color label -> sample count
+    _seg_motion_vecs: list = []          # (dx, dy) vectors for detect_scene_type
+    _seg_prev_centroids: list = []       # previous frame's centroids
+    _seg_brightness_sum = 0.0            # sum of per-frame mean brightness
+    _seg_brightness_n = 0
+    _seg_pose_confirmed = 0              # pose-verified person detections (6.11)
 
     def _open_new_segment(first_frame, first_regions):
         """Open FFmpeg pipe for a new segment.  Returns the background frame used."""
-        nonlocal segment_start_background, _seg_all_classes, _seg_colors, _seg_motion_vecs, _seg_prev_centroids, _seg_brightness, _seg_pose_confirmed
-        # Reset per-segment accumulators
-        _seg_all_classes  = set()
-        _seg_colors       = []
-        _seg_motion_vecs  = []
+        nonlocal segment_start_background, _seg_all_classes, _seg_colors, _seg_motion_vecs
+        nonlocal _seg_prev_centroids, _seg_brightness_sum, _seg_brightness_n, _seg_pose_confirmed
+        _seg_all_classes = set()
+        _seg_colors = Counter()
+        _seg_motion_vecs = []
         _seg_prev_centroids = []
-        _seg_brightness   = []
+        _seg_brightness_sum = 0.0
+        _seg_brightness_n = 0
         _seg_pose_confirmed = 0
 
-        # Mode 0 (Live Surveillance) must use ONE predictable CRF for its
-        # whole segment, not silently swap to the much heavier background_crf
-        # just because the single frame that happened to open the segment
-        # (timing accident, not content) had zero detections that instant.
-        # Modes 1-3 only ever open a segment on a frame that already has
-        # detections (they skip quiet frames entirely), so this only ever
-        # mattered for mode0 in practice - and for mode0 it must always be
-        # True. Part of the 2026-10-01 "mode0 = just compress it" fix.
+        # Mode 0 keeps one predictable CRF for the whole segment instead of
+        # switching to the heavier background CRF because the opening frame
+        # happened to have no detections. Modes 1-3 only open a segment on a
+        # frame that already has detections.
         has_targets = True if mode == "mode0" else len(first_regions) > 0
 
         # Use real YOLO labels if available, otherwise fall back to unknown
@@ -695,37 +664,20 @@ def run_pipeline(
             segment_index += 1
             return
 
-        # ── Compute segment-level rich metadata ───────────────────────────────
-        # Dominant color: most frequent color label seen across all ROI samples
-        from collections import Counter as _Counter
-        _dom_color = None
-        if _seg_colors:
-            _dom_color = _Counter(_seg_colors).most_common(1)[0][0]
+        _dom_color = _seg_colors.most_common(1)[0][0] if _seg_colors else None
 
-        # Scene type via motion vector heuristic. Uses the source's own
-        # frame_w/frame_h (known for the whole run from FrameSource, set
-        # near the top of run_pipeline()) rather than the last-read `frame`
-        # variable - that one is None exactly when a segment closes because
-        # the source hit EOF, which is routinely when the final segment of
-        # a short clip gets closed. Reading frame.shape there silently
-        # dropped every orientation-based classification (this fix's
-        # "handheld" shortcut included) straight to "unknown".
+        # Use the source's frame_w/frame_h, not the last-read frame: that frame
+        # is None when the segment closes because the source hit EOF.
         _scene = detect_scene_type(_seg_motion_vecs, target_frames_this_segment, frame_w, frame_h)
 
-        # Time of day from the segment's own footage (mean brightness across
-        # every frame processed), not wall-clock time - see
-        # _time_of_day_from_brightness() for why the old
-        # _time_of_day(utcnow().hour) approach was wrong.
-        _tod = _time_of_day_from_brightness(_seg_brightness)
+        _tod = (_time_of_day_from_mean(_seg_brightness_sum / _seg_brightness_n)
+                if _seg_brightness_n else "unknown")
 
-        # Per-type counts
-        _vcls = _VEHICLE_CLASSES
-        _pcls = _PERSON_CLASSES
-        _vcount = sum(1 for c in _seg_all_classes if c in _vcls)
-        _pcount = sum(1 for c in _seg_all_classes if c in _pcls)
+        _vcount = sum(1 for c in _seg_all_classes if c in _VEHICLE_CLASSES)
+        _pcount = sum(1 for c in _seg_all_classes if c in _PERSON_CLASSES)
 
-        # object_classes JSON array (sorted for consistent storage)
-        _obj_cls_json = _json.dumps(sorted(_seg_all_classes)) if _seg_all_classes else None
+        # Sorted so the stored JSON is stable from run to run.
+        _obj_cls_json = json.dumps(sorted(_seg_all_classes)) if _seg_all_classes else None
 
         out = encoder.finish_segment(
             object_classes = _obj_cls_json,
@@ -738,13 +690,12 @@ def run_pipeline(
         )
         log.info("Saved segment %d: %s [type=%s color=%s scene=%s %s]",
                  segment_index + 1, out["file_path"],
-                 encoder._stream_object_type if hasattr(encoder, "_stream_object_type") else "?",
+                 getattr(encoder, "_stream_object_type", "?"),
                  _dom_color or "?", _scene, _tod)
         if out.get("sharpness_label"):
             log.info("Target ROI sharpness: %s (score=%.1f)",
                      out["sharpness_label"], out["avg_sharpness"])
-        # FIX 7: per-segment detail - detections, output size, a rough ratio vs
-        # raw frames, and overall progress. Useful at Normal verbosity too.
+        # Logged at Normal verbosity too: detections, size, ratio vs raw, progress.
         try:
             _seg_bytes = Path(out["file_path"]).stat().st_size
         except OSError:
@@ -782,8 +733,8 @@ def run_pipeline(
 
             try:
                 _frame_cache.maybe_save(frame)
-            except Exception:  # noqa: BLE001 - a thumbnail must never stall a run
-                pass
+            except Exception as _cexc:  # noqa: BLE001 - a thumbnail must never stall a run
+                log.debug("Frame cache write skipped: %s", _cexc)
 
             mask             = subtractor.apply(frame)
             raw_regions      = subtractor.get_foreground_regions(mask)
@@ -835,36 +786,21 @@ def run_pipeline(
 
             # ── Per-frame metadata accumulation ──────────────────────────────
             if segment_open:
-                # Brightness is sampled on EVERY frame (not gated on
-                # has_regions) so a quiet, empty-looking daytime segment
-                # still gets tagged "day" instead of only ever contributing
-                # samples when something was detected. Cheap: one
-                # whole-array mean over already-decoded frame data, no
-                # extra grayscale conversion or resize needed for a coarse
-                # day/dusk/night signal.
-                _seg_brightness.append(float(frame.mean()))
+                # Sampled on every frame, not only frames with detections, so
+                # a quiet daytime segment is still tagged "day".
+                _seg_brightness_sum += _mean_brightness(frame)
+                _seg_brightness_n += 1
 
             if segment_open and has_regions:
-                # Color: sample the dominant color of each detected ROI
                 for r in regions:
                     color = detect_dominant_color(frame, r.x, r.y, r.w, r.h)
                     if color != "unknown":
-                        _seg_colors.append(color)
+                        _seg_colors[color] += 1
 
-                # Motion vectors: compare centroids to previous frame
                 curr_centroids = [(r.x + r.w // 2, r.y + r.h // 2) for r in regions]
-                if _seg_prev_centroids and curr_centroids:
-                    # Match by nearest centroid (simple greedy)
-                    _frame_vecs = []
-                    for cx, cy in curr_centroids:
-                        best_dx, best_dy, best_dist = 0, 0, float("inf")
-                        for px, py in _seg_prev_centroids:
-                            d = ((cx - px) ** 2 + (cy - py) ** 2) ** 0.5
-                            if d < best_dist:
-                                best_dist, best_dx, best_dy = d, cx - px, cy - py
-                        if best_dist < 80:   # px threshold - ignore teleporting blobs
-                            _frame_vecs.append((best_dx, best_dy))
-                    _seg_motion_vecs.extend(_compensate_camera_motion(_frame_vecs))
+                if _seg_prev_centroids:
+                    _seg_motion_vecs.extend(_compensate_camera_motion(
+                        _match_motion_vectors(curr_centroids, _seg_prev_centroids)))
                 _seg_prev_centroids = curr_centroids
 
             # --- WARMUP GATE ---
@@ -879,7 +815,7 @@ def run_pipeline(
 
             post_warmup_frame_count += 1
 
-            # FIX 7: verbose per-N-frames progress to the SSE log + console.
+            # Verbose: progress every 100 frames to the SSE log and console.
             if verbose and post_warmup_frame_count % 100 == 0:
                 if total_frames > 0:
                     _p = 100.0 * source_frame_index / total_frames
@@ -903,7 +839,7 @@ def run_pipeline(
             # The async pattern: submit this frame to the executor, then
             # immediately use the *previous* completed result for encoding.
             # This hides the SR latency behind decoding the next frames.
-            if enhancer is not None and regions:
+            if _enhance_executor is not None and regions:
                 _enhance_frame_counter += 1
                 is_enhance_frame = (_enhance_frame_counter % enhance_every_n) == 1
 
@@ -915,26 +851,16 @@ def run_pipeline(
                     ]
 
                     if eligible:
-                        # Capture loop-locals for the closure
-                        _frame_to_enhance = frame.copy()
-                        _regions_to_enhance = eligible
-                        _enhancer_ref = enhancer
-
-                        def _do_enhance(f, regs, enh):
-                            result = f
-                            for r in regs:
-                                result = enh.upscale_roi(result, (r.x, r.y, r.w, r.h))
-                            return result
-
-                        # Collect previous result before submitting the next
+                        # Collect the previous result before submitting the next.
                         if _enhance_future is not None and _enhance_future.done():
                             try:
                                 _last_enhanced_frame = _enhance_future.result()
-                            except Exception as _e:
+                            except Exception as _e:  # noqa: BLE001 - any SR backend error; enhancement is optional
                                 log.debug("Enhancement error (ignored): %s", _e)
 
+                        # Copy: the worker thread must not see this frame change.
                         _enhance_future = _enhance_executor.submit(
-                            _do_enhance, _frame_to_enhance, _regions_to_enhance, _enhancer_ref
+                            _enhance_rois, frame.copy(), eligible, enhancer
                         )
 
                 # Use cached enhanced frame if we have one
@@ -976,7 +902,9 @@ def run_pipeline(
                     clean_frame_buffer.clear()
                 else:
                     clean_frame_streak += 1
-                    clean_frame_buffer.append(frame.copy())
+                    # No copy needed: every read returns a fresh array and a
+                    # skipped frame is never modified after this point.
+                    clean_frame_buffer.append(frame)
 
             if mode_decision.target_detected:
                 target_frames_this_segment += 1
@@ -1007,7 +935,6 @@ def run_pipeline(
                 log.info("Stop event received mid-segment. Ending pipeline loop.")
                 break
 
-            # Write frame directly to the open pipe. No copy into a list.
             boxes = [r.to_tuple() for r in regions]
             if upscale_output and enhance_scale > 1 and boxes:
                 s = enhance_scale
@@ -1019,19 +946,9 @@ def run_pipeline(
                 object_only=object_only,
                 mode_label=mode_label,
                 measure_sharpness=(len(boxes) > 0),
-                # Mode 0 (Live Surveillance) must leave the picture visually
-                # unchanged - it is the just compress it, do not touch how it
-                # looks mode. It used to always run every frame through
-                # _compress_background_outside_bboxes(), an 8x downscale/
-                # upscale blur applied to the whole background regardless of
-                # CRF - that was the original dual-CRF design (see the
-                # 16.6x / PSNR 41.2dB result in docs/RESEARCH.md) but it
-                # visibly blurred the feed, which is not what mode0 is for.
-                # Per explicit product direction (2026-10-01), mode0 now only
-                # ever applies its CRF/codec encode to the raw frame - zero
-                # visual alteration. Mode 2 (Smart Compress) and Mode 3
-                # (Object Only) remain the modes that intentionally trade
-                # background detail for size.
+                # No 8x background blur: mode 0 must leave the picture visually
+                # unchanged (product direction 2026-10-01), and modes 2 and 3
+                # already trade background detail for size by compositing.
                 compress_background=False,
             )
             frames_in_segment += 1
@@ -1167,6 +1084,9 @@ if __name__ == "__main__":
                         help="Target perceptual quality (VMAF 85-97, e.g. 93) instead of a "
                              "fixed CRF. Sample-searches the smallest CRF that clears the "
                              "target; falls back to the fixed CRF if VMAF is unavailable.")
+    parser.add_argument("--mode2-background-lag-seconds", type=float, default=1.5,
+                        help="Mode 2: how far back to pick the clean background frame "
+                             "when a skip ends.")
     args = parser.parse_args()
 
     input_src = args.input

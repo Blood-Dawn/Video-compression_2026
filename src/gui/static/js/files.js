@@ -46,9 +46,8 @@ async function loadSegments() {
           : s.sharpness_label.includes('480p') ? 'var(--yellow)'
           : 'var(--green)')
         : '';
-      // ── New columns 2026-05-03 (UI cleanup pass): Color / Scene /
-      //    Light / Cars / People - same data the SEARCH tab already had.
-      //    Author: Bloodawn (KheivenD).
+      // Color / Scene / Light / Cars / People: the same data the SEARCH tab shows.
+      // Author: Bloodawn (KheivenD).
       const dash = '<span style="color:var(--text-dim)"> - </span>';
       const color = s.dominant_color
         ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${_colorSwatch(s.dominant_color)};margin-right:4px;vertical-align:middle;"></span>${escHtml(s.dominant_color)}`
@@ -61,17 +60,11 @@ async function loadSegments() {
         : dash;
       const carsStr   = s.vehicle_count > 0 ? s.vehicle_count : (s.target_detected && (s.object_type || '').includes('vehicle') ? '+' : dash);
       const peopleStr = s.person_count  > 0 ? s.person_count  : (s.target_detected && (s.object_type || '').includes('person')  ? '+' : dash);
-      // Display name priority for the Cam column: prefer the camera_id
-      // when it's something meaningful (auto-derived filename stem from
-      // _autoCamera()), but if it's the legacy "cam_00" default fall
-      // back to the output file's basename so the user can still tell
-      // their recordings apart instead of seeing a wall of "cam_00".
+      // A legacy "cam_00" camera_id falls back to a name derived from the
+      // file path, so recordings are not a wall of identical "cam_00" rows.
       // Author: Bloodawn (KheivenD), 2026-05-03 (UI fix pass).
-      const camDisplay = (!s.camera_id || s.camera_id === 'cam_00')
-        ? _segDisplayName(s)
-        : s.camera_id;
-      // Flag rows where the underlying file is gone - play button will
-      // be a " - " (no playable_url) and the segment isn't an .enc file.
+      const camDisplay = _segCamLabel(s);
+      // No playable_url on a non-.enc row means the file is gone from disk.
       // Author: Bloodawn (KheivenD), 2026-05-03 (cleanup of dead rows).
       const isStale = !s.playable_url && !isEnc;
       const rowStyle = isStale
@@ -86,12 +79,7 @@ async function loadSegments() {
         ? `<button class="btn-row-hide" title="Remove this row from the dashboard (file on disk is kept)" onclick="event.stopPropagation();_hideSegmentRow('${jsAttr(s.file_path)}')">×</button>`
         : `<span style="color:var(--text-dim);font-size:0.6rem;"> - </span>`;
       const mode = _segMode(s);
-      const modeColor = mode === ' - ' ? 'var(--text-dim)'
-        : mode.startsWith('Split') ? 'var(--purple)'
-        : mode === 'Mode 0' ? 'var(--text)'
-        : mode === 'Mode 1' ? 'var(--teal)'
-        : mode === 'Mode 2' ? 'var(--yellow)'
-        : 'var(--green)';
+      const modeColor = _segModeColor(mode);
       return `<tr data-seg-idx="${idx}" class="seg-row" style="${rowStyle}" onmouseenter="_onSegRowEnter(event,${idx})" onmousemove="_moveTooltip(event)" onmouseleave="_hideTooltip()" onclick="_metricsRowClick(${idx})">
         <td>${ts}</td>
         <td title="${escHtml(s.camera_id)}">${escHtml(camDisplay)}${staleTag}</td>
@@ -120,35 +108,26 @@ function _updateHomeRecent(segments) {
   const tbody = document.getElementById('home-rec-tbody');
   const count = document.getElementById('home-rec-count');
   if (!tbody) return;
-  // /api/segments returns rows in DESC timestamp order, so the array
-  // is already newest-first. Was slice(0,8) - that capped the panel at
-  // 8 rows and left the scroll bar with nothing to scroll past, which
-  // looked broken when the user had 25+ recordings ("25 total" shown
-  // up top but only 8 visible). Show ALL of them; the parent div has
-  // overflow:auto so anything past the panel height scrolls naturally.
+  // /api/segments is already newest-first. Every row is shown so the count
+  // in the header matches what can be scrolled to (the parent div has
+  // overflow:auto).
   // Author: Bloodawn (KheivenD), 2026-05-03 (home-recent scroll fix).
-  const recent = segments;
   if (count) count.textContent = segments.length + ' total';
-  if (!recent.length) {
+  if (!segments.length) {
     tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text-dim);text-align:center;padding:0.75rem;font-family:var(--mono);font-size:0.65rem;">No recordings yet</td></tr>';
     return;
   }
-  // Each row gets the same hover-tooltip handler the Metrics tab uses
-  // (`_onSegRowEnter` + `_segmentData[idx]`). The idx we pass is the
-  // *global* index in `_segmentData` because the recent slice mirrors
-  // the head of that array - newest-first in both places.
-  tbody.innerHTML = recent.map((s, idx) => {
+  // Same hover tooltip as the Metrics tab: idx indexes `_segmentData`,
+  // which holds these same rows in the same order.
+  tbody.innerHTML = segments.map((s, idx) => {
     const isEnc = s.file_path && s.file_path.endsWith('.enc');
-    const objIcon = s.object_type === 'vehicle' ? '' : s.object_type === 'person' ? '' : s.target_detected ? '' : '';
     const playBtn = isEnc
       ? `<button class="btn-play-sm btn-enc" title="Encrypted" onclick="promptDecrypt('${jsAttr(s.file_path)}')">[ENC]</button>`
       : s.playable_url
         ? `<button class="btn-play-sm" onclick="playSegment('${jsAttr(s.playable_url)}','${jsAttr(s.file_path)}')">▶</button>`
         : ' - ';
     const sizeMb = (s.file_size_kb / 1024);
-    const camDisplay = (!s.camera_id || s.camera_id === 'cam_00')
-      ? _segDisplayName(s)
-      : s.camera_id;
+    const camDisplay = _segCamLabel(s);
     return `<tr class="seg-row" data-seg-idx="${idx}"
       onmouseenter="_onSegRowEnter(event,${idx})"
       onmousemove="_moveTooltip(event)"
@@ -156,7 +135,7 @@ function _updateHomeRecent(segments) {
       style="border-bottom:1px solid rgba(42,68,102,0.4);cursor:pointer;">
       <td style="padding:0.25rem 0.5rem;color:var(--text-dim);white-space:nowrap;">${formatTimestamp(s.timestamp)}</td>
       <td style="padding:0.25rem 0.5rem;font-family:var(--mono);font-size:0.65rem;" title="${escHtml(s.camera_id)}">${escHtml(camDisplay)}</td>
-      <td style="padding:0.25rem 0.5rem;">${objIcon} ${escHtml(s.object_type || ' - ')}</td>
+      <td style="padding:0.25rem 0.5rem;"> ${escHtml(s.object_type || ' - ')}</td>
       <td style="padding:0.25rem 0.5rem;text-align:right;font-family:var(--mono);font-size:0.65rem;">${sizeMb >= 1 ? sizeMb.toFixed(1) + ' MB' : s.file_size_kb + ' KB'}</td>
       <td style="padding:0.25rem 0.5rem;text-align:center;">${playBtn}</td>
     </tr>`;
@@ -166,16 +145,15 @@ function _updateHomeRecent(segments) {
 // ── Metrics library summary ────────────────────────────────────
 function _updateLibrarySummary(segments) {
   const n = segments.length;
-  const totalKb = segments.reduce((a, s) => a + (s.file_size_kb || 0), 0);
-  const totalMb = totalKb / 1024;
-  const totalDur = segments.reduce((a, s) => a + (s.duration_s || 0), 0);
-  const encCount = segments.filter(s => s.file_path && s.file_path.endsWith('.enc')).length;
-
-  // Estimate raw size for savings calculation
-  let rawMb = 0;
-  segments.forEach(s => {
+  let totalKb = 0, totalDur = 0, encCount = 0;
+  let rawMb = 0;  // estimated uncompressed size, for the savings figure
+  for (const s of segments) {
+    totalKb += s.file_size_kb || 0;
+    totalDur += s.duration_s || 0;
+    if (s.file_path && s.file_path.endsWith('.enc')) encCount++;
     rawMb += (s.duration_s * (s.width || 640) * (s.height || 480) * 3 * (s.fps || 25)) / 1e6;
-  });
+  }
+  const totalMb = totalKb / 1024;
   const savedMb = rawMb > 0 ? rawMb - totalMb : 0;
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
@@ -237,19 +215,18 @@ function showMetricsDetail(s) {
   noSel.style.display = 'none';
   detail.style.display = 'flex';
 
-  // Video
   const video = document.getElementById('metrics-video');
   if (video) {
     if (s.file_path && s.file_path.endsWith('.enc')) {
       video.poster = '';
-      video.removeAttribute('src');
+      _setVideoSrc(video, null);
       video.load();
     } else if (s.playable_url) {
-      video.src = s.playable_url;
+      _setVideoSrc(video, s.playable_url);
       video.load();
       video.play().catch(() => {});
     } else {
-      video.removeAttribute('src');
+      _setVideoSrc(video, null);
       video.load();
     }
   }
@@ -290,12 +267,9 @@ function showMetricsDetail(s) {
   const compMb = (s.file_size_kb || 0) / 1024;
   const rawMb = (s.duration_s * (s.width || 640) * (s.height || 480) * 3 * (s.fps || 25)) / 1e6;
   const ratio = rawMb > 0 && compMb > 0 ? (rawMb / compMb).toFixed(1) + '×' : ' - ';
-  // Detail card "Camera" should match the table cell - show the friendly
-  // filename-derived name when camera_id is the legacy default.
+  // Same camera label as the table cell.
   // Author: Bloodawn (KheivenD), 2026-05-03 (UI fix pass).
-  const camDisplay = (!s.camera_id || s.camera_id === 'cam_00')
-    ? _segDisplayName(s)
-    : s.camera_id;
+  const camDisplay = _segCamLabel(s);
   const rows = [
     ['Camera', camDisplay || ' - '],
     ['Mode', _segMode(s)],
@@ -343,7 +317,7 @@ function _renderClipCpuStats(s) {
   }
 
   const mode = _segMode(s);
-  const camLabel = (!s.camera_id || s.camera_id === 'cam_00') ? _segDisplayName(s) : s.camera_id;
+  const camLabel = _segCamLabel(s);
   if (labelEl) labelEl.textContent = `· ${mode}  ·  ${camLabel}`;
 
   const avg = s.cpu_avg;
@@ -394,52 +368,52 @@ function _onSegRowEnter(evt, idx) {
 }
 
 // ── Segment inline playback ────────────────────────────────────
+
+// Decrypted clips play from blob: URLs, and each one pins the whole decrypted
+// video in memory until it is revoked. Revoke the old URL once no <video> on
+// the page still shows it, so repeated decrypts do not pile up.
+function _setVideoSrc(video, url) {
+  const old = video.getAttribute('src') || '';
+  if (url == null) video.removeAttribute('src');
+  else video.src = url;
+  if (old.startsWith('blob:') && old !== url) {
+    const stillShown = Array.from(document.querySelectorAll('video'))
+      .some((v) => v.getAttribute('src') === old);
+    if (!stillShown) URL.revokeObjectURL(old);
+  }
+}
+
+// Play in the HOME or SEARCH inline preview (prefix 'home' / 'search').
+// Returns false when that tab's preview player is not on the page.
+function _playInPreview(prefix, url, path) {
+  const wrap  = document.getElementById(prefix + '-preview-wrap');
+  const video = document.getElementById(prefix + '-preview-video');
+  const label = document.getElementById(prefix + '-preview-label');
+  if (!wrap || !video) return false;
+  _setVideoSrc(video, url);
+  video.load();
+  video.play().catch(() => {});
+  label.textContent = path.split(/[\\/]/).pop() || path;
+  wrap.style.display = '';
+  wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  return true;
+}
+
 function playSegment(url, path) {
   const activeTab = document.querySelector('.tab-page.active');
   const tabId = activeTab ? activeTab.id : '';
 
-  // HOME tab: play inline in the home preview player
-  if (tabId === 'tab-home') {
-    const wrap  = document.getElementById('home-preview-wrap');
-    const video = document.getElementById('home-preview-video');
-    const label = document.getElementById('home-preview-label');
-    if (wrap && video) {
-      video.src = url;
-      video.load();
-      video.play().catch(() => {});
-      label.textContent = path.split(/[\\/]/).pop() || path;
-      wrap.style.display = '';
-      wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      return;
-    }
-  }
+  if (tabId === 'tab-home' && _playInPreview('home', url, path)) return;
+  if (tabId === 'tab-search' && _playInPreview('search', url, path)) return;
 
-  // SEARCH tab: play inline in the search preview player
-  if (tabId === 'tab-search') {
-    const wrap  = document.getElementById('search-preview-wrap');
-    const video = document.getElementById('search-preview-video');
-    const label = document.getElementById('search-preview-label');
-    if (wrap && video) {
-      video.src = url;
-      video.load();
-      video.play().catch(() => {});
-      label.textContent = path.split(/[\\/]/).pop() || path;
-      wrap.style.display = '';
-      wrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      return;
-    }
-  }
-
-  // METRICS tab default: route through the right-side detail panel.
-  // The old #seg-preview floating player below the table was removed
-  // 2026-05-03 because it was a duplicate of #metrics-video and caused
-  // two videos to play at the same time.
+  // Everywhere else: the METRICS detail panel's player (#metrics-video is the
+  // only one, so two clips can never play at once).
   // Author: Bloodawn (KheivenD).
   const video = document.getElementById('metrics-video');
   const noSel = document.getElementById('metrics-no-selection');
   const detail = document.getElementById('metrics-detail');
   if (video) {
-    video.src = url;
+    _setVideoSrc(video, url);
     video.load();
     video.play().catch(() => {});
   }
@@ -454,14 +428,14 @@ function closeHomePreview() {
   const wrap  = document.getElementById('home-preview-wrap');
   const video = document.getElementById('home-preview-video');
   if (wrap) wrap.style.display = 'none';
-  if (video) { video.src = ''; video.load(); }
+  if (video) { _setVideoSrc(video, ''); video.load(); }
 }
 
 function closeSearchPreview() {
   const wrap  = document.getElementById('search-preview-wrap');
   const video = document.getElementById('search-preview-video');
   if (wrap) wrap.style.display = 'none';
-  if (video) { video.src = ''; video.load(); }
+  if (video) { _setVideoSrc(video, ''); video.load(); }
 }
 
 // ── Decrypt modal ──────────────────────────────────────────────
@@ -489,7 +463,8 @@ function _decryptOverlayClick(evt) {
 }
 
 async function doDecrypt() {
-  if (!_decryptTargetPath) return;
+  const targetPath = _decryptTargetPath;
+  if (!targetPath) return;
   const password = document.getElementById('decrypt-password').value.trim() || null;
   const keyFile  = document.getElementById('decrypt-keyfile').value.trim() || null;
 
@@ -509,7 +484,7 @@ async function doDecrypt() {
     const res = await fetch('/api/decrypt', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ file_path: _decryptTargetPath, password, key_file: keyFile }),
+      body: JSON.stringify({ file_path: targetPath, password, key_file: keyFile }),
     });
 
     if (!res.ok) {
@@ -522,11 +497,12 @@ async function doDecrypt() {
       return;
     }
 
-    // Stream the decrypted video into a blob URL for inline playback
+    // Stream the decrypted video into a blob URL for inline playback.
+    // Uses targetPath because closeDecryptModal() nulls _decryptTargetPath.
     const blob = await res.blob();
     const blobUrl = URL.createObjectURL(blob);
     closeDecryptModal();
-    playSegment(blobUrl, _decryptTargetPath + ' (decrypted)');
+    playSegment(blobUrl, targetPath + ' (decrypted)');
 
   } catch(e) {
     const errEl = document.getElementById('decrypt-error');

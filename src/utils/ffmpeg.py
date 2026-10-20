@@ -29,7 +29,6 @@ import shutil
 import sys
 from functools import lru_cache
 from pathlib import Path
-from typing import List
 
 _IS_WINDOWS = os.name == "nt"
 
@@ -38,14 +37,14 @@ def _exe(name: str) -> str:
     return name + ".exe" if _IS_WINDOWS else name
 
 
-def _bundle_roots() -> List[Path]:
+def _bundle_roots() -> list[Path]:
     """Directories that may contain a vendored ffmpeg/ffprobe, most-preferred
     first.
 
     In a PyInstaller build, datas land under ``sys._MEIPASS``; in a source
     checkout we look under ``<repo>/tools/ffmpeg``.
     """
-    roots: List[Path] = []
+    roots: list[Path] = []
     meipass = getattr(sys, "_MEIPASS", None)
     if meipass:
         base = Path(meipass)

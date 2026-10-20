@@ -1,14 +1,15 @@
 """
 src/gui/routes/files_bp.py
 
-files routes blueprint, carved from gui/app.py (TASK 1.3).
-Pure relocation: every URL, method, and response shape is unchanged.
+Segment list, storage stats, media serving, uploads and the hide/cleanup
+actions for the dashboard's metrics table.
 Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - blueprints).
 """
 
-import sys
 import json
+import sqlite3
 import subprocess
+import sys
 from pathlib import Path
 from urllib.parse import quote, unquote
 from flask import Blueprint, jsonify, request, Response, send_from_directory, abort
@@ -38,7 +39,24 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 _MEDIA_SERVE_EXTS = {".mp4", ".webm", ".mov", ".avi", ".mkv", ".ts", ".m4v",
                      ".jpg", ".jpeg", ".png", ".gif", ".webp"}
 
-# Repo root (…/src/gui/routes/<bp>_bp.py -> parents[3]).
+# Containers /api/media will stream, and the type it sends for each.
+_VIDEO_MIME = {
+    ".mp4": "video/mp4",
+    ".webm": "video/webm",
+    ".mov": "video/quicktime",
+    ".avi": "video/x-msvideo",
+    ".mkv": "video/x-matroska",
+}
+# Containers a browser <video> tag plays, so a segment row gets a play link.
+_PLAYABLE_EXTS = {".mp4", ".webm", ".mov", ".avi"}
+
+_STREAM_CHUNK = 64 * 1024
+
+# A client filename past the filesystem's per-component limit (255 bytes)
+# makes save() raise OSError; trim well under it, extension kept.
+_MAX_STEM_LEN = 150
+
+# Repo root (.../src/gui/routes/<bp>_bp.py -> parents[3]).
 _ROOT = Path(__file__).resolve().parents[3]
 
 files_bp = Blueprint("files", __name__)
@@ -49,6 +67,57 @@ def _segment_absolute_path(file_path: str, output_dir: str) -> Path:
     if not p.is_absolute():
         p = Path(output_dir) / p
     return p.resolve()
+
+
+def _candidate_roots() -> list[Path]:
+    """Every folder that may hold a metadata.db, resolved, de-duplicated.
+
+    The pipeline writes <output_dir>/metadata.db. Demo runs write under the
+    demo's last output root, which can legitimately differ (./outputs vs
+    OneDrive/SVCS), and demo recordings went missing from the metrics tab
+    when only the pipeline root was walked. ./outputs is the fallback for a
+    fresh clone.
+    Author: Bloodawn (KheivenD), 2026-05-04 (demo-output discovery).
+    """
+    with _state_lock:
+        cfg = _status.get("config", {})
+    with _demo_lock:
+        demo_last_root = _demo_state.get("last_output_root", "")
+
+    roots: list[Path] = []
+    for raw in (cfg.get("output_dir", ""), demo_last_root, str(_ROOT / "outputs")):
+        if not raw:
+            continue
+        try:
+            p = Path(raw).resolve()
+        except (OSError, ValueError, RuntimeError, TypeError):
+            continue
+        if p not in roots:
+            roots.append(p)
+    return roots
+
+
+def _metadata_dbs(roots: list[Path]) -> list[Path]:
+    """Every metadata.db under the existing roots, each once, sorted.
+
+    A root nested inside another root is not walked a second time: the outer
+    rglob already reaches it, and the walk is the expensive part.
+    """
+    existing = [r for r in roots if r.exists()]
+    outermost = [r for r in existing
+                 if not any(o != r and o in r.parents for o in existing)]
+    found: set[Path] = set()
+    for root in outermost:
+        for db in root.rglob("metadata.db"):
+            found.add(db.resolve())
+    return sorted(found)
+
+
+def _ensure_hidden_column(conn) -> None:
+    """Add segments.hidden to a database created before the column existed."""
+    cols = {c[1] for c in conn.execute("PRAGMA table_info(segments)").fetchall()}
+    if "hidden" not in cols:
+        conn.execute("ALTER TABLE segments ADD COLUMN hidden INTEGER DEFAULT 0")
 
 
 @files_bp.route("/api/segments")
@@ -62,43 +131,8 @@ def api_segments():
       time_of_day   - day | night | dusk_dawn
       camera_id     - filter by camera
     """
-    with _state_lock:
-        cfg = _status.get("config", {})
-    with _demo_lock:
-        demo_last_root = _demo_state.get("last_output_root", "")
-
-    # ── Discover metadata.db files under EVERY plausible root ────────────────
-    # The main pipeline writes to <pipeline-output_dir>/metadata.db.
-    # Demo runs write to <demo-output_root>/demo_<mode><suffix>/metadata.db
-    # AND ./demo_comp<suffix>/metadata.db (added 2026-05-04 so split-screen
-    # videos are searchable).
-    # The pipeline cfg's output_dir and the demo's last output_root can
-    # legitimately differ (one might point to ./outputs/, the other to
-    # OneDrive/SVCS/) - the user's report was that demo recordings
-    # weren't appearing in the metrics tab because we were only walking
-    # the pipeline cfg root. Now we walk both, plus a hard fallback to
-    # ./outputs/ for fresh clones, then de-dup by resolved path.
-    # Author: Bloodawn (KheivenD), 2026-05-04 (demo-output discovery).
-    candidate_roots: list[Path] = []
-    for raw in (
-        cfg.get("output_dir", ""),
-        demo_last_root,
-        str(_ROOT / "outputs"),
-    ):
-        if raw:
-            try:
-                p = Path(raw).resolve()
-                if p not in candidate_roots:
-                    candidate_roots.append(p)
-            except Exception:
-                continue
-
-    all_dbs_set: set[Path] = set()
-    for root in candidate_roots:
-        if root.exists():
-            for db in root.rglob("metadata.db"):
-                all_dbs_set.add(db.resolve())
-    all_dbs: list[Path] = sorted(all_dbs_set)
+    candidate_roots = _candidate_roots()
+    all_dbs = _metadata_dbs(candidate_roots)
 
     output_root = candidate_roots[0] if candidate_roots else (_ROOT / "outputs")
 
@@ -107,7 +141,7 @@ def api_segments():
                         "note": "No metadata.db found - run the pipeline or a demo first.",
                         "roots_searched": [str(r) for r in candidate_roots]})
 
-    # ── Build filter clause (same params applied to every db) ────────────────
+    # Same WHERE clause and params for every db.
     filters: list[str] = ["COALESCE(hidden, 0) = 0"]
     params:  list      = []
 
@@ -120,21 +154,15 @@ def api_segments():
     f_end       = request.args.get("end_time", "").strip()
     f_min_rois  = request.args.get("min_roi_count", "").strip()
     f_enc_only  = request.args.get("encrypted_only", "").strip() == "1"
-    # Planner 6.11: restrict to persons whose bbox was additionally
-    # confirmed by YOLO pose/keypoint estimation, not just the bbox
-    # classifier - see detection/pose_onnx_backend.py.
+    # Persons whose bbox was also confirmed by YOLO pose keypoints
+    # (detection/pose_onnx_backend.py), not just the bbox classifier.
     f_pose_only = request.args.get("pose_verified_only", "").strip() == "1"
 
     if f_type:
         if f_type in ("person", "vehicle", "animal"):
-            # A single-class pick must also match combo labels
-            # ("person+vehicle", "vehicle+animal", "person+animal" - the
-            # only combos _label_from_classes() ever produces). A strict
-            # equality check here used to silently hide every mixed-type
-            # segment from a "Person"/"Vehicle"/"Animal" filter pick, which
-            # is exactly the "search only people/vehicles" gap flagged for
-            # planner 6.11. An explicit combo pick (e.g. "person+vehicle")
-            # still falls through to the exact-match branch below.
+            # A single-class pick must also match combo labels such as
+            # "person+vehicle", or mixed-type segments vanish from the
+            # filter. An explicit combo pick falls to the exact match below.
             filters.append(
                 "(COALESCE(object_type,'unknown') = ?"
                 " OR COALESCE(object_type,'unknown') LIKE ?"
@@ -142,22 +170,23 @@ def api_segments():
             )
             params.extend([f_type, f"{f_type}+%", f"%+{f_type}"])
         else:
-            filters.append("COALESCE(object_type,'unknown') = ?"); params.append(f_type)
-    if f_color:
-        filters.append("dominant_color = ?"); params.append(f_color)
-    if f_scene:
-        filters.append("COALESCE(scene_type,'unknown') = ?"); params.append(f_scene)
-    if f_tod:
-        filters.append("time_of_day = ?"); params.append(f_tod)
-    if f_cam:
-        filters.append("camera_id = ?"); params.append(f_cam)
-    if f_start:
-        filters.append("timestamp >= ?"); params.append(f_start)
-    if f_end:
-        filters.append("timestamp <= ?"); params.append(f_end)
+            filters.append("COALESCE(object_type,'unknown') = ?")
+            params.append(f_type)
+    for clause, value in (
+        ("dominant_color = ?", f_color),
+        ("COALESCE(scene_type,'unknown') = ?", f_scene),
+        ("time_of_day = ?", f_tod),
+        ("camera_id = ?", f_cam),
+        ("timestamp >= ?", f_start),
+        ("timestamp <= ?", f_end),
+    ):
+        if value:
+            filters.append(clause)
+            params.append(value)
     if f_min_rois:
         try:
-            filters.append("roi_count >= ?"); params.append(int(f_min_rois))
+            params.append(int(f_min_rois))
+            filters.append("roi_count >= ?")
         except ValueError:
             pass
     if f_enc_only:
@@ -188,52 +217,48 @@ def api_segments():
         LIMIT {row_limit}
     """
 
-    # ── Query every db, merge results, re-sort ───────────────────────────────
+    # Query every db, tagging each row with its db folder so relative file
+    # paths resolve, then merge and re-sort.
     all_rows: list[tuple] = []
     for db_path in all_dbs:
+        db_dir = str(db_path.parent)
         try:
             with get_connection(str(db_path)) as conn:
-                db_dir = str(db_path.parent)
                 rows = conn.execute(query, params).fetchall()
-                # Tag each row with its db directory so file paths resolve correctly
-                all_rows.extend((r, db_dir) for r in rows)
-        except Exception:
-            continue  # skip corrupt or schema-mismatched dbs
+        except sqlite3.Error:
+            continue  # corrupt or schema-mismatched db
+        all_rows.extend((r, db_dir) for r in rows)
 
-    # Global sort by timestamp desc, then cap total
     all_rows.sort(key=lambda x: x[0][0], reverse=True)
     all_rows = all_rows[:row_limit]
 
-    # Cache cpu_stats.json reads - many segments share the same db_dir.
+    # cpu_stats.json is read once per db folder; many segments share one.
     # Author: Bloodawn (KheivenD), 2026-05-03 (per-clip CPU stats).
-    _cpu_cache: dict[str, dict | None] = {}
+    cpu_cache: dict[str, dict | None] = {}
 
     def _cpu_for_dir(d: str) -> dict | None:
-        if d in _cpu_cache:
-            return _cpu_cache[d]
-        try:
+        if d not in cpu_cache:
             stats_file = Path(d) / "cpu_stats.json"
-            if stats_file.exists():
-                _cpu_cache[d] = json.loads(stats_file.read_text())
-            else:
-                _cpu_cache[d] = None
-        except Exception:
-            _cpu_cache[d] = None
-        return _cpu_cache[d]
+            try:
+                cpu_cache[d] = json.loads(stats_file.read_text()) if stats_file.exists() else None
+            except (OSError, ValueError):
+                cpu_cache[d] = None
+        return cpu_cache[d]
 
     segs = []
     for r, db_dir in all_rows:
         abs_path = _segment_absolute_path(r[6], db_dir)
         playable_url = None
-        if abs_path.exists() and abs_path.suffix.lower() in {".mp4", ".webm", ".mov", ".avi"}:
+        if abs_path.exists() and abs_path.suffix.lower() in _PLAYABLE_EXTS:
             playable_url = f"/api/media?path={quote(str(abs_path))}"
 
         try:
             obj_classes = json.loads(r[10]) if r[10] else []
-        except Exception:
+        except (TypeError, ValueError):
             obj_classes = []
 
-        cpu_stats = _cpu_for_dir(db_dir)
+        # None for every cpu_* field when no sampler ran for this folder.
+        cpu_stats = _cpu_for_dir(db_dir) or {}
 
         segs.append({
             "timestamp":       r[0],
@@ -254,12 +279,11 @@ def api_segments():
             "vehicle_count":   r[14],
             "person_count":    r[15],
             "pose_verified_person_count": r[16],
-            # Per-clip CPU stats (None if no sampler ran for this output dir).
-            "cpu_avg":         cpu_stats.get("avg") if cpu_stats else None,
-            "cpu_max":         cpu_stats.get("max") if cpu_stats else None,
-            "cpu_min":         cpu_stats.get("min") if cpu_stats else None,
-            "cpu_samples":     cpu_stats.get("samples") if cpu_stats else None,
-            "cpu_duration_s":  cpu_stats.get("duration_s") if cpu_stats else None,
+            "cpu_avg":         cpu_stats.get("avg"),
+            "cpu_max":         cpu_stats.get("max"),
+            "cpu_min":         cpu_stats.get("min"),
+            "cpu_samples":     cpu_stats.get("samples"),
+            "cpu_duration_s":  cpu_stats.get("duration_s"),
         })
 
     return jsonify({"segments": segs, "db_count": len(all_dbs)})
@@ -310,8 +334,7 @@ def api_scan_videos():
     videos = []
     if data_dir.exists():
         for ext in ("*.mp4", "*.avi", "*.mov", "*.mkv"):
-            for f in sorted(data_dir.glob(ext)):
-                videos.append(str(f))
+            videos.extend(str(f) for f in sorted(data_dir.glob(ext)))
     return jsonify({"videos": videos, "data_dir": str(data_dir)})
 
 
@@ -346,17 +369,19 @@ def api_media_debug():
     # everything else is reported as simply not-servable, with no resolved path.
     if not _ps.is_path_allowed(p, _ps.allowed_media_roots()):
         return jsonify({"raw_path": path, "allowed": False, "would_serve": False})
+    suffix = p.suffix.lower()
+    exists = p.exists()
+    is_file = exists and p.is_file()
     return jsonify({
         "raw_path": path,
         "allowed": True,
         "resolved": str(p),
         "is_absolute": p.is_absolute(),
-        "exists": p.exists(),
-        "is_file": p.is_file() if p.exists() else False,
-        "suffix": p.suffix.lower(),
-        "allowed_suffix": p.suffix.lower() in {".mp4", ".webm", ".mov", ".avi", ".mkv"},
-        "would_serve": p.is_absolute() and p.exists() and p.is_file()
-                       and p.suffix.lower() in {".mp4", ".webm", ".mov", ".avi", ".mkv"},
+        "exists": exists,
+        "is_file": is_file,
+        "suffix": suffix,
+        "allowed_suffix": suffix in _VIDEO_MIME,
+        "would_serve": p.is_absolute() and is_file and suffix in _VIDEO_MIME,
     })
 
 
@@ -367,9 +392,8 @@ def api_media():
     Called as /api/media?path=<url-encoded-absolute-path>.
     Rejects non-video extensions and non-existent files.
 
-    Range request support is required for browser <video> elements to seek
-    and play without buffering the entire file. Flask's send_from_directory
-    does not handle Range headers. This implementation does.
+    Browser <video> elements need Range support to seek, and Flask's
+    send_from_directory does not handle Range headers.
     """
     path = unquote(request.args.get("path", "").strip())
     if not path:
@@ -387,7 +411,7 @@ def api_media():
     if not p.exists() or not p.is_file():
         abort(404)
     suffix = p.suffix.lower()
-    if suffix not in {".mp4", ".webm", ".mov", ".avi", ".mkv"}:
+    if suffix not in _VIDEO_MIME:
         abort(403)
     # SEC-002: confine to the operator's media folders. The dashboard binds
     # 0.0.0.0, so the old "localhost only, already trusted" assumption is false;
@@ -395,19 +419,23 @@ def api_media():
     if not _ps.is_path_allowed(p, _ps.allowed_media_roots()):
         abort(403)
 
-    mime_map = {
-        ".mp4": "video/mp4",
-        ".webm": "video/webm",
-        ".mov": "video/quicktime",
-        ".avi": "video/x-msvideo",
-        ".mkv": "video/x-matroska",
-    }
-    mime = mime_map.get(suffix, "video/mp4")
+    mime = _VIDEO_MIME[suffix]
     file_size = p.stat().st_size
 
-    range_header = request.headers.get("Range", None)
+    def _read_span(start: int, length: int):
+        with open(p, "rb") as f:
+            f.seek(start)
+            remaining = length
+            while remaining > 0:
+                data = f.read(min(_STREAM_CHUNK, remaining))
+                if not data:
+                    break
+                remaining -= len(data)
+                yield data
+
+    range_header = request.headers.get("Range")
     if range_header:
-        # Parse "bytes=start-end"
+        # "bytes=start-end"; either end may be blank.
         try:
             byte_range = range_header.strip().replace("bytes=", "")
             parts = byte_range.split("-")
@@ -421,21 +449,8 @@ def api_media():
             abort(416)
 
         length = end - start + 1
-
-        def _generate_range():
-            with open(p, "rb") as f:
-                f.seek(start)
-                remaining = length
-                chunk = 65536
-                while remaining > 0:
-                    data = f.read(min(chunk, remaining))
-                    if not data:
-                        break
-                    remaining -= len(data)
-                    yield data
-
         resp = Response(
-            _generate_range(),
+            _read_span(start, length),
             status=206,
             mimetype=mime,
             direct_passthrough=True,
@@ -446,16 +461,8 @@ def api_media():
         resp.headers["Cache-Control"] = "no-cache"
         return resp
 
-    # Full file response (no Range header)
-    def _generate_full():
-        with open(p, "rb") as f:
-            while True:
-                data = f.read(65536)
-                if not data:
-                    break
-                yield data
-
-    resp = Response(_generate_full(), status=200, mimetype=mime, direct_passthrough=True)
+    resp = Response(_read_span(0, file_size), status=200, mimetype=mime,
+                    direct_passthrough=True)
     resp.headers["Content-Length"] = str(file_size)
     resp.headers["Accept-Ranges"] = "bytes"
     resp.headers["Cache-Control"] = "no-cache"
@@ -488,22 +495,18 @@ def api_browse():
             text=True,
             timeout=120,
         )
-        path = result.stdout.strip()
-    except Exception as exc:
-        log.warning(f"File picker failed: {exc}")
+        path = (result.stdout or "").strip()
+    except (OSError, subprocess.SubprocessError) as exc:
+        log.warning("File picker failed: %s", exc)
         path = ""
     return jsonify({"path": path})
 
 
 _UPLOAD_DIR_LOCAL = _ROOT / "data" / "uploads"
-# _ALLOWED_EXTENSIONS now lives in gui.state (imported at the top).
 
 
 #: Path fragments that mean "this is inside a third-party sync root". Used only
 #: to TELL the user where their upload landed, never to choose the destination.
-#: The old check looked for "My Drive"/"Google Drive" only, so a OneDrive
-#: destination reported in_drive=false and a client could not detect the
-#: condition at all.
 _CLOUD_MARKERS = ("onedrive", "google drive", "my drive", "googledrive",
                   "icloud", "dropbox", "box sync")
 
@@ -517,24 +520,14 @@ def _is_cloud_path(p: Path) -> bool:
 def _upload_dir() -> Path:
     """Return the upload directory, never auto-selecting a cloud folder.
 
-    Resolution order, mirroring _default_output_dir() (FIX 1):
-      1. ``<the user's explicitly chosen output_dir>/uploads``. If the user
-         picked a cloud folder in Setup, that path lives here, so a cloud
-         destination is only ever used when the user chose it.
+    Resolution order, mirroring _default_output_dir():
+      1. ``<the user's explicitly chosen output_dir>/uploads``. A cloud
+         destination is only ever used when the user chose it in Setup.
       2. Local ``data/uploads/``.
 
-    M0.7: this previously PREFERRED a detected OneDrive or Google Drive root
-    with no opt-in and no way to decline, which was a regression against the
-    policy FIX 1 adopted on 2026-06-03: "The app NEVER falls through to a
-    OneDrive / Google Drive / iCloud root on its own. Cloud roots are only
-    OFFERED in the Setup page."
-
-    That mattered more here than anywhere else. Uploads are surveillance
-    footage of real people, so the old behavior silently copied video of
-    identifiable people into a third-party cloud, and a 1GB phone upload also
-    triggered a 1GB cloud sync. It contradicted the product's own promise to
-    the user, which the mobile mockup states verbatim: "Nothing is sent to any
-    cloud unless you pick a cloud folder in Settings."
+    Policy: the app never falls through to a OneDrive / Google Drive / iCloud
+    root on its own. Uploads are footage of real people, and the product
+    promises nothing goes to a cloud unless the user picks a cloud folder.
     """
     with _state_lock:
         cfg = _status.get("config", {}) or {}
@@ -551,22 +544,12 @@ def _upload_dir() -> Path:
 def api_open_folder():
     """Open a folder in the native OS file explorer on the host machine.
 
-    M0.9 hardening. This route takes a caller-supplied path, resolves it, and
-    spawns a process on the SERVER host, so it needs real confinement:
-
-      * The old docstring claimed "Runs on localhost only" but no code enforced
-        it, and the app defaults its bind to 0.0.0.0. Anyone who could reach
-        the port could spawn explorer/open/xdg-open on the host.
-      * It was also a filesystem existence oracle: a miss returned 404 naming
-        the resolved path and a hit returned 200 naming it, so an authenticated
-        but untrusted caller could map the host's filesystem one probe at a
-        time. That is exactly the oracle SEC-015 closed on /api/media_debug.
-
-    Now confined to allowed_media_roots(), the same guard /api/media and
-    /media/<path> already use, and outside-roots answers are indistinguishable
-    whether or not the target exists.
+    This route takes a caller-supplied path and spawns a process on the
+    SERVER host, and the app binds 0.0.0.0, so it is confined to
+    allowed_media_roots(), the same guard /api/media and /media/<path> use.
+    Outside-roots answers are identical whether or not the target exists, so
+    the route is not a filesystem existence oracle (SEC-015).
     """
-    import platform as _platform
     data = request.get_json(silent=True) or {}
     raw = data.get("path", "").strip()
     if not raw:
@@ -593,15 +576,12 @@ def api_open_folder():
     if not _ps.is_path_allowed(folder, roots):
         return jsonify({"error": "Path is outside the allowed media folders."}), 403
 
+    # sys.platform, not platform.system(): the latter shells out to `ver` on
+    # its first call on Windows.
+    opener = {"win32": "explorer", "darwin": "open"}.get(sys.platform, "xdg-open")
     try:
-        sys_name = _platform.system()
-        if sys_name == "Windows":
-            subprocess.Popen(["explorer", str(folder)])
-        elif sys_name == "Darwin":
-            subprocess.Popen(["open", str(folder)])
-        else:
-            subprocess.Popen(["xdg-open", str(folder)])
-    except Exception as exc:
+        subprocess.Popen([opener, str(folder)])
+    except OSError as exc:
         log.warning("api_open_folder: failed to open %s - %s", folder, exc)
         return jsonify({"error": str(exc)}), 500
 
@@ -612,9 +592,9 @@ def api_open_folder():
 def api_upload():
     """Accept a video file upload from a remote browser.
 
-    Saves the file into the Google Drive SVCS/uploads/ folder when Drive is
-    detected, otherwise falls back to local data/uploads/.  Returns the
-    server-side path so the pipeline can use it as input_source.
+    Saves into _upload_dir() (the chosen output folder's uploads/, else local
+    data/uploads/) and returns the server-side path so the pipeline can use
+    it as input_source.
     """
     if "file" not in request.files:
         return jsonify({"error": "No file in request"}), 400
@@ -628,16 +608,8 @@ def api_upload():
         return jsonify({"error": f"File type {suffix} not allowed"}), 400
 
     upload_dir = _upload_dir()
-    # Sanitize filename: strip any path components the client might inject
+    # Strip any path components the client might inject, then cap the length.
     safe_name = Path(f.filename).name
-
-    # Week 3 TASK 3.15 (fuzzing) found that a filename long enough to blow
-    # past the filesystem's per-component limit (255 bytes on ext4, similar
-    # on NTFS) crashed this route with an unhandled OSError -> HTTP 500,
-    # from an attacker-controlled string nobody had validated the length of.
-    # Trim well under that limit, keeping the extension intact, rather than
-    # trusting whatever length a client's multipart form sends.
-    _MAX_STEM_LEN = 150
     stem = Path(safe_name).stem[:_MAX_STEM_LEN] or "upload"
     safe_name = f"{stem}{suffix}"
 
@@ -650,19 +622,18 @@ def api_upload():
             counter += 1
         f.save(str(dest))
     except OSError as exc:
-        # Same fuzzing pass: a filesystem-level failure here (illegal
-        # characters on Windows, a path-length limit even after the trim
-        # above, a full disk) must come back as a clean 400, not a 500 that
-        # leaks a stack trace and looks like the server is broken.
+        # Illegal characters on Windows, a path-length limit even after the
+        # trim, or a full disk: a clean 400, not a 500 with a stack trace.
         log.warning("Upload rejected: could not save %r: %s", f.filename, exc)
         return jsonify({"error": "Could not save that file (invalid or "
                                  "unsupported filename)."}), 400
 
     log.info("Uploaded video saved: %s (%d bytes)", dest.name, dest.stat().st_size)
+    in_cloud = _is_cloud_path(dest)
     return jsonify({"path": str(dest), "filename": dest.name,
-                    "in_cloud": _is_cloud_path(dest),
+                    "in_cloud": in_cloud,
                     # Kept for the existing dashboard JS, which reads in_drive.
-                    "in_drive": _is_cloud_path(dest)})
+                    "in_drive": in_cloud})
 
 
 @files_bp.route("/api/segments/clear", methods=["POST"])
@@ -682,10 +653,7 @@ def api_segments_clear():
     if db_path.exists():
         try:
             with get_connection(str(db_path)) as conn:
-                # Add hidden column if upgrading from older DB
-                cols = [c[1] for c in conn.execute("PRAGMA table_info(segments)").fetchall()]
-                if "hidden" not in cols:
-                    conn.execute("ALTER TABLE segments ADD COLUMN hidden INTEGER DEFAULT 0")
+                _ensure_hidden_column(conn)
                 conn.execute("UPDATE segments SET hidden = 1")
                 conn.commit()
         except Exception as exc:
@@ -700,13 +668,9 @@ def api_segments_clear():
 def api_segments_hide_one():
     """Hide one segment row by file_path.
 
-    The segment list doesn't carry DB row IDs across the multiple
-    metadata.db files (main + per-demo), so file_path is the cheapest
-    stable identifier. Walks every metadata.db under the output root,
-    sets hidden=1 on any matching row, leaves the file on disk alone.
-
-    Used by the per-row [X] button in the metrics table - the user just
-    wants the entry off the dashboard, not the underlying file deleted.
+    The segment list carries no row IDs across the several metadata.db files
+    (main + per-demo), so file_path is the identifier. Sets hidden=1 on any
+    matching row under the output root and leaves the file on disk.
 
     Author: Bloodawn (KheivenD), 2026-05-03 (cleanup of dead rows).
     """
@@ -725,9 +689,7 @@ def api_segments_hide_one():
     for db_path in output_root.rglob("metadata.db"):
         try:
             with get_connection(str(db_path)) as conn:
-                cols = [c[1] for c in conn.execute("PRAGMA table_info(segments)").fetchall()]
-                if "hidden" not in cols:
-                    conn.execute("ALTER TABLE segments ADD COLUMN hidden INTEGER DEFAULT 0")
+                _ensure_hidden_column(conn)
                 cur = conn.execute(
                     "UPDATE segments SET hidden = 1 WHERE file_path = ? AND COALESCE(hidden,0) = 0",
                     (file_path,),
@@ -745,95 +707,53 @@ def api_segments_hide_one():
 def api_segments_cleanup_missing():
     """Hide every segment whose file_path no longer exists on disk.
 
-    A pipeline test or a stop-mid-run can leave dangling DB rows whose
-    file got cleaned up before the row could be deleted. The user can
-    see them in the dashboard but the play / encrypt buttons all do
-    nothing. This sweeps them in one shot.
-
-    Returns the count of rows hidden so the frontend can confirm.
+    A test run or a stop mid-run can leave rows whose file is gone, so the
+    play / encrypt buttons do nothing. Returns the count hidden.
 
     Author: Bloodawn (KheivenD), 2026-05-03 (cleanup of dead rows).
     """
-    # Walk every plausible root - pipeline output_dir, last demo
-    # output_root, project /outputs/ - same fan-out /api/segments uses.
-    with _state_lock:
-        cfg = _status.get("config", {})
-    with _demo_lock:
-        demo_last_root = _demo_state.get("last_output_root", "")
-
-    candidate_roots: list[Path] = []
-    for raw in (
-        cfg.get("output_dir", ""),
-        demo_last_root,
-        str(_ROOT / "outputs"),
-    ):
-        if raw:
-            try:
-                p = Path(raw).resolve()
-                if p not in candidate_roots and p.exists():
-                    candidate_roots.append(p)
-            except Exception:
-                continue
-
     hidden_count = 0
     redundant_demo_count = 0
-    for root in candidate_roots:
-        for db_path in root.rglob("metadata.db"):
-            try:
-                with get_connection(str(db_path)) as conn:
-                    cols = [c[1] for c in conn.execute("PRAGMA table_info(segments)").fetchall()]
-                    if "hidden" not in cols:
-                        conn.execute("ALTER TABLE segments ADD COLUMN hidden INTEGER DEFAULT 0")
-                    rows = conn.execute(
-                        "SELECT rowid, file_path FROM segments "
-                        "WHERE COALESCE(hidden,0) = 0"
-                    ).fetchall()
-                    stale_ids = []
-                    db_dir = db_path.parent
-                    for rowid, fp in rows:
-                        if not fp:
-                            stale_ids.append(rowid)
-                            continue
-                        # Resolve path (relative paths are relative to the db's dir)
-                        p = Path(fp)
-                        if not p.is_absolute():
-                            p = db_dir / p
-                        if not p.exists():
-                            stale_ids.append(rowid)
-                    if stale_ids:
-                        placeholders = ",".join("?" * len(stale_ids))
-                        conn.execute(
-                            f"UPDATE segments SET hidden = 1 WHERE rowid IN ({placeholders})",
-                            stale_ids,
-                        )
-                        hidden_count += len(stale_ids)
+    for db_path in _metadata_dbs(_candidate_roots()):
+        try:
+            with get_connection(str(db_path)) as conn:
+                _ensure_hidden_column(conn)
+                rows = conn.execute(
+                    "SELECT rowid, file_path FROM segments "
+                    "WHERE COALESCE(hidden,0) = 0"
+                ).fetchall()
+                db_dir = db_path.parent
+                # Relative paths are relative to the db's folder.
+                stale_ids = [rowid for rowid, fp in rows
+                             if not fp or not (db_dir / fp).exists()]
+                if stale_ids:
+                    placeholders = ",".join("?" * len(stale_ids))
+                    conn.execute(
+                        f"UPDATE segments SET hidden = 1 WHERE rowid IN ({placeholders})",
+                        stale_ids,
+                    )
+                    hidden_count += len(stale_ids)
 
-                    # ── Redundant per-mode demo rows ─────────────────────
-                    # Pre-2026-05-04 the demo runner indexed BOTH every
-                    # per-mode rendered video AND the split-screen
-                    # composite - five rows per demo run for what is
-                    # effectively one output. Hide the per-mode rows in
-                    # any demo_comp* dir that also has a *_split_M*
-                    # composite row, so the table only shows the one
-                    # video the user actually cares about.
-                    # Author: Bloodawn (KheivenD), 2026-05-04 (demo dedup).
-                    if "demo_comp" in str(db_path).lower():
-                        has_split = conn.execute(
-                            "SELECT 1 FROM segments "
-                            "WHERE camera_id LIKE '%_split_%' "
-                            "  AND COALESCE(hidden,0) = 0 LIMIT 1"
-                        ).fetchone()
-                        if has_split:
-                            cur = conn.execute(
-                                "UPDATE segments SET hidden = 1 "
-                                "WHERE camera_id LIKE '%_demo_mode%' "
-                                "  AND COALESCE(hidden,0) = 0"
-                            )
-                            redundant_demo_count += cur.rowcount
-                    conn.commit()
-            except Exception as exc:  # noqa: BLE001
-                log.warning("cleanup_missing: skipped %s - %s", db_path, exc)
-                continue
+                # Older demo runs indexed every per-mode render plus the
+                # split-screen composite. In a demo_comp* db with a *_split_*
+                # row, hide the per-mode rows.
+                # Author: Bloodawn (KheivenD), 2026-05-04 (demo dedup).
+                if "demo_comp" in str(db_path).lower():
+                    has_split = conn.execute(
+                        "SELECT 1 FROM segments "
+                        "WHERE camera_id LIKE '%_split_%' "
+                        "  AND COALESCE(hidden,0) = 0 LIMIT 1"
+                    ).fetchone()
+                    if has_split:
+                        cur = conn.execute(
+                            "UPDATE segments SET hidden = 1 "
+                            "WHERE camera_id LIKE '%_demo_mode%' "
+                            "  AND COALESCE(hidden,0) = 0"
+                        )
+                        redundant_demo_count += cur.rowcount
+                conn.commit()
+        except Exception as exc:  # noqa: BLE001 - one bad db must not stop the sweep
+            log.warning("cleanup_missing: skipped %s - %s", db_path, exc)
 
     total = hidden_count + redundant_demo_count
     if total:
@@ -845,8 +765,3 @@ def api_segments_cleanup_missing():
         "missing": hidden_count,
         "redundant_demo": redundant_demo_count,
     })
-
-
-# ── Archive query routes (Ashleyn's DB queries) ───────────────────────────────
-
-

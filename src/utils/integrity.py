@@ -29,9 +29,14 @@ import hashlib
 import json
 import sys
 import threading
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+
+try:
+    from utils.tail import iter_lines_backwards
+except ModuleNotFoundError:  # pragma: no cover - import path shim
+    from src.utils.tail import iter_lines_backwards
 
 MANIFEST_NAME = "MANIFEST.sha256.jsonl"
 _GENESIS = "0" * 64
@@ -88,7 +93,30 @@ def _read_entries(manifest: Path) -> list[dict]:
     return entries
 
 
-def append_manifest(directory: Path, output_file: Path) -> Optional[dict]:
+def _last_chain(manifest: Path) -> str:
+    """Chain value of the manifest's last entry, or the genesis value.
+
+    Reads backwards from the end of the file, so an append costs the same
+    with ten entries or a year of them. Matches _read_entries: blank lines
+    are skipped and a malformed last line counts as having no chain.
+    """
+    try:
+        with closing(iter_lines_backwards(manifest)) as lines:
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    last = json.loads(line)
+                except json.JSONDecodeError:
+                    return _GENESIS
+                return str(last.get("chain", _GENESIS))
+    except OSError:
+        pass
+    return _GENESIS
+
+
+def append_manifest(directory: Path, output_file: Path) -> dict | None:
     """Record ``output_file`` in the folder manifest. Returns the entry.
 
     Best-effort by design: recording integrity metadata must never fail a
@@ -103,11 +131,7 @@ def append_manifest(directory: Path, output_file: Path) -> Optional[dict]:
         return None
     with _append_lock:
         manifest = _manifest_path(directory)
-        entries = _read_entries(manifest)
-        prev_chain = _GENESIS
-        if entries:
-            last = entries[-1]
-            prev_chain = str(last.get("chain", _GENESIS))
+        prev_chain = _last_chain(manifest)
         entry = {
             "file": output_file.name,
             "sha256": digest,
@@ -179,7 +203,7 @@ def verify_manifest(directory: Path) -> dict:
     return report
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     """CLI entry: ``python -m utils.integrity verify <folder>``."""
     argv = list(sys.argv[1:] if argv is None else argv)
     if len(argv) != 2 or argv[0] != "verify":

@@ -24,6 +24,8 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import numpy as np
+
 try:                                       # bundled-first ffmpeg resolution (TASK 2.3)
     from utils.ffmpeg import ffmpeg_path
 except ImportError:                        # pragma: no cover - import path shim
@@ -78,27 +80,30 @@ class H264Writer:
         """Write one BGR frame (numpy array, shape HxWx3)."""
         if self._proc is None or self._proc.stdin is None:
             return
-        # Resize if dimensions don't match (safety guard)
         if frame.shape[0] != self._height or frame.shape[1] != self._width:
             import cv2
             frame = cv2.resize(frame, (self._width, self._height))
-        self._proc.stdin.write(frame.tobytes())
+        # Hand the pipe the array's own buffer; tobytes() would copy the
+        # whole frame first. Non-contiguous views (crops) still need a copy.
+        if not frame.flags.c_contiguous:
+            frame = np.ascontiguousarray(frame)
+        self._proc.stdin.write(frame.data)
 
     def release(self) -> None:
         if self._proc is not None:
             if self._proc.stdin:
                 try:
                     self._proc.stdin.close()
-                except Exception:
-                    pass
+                except OSError:
+                    pass  # ffmpeg already exited (broken pipe); nothing left to flush
             try:
                 self._proc.wait(timeout=30)
-            except Exception:
-                # FFmpeg did not exit within 30 s - kill it so we don't hang forever.
+            except subprocess.TimeoutExpired:
+                # Kill it so release() never hangs forever.
                 try:
                     self._proc.kill()
                     self._proc.wait()
-                except Exception:
+                except OSError:
                     pass
             self._proc = None
         self._opened = False

@@ -26,8 +26,8 @@ Architecture:
 
 Static suppression mask (optional):
     Regions that have ONLY ever produced false detections can be added to a
-    suppression mask. Future frames skip those regions entirely, saving both
-    MOG2 and YOLO work. The mask resets when a true target is seen in that
+    suppression mask. Future frames skip those regions entirely, saving YOLO
+    work. The mask resets when a true target is seen in that
     region (so if a person walks into a previously-suppressed leaf area, they
     get detected).
 
@@ -46,7 +46,7 @@ Author: Bloodawn / KheivenD
 from __future__ import annotations
 
 import logging
-from typing import Optional, Tuple
+import math
 
 import cv2
 import numpy as np
@@ -118,18 +118,15 @@ def detect_dominant_color(frame: np.ndarray, x: int, y: int, w: int, h: int) -> 
     if x2 <= x1 or y2 <= y1:
         return "unknown"
 
-    crop = frame[y1:y2, x1:x2]
-    if crop.size == 0:
-        return "unknown"
-
-    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    hsv = cv2.cvtColor(frame[y1:y2, x1:x2], cv2.COLOR_BGR2HSV)
     h_ch, s_ch, v_ch = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
 
     # Achromatic check: pixels with low saturation or extreme brightness
     total = h_ch.size
-    white_px = int(np.sum((s_ch < 40) & (v_ch > 200)))
-    black_px = int(np.sum(v_ch < 50))
-    gray_px  = int(np.sum((s_ch < 50) & (v_ch >= 50) & (v_ch <= 200)))
+    low_sat = s_ch < 50
+    white_px = np.count_nonzero((s_ch < 40) & (v_ch > 200))
+    black_px = np.count_nonzero(v_ch < 50)
+    gray_px = np.count_nonzero(low_sat & (v_ch >= 50) & (v_ch <= 200))
 
     achromatic = white_px + black_px + gray_px
     if achromatic > total * 0.55:
@@ -139,15 +136,15 @@ def detect_dominant_color(frame: np.ndarray, x: int, y: int, w: int, h: int) -> 
             return "black"
         return "gray"
 
-    # Only consider chromatic (saturated) pixels for hue analysis
-    chromatic_mask = s_ch >= 50
-    if not np.any(chromatic_mask):
+    # Only saturated pixels carry a meaningful hue.
+    hues = h_ch[~low_sat]
+    if hues.size == 0:
         return "gray"
 
-    h_vals = h_ch[chromatic_mask]
-    hist, _ = np.histogram(h_vals, bins=180, range=(0, 180))
+    # 8-bit HSV hue is an integer in 0..179, so a bincount is the 180-bin
+    # histogram without np.histogram's float binning overhead.
+    hist = np.bincount(hues, minlength=180)
 
-    # Score each named color
     best_label, best_score = "unknown", 0
     for label, ranges in _HUE_RANGES:
         score = sum(int(hist[lo:hi].sum()) for lo, hi in ranges)
@@ -193,7 +190,6 @@ def detect_scene_type(motion_vectors: list[tuple[float, float]], roi_count: int,
     if not motion_vectors or roi_count < 3:
         return "unknown"
 
-    import math
     angles = []
     for dx, dy in motion_vectors:
         mag = math.hypot(dx, dy)
@@ -275,7 +271,7 @@ class ObjectFilter:
         self,
         confidence: float = _DEFAULT_CONFIDENCE,
         device: str = "auto",
-        target_classes: Optional[set] = None,
+        target_classes: set | None = None,
         min_box_px: int = _MIN_CLASSIFY_PX,
         use_suppression: bool = True,
         suppress_after: int = 30,
@@ -328,11 +324,14 @@ class ObjectFilter:
         if self.use_pose:
             self._load_pose()
 
-        # Suppression state: grid of counters, built lazily on first frame
-        self._suppress_grid: Optional[np.ndarray] = None  # (rows, cols) int16
-        self._suppress_mask: Optional[np.ndarray] = None  # (H, W) bool
+        # Suppression state, built lazily on the first frame. The grid counts
+        # false-only frames per cell; _suppressed_cells is the snapshot of
+        # "count >= suppress_after" taken at the end of each filter() call,
+        # so boxes within one frame are judged against the previous frame.
+        self._suppress_grid: np.ndarray | None = None  # (rows, cols) int16
+        self._suppressed_cells: np.ndarray | None = None  # (rows, cols) bool
         self._grid_cell = 32   # px per grid cell
-        self._frame_shape: Optional[Tuple[int, int]] = None
+        self._frame_shape: tuple[int, int] | None = None
 
     # ------------------------------------------------------------------
     # Model loading
@@ -422,13 +421,6 @@ class ObjectFilter:
     # Public API
     # ------------------------------------------------------------------
 
-    # COCO class → semantic group mapping used for type labelling
-    _VEHICLE_CLASSES  = {"bicycle", "car", "motorcycle", "bus", "truck", "train", "boat", "airplane"}
-    _PERSON_CLASSES   = {"person"}
-    _ANIMAL_CLASSES   = {"bird", "cat", "dog", "horse", "sheep", "cow", "elephant",
-                         "bear", "zebra", "giraffe"}
-    _CARRIED_CLASSES  = {"backpack", "handbag", "suitcase"}
-
     @property
     def active(self) -> bool:
         """True if YOLO is loaded and filtering is actually happening."""
@@ -485,7 +477,7 @@ class ObjectFilter:
         if self.use_suppression:
             for region in false_regions:
                 self._increment_suppression(region.x, region.y, region.w, region.h)
-            self._rebuild_suppress_mask()
+            self._suppressed_cells = self._suppress_grid >= self.suppress_after
 
         return kept
 
@@ -493,8 +485,8 @@ class ObjectFilter:
         """Return a segment-level type label from the last filter() call.
 
         Combines all detected class names across every kept region and maps
-        them to one of:
-          vehicle | person | person+vehicle | animal | mixed | unknown
+        them to one of: person | vehicle | animal | person+vehicle |
+        vehicle+animal | person+animal | other | unknown.
         """
         all_classes: set[str] = set()
         for labels in self.last_detected_classes.values():
@@ -513,7 +505,7 @@ class ObjectFilter:
     def reset_suppression(self) -> None:
         """Clear the suppression mask. Call when the source changes."""
         self._suppress_grid = None
-        self._suppress_mask = None
+        self._suppressed_cells = None
         self._frame_shape = None
 
     # ------------------------------------------------------------------
@@ -522,7 +514,7 @@ class ObjectFilter:
 
     def _classify_box_labels(
         self, frame: np.ndarray, x: int, y: int, w: int, h: int
-    ) -> Tuple[Optional[set], bool]:
+    ) -> tuple[set | None, bool]:
         """Run YOLO on the bbox crop.
 
         Returns (found, pose_confirmed):
@@ -592,50 +584,34 @@ class ObjectFilter:
         rows = (h + self._grid_cell - 1) // self._grid_cell
         cols = (w + self._grid_cell - 1) // self._grid_cell
         self._suppress_grid = np.zeros((rows, cols), dtype=np.int16)
-        self._suppress_mask = np.zeros((h, w), dtype=bool)
+        self._suppressed_cells = np.zeros((rows, cols), dtype=bool)
         log.debug("Suppression grid initialised: %dx%d cells", rows, cols)
 
-    def _grid_cells_for(self, x: int, y: int, w: int, h: int):
-        """Yield (row, col) grid cell indices covered by the bbox."""
+    def _grid_window(self, x: int, y: int, w: int, h: int) -> np.ndarray:
+        """View of the grid cells the bbox covers (empty for a degenerate box)."""
         c = self._grid_cell
-        r0 = y // c; r1 = (y + h - 1) // c
-        c0 = x // c; c1 = (x + w - 1) // c
         rows, cols = self._suppress_grid.shape
-        for r in range(max(0, r0), min(rows, r1 + 1)):
-            for cc in range(max(0, c0), min(cols, c1 + 1)):
-                yield r, cc
+        r0, c0 = max(0, y // c), max(0, x // c)
+        # Clamp the stop at the start: a negative stop would wrap around.
+        r1 = max(r0, min(rows, (y + h - 1) // c + 1))
+        c1 = max(c0, min(cols, (x + w - 1) // c + 1))
+        return self._suppress_grid[r0:r1, c0:c1]
 
     def _is_suppressed(self, x: int, y: int, w: int, h: int) -> bool:
-        if self._suppress_mask is None:
+        if self._suppressed_cells is None:
             return False
         fh, fw = self._frame_shape
         cx = max(0, min(fw - 1, x + w // 2))
         cy = max(0, min(fh - 1, y + h // 2))
-        return bool(self._suppress_mask[cy, cx])
+        return bool(self._suppressed_cells[cy // self._grid_cell, cx // self._grid_cell])
 
     def _increment_suppression(self, x: int, y: int, w: int, h: int) -> None:
         if self._suppress_grid is None:
             return
-        for r, c in self._grid_cells_for(x, y, w, h):
-            if self._suppress_grid[r, c] < 32767:
-                self._suppress_grid[r, c] += 1
+        cells = self._grid_window(x, y, w, h)
+        cells[cells < 32767] += 1   # saturate instead of wrapping int16
 
     def _reset_suppression(self, x: int, y: int, w: int, h: int) -> None:
         if self._suppress_grid is None:
             return
-        for r, c in self._grid_cells_for(x, y, w, h):
-            self._suppress_grid[r, c] = 0
-
-    def _rebuild_suppress_mask(self) -> None:
-        if self._suppress_grid is None or self._suppress_mask is None:
-            return
-        c = self._grid_cell
-        h, w = self._frame_shape
-        rows, cols = self._suppress_grid.shape
-        for r in range(rows):
-            for cc in range(cols):
-                y0 = r * c; y1 = min(h, y0 + c)
-                x0 = cc * c; x1 = min(w, x0 + c)
-                self._suppress_mask[y0:y1, x0:x1] = (
-                    self._suppress_grid[r, cc] >= self.suppress_after
-                )
+        self._grid_window(x, y, w, h)[:] = 0

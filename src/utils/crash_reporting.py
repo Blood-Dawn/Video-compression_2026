@@ -35,7 +35,6 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Optional
 
 _log = logging.getLogger(__name__)
 
@@ -52,8 +51,8 @@ def _is_truthy_env(name: str) -> bool:
 
 
 def init_crash_reporting(
-    release: Optional[str] = None,
-    environment: Optional[str] = None,
+    release: str | None = None,
+    environment: str | None = None,
 ) -> bool:
     """Initialize Sentry if the SDK is installed and opt-in is on.
 

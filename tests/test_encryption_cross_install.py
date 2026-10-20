@@ -45,7 +45,6 @@ from src.utils.encryption import (
     SALT_SIZE,
     PBKDF2_ITERS,
     encrypt_file,
-    decrypt_file,
     generate_key,
 )
 

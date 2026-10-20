@@ -41,13 +41,10 @@ Config lives in its own state file rather than gui_state.json, because it
 may hold an ntfy access token and gui_state.json's contract is "paths, no
 secrets". The file is written 0o600 the same way device_tokens.json is.
 
+``check_outbound_url`` exposes the same guard, with caller-specific wording,
+for URLs this module does not post to itself (a device's own push endpoint).
+
 Author: Bloodawn (KheivenD), 2026-08-17 (R6 TRACK C1).
-Updated: 2026-10-07 - three more blocked metadata addresses, a trailing-dot
-hostname normalization, and ``check_outbound_url`` (a shared, label-aware
-version of this guard for callers that are not the ntfy topic itself, such
-as a device's own push endpoint) folded in from planner 5.10/6.9's review,
-on top of the existing SEC-017 DNS-rebinding fix below, which they do not
-replace.
 """
 
 from __future__ import annotations
@@ -256,6 +253,46 @@ def _address_refused(ip) -> str:
     return ""
 
 
+def _check_url(url, *, require_path: bool, label: str,
+               credential_field: str) -> "tuple[bool, str, list, str]":
+    """The one SSRF check behind every public guard. Returns (ok, reason, addrs, host)."""
+    s = str(url or "").strip()
+    if not s:
+        return False, f"empty {label} URL", [], ""
+    if len(s) > 2048:
+        return False, f"{label} URL is too long", [], ""
+    try:
+        parsed = urlparse(s)
+    except ValueError:
+        return False, f"{label} URL could not be parsed", [], ""
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in ("http", "https"):
+        return False, f"scheme not allowed: {scheme or 'none'}", [], ""
+    if parsed.username or parsed.password:
+        return False, f"credentials in the URL are not allowed, use the {credential_field}", [], ""
+    try:
+        # A trailing dot is the fully-qualified spelling of the same name
+        # ("metadata.google.internal."), so it must not slip past the
+        # hostname blocklist below.
+        host = (parsed.hostname or "").lower().rstrip(".")
+    except ValueError:
+        return False, f"{label} URL host could not be parsed", [], ""
+    if not host:
+        return False, f"no host in the {label} URL", [], ""
+    if host in _BLOCKED_HOSTS:
+        return False, "blocked cloud-metadata host", [], host
+    if require_path and not (parsed.path or "").strip("/"):
+        return False, "no topic in the URL path, for example http://192.168.1.50:8080/svcs-alerts", [], host
+    addrs, why = _addresses_for(host, label)
+    if why:
+        return False, why, [], host
+    for ip in addrs:
+        refused = _address_refused(ip)
+        if refused:
+            return False, refused, [], host
+    return True, "", addrs, host
+
+
 def validate_push_url(url) -> "tuple[bool, str, list, str]":
     """Validate an ntfy topic URL. Returns (ok, reason, addrs, host).
 
@@ -274,51 +311,16 @@ def validate_push_url(url) -> "tuple[bool, str, list, str]":
     lookups is the SEC-017 DNS-rebinding gap, where a hostile DNS answer
     can differ between the check and the connection.
     """
-    s = str(url or "").strip()
-    if not s:
-        return False, "empty topic URL", [], ""
-    if len(s) > 2048:
-        return False, "topic URL is too long", [], ""
-    try:
-        parsed = urlparse(s)
-    except ValueError:
-        return False, "topic URL could not be parsed", [], ""
-    scheme = (parsed.scheme or "").lower()
-    if scheme not in ("http", "https"):
-        return False, f"scheme not allowed: {scheme or 'none'}", [], ""
-    if parsed.username or parsed.password:
-        return False, "credentials in the URL are not allowed, use the token field", [], ""
-    try:
-        # A trailing dot is the fully-qualified spelling of the same name
-        # ("metadata.google.internal."), so it must not slip past the
-        # hostname blocklist below.
-        host = (parsed.hostname or "").lower().rstrip(".")
-    except ValueError:
-        return False, "topic URL host could not be parsed", [], ""
-    if not host:
-        return False, "no host in the topic URL", [], ""
-    if host in _BLOCKED_HOSTS:
-        return False, "blocked cloud-metadata host", [], host
-    if not (parsed.path or "").strip("/"):
-        return False, "no topic in the URL path, for example http://192.168.1.50:8080/svcs-alerts", [], host
-    addrs, why = _addresses_for(host)
-    if why:
-        return False, why, [], host
-    for ip in addrs:
-        refused = _address_refused(ip)
-        if refused:
-            return False, refused, [], host
-    return True, "", addrs, host
+    return _check_url(url, require_path=True, label="topic",
+                      credential_field="token field")
 
 
 def is_safe_push_url(url) -> "tuple[bool, str]":
     """Validate an ntfy topic URL. Returns (ok, reason).
 
-    Thin (ok, reason) view of ``validate_push_url`` kept for every existing
-    caller and test that only wants the yes/no answer. A caller that is
-    about to make the actual request should call ``validate_push_url``
-    directly and pin the connection to the addresses it returns instead
-    (see ``pin_resolution``).
+    A caller that is about to make the actual request should call
+    ``validate_push_url`` instead and pin the connection to the addresses it
+    returns (see ``pin_resolution``).
     """
     ok, why, _addrs, _host = validate_push_url(url)
     return ok, why
@@ -332,10 +334,9 @@ def check_outbound_url(url, *, require_path: bool, label: str,
     rebinding-safe guard for a URL this module is about to POST to itself,
     and remain the only path used for that. This function is for a caller
     that needs the SAME blocklist and address checks but is not making the
-    request yet and so has nothing to pin a connection to today - right now
-    that is a device registering its own push endpoint (planner 6.9): the
-    server validates the URL at registration time and will post to it, with
-    its own pinned resolution, once the week 8 delivery path exists.
+    request yet and so has nothing to pin a connection to: a device
+    registering its own push endpoint (planner 6.9). The URL is checked at
+    registration time; whatever later posts to it must pin its own resolution.
 
     ``label`` names the feature in messages ("push endpoint", "webhook") and
     ``credential_field`` names the form field that holds a secret instead,
@@ -343,38 +344,9 @@ def check_outbound_url(url, *, require_path: bool, label: str,
     their form. ``require_path`` additionally refuses a bare host, which
     matters for an ntfy-style topic URL and not for others.
     """
-    s = str(url or "").strip()
-    if not s:
-        return False, f"empty {label} URL"
-    if len(s) > 2048:
-        return False, f"{label} URL is too long"
-    try:
-        parsed = urlparse(s)
-    except ValueError:
-        return False, f"{label} URL could not be parsed"
-    scheme = (parsed.scheme or "").lower()
-    if scheme not in ("http", "https"):
-        return False, f"scheme not allowed: {scheme or 'none'}"
-    if parsed.username or parsed.password:
-        return False, f"credentials in the URL are not allowed, use the {credential_field}"
-    try:
-        host = (parsed.hostname or "").lower().rstrip(".")
-    except ValueError:
-        return False, f"{label} URL host could not be parsed"
-    if not host:
-        return False, f"no host in the {label} URL"
-    if host in _BLOCKED_HOSTS:
-        return False, "blocked cloud-metadata host"
-    if require_path and not (parsed.path or "").strip("/"):
-        return False, "no topic in the URL path, for example http://192.168.1.50:8080/svcs-alerts"
-    addrs, why = _addresses_for(host, label)
-    if why:
-        return False, why
-    for ip in addrs:
-        refused = _address_refused(ip)
-        if refused:
-            return False, refused
-    return True, ""
+    ok, why, _addrs, _host = _check_url(url, require_path=require_path, label=label,
+                                        credential_field=credential_field)
+    return ok, why
 
 
 @contextlib.contextmanager

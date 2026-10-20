@@ -33,7 +33,6 @@ import tempfile
 import threading
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 try:
     from utils.ffmpeg import ffmpeg_path, ffmpeg_available
@@ -87,11 +86,11 @@ class CrfSearchResult:
 
     crf: int                              # the CRF to encode the full clip at
     target_vmaf: float
-    measured_vmaf: Optional[float] = None  # VMAF of the samples at ``crf``
+    measured_vmaf: float | None = None  # VMAF of the samples at ``crf``
     probes: int = 0                        # sample encodes actually run
     cached: bool = False
-    fallback_reason: Optional[str] = None  # set when the fixed CRF was kept
-    measurements: List[Tuple[int, float]] = field(default_factory=list)
+    fallback_reason: str | None = None  # set when the fixed CRF was kept
+    measurements: list[tuple[int, float]] = field(default_factory=list)
 
     @property
     def used_target(self) -> bool:
@@ -101,7 +100,7 @@ class CrfSearchResult:
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-def clamp_target(target: Optional[float]) -> float:
+def clamp_target(target: float | None) -> float:
     """Clamp a requested VMAF target into the supported band."""
     try:
         t = float(target) if target is not None else DEFAULT_TARGET_VMAF
@@ -112,7 +111,7 @@ def clamp_target(target: Optional[float]) -> float:
     return max(TARGET_VMAF_MIN, min(TARGET_VMAF_MAX, t))
 
 
-def crf_bounds(codec: str) -> Tuple[int, int]:
+def crf_bounds(codec: str) -> tuple[int, int]:
     """The CRF search window for ``codec`` (AV1 uses a wider 0-63 scale)."""
     if (codec or "").lower() in _AV1_CODECS:
         return _SEARCH_CRF_MIN, _SEARCH_CRF_MAX_AV1
@@ -139,7 +138,7 @@ def _cache_key(source, codec: str, preset: str, target: float,
             f"|{int(samples)}x{float(sample_seconds):.1f}")
 
 
-def _cache_load() -> Dict[str, dict]:
+def _cache_load() -> dict[str, dict]:
     try:
         f = _cache_file()
         if not f.exists():
@@ -152,14 +151,14 @@ def _cache_load() -> Dict[str, dict]:
 
 def cache_get(source, codec: str, preset: str, target: float,
               samples: int = DEFAULT_SAMPLES,
-              sample_seconds: float = DEFAULT_SAMPLE_SECONDS) -> Optional[dict]:
+              sample_seconds: float = DEFAULT_SAMPLE_SECONDS) -> dict | None:
     with _cache_lock:
         return _cache_load().get(
             _cache_key(source, codec, preset, target, samples, sample_seconds))
 
 
 def cache_put(source, codec: str, preset: str, target: float,
-              crf: int, vmaf: Optional[float],
+              crf: int, vmaf: float | None,
               samples: int = DEFAULT_SAMPLES,
               sample_seconds: float = DEFAULT_SAMPLE_SECONDS) -> None:
     try:
@@ -180,7 +179,7 @@ def cache_put(source, codec: str, preset: str, target: float,
         pass
 
 
-def _probe_duration(source) -> Optional[float]:
+def _probe_duration(source) -> float | None:
     """Source duration in seconds via ffprobe, or None."""
     try:
         from utils.ffmpeg import ffprobe_path
@@ -198,7 +197,7 @@ def _probe_duration(source) -> Optional[float]:
         return None
 
 
-def sample_offsets(duration: float, samples: int, sample_seconds: float) -> List[float]:
+def sample_offsets(duration: float, samples: int, sample_seconds: float) -> list[float]:
     """Start offsets spread across the clip (not just the head).
 
     For 3 samples that is roughly 20%/50%/80% of the duration, pulled back so a
@@ -254,10 +253,10 @@ def _encode_sample(sample: Path, crf: int, codec: str, preset: str, dest: Path) 
         return False
 
 
-def _measure_crf(samples: List[Path], crf: int, codec: str, preset: str,
-                 workdir: Path) -> Optional[float]:
+def _measure_crf(samples: list[Path], crf: int, codec: str, preset: str,
+                 workdir: Path) -> float | None:
     """Mean VMAF across the samples encoded at ``crf``, or None on failure."""
-    scores: List[float] = []
+    scores: list[float] = []
     for i, sample in enumerate(samples):
         dist = workdir / f"d_{crf}_{i}.mp4"
         if not _encode_sample(sample, crf, codec, preset, dist):
@@ -273,7 +272,7 @@ def _measure_crf(samples: List[Path], crf: int, codec: str, preset: str,
     return (sum(scores) / len(scores)) if scores else None
 
 
-def interpolate_crf(measurements: List[Tuple[int, float]], target: float,
+def interpolate_crf(measurements: list[tuple[int, float]], target: float,
                     lo: int, hi: int) -> int:
     """Next CRF to probe: linear interpolation on the bracketing pair, else bisect.
 
@@ -302,7 +301,7 @@ def find_crf_for_target(
     source,
     codec: str,
     fixed_crf: int,
-    target_vmaf: Optional[float] = None,
+    target_vmaf: float | None = None,
     preset: str = "veryfast",
     samples: int = DEFAULT_SAMPLES,
     sample_seconds: float = DEFAULT_SAMPLE_SECONDS,
@@ -340,7 +339,7 @@ def find_crf_for_target(
 
         workdir = Path(tempfile.mkdtemp(prefix="svcs_vmaf_target_"))
         try:
-            cut: List[Path] = []
+            cut: list[Path] = []
             for i, off in enumerate(offsets):
                 dest = workdir / f"s{i}.mp4"
                 if _extract_sample(src, off, sample_seconds, dest):
@@ -349,8 +348,8 @@ def find_crf_for_target(
                 result.fallback_reason = "could not extract samples"
                 return result
 
-            measurements: List[Tuple[int, float]] = []
-            best: Optional[Tuple[int, float]] = None   # largest CRF meeting target
+            measurements: list[tuple[int, float]] = []
+            best: tuple[int, float] | None = None   # largest CRF meeting target
             probe_lo, probe_hi = lo, hi
 
             for _ in range(max(1, int(max_probes))):

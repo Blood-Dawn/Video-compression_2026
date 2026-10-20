@@ -21,7 +21,9 @@ Author: Bloodawn (KheivenD), 2026-06-03 (FIX 6 - library/gallery).
 """
 
 import hashlib
+import os
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -45,10 +47,8 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 
 library_bp = Blueprint("library", __name__)
 
-# R4 Phase 6: the universal ingest set so vendor/DVR exports show in the Library
-# and can be compressed. Thumbnails use FFmpeg (broad format support); a vendor
-# ORIGINAL will not play in the browser <video> tag, but its compressed OUTPUT
-# is mp4 and does.
+# The universal ingest set, so vendor/DVR exports show in the Library. A vendor
+# original will not play in a browser <video> tag, but its mp4 output does.
 try:
     from utils.video_formats import ALL_INGEST_EXTS as _ALL_INGEST_EXTS
 except ModuleNotFoundError:  # pragma: no cover - import path shim
@@ -66,20 +66,9 @@ _MIME = {
 def _resolve_folder(raw: str) -> Path:
     """Resolve the requested library folder.
 
-    Order: the explicitly requested folder, then the one the user last browsed,
-    then the output dir.
-
-    The middle step was missing. /api/library/videos calls set_library_folder()
-    on every request and its own docstring promises "the chosen folder is
-    remembered so the Library reopens where the user left off", but nothing ever
-    read that value back: get_library_folder() existed and had no callers, so
-    the promise was unfulfilled for every client.
-
-    It went unnoticed on the desktop because its JS echoes the folder back from
-    the previous response into the input box, so within one page session it
-    looks like it works. Load the page fresh and the Library still opens on the
-    output dir. It became visible on the phone, which sends no folder at all and
-    therefore always got the output dir with no way to change it.
+    Order: the explicitly requested folder, then the one the user last browsed
+    (so the Library reopens where the user left off; the phone sends no folder
+    at all and depends on this), then the output dir.
     """
     raw = (raw or "").strip()
     if raw:
@@ -91,9 +80,8 @@ def _resolve_folder(raw: str) -> Path:
     remembered = (get_library_folder() or "").strip()
     if remembered:
         p = Path(remembered)
-        # Only honor it if it still exists: a folder can be unmounted, renamed,
-        # or on a drive that is not plugged in, and falling back is friendlier
-        # than reporting an empty library.
+        # The folder may be unmounted or renamed; fall back instead of
+        # showing an empty library.
         if p.is_dir():
             return p
     return Path(_default_output_dir())
@@ -102,17 +90,13 @@ def _resolve_folder(raw: str) -> Path:
 def _safe_video(raw: str, context_folder: str = ""):
     """Resolve a video path; return Path if it is an existing video file, else None.
 
-    ``context_folder`` (mobile fix, 2026-08-16): the file/thumb/compress routes
-    accept an explicit ``folder`` the client is browsing. Multiple clients share
-    the server-global "last library folder" that allowed_media_roots() derives
-    from, so when the desktop browses elsewhere, a phone's already-listed paths
-    fall out of the allowed set MID-SESSION and playback 400s for no visible
-    reason. An authenticated client can already make any existing folder the
-    library root via /api/library/videos?folder=..., which joins that same
-    allowed set; honoring the identical folder here, stated explicitly per
-    request, grants nothing an authed client could not already reach and
-    removes the cross-client race. The path must still be a real video file
-    strictly INSIDE the stated folder.
+    ``context_folder`` is the folder the client is browsing. Clients share the
+    server-global "last library folder" that allowed_media_roots() derives
+    from, so when the desktop browses elsewhere a phone's listed paths would
+    fall out of the allowed set mid-session. An authenticated client can
+    already make any folder the library root via /api/library/videos?folder=,
+    so honoring it per request grants nothing new. The path must still be a
+    real video file strictly inside that folder.
     """
     raw = (raw or "").strip()
     if not raw:
@@ -122,9 +106,8 @@ def _safe_video(raw: str, context_folder: str = ""):
     except (OSError, ValueError):
         return None
     # Must be an existing video file AND confined to one of the operator's media
-    # folders (SEC-003). The old `'..' in p.parts` check was dead code: resolve()
-    # collapses traversal before it runs, and an absolute path bypassed it
-    # entirely, so /api/library/file could stream any video on the host.
+    # folders (SEC-003); without the confinement /api/library/file could stream
+    # any video on the host.
     if not (p.is_file() and p.suffix.lower() in VIDEO_EXTS):
         return None
     if _ps.is_path_allowed(p, _ps.allowed_media_roots()):
@@ -151,35 +134,16 @@ def _int_arg(name: str, default=None):
         return default
 
 
-# ── Listing cache (M2.1a) ────────────────────────────────────────────────────
-# /api/library/videos used to re-walk the entire folder tree on EVERY request,
-# including every page of the same listing. Measured on this machine:
+# Listing cache. The walk (directory listing, a stat per file, classification
+# against the compressed index) is linear in file count and does not depend on
+# the request's filters, so it is cached per (folder, recursive); filter and
+# sort run per request.
 #
-#     100 files ->    45 ms       5,000 files -> 2,153 ms
-#     50x the files -> 47.8x the time, i.e. strictly linear
-#
-# and every page pays it again, so paging through N pages costs O(N * files).
-# Projected onto a real deployment (one camera writing 60s segments produces
-# 1,440 a day) that is ~18.6 s per page at 30 days, ~74 s at four cameras.
-#
-# This is not a mobile-only problem: the desktop Library tab calls the same
-# endpoint, so anyone with a month of footage already has an 18 second Library.
-# It became visible while sizing the phone LIBRARY tab, where infinite scroll
-# would have multiplied it.
-#
-# The split that fixes it: the WALK (rglob + a stat per file + a resolve and an
-# is_file per file for classification, plus re-reading the compressed index) is
-# expensive and does not depend on the request's filters. The FILTER and SORT
-# are cheap and do. So the walk is cached per (folder, recursive) and the
-# filters keep running per request.
-#
-# TTL rather than mtime-watching on purpose: a nested tree changes without the
-# root's mtime moving, so an mtime check would be quietly wrong. A short TTL is
-# honest about being approximate, and `refresh=1` gives an exact answer when one
-# is needed.
+# TTL rather than mtime-watching: a nested tree changes without the root's
+# mtime moving. `refresh=1` forces an exact rebuild.
 _LIB_CACHE_TTL_S = 10.0
 _LIB_CACHE_MAX_FOLDERS = 4      # ~1 MB per cached folder at the 5000 cap
-_LIB_CACHE_CAP = 5000           # unchanged: the pre-existing listing cap
+_LIB_CACHE_CAP = 5000           # max files listed per folder
 
 _lib_cache_lock = threading.Lock()
 _lib_cache: dict = {}           # key -> {"at": float, "items": [...], ...}
@@ -191,54 +155,88 @@ def _reset_library_cache() -> None:
         _lib_cache.clear()
 
 
+def _suffix(name: str) -> str:
+    """Lower-cased extension, with the same edge cases as Path.suffix."""
+    dot = name.rfind(".")
+    return name[dot:].lower() if 0 < dot < len(name) - 1 else ""
+
+
+def _iter_video_entries(folder: Path, recursive: bool):
+    """Yield (DirEntry, posix path relative to folder, resolved folder or None).
+
+    A folder's entries come in directory order, then each subfolder depth
+    first. os.scandir answers is_file()/is_dir() from the listing itself (no
+    extra stat per file on Windows), and each folder is resolved once.
+
+    hls/ subfolders are not entered: the HLS runner writes transient
+    playlist*.ts chunks there while a stream runs, and they are not clips to
+    offer for compression. Pointing the library AT an hls folder still lists
+    it, since only subfolders below the listing root are skipped.
+    """
+    stack = [(str(folder), "")]
+    while stack:
+        dirpath, rel_prefix = stack.pop()
+        try:
+            with os.scandir(dirpath) as it:
+                entries = list(it)
+        except PermissionError:
+            # rglob skipped unreadable folders silently; iterdir raised.
+            if not recursive:
+                raise
+            continue
+        try:
+            resolved_dir = str(Path(dirpath).resolve())
+        except (OSError, ValueError):
+            resolved_dir = None
+
+        subdirs = []
+        for entry in entries:
+            try:
+                if recursive and entry.is_dir() and not entry.is_symlink():
+                    if entry.name.lower() != "hls":
+                        subdirs.append((entry.path, rel_prefix + entry.name + "/"))
+                    continue
+                if not entry.is_file():
+                    continue
+            except OSError:
+                continue
+            if _suffix(entry.name) in VIDEO_EXTS:
+                yield entry, rel_prefix + entry.name, resolved_dir
+        # Reversed so the first subfolder is popped (walked) first.
+        stack.extend(reversed(subdirs))
+
+
 def _walk_and_classify(folder: Path, recursive: bool) -> dict:
     """Walk one folder and classify every video in it. The expensive half.
 
-    Returns the same shape the cache stores. Classification is folded in here
-    rather than left per-request because it costs a resolve() and an is_file()
-    per file, which is I/O and belongs on the cached side of the split.
+    Returns the shape the cache stores. Classification lives here because it
+    needs each file's resolved path, which is I/O.
     """
     items = []
     truncated = False
     try:
-        walker = folder.rglob("*") if recursive else folder.iterdir()
-        for f in walker:
-            if not (f.is_file() and f.suffix.lower() in VIDEO_EXTS):
-                continue
-            # Skip the live stream's WORKING segments (2026-08-16): the HLS
-            # runner writes transient playlist*.ts chunks under <root>/hls/
-            # while a stream runs, and a recursive listing offered them as
-            # compressible "originals", which is exactly the redundant clutter
-            # the owner asked removed. Pointing the library AT an hls folder
-            # explicitly still lists it (the skip keys on a subfolder relative
-            # to the listing root, not on the root itself).
+        for entry, rel, resolved_dir in _iter_video_entries(folder, recursive):
             try:
-                _rel_parts = {p.lower() for p in f.relative_to(folder).parts[:-1]}
-            except ValueError:
-                _rel_parts = set()
-            if "hls" in _rel_parts:
-                continue
-            try:
-                st = f.stat()
+                st = os.stat(entry.path)
             except OSError:
                 continue
-            try:
-                rel = f.relative_to(folder).as_posix()
-            except ValueError:
-                rel = f.name
-            items.append({"name": rel, "path": str(f),
+            # A symlinked file resolves somewhere else; anything else lives
+            # in its (already resolved) folder.
+            if resolved_dir is not None and not entry.is_symlink():
+                resolved = os.path.join(resolved_dir, entry.name)
+            else:
+                resolved = None
+            items.append({"name": rel, "path": entry.path,
                           "size": st.st_size, "mtime": st.st_mtime,
-                          "_ext": f.suffix.lower()})
+                          "_ext": _suffix(entry.name), "_resolved": resolved})
             if len(items) >= _LIB_CACHE_CAP:
                 truncated = True
                 break
     except OSError as exc:
         return {"items": [], "exts": [], "truncated": False, "error": str(exc)}
 
-    # R3.1d: load the compressed index ONCE and build lookups so every file can
-    # be classified (original vs compressed output) without re-reading the index
-    # per item. out_to_src maps a recorded output back to its source so a
-    # compressed clip can show where it came from.
+    # Load the compressed index once. out_to_src maps a recorded output back to
+    # its source so a compressed clip can show where it came from.
     _idx = _cidx._load()
     _entries = _idx.get("entries", {})
     out_to_src = {e.get("output", ""): e.get("source", "") for e in _entries.values()}
@@ -246,10 +244,12 @@ def _walk_and_classify(folder: Path, recursive: bool) -> dict:
 
     for i in items:
         path_str = i["path"]
-        try:
-            rp = str(Path(path_str).resolve())
-        except (OSError, ValueError):
-            rp = path_str
+        rp = i.pop("_resolved")
+        if rp is None:
+            try:
+                rp = str(Path(path_str).resolve())
+            except (OSError, ValueError):
+                rp = path_str
         in_comp_loc = _comp_dirname in {p.lower() for p in Path(rp).parts}
         if in_comp_loc or rp in out_to_src:
             i["kind"] = "compressed"
@@ -267,9 +267,8 @@ def _walk_and_classify(folder: Path, recursive: bool) -> dict:
 def _cached_listing(folder: Path, recursive: bool, force: bool = False) -> dict:
     """Return the walked+classified listing for a folder, from cache if fresh.
 
-    The lock is held across the walk deliberately. Two clients asking for the
-    same cold folder should not both walk it: on a large tree that would double
-    the very cost this cache exists to remove.
+    The lock is held across the walk on purpose, so two clients asking for the
+    same cold folder do not both walk it.
     """
     key = (str(folder), bool(recursive))
     now = time.monotonic()
@@ -317,7 +316,6 @@ def api_library_videos():
     max_size = _int_arg("max_size")
     sort = (request.args.get("sort", "date") or "date").strip().lower()
     order = (request.args.get("order", "desc") or "desc").strip().lower()
-    # R3.1d: filter by whether a clip is an original or a compressed output.
     kind = (request.args.get("kind", "all") or "all").strip().lower()
     if kind not in ("all", "original", "compressed"):
         kind = "all"
@@ -328,19 +326,17 @@ def api_library_videos():
         return jsonify({"folder": str(folder), "exists": False,
                         "total": 0, "videos": []})
 
-    # Remember the folder for next time (R2.3 - persist last library folder).
+    # Remember the folder so the Library reopens there.
     try:
         from gui.services.gui_state_persist import set_library_folder
     except ModuleNotFoundError:  # pragma: no cover - import path shim
         from src.gui.services.gui_state_persist import set_library_folder
     set_library_folder(str(folder))
 
-    # Recurse by default so pointing at a parent folder (e.g. a corpus with
-    # per-scene subfolders) finds the clips nested beneath it. Capped so a huge
-    # tree cannot hang the request. ``recursive=0`` lists the top level only.
+    # Recurse by default so a parent folder finds nested clips (the walk is
+    # capped). ``recursive=0`` lists the top level only.
     recursive = (request.args.get("recursive", "1") or "1").strip() not in ("0", "false", "no")
-    # refresh=1 forces a rebuild, for the dashboard's refresh button and for a
-    # client that has just finished a compression and wants the new state now.
+    # refresh=1 forces a rebuild past the cache TTL.
     force = (request.args.get("refresh", "") or "").strip() in ("1", "true", "yes")
 
     listing = _cached_listing(folder, recursive, force=force)
@@ -351,9 +347,6 @@ def api_library_videos():
         return jsonify({"folder": str(folder), "exists": True,
                         "error": listing["error"], "total": 0, "videos": []}), 200
 
-    # Filters run over the CACHED listing. This half is pure in-memory work, so
-    # it is roughly a thousand times cheaper than the walk above and can stay
-    # per-request without hurting.
     items = []
     for i in all_items:
         if allowed_exts is not None and i["_ext"] not in allowed_exts:
@@ -365,9 +358,7 @@ def api_library_videos():
         if max_size is not None and i["size"] > max_size:
             continue
         ikind = i["kind"]
-        if kind == "compressed" and ikind != "compressed":
-            continue
-        if kind == "original" and ikind != "original":
+        if kind != "all" and ikind != kind:
             continue
         item = {"name": i["name"], "path": i["path"],
                 "size": i["size"], "mtime": i["mtime"], "kind": ikind}
@@ -397,22 +388,20 @@ def api_library_videos():
 def api_library_list_dirs():
     """List subdirectories for the in-app folder browser (R2.3 follow-up).
 
-    A native dialog cannot be opened from the frozen app (sys.executable is the
-    bundled exe, not a Python interpreter), and would not work for a remote or
-    Docker browser anyway. This server-side navigator returns the immediate
-    subdirectories of ``path`` plus the parent, so the UI can walk the tree and
-    pick a folder. With no path it returns the drive roots (Windows) or "/".
+    A native dialog cannot run from the frozen app (sys.executable is the
+    bundled exe) or for a remote browser. This returns the immediate
+    subdirectories of ``path`` plus the parent so the UI can walk the tree.
+    With no path it returns the drive roots (Windows) or "/".
 
     Returns: {"path": str, "parent": str|null, "is_root": bool,
               "dirs": [{"name": str, "path": str}],
               "video_count": int}   # videos directly in this folder
     """
-    import os as _os
     raw = (request.args.get("path", "") or "").strip()
 
     # No path -> top level: drive letters on Windows, "/" elsewhere.
     if not raw:
-        if _os.name == "nt":
+        if os.name == "nt":
             try:
                 from gui.services.cloud_detection import _windows_drive_roots
             except ModuleNotFoundError:  # pragma: no cover - import path shim
@@ -432,22 +421,25 @@ def api_library_list_dirs():
 
     dirs = []
     video_count = 0
+    # scandir answers is_dir()/is_file() without a stat per entry.
     try:
-        for entry in sorted(base.iterdir(), key=lambda p: p.name.lower()):
-            try:
-                if entry.is_dir():
-                    dirs.append({"name": entry.name, "path": str(entry)})
-                elif entry.is_file() and entry.suffix.lower() in VIDEO_EXTS:
-                    video_count += 1
-            except OSError:
-                continue
+        with os.scandir(base) as it:
+            entries = sorted(it, key=lambda e: e.name.lower())
     except OSError as exc:
         return jsonify({"error": str(exc), "path": str(base)}), 200
+    for entry in entries:
+        try:
+            if entry.is_dir():
+                dirs.append({"name": entry.name, "path": entry.path})
+            elif entry.is_file() and _suffix(entry.name) in VIDEO_EXTS:
+                video_count += 1
+        except OSError:
+            continue
 
     parent = str(base.parent) if base.parent != base else None
     # On Windows a drive root's parent is itself; expose "" so the UI can go to
     # the drive list.
-    if _os.name == "nt" and base.parent == base:
+    if os.name == "nt" and base.parent == base:
         parent = ""
     return jsonify({"path": str(base), "parent": parent, "is_root": False,
                     "dirs": dirs, "video_count": video_count})
@@ -457,18 +449,11 @@ def api_library_list_dirs():
 def api_library_browse_folder():
     """Open a NATIVE folder picker on the host and return the chosen directory.
 
-    Windows uses a PowerShell ``FolderBrowserDialog`` so it also works in the
-    FROZEN app, where ``sys.executable`` is the bundled SVCS.exe and cannot run a
-    ``python -c`` script. Other platforms shell out to a tkinter askdirectory
-    dialog (works from source). The dialog runs in a separate process so it never
-    blocks or crashes the Flask worker thread.
-
-    Remote/Docker users (where the dialog would open on the server, not their
-    screen) type a path instead, and the Library falls back to its in-app browser
-    if this returns nothing. Returns {"path": "..."} (empty if cancelled).
+    Windows uses a PowerShell ``FolderBrowserDialog`` because the frozen app's
+    ``sys.executable`` cannot run ``python -c``; other platforms use tkinter.
+    The dialog runs in a separate process so it never blocks the Flask worker.
+    Returns {"path": "..."} (empty if cancelled).
     """
-    import subprocess
-    import sys
     path = ""
     try:
         if sys.platform == "win32":
@@ -493,7 +478,8 @@ def api_library_browse_folder():
             result = subprocess.run([sys.executable, "-c", script],
                                     capture_output=True, text=True, timeout=300)
         path = (result.stdout or "").strip()
-    except Exception as exc:  # noqa: BLE001
+    except (OSError, ValueError, subprocess.SubprocessError) as exc:
+        # ValueError covers a stdout that does not decode in the locale.
         log.warning("Library folder picker failed: %s", exc)
         path = ""
     return jsonify({"path": path})

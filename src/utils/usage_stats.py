@@ -32,7 +32,7 @@ import logging
 import os
 import re
 from pathlib import Path
-from typing import Callable, Dict, Optional, Set
+from typing import Callable
 
 _log = logging.getLogger(__name__)
 
@@ -43,7 +43,7 @@ _CONSENT_FILE = "usage_consent.json"
 _EVENTS_FILE = "usage_events.jsonl"
 
 # Per-event whitelist: ONLY these fields may ever appear in a payload.
-_ALLOWED_FIELDS: Dict[str, Set[str]] = {
+_ALLOWED_FIELDS: dict[str, set[str]] = {
     "encode": {"preset", "mode", "codec", "success",
                "error_category", "ingestion_path"},
     "session": {"event"},
@@ -51,7 +51,7 @@ _ALLOWED_FIELDS: Dict[str, Set[str]] = {
 
 # Categorical vocabularies. A value outside its set is coerced to "other"
 # (or "unknown"), so a stray free-text value can't ride along.
-_VOCAB: Dict[str, Set[str]] = {
+_VOCAB: dict[str, set[str]] = {
     "mode": {"mode0", "mode1", "mode2", "mode3"},
     "codec": {"auto", "libx264", "libsvtav1", "libaom-av1"},
     "ingestion_path": {"rtsp", "onvif", "watchfolder", "bridge",
@@ -74,14 +74,14 @@ _PII_RE = re.compile(
 )
 
 # Overridable sink (tests set this); None => _default_emit.
-_SINK: Optional[Callable[[dict], None]] = None
+_SINK: Callable[[dict], None] | None = None
 
 
 def _truthy(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
 
 
-def _consent_path(path: Optional[Path] = None) -> Path:
+def _consent_path(path: Path | None = None) -> Path:
     if path is not None:
         return Path(path)
     try:
@@ -91,7 +91,7 @@ def _consent_path(path: Optional[Path] = None) -> Path:
     return state_file(_CONSENT_FILE)
 
 
-def read_consent(path: Optional[Path] = None) -> Optional[bool]:
+def read_consent(path: Path | None = None) -> bool | None:
     """Return the stored consent: True/False, or None if never answered."""
     p = _consent_path(path)
     try:
@@ -102,7 +102,7 @@ def read_consent(path: Optional[Path] = None) -> Optional[bool]:
         return None
 
 
-def set_consent(value: bool, path: Optional[Path] = None) -> None:
+def set_consent(value: bool, path: Path | None = None) -> None:
     """Persist the user's consent decision (first-run screen / settings toggle)."""
     p = _consent_path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -110,7 +110,7 @@ def set_consent(value: bool, path: Optional[Path] = None) -> None:
                  encoding="utf-8")
 
 
-def is_enabled(path: Optional[Path] = None) -> bool:
+def is_enabled(path: Path | None = None) -> bool:
     """True only if the user opted in AND the env kill-switch isn't set."""
     if _truthy(ENV_OPT_OUT):
         return False
@@ -122,7 +122,7 @@ def _looks_like_pii(value: str) -> bool:
 
 
 def _coerce(field: str, value):
-    """Coerce one field to a safe, allowed value (or drop it by returning _DROP)."""
+    """Coerce one field to a safe, allowed value, or None to drop it."""
     if field == "success":
         return bool(value)
     if field in _VOCAB:
@@ -142,9 +142,6 @@ def _coerce(field: str, value):
     if isinstance(value, str):
         return value if not _looks_like_pii(value) else None
     return None
-
-
-_DROP = object()
 
 
 def sanitize_event(event_type: str, fields: dict) -> dict:
@@ -192,7 +189,7 @@ def _default_emit(payload: dict) -> None:
         _log.debug("usage_stats: post failed: %s", exc)
 
 
-def record_event(event_type: str, path: Optional[Path] = None, **fields) -> Optional[dict]:
+def record_event(event_type: str, path: Path | None = None, **fields) -> dict | None:
     """Record an event IF the user opted in; otherwise a strict no-op.
 
     Returns the sanitized payload that was emitted, or None if usage stats are

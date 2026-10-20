@@ -52,8 +52,9 @@ Author: Bloodawn (KheivenD), CBC implementation
 """
 
 import os
+import shutil
+import tempfile
 from pathlib import Path
-from typing import Optional, Union
 
 # ---------------------------------------------------------------------------
 # Dependency guard: give a helpful error if `cryptography` is missing.
@@ -80,6 +81,10 @@ KEY_SIZE      = 32       # AES-256 key length (bytes)
 PBKDF2_ITERS  = 600_000  # NIST recommendation for PBKDF2-HMAC-SHA256 (2023)
 HEADER_SIZE   = NONCE_SIZE + SALT_SIZE + TAG_SIZE   # 44 bytes total
 
+# Files are streamed through the cipher in pieces this size, so encrypting or
+# decrypting a large file holds about 2 MiB instead of three copies of it.
+_CHUNK_SIZE = 1 << 20
+
 # Raw-key mode stores zeros in the salt field; the value is ignored on decrypt.
 _ZERO_SALT = b"\x00" * SALT_SIZE
 
@@ -87,6 +92,27 @@ _ZERO_SALT = b"\x00" * SALT_SIZE
 # ---------------------------------------------------------------------------
 # Public helpers
 # ---------------------------------------------------------------------------
+
+def _side_path(out_path: Path) -> Path:
+    """Create a uniquely named side file next to out_path (never shared)."""
+    fd, name = tempfile.mkstemp(dir=out_path.parent, prefix=out_path.name + ".",
+                                suffix=".part")
+    os.close(fd)
+    return Path(name)
+
+
+def _publish(part_path: Path, out_path: Path) -> None:
+    """Move part_path onto out_path, tolerating a target that is held open.
+
+    On Windows os.replace fails with PermissionError when out_path is open
+    elsewhere; fall back to copying over it in place (the part file is
+    removed by the caller).
+    """
+    try:
+        os.replace(part_path, out_path)
+    except PermissionError:
+        shutil.copyfile(part_path, out_path)
+
 
 def generate_key() -> bytes:
     """
@@ -103,7 +129,7 @@ def generate_key() -> bytes:
     return os.urandom(KEY_SIZE)
 
 
-def derive_key(password: Union[str, bytes], salt: bytes, iterations: int = PBKDF2_ITERS) -> bytes:
+def derive_key(password: str | bytes, salt: bytes, iterations: int = PBKDF2_ITERS) -> bytes:
     """
     Derive a 256-bit AES key from a password using PBKDF2-HMAC-SHA256.
 
@@ -137,11 +163,11 @@ def derive_key(password: Union[str, bytes], salt: bytes, iterations: int = PBKDF
 # ---------------------------------------------------------------------------
 
 def encrypt_file(
-    path: Union[str, Path],
-    password: Optional[str] = None,
-    key: Optional[bytes] = None,
+    path: str | Path,
+    password: str | None = None,
+    key: bytes | None = None,
     delete_original: bool = True,
-    output_path: Optional[Union[str, Path]] = None,
+    output_path: str | Path | None = None,
 ) -> Path:
     """
     Encrypt a file in-place using AES-256-GCM.
@@ -182,10 +208,23 @@ def encrypt_file(
     else:
         aes_key = _validate_raw_key(key)  # type: ignore[arg-type]
 
-    plaintext = path.read_bytes()
-    ciphertext, tag = _aes_gcm_encrypt(plaintext, aes_key, nonce)
-
-    out_path.write_bytes(nonce + salt + tag + ciphertext)
+    encryptor = Cipher(algorithms.AES(aes_key), modes.GCM(nonce),
+                       backend=default_backend()).encryptor()
+    # Written to a side file and renamed into place, so a failure part way
+    # through never leaves a truncated .enc behind (and output_path may even
+    # be the input file itself).
+    part_path = _side_path(out_path)
+    try:
+        with open(path, "rb") as src, open(part_path, "wb") as dst:
+            # The GCM tag is only known after the last chunk; reserve its
+            # header slot now and fill it in at the end.
+            dst.write(nonce + salt + bytes(TAG_SIZE))
+            _stream(encryptor, src, dst)
+            dst.seek(NONCE_SIZE + SALT_SIZE)
+            dst.write(encryptor.tag)
+        _publish(part_path, out_path)
+    finally:
+        part_path.unlink(missing_ok=True)
 
     if delete_original:
         path.unlink()
@@ -194,10 +233,10 @@ def encrypt_file(
 
 
 def decrypt_file(
-    path: Union[str, Path],
-    password: Optional[str] = None,
-    key: Optional[bytes] = None,
-    output_path: Optional[Union[str, Path]] = None,
+    path: str | Path,
+    password: str | None = None,
+    key: bytes | None = None,
+    output_path: str | Path | None = None,
 ) -> Path:
     """
     Decrypt a file previously encrypted with encrypt_file().
@@ -230,45 +269,55 @@ def decrypt_file(
     if not path.exists():
         raise FileNotFoundError(f"decrypt_file: input not found: {path}")
 
-    data = path.read_bytes()
-    if len(data) < HEADER_SIZE:
+    size = path.stat().st_size
+    if size < HEADER_SIZE:
         raise ValueError(
             f"decrypt_file: file too short to contain a valid header "
-            f"(expected ≥{HEADER_SIZE} bytes, got {len(data)})"
+            f"(expected ≥{HEADER_SIZE} bytes, got {size})"
         )
-
-    nonce      = data[:NONCE_SIZE]
-    salt       = data[NONCE_SIZE:NONCE_SIZE + SALT_SIZE]
-    tag        = data[NONCE_SIZE + SALT_SIZE:HEADER_SIZE]
-    ciphertext = data[HEADER_SIZE:]
-
-    if password is not None:
-        aes_key = derive_key(password, salt)
-    else:
-        aes_key = _validate_raw_key(key)  # type: ignore[arg-type]
-
-    try:
-        plaintext = _aes_gcm_decrypt(ciphertext, aes_key, nonce, tag)
-    except InvalidTag:
-        raise RuntimeError(
-            "decrypt_file: authentication failed. Wrong key or file has been tampered with."
-        )
-    except Exception as exc:
-        raise RuntimeError(
-            f"decrypt_file: decryption failed. Wrong key or corrupted file. "
-            f"({type(exc).__name__}: {exc})"
-        ) from exc
 
     if output_path:
         out_path = Path(output_path)
+    elif path.name.endswith(".enc"):
+        out_path = path.with_name(path.name[:-4])
     else:
-        name = path.name
-        if name.endswith(".enc"):
-            out_path = path.with_name(name[:-4])
-        else:
-            out_path = path.with_suffix(".dec")
+        out_path = path.with_suffix(".dec")
 
-    out_path.write_bytes(plaintext)
+    with open(path, "rb") as src:
+        header = src.read(HEADER_SIZE)
+        nonce = header[:NONCE_SIZE]
+        salt = header[NONCE_SIZE:NONCE_SIZE + SALT_SIZE]
+        tag = header[NONCE_SIZE + SALT_SIZE:]
+
+        if password is not None:
+            aes_key = derive_key(password, salt)
+        else:
+            aes_key = _validate_raw_key(key)  # type: ignore[arg-type]
+
+        # Plaintext goes to a side file and is renamed into place only after
+        # the GCM tag verifies, so unauthenticated bytes never land at
+        # out_path.
+        part_path = _side_path(out_path)
+        try:
+            decryptor = Cipher(algorithms.AES(aes_key), modes.GCM(nonce, tag),
+                               backend=default_backend()).decryptor()
+            with open(part_path, "wb") as dst:
+                _stream(decryptor, src, dst)
+            _publish(part_path, out_path)
+        except InvalidTag:
+            raise RuntimeError(
+                "decrypt_file: authentication failed. Wrong key or file has been tampered with."
+            )
+        except OSError:
+            raise
+        except Exception as exc:
+            raise RuntimeError(
+                f"decrypt_file: decryption failed. Wrong key or corrupted file. "
+                f"({type(exc).__name__}: {exc})"
+            ) from exc
+        finally:
+            part_path.unlink(missing_ok=True)
+
     return out_path
 
 
@@ -285,7 +334,7 @@ def _require_crypto() -> None:
         )
 
 
-def _validate_key_args(password: Optional[str], key: Optional[bytes]) -> None:
+def _validate_key_args(password: str | None, key: bytes | None) -> None:
     """Ensure exactly one of password / key is provided."""
     if password is None and key is None:
         raise ValueError("encrypt/decrypt requires either `password` or `key`.")
@@ -305,19 +354,15 @@ def _validate_raw_key(key: bytes) -> bytes:
     return bytes(key)
 
 
-def _aes_gcm_encrypt(plaintext: bytes, key: bytes, nonce: bytes) -> tuple[bytes, bytes]:
-    """Encrypt plaintext with AES-256-GCM. Returns (ciphertext, tag)."""
-    cipher    = Cipher(algorithms.AES(key), modes.GCM(nonce), backend=default_backend())
-    encryptor = cipher.encryptor()
-    ciphertext = encryptor.update(plaintext) + encryptor.finalize()
-    return ciphertext, encryptor.tag
+def _stream(context, src, dst) -> None:
+    """Run every remaining byte of ``src`` through a cipher context into ``dst``.
 
-
-def _aes_gcm_decrypt(ciphertext: bytes, key: bytes, nonce: bytes, tag: bytes) -> bytes:
-    """Decrypt AES-256-GCM ciphertext and verify the auth tag."""
-    cipher    = Cipher(algorithms.AES(key), modes.GCM(nonce, tag), backend=default_backend())
-    decryptor = cipher.decryptor()
-    return decryptor.update(ciphertext) + decryptor.finalize()
+    For a GCM decryptor, finalize() is where the tag is checked and
+    InvalidTag is raised.
+    """
+    for chunk in iter(lambda: src.read(_CHUNK_SIZE), b""):
+        dst.write(context.update(chunk))
+    dst.write(context.finalize())
 
 
 # ---------------------------------------------------------------------------

@@ -81,9 +81,19 @@ def confine_to_allowed(path, allowed_roots):
     Returns the resolved Path, or raises ValueError if it escapes every root.
     Use for any route that reads/serves a user-supplied filesystem path.
     """
-    p = Path(path).resolve()
+    # Same test as is_within(), but ``path`` is resolved once instead of once
+    # per root; resolve() is a filesystem round trip on Windows.
+    try:
+        p = Path(path).resolve()
+    except (OSError, ValueError):
+        raise ValueError(f"path is outside the allowed folders: {path}") from None
+    parents = p.parents
     for root in allowed_roots:
-        if is_within(p, root):
+        try:
+            r = Path(root).resolve()
+        except (OSError, ValueError):
+            continue
+        if p == r or r in parents:
             return p
     raise ValueError(f"path is outside the allowed folders: {p}")
 

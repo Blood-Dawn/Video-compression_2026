@@ -3,25 +3,17 @@ src/gui/services/update_manager.py
 
 In-app auto-update pipeline for the desktop build (Fall TASK 3.18).
 
-Fall 3.17 (src/gui/routes/setup_bp.py::api_setup_update_check) already tells
-the dashboard whether a newer desktop release exists on GitHub, but it is
-check-and-notify only: a human still has to click through to GitHub, download
-the installer by hand, and reinstall. This module is the rest of the
-pipeline - actually fetching that release's installer, verifying it against
-the checksums the release publishes (every release ships a SHA256SUMS.txt
-beside its .exe/.apk assets, see docs/RELEASE-CHECKLIST.md), and launching it
-- so "Install update" in the dashboard can mean exactly that.
+Finds the newest desktop release on GitHub, downloads its installer, verifies
+it against the SHA256SUMS.txt every release publishes beside its assets (see
+docs/RELEASE-CHECKLIST.md), and launches it, so "Install update" in the
+dashboard means exactly that.
 
-check_for_update() below is now the single source of truth for "what is the
-newest desktop release on GitHub" - setup_bp's route calls into it instead of
-keeping its own copy, so the notify-only check and the actual downloader can
-never disagree about which release is newest.
+check_for_update() is the single source of truth for "what is the newest
+desktop release": setup_bp's notify-only check calls it too, so the check and
+the downloader can never disagree about which release is newest.
 
-Design constraints, on purpose (same reasoning as the encryption-honesty and
-dead-segment-counter fixes from the 2026-09-24 dishonesty audit: a feature
-that can silently do something other than what it visibly says is a
-liability, and an auto-updater is exactly the kind of feature where that
-liability is worst):
+Design constraints, on purpose (an auto-updater that silently does something
+other than what it says is the worst kind of liability):
 
   * The only URL this module ever fetches a RELEASE LISTING from is the
     hardcoded GitHub API endpoint for this repo (GITHUB_RELEASES_URL). The
@@ -66,7 +58,6 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Optional
 
 try:
     from gui.logging_setup import log
@@ -75,7 +66,6 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.logging_setup import log
     from src.utils.version import APP_VERSION, is_newer
 
-# Same repo, same endpoint the Fall 3.17 check has always used.
 GITHUB_RELEASES_URL = (
     "https://api.github.com/repos/Blood-Dawn/Video-compression_2026/releases"
 )
@@ -94,7 +84,7 @@ def _is_mobile_only(release: dict) -> bool:
     return any(n.endswith(".apk") for n in names) and not any(n.endswith(".exe") for n in names)
 
 
-def _fetch_releases() -> Optional[list]:
+def _fetch_releases() -> list | None:
     """Best effort: the parsed GitHub releases list, or None on any failure
     (offline, GitHub down/rate-limited, an unparseable body)."""
     try:
@@ -113,14 +103,14 @@ def _fetch_releases() -> Optional[list]:
     return releases if isinstance(releases, list) else None
 
 
-def _best_desktop_release(releases: list) -> tuple[Optional[str], Optional[dict]]:
+def _best_desktop_release(releases: list) -> tuple[str | None, dict | None]:
     """The newest non-draft, non-mobile release with a real desktop build.
 
     Prereleases are NOT excluded on purpose: every release this project has
     published so far is marked prerelease on GitHub (it's a beta product).
     """
-    best_tag: Optional[str] = None
-    best_release: Optional[dict] = None
+    best_tag: str | None = None
+    best_release: dict | None = None
     for rel in releases:
         if not isinstance(rel, dict):
             continue
@@ -134,7 +124,7 @@ def _best_desktop_release(releases: list) -> tuple[Optional[str], Optional[dict]
     return best_tag, best_release
 
 
-def check_for_update(current_version: Optional[str] = None) -> dict:
+def check_for_update(current_version: str | None = None) -> dict:
     """Check GitHub releases for a newer DESKTOP build.
 
     Best effort and silent on failure: offline, GitHub unreachable, rate
@@ -189,7 +179,7 @@ _state = {
     "bytes_downloaded": 0,
     "bytes_total": 0,
 }
-_download_thread: Optional[threading.Thread] = None
+_download_thread: threading.Thread | None = None
 
 
 def get_status() -> dict:
@@ -236,7 +226,7 @@ def _staging_dir() -> Path:
     return d
 
 
-def _fetch_checksum(checksum_url: str, installer_name: str) -> Optional[str]:
+def _fetch_checksum(checksum_url: str, installer_name: str) -> str | None:
     """Parse a SHA256SUMS.txt-style body (``<hex>  <filename>`` per line,
     optionally with a leading ``*`` on the filename for binary mode) for the
     hash matching ``installer_name``.
@@ -387,7 +377,7 @@ def _download_and_verify(info: dict) -> None:
     _set(phase="ready", installer_path=str(dest))
 
 
-def install_and_restart(app_exe_path: Optional[str] = None) -> dict:
+def install_and_restart(app_exe_path: str | None = None) -> dict:
     """Launch the verified installer silently, then relaunch the app.
 
     Refuses unless the current phase is "ready" with a file on disk -

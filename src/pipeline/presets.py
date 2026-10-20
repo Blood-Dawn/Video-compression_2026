@@ -23,7 +23,6 @@ Author: Bloodawn (KheivenD), 2026-06-03 (TASK 3.1 - surveillance presets).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List
 
 VALID_MODES = {"mode0", "mode1", "mode2", "mode3"}
 VALID_CODECS = {"auto", "libsvtav1", "libaom-av1", "libx264"}
@@ -52,7 +51,7 @@ class Preset:
     segment_seconds: int = 60
     surveillance: bool = True
 
-    def to_config(self) -> Dict:
+    def to_config(self) -> dict:
         """Resolve to the encode-config dict consumed by /api/start + pipeline."""
         return {
             "preset": self.key,
@@ -70,7 +69,7 @@ class Preset:
 # Rationale per preset is in the description + comments. CRF choices follow the
 # progressive scheme and keep foreground <= background (foreground is always the
 # higher-quality stream).
-_PRESET_LIST: List[Preset] = [
+_PRESET_LIST: list[Preset] = [
     Preset(
         key="continuous_cctv",
         label="Continuous CCTV (max savings)",
@@ -159,13 +158,13 @@ _PRESET_LIST: List[Preset] = [
     ),
 ]
 
-PRESETS: Dict[str, Preset] = {p.key: p for p in _PRESET_LIST}
+PRESETS: dict[str, Preset] = {p.key: p for p in _PRESET_LIST}
 
 # The default preset selected in the UI on first run.
 DEFAULT_PRESET = "continuous_cctv"
 
 
-def list_presets() -> List[Dict]:
+def list_presets() -> list[dict]:
     """Catalog for the UI: key/label/description/mode/surveillance, in order."""
     return [
         {
@@ -187,12 +186,12 @@ def get_preset(key: str) -> Preset:
         raise KeyError(f"unknown preset: {key!r}") from None
 
 
-def resolve_preset(key: str) -> Dict:
+def resolve_preset(key: str) -> dict:
     """Resolve a preset key to its encode-config dict."""
     return get_preset(key).to_config()
 
 
-def validate_encode_config(cfg: Dict) -> None:
+def validate_encode_config(cfg: dict) -> None:
     """Raise ValueError if a resolved encode config is invalid.
 
     Checks the mode, codec, bg method, CRF ranges, and the foreground<=background

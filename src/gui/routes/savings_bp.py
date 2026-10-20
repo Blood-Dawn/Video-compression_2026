@@ -1,41 +1,26 @@
 """
 src/gui/routes/savings_bp.py
 
-GET /api/savings - how much space compression actually saved (M2.3).
+GET /api/savings - how much space compression actually saved.
 
-Why this exists at all: nothing server-side recorded a savings figure. The
-pipeline writes each segment's size to the metadata DB but never records what
-the input was worth, and `_record_job_history` omits bytes_in/bytes_out for
-pipeline runs entirely. The desktop dashboard therefore derives its headline
-ratio in JavaScript as:
+The dashboard's headline ratio is computed in JavaScript against the size of
+the clip as raw uncompressed RGB frames. A camera never delivers raw RGB (it
+delivers H.264), so most of that ratio is "video compression exists", not
+"SVCS shrank your files". This endpoint reports two things separately and
+never blends them:
 
-    raw = duration_s * width * height * 3 * fps        (files.js:177)
-    ratio = raw / compressed
-
-That is the size of the clip as RAW UNCOMPRESSED RGB frames, which for 1080p30
-over 60s is about 11 GB, and it is where the "277.8x smaller" figure in the
-mobile mockup comes from.
-
-The problem is not that the arithmetic is wrong, it is that the number answers a
-question nobody asked. A camera never delivers raw RGB; it delivers H.264
-already. So most of that 277x is "video compression exists", not "SVCS shrank
-your files". An operator reading "277x smaller" on a dashboard will reasonably
-conclude SVCS did that, and it did not.
-
-So this endpoint reports the two things separately and refuses to blend them:
-
-  * ``measured`` - REAL source-versus-output bytes, only for files SVCS actually
-    compressed from an existing file. This is the honest "we made it smaller"
-    number. No schema change was needed: compressed_index signatures are
-    ``<path>|<size>|<mtime>``, so the source size at compression time is already
-    recorded, and the output size is on disk.
-  * ``recorded`` - total bytes the recording pipeline has written. There is no
-    source file for a live camera capture, so no ratio is offered here. Reporting
-    one would mean inventing the denominator.
+  * ``measured``: real source-versus-output bytes, only for files SVCS
+    compressed from an existing file. compressed_index signatures are
+    ``<path>|<size>|<mtime>``, so the source size is already recorded and the
+    output size is on disk.
+  * ``recorded``: total bytes the recording pipeline has written. A live
+    capture has no source file, so no ratio is offered; it would need an
+    invented denominator.
 
 Author: Bloodawn (KheivenD), 2026-07-19 (M2.3).
 """
 
+import stat
 from pathlib import Path
 
 from flask import Blueprint, jsonify
@@ -88,17 +73,17 @@ def measured_savings() -> dict:
         sig = (e or {}).get("signature") or ""
         if not out or not sig:
             continue
+        # One stat per entry: is_file() followed by stat() paid for two.
         try:
-            p = Path(out)
-            if not p.is_file():
-                continue
-            osz = p.stat().st_size
-        except OSError:
+            st = Path(out).stat()
+        except (OSError, ValueError):
             continue
+        if not stat.S_ISREG(st.st_mode):
+            continue
+        osz = st.st_size
         ssz = _parse_source_size(sig)
         # A source size of 0 means the signature was written for a file that
-        # could not be stat'd. Counting it would make the saving look larger
-        # than it was, so skip the pair entirely.
+        # could not be stat'd; counting it would overstate the saving.
         if ssz <= 0 or osz <= 0:
             continue
         files += 1
@@ -131,9 +116,8 @@ def recorded_totals() -> dict:
     try:
         db = _get_db_path()
         if db.exists():
-            # Column names are the SCHEMA ones (file_size in bytes, duration in
-            # seconds); the API layer renames them for its own payloads, and
-            # querying the renamed forms here would silently return zeros.
+            # Schema column names (file_size bytes, duration seconds); the API
+            # layer's renamed forms would silently return zeros here.
             with get_connection(str(db)) as conn:
                 row = conn.execute(
                     "SELECT COUNT(*), COALESCE(SUM(file_size), 0), "
@@ -160,8 +144,7 @@ def api_savings():
     return jsonify({
         "measured": measured,
         "recorded": recorded,
-        # Spelled out so a client cannot accidentally present the recording
-        # total as a compression achievement.
+        # Keeps a client from presenting the recording total as a saving.
         "note": (
             "measured covers files compressed from an existing source, where "
             "both sizes are known. recorded covers live capture, which has no "

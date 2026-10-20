@@ -20,8 +20,7 @@ function startPolling() {
   // refresh also picks up auto-compress batches finished by the daemon.
   jobsInterval = setInterval(loadRecentJobs, 15000);
   loadRecentJobs();
-  // Measured savings (2026-09 follow-up, RESEARCH-DESKTOP-DEEPDIVE-2026-09.md
-  // Part B3): a real API existed (savings_bp.py) with no frontend consumer.
+  // Measured savings from savings_bp.py (RESEARCH-DESKTOP-DEEPDIVE-2026-09.md B3).
   savingsInterval = setInterval(pollMeasuredSavings, 15000);
   pollMeasuredSavings();
 }
@@ -120,15 +119,10 @@ async function pollStatus() {
         _enhChip.textContent = 'SR ENHANCE';
         _enhChip.classList.remove('chip-warn');
       }
-      // 2026-09-24 dishonesty audit (task #86): config.encrypt only reflects
-      // what was REQUESTED, and used to be the only thing this chip looked
-      // at - so a run with no password/key file (or a missing cryptography
-      // package, or an unreadable key file) showed "encrypted" the whole
-      // time while every segment silently wrote as plaintext. encryption_
-      // failures comes from the live ROIEncoder instance (gui.state._status,
-      // set by pipeline_runner's finish_segment patch), so a real failure is
-      // now visible instead of hidden, the same honesty fix already applied
-      // to the SR ENHANCE chip above.
+      // config.encrypt is only what was REQUESTED. A run with no password or
+      // key file, a missing cryptography package or an unreadable key writes
+      // plaintext, so the chip also checks encryption_failures, which comes
+      // from the live ROIEncoder (pipeline_runner's finish_segment patch).
       const _encChip = document.getElementById('chip-encrypt');
       const encRequested = !!data.config.encrypt;
       const encFailures = data.encryption_failures || 0;
@@ -147,7 +141,7 @@ async function pollStatus() {
 
     // ── HOME hero strip ────────────────────────────────────────
     _updateHeroStrip(data);
-    // Global activity drawer (visible on every tab, 2026-09-30 follow-up)
+    // Global activity drawer (visible on every tab).
     _updateGlobalStatus(data);
 
   } catch(e) { /* ignore network errors during poll */ }
@@ -200,15 +194,18 @@ function _updateHeroStrip(data) {
   if (data.running) {
     dot.className   = 'home-hero-dot running';
     label.textContent = 'LIVE';
+    label.title = 'Compression pipeline is running.';
     label.style.color = 'var(--green)';
   } else if (data.error) {
     dot.className   = 'home-hero-dot error';
     label.textContent = 'ERROR';
+    label.title = 'The last run stopped with an error. See the error banner.';
     label.style.color = 'var(--red)';
   } else {
     dot.className   = 'home-hero-dot';
     label.textContent = 'OFFLINE';
     label.style.color = 'var(--text-dim)';
+    label.title = 'Pipeline is idle: nothing is compressing right now. The web server itself is up. Press Start to begin.';
   }
 
   if (data.config) {
@@ -228,7 +225,7 @@ function _updateHeroStrip(data) {
   } else if (data.running) {
     upChip.textContent = 'Starting…';
   } else {
-    upChip.textContent = 'Uptime:  - ';
+    upChip.textContent = 'Idle, press Start to begin';
   }
 }
 

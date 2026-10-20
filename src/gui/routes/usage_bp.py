@@ -1,7 +1,7 @@
 """
 src/gui/routes/usage_bp.py
 
-Opt-in usage-stats consent routes (M5 TASK 5.2).
+Opt-in usage-stats consent routes.
 
 Backs the first-run consent banner and the settings toggle:
   * GET  /api/usage_stats          - current state {consent, known, enabled}

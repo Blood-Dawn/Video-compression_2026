@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Iterable
 
 import cv2
 import numpy as np
@@ -103,17 +103,17 @@ class LayerSegmentEncoder:
         self._reset_segment_state()
 
     def _reset_segment_state(self) -> None:
-        self._segment_dir: Optional[Path] = None
-        self._crop_dir: Optional[Path] = None
-        self._mask_dir: Optional[Path] = None
-        self._preview_path: Optional[Path] = None
-        self._preview_writer: Optional[cv2.VideoWriter] = None
+        self._segment_dir: Path | None = None
+        self._crop_dir: Path | None = None
+        self._mask_dir: Path | None = None
+        self._preview_path: Path | None = None
+        self._preview_writer: cv2.VideoWriter | None = None
         self._metadata: dict = {}
         self._frame_records: list[dict] = []
         self._object_count = 0
         self._event_frame_count = 0
-        self._source_start_frame: Optional[int] = None
-        self._source_end_frame: Optional[int] = None
+        self._source_start_frame: int | None = None
+        self._source_end_frame: int | None = None
 
     @property
     def has_data(self) -> bool:
@@ -216,6 +216,13 @@ class LayerSegmentEncoder:
             "objects": [],
         }
         preview = np.zeros_like(frame) if self.write_preview else None
+        crop_ext = "jpg" if self.crop_format in {"jpg", "jpeg"} else "png"
+        if crop_ext == "png":
+            crop_params = [int(cv2.IMWRITE_PNG_COMPRESSION), self.png_compression]
+        else:
+            crop_params = [int(cv2.IMWRITE_JPEG_QUALITY), self.crop_quality]
+            if hasattr(cv2, "IMWRITE_JPEG_OPTIMIZE"):
+                crop_params.extend([int(cv2.IMWRITE_JPEG_OPTIMIZE), 1])
 
         for region_index, (x, y, w, h) in enumerate(region_tuples):
             x1 = max(0, x)
@@ -238,16 +245,8 @@ class LayerSegmentEncoder:
 
             object_id = self._object_count
             stem = f"f{source_frame_index:08d}_o{region_index:02d}"
-            crop_ext = "jpg" if self.crop_format in {"jpg", "jpeg"} else "png"
             crop_name = f"{stem}.{crop_ext}"
             crop_path = self._crop_dir / crop_name
-
-            if crop_ext == "png":
-                crop_params = [int(cv2.IMWRITE_PNG_COMPRESSION), self.png_compression]
-            else:
-                crop_params = [int(cv2.IMWRITE_JPEG_QUALITY), self.crop_quality]
-                if hasattr(cv2, "IMWRITE_JPEG_OPTIMIZE"):
-                    crop_params.extend([int(cv2.IMWRITE_JPEG_OPTIMIZE), 1])
             ok_crop = cv2.imwrite(str(crop_path), crop, crop_params)
             if not ok_crop:
                 raise RuntimeError(f"Failed to write mode3 crop for {stem}")
@@ -262,17 +261,17 @@ class LayerSegmentEncoder:
                 if not ok_mask:
                     raise RuntimeError(f"Failed to write mode3 mask for {stem}")
 
+            fg = binary_mask > 0 if binary_mask is not None else None
             if preview is not None:
-                assert binary_mask is not None
-                roi = preview[y1:y2, x1:x2]
-                roi[binary_mask > 0] = crop[binary_mask > 0]
+                assert fg is not None
+                preview[y1:y2, x1:x2][fg] = crop[fg]
 
             object_record = {
                 "object_id": int(object_id),
                 "bbox": [int(x1), int(y1), int(x2 - x1), int(y2 - y1)],
                 "crop_path": f"crops/{crop_name}",
                 "mask_path": f"masks/{mask_name}" if mask_name is not None else None,
-                "area": int((binary_mask > 0).sum()) if binary_mask is not None else int((x2 - x1) * (y2 - y1)),
+                "area": int(np.count_nonzero(fg)) if fg is not None else int((x2 - x1) * (y2 - y1)),
             }
             frame_record["objects"].append(object_record)
             self._object_count += 1
@@ -286,7 +285,7 @@ class LayerSegmentEncoder:
                 self._source_start_frame = int(source_frame_index)
             self._source_end_frame = int(source_frame_index)
 
-    def flush_segment(self, *, camera_id: str, object_type: str = "unknown") -> Optional[str]:
+    def flush_segment(self, *, camera_id: str, object_type: str = "unknown") -> str | None:
         """
         Finalize the current sparse segment and insert its metadata DB row.
 

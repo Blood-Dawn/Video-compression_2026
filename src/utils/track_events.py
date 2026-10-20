@@ -24,7 +24,6 @@ Author: Bloodawn (KheivenD), 2026-08-17 (R5 TASK 5.7).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Optional
 
 # ── geometry ─────────────────────────────────────────────────────────────────
 
@@ -76,11 +75,13 @@ class Track:
     label: str = ""
     age: int = 0
     misses: int = 0
+    # Only the first center (for direction()) and the last two (for line
+    # crossings) are ever read, so add_center() keeps at most those three.
     centers: list = field(default_factory=list)
     zone_entered_at: dict = field(default_factory=dict)   # zone id -> time
     emitted: dict = field(default_factory=dict)           # (kind, gid) -> time
 
-    def direction(self) -> Optional[str]:
+    def direction(self) -> str | None:
         """Dominant compass-ish direction over the track's life, or None."""
         if len(self.centers) < 2:
             return None
@@ -91,6 +92,11 @@ class Track:
         if abs(dx) >= abs(dy):
             return "right" if dx > 0 else "left"
         return "down" if dy > 0 else "up"
+
+    def add_center(self) -> None:
+        self.centers.append(_center(self.box))
+        if len(self.centers) > 3:
+            del self.centers[1]
 
 
 class EventEngine:
@@ -119,7 +125,7 @@ class EventEngine:
         self._next_id = 1
 
     # ── the per-frame step ───────────────────────────────────────────────
-    def step(self, boxes: list, t: float, labels: Optional[list] = None) -> list:
+    def step(self, boxes: list, t: float, labels: list | None = None) -> list:
         """Advance one frame. boxes are normalized xyxy; t is seconds.
 
         Returns the events raised THIS frame, each:
@@ -127,6 +133,7 @@ class EventEngine:
          "geometry_id", "direction"}
         """
         labels = list(labels or [""] * len(boxes))
+        boxes = [tuple(b) for b in boxes]
         # Pass 1: greedy IOU matching. Pass 2: a center-distance fallback for
         # fast movers - an object that moves more than its own width between
         # frames has ZERO overlap with itself, and without the fallback every
@@ -138,7 +145,7 @@ class EventEngine:
         for tr in self.tracks:
             best_j, best_v = -1, self.iou_threshold
             for j in unmatched:
-                v = _iou(tr.box, tuple(boxes[j]))
+                v = _iou(tr.box, boxes[j])
                 if v > best_v:
                     best_j, best_v = j, v
             if best_j >= 0:
@@ -152,7 +159,7 @@ class EventEngine:
             tc = _center(tr.box)
             best_j, best_d = -1, reach
             for j in unmatched:
-                c = _center(tuple(boxes[j]))
+                c = _center(boxes[j])
                 d = ((c[0] - tc[0]) ** 2 + (c[1] - tc[1]) ** 2) ** 0.5
                 if d < best_d:
                     best_j, best_d = j, d
@@ -167,14 +174,14 @@ class EventEngine:
                 # surviving the gap and firing on re-acquisition.
                 tr.zone_entered_at.clear()
         for tr, j in pairs:
-            tr.box = tuple(boxes[j])
+            tr.box = boxes[j]
             tr.label = labels[j] or tr.label
             tr.age += 1
             tr.misses = 0
-            tr.centers.append(_center(tr.box))
+            tr.add_center()
         for j in unmatched:
-            tr = Track(self._next_id, tuple(boxes[j]), labels[j])
-            tr.centers.append(_center(tr.box))
+            tr = Track(self._next_id, boxes[j], labels[j])
+            tr.add_center()
             self._next_id += 1
             self.tracks.append(tr)
         self.tracks = [tr for tr in self.tracks if tr.misses <= self.max_misses]

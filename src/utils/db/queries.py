@@ -10,7 +10,6 @@ Author: Bloodawn (KheivenD), 2026-05-14 (audit split).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import List, Optional, Tuple, Union
 
 from utils.db import DB_NAME, SegmentRow
 from utils.db.schema import get_connection
@@ -25,16 +24,16 @@ def insert_segment(
     duration: float,
     file_path: str,
     object_type: str = "unknown",
-    avg_sharpness: Optional[float] = None,
-    sharpness_label: Optional[str] = None,
-    object_classes: Optional[str] = None,   # JSON array string, e.g. '["car","person"]'
-    dominant_color: Optional[str] = None,   # e.g. "blue", "white"
+    avg_sharpness: float | None = None,
+    sharpness_label: str | None = None,
+    object_classes: str | None = None,   # JSON array string, e.g. '["car","person"]'
+    dominant_color: str | None = None,   # e.g. "blue", "white"
     scene_type: str = "unknown",            # highway | intersection | parking | street
-    time_of_day: Optional[str] = None,      # day | night | dusk_dawn
+    time_of_day: str | None = None,      # day | night | dusk_dawn
     vehicle_count: int = 0,
     person_count: int = 0,
     pose_verified_person_count: int = 0,
-    db_path: Union[str, Path] = DB_NAME,
+    db_path: str | Path = DB_NAME,
 ) -> None:
     """Insert one encoded segment into the metadata index.
 
@@ -107,12 +106,14 @@ def insert_segment(
 def query_recent_targets(
     camera_id: str,
     hours: int = 24,
-    db_path: Union[str, Path] = DB_NAME,
-) -> List[SegmentRow]:
+    db_path: str | Path = DB_NAME,
+) -> list[SegmentRow]:
     """Return all segments from a camera where targets were detected in the
     last N hours.
 
-    Uses the (camera_id, timestamp) index for efficient filtering.
+    Uses the (camera_id, timestamp) index for efficient filtering. The
+    cutoff is formatted like the stored timestamps ('%Y%m%dT%H%M%SZ', UTC)
+    because the comparison is a plain string comparison.
 
     Args:
         camera_id: Camera to filter by.
@@ -128,7 +129,7 @@ def query_recent_targets(
             SELECT * FROM segments
             WHERE camera_id      = ?
               AND target_detected = 1
-              AND timestamp      >= datetime('now', ?)
+              AND timestamp      >= strftime('%Y%m%dT%H%M%SZ', 'now', ?)
             ORDER BY timestamp DESC
             """,
             (camera_id, f"-{hours} hours"),
@@ -137,9 +138,9 @@ def query_recent_targets(
 
 
 def query_segments_by_target_count(
-    db_path: Union[str, Path] = DB_NAME,
+    db_path: str | Path = DB_NAME,
     limit: int = 50,
-) -> List[SegmentRow]:
+) -> list[SegmentRow]:
     """Return segments sorted by roi_count descending (most detections first).
 
     Useful for finding the busiest clips in the archive.
@@ -165,8 +166,8 @@ def query_segments_by_target_count(
 
 
 def query_daily_storage_summary(
-    db_path: Union[str, Path] = DB_NAME,
-) -> List[Tuple[str, str, int, float]]:
+    db_path: str | Path = DB_NAME,
+) -> list[tuple[str, str, int, float]]:
     """Return daily storage usage grouped by camera and date.
 
     Useful for operational reporting: "how much did each camera record today?"
@@ -195,13 +196,13 @@ def query_daily_storage_summary(
 
 
 def query_by_type(
-    object_type: Union[str, List[str]],
-    camera_id: Optional[str] = None,
-    start_time: Optional[str] = None,
-    end_time: Optional[str] = None,
-    min_roi_count: Optional[int] = None,
-    db_path: Union[str, Path] = DB_NAME,
-) -> List[SegmentRow]:
+    object_type: str | list[str],
+    camera_id: str | None = None,
+    start_time: str | None = None,
+    end_time: str | None = None,
+    min_roi_count: int | None = None,
+    db_path: str | Path = DB_NAME,
+) -> list[SegmentRow]:
     """Query segments filtered by object type, camera, time range, and ROI count.
 
     ``object_type`` may be a single string or a list of strings for

@@ -1,8 +1,7 @@
 """
 src/gui/routes/plates_bp.py
 
-plates routes blueprint, carved from gui/app.py (TASK 1.3).
-Pure relocation: every URL, method, and response shape is unchanged.
+License-plate enhancement and its benchmark.
 Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - blueprints).
 """
 
@@ -15,6 +14,7 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.logging_setup import log
 
 plates_bp = Blueprint("plates", __name__)
+
 
 def _import_plate_reader():
     """Lazy import so module loading doesn't pull torch / paddle at startup."""
@@ -186,7 +186,3 @@ def api_plate_reader():
         return jsonify({"error": f"Plate reader failed: {exc}"}), 500
 
     return jsonify(result.to_dict())
-
-
-# ── Network / LAN info ────────────────────────────────────────────────────────
-

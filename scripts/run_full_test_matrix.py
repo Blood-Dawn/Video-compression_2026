@@ -38,7 +38,6 @@ import argparse
 import csv
 import logging
 from pathlib import Path
-from typing import Dict, List, Tuple
 
 from run_benchmark import benchmark_one
 
@@ -55,7 +54,7 @@ DEFAULT_SCENES = [
 ]
 
 
-def _write_csv(rows: List[dict], csv_path: Path) -> None:
+def _write_csv(rows: list[dict], csv_path: Path) -> None:
     if not rows:
         return
     csv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -65,19 +64,19 @@ def _write_csv(rows: List[dict], csv_path: Path) -> None:
         writer.writerows(rows)
 
 
-def _read_csv(path: Path) -> List[dict]:
+def _read_csv(path: Path) -> list[dict]:
     if not path.exists():
         return []
     with path.open("r", newline="", encoding="utf-8") as f:
         return list(csv.DictReader(f))
 
 
-def _best_by_scene_method(rows: List[dict]) -> Dict[Tuple[str, str], dict]:
+def _best_by_scene_method(rows: list[dict]) -> dict[tuple[str, str], dict]:
     """
     If multiple warmups exist for one (scene, method), keep the row with the
     highest selective_ratio. This makes compare output deterministic.
     """
-    best: Dict[Tuple[str, str], dict] = {}
+    best: dict[tuple[str, str], dict] = {}
     for r in rows:
         k = (r["scene"], r["method"])
         cur = best.get(k)
@@ -86,7 +85,7 @@ def _best_by_scene_method(rows: List[dict]) -> Dict[Tuple[str, str], dict]:
     return best
 
 
-def _compare(new_rows: List[dict], old_rows: List[dict]) -> List[dict]:
+def _compare(new_rows: list[dict], old_rows: list[dict]) -> list[dict]:
     old_best = _best_by_scene_method(old_rows)
     new_best = _best_by_scene_method(new_rows)
 
@@ -141,7 +140,7 @@ def _compare(new_rows: List[dict], old_rows: List[dict]) -> List[dict]:
     return out
 
 
-def _print_compare_table(rows: List[dict]) -> None:
+def _print_compare_table(rows: list[dict]) -> None:
     if not rows:
         return
     print("\n" + "=" * 124)
@@ -191,7 +190,7 @@ def main() -> None:
             log.error(f"Missing scene path: {m}")
         raise SystemExit(1)
 
-    results: List[dict] = []
+    results: list[dict] = []
     total = len(scene_paths) * len(args.methods) * len(args.warmups)
     done = 0
 

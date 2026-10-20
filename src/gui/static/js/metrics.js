@@ -7,10 +7,9 @@
  * global (reachable from inline on* handlers and the other modules).
  * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - JS split).
  */
-// ---- System-load history chart (2026-09 follow-up, uPlot) ----
-// RESEARCH-DESKTOP-DEEPDIVE-2026-09.md Part B1: /api/system_metrics already
-// computes cpu_pct/ram_pct every 2s but the old UI only ever showed the
-// latest sample. This keeps a capped client-side ring buffer and plots it.
+// ---- System-load history chart (uPlot) ----
+// /api/system_metrics reports cpu_pct/ram_pct every 2s; this keeps a capped
+// client-side history of them and plots it (RESEARCH-DESKTOP-DEEPDIVE-2026-09 B1).
 let _mHistT = [];
 let _mHistCpu = [];
 let _mHistRam = [];
@@ -95,13 +94,6 @@ async function checkGpu() {
   try {
     const res  = await fetch('/api/gpu_info');
     const data = await res.json();
-    const sel  = document.getElementById('enhance-device');
-
-    // Auto-select best device
-    if (data.available && sel.value === 'auto') {
-      // leave as auto, just display info
-    }
-
     const color = data.will_work ? 'var(--green)' : data.available ? 'var(--amber)' : 'var(--text-dim)';
     msgEl.style.color = color;
     let msg = data.note || '';
@@ -132,7 +124,6 @@ function _copyLanUrl() {
   const link = document.getElementById('lan-url-link');
   if (!link) return;
   navigator.clipboard.writeText(link.href).then(() => {
-    const orig = link.title;
     link.style.color = 'var(--green)';
     setTimeout(() => { link.style.color = ''; }, 1200);
   }).catch(() => {});
@@ -193,12 +184,7 @@ function _applyHardwareMetrics(d) {
 
   // ── METRICS per-mode bars ──────────────────────────────────
   const avgs = d.mode_avgs || {};
-  const modeLabels = {
-    mode0: 'Mode 0 · Live Surveillance',
-    mode1: 'Mode 1 · Event Recording',
-    mode2: 'Mode 2 · Smart Compress',
-    mode3: 'Mode 3 · Object Only',
-  };
+  const modeLabels = _MODE_CPU_LABELS;
   const rows = document.getElementById('mode-cpu-rows');
   // If a row is currently selected in the metrics table, leave the
   // CPU card alone - it's showing per-clip stats for that recording
@@ -248,6 +234,13 @@ function _applyHardwareMetrics(d) {
   }
 }
 
+const _MODE_CPU_LABELS = {
+  mode0: 'Mode 0 · Live Surveillance',
+  mode1: 'Mode 1 · Event Recording',
+  mode2: 'Mode 2 · Smart Compress',
+  mode3: 'Mode 3 · Object Only',
+};
+
 function _hwSet(id, prop, val) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -270,11 +263,23 @@ function switchTab(name) {
   // Auto-compress tab: start/stop its status poll + log stream on show/hide.
   if (name === 'autocompress' && typeof acOnTabShow === 'function') acOnTabShow();
   if (name !== 'autocompress' && typeof acOnTabHide === 'function') acOnTabHide();
-  // Demo is now in the sidebar, not a tab - nothing to lazy-load here
-  // Demo comparison videos are in a collapsed <details> - only load on expand
 }
 
 // ── Metrics table filter ──────────────────────────────────────
+// Lowercased JSON of each segment row, built once per row object instead of on
+// every keystroke. loadSegments replaces the row objects, so a WeakMap entry
+// never outlives the data it was built from.
+const _segSearchText = new WeakMap();
+
+function _segHaystack(s) {
+  let text = _segSearchText.get(s);
+  if (text === undefined) {
+    text = JSON.stringify(s).toLowerCase();
+    _segSearchText.set(s, text);
+  }
+  return text;
+}
+
 function filterMetricsTable() {
   const query   = (document.getElementById('met-filter-cam')?.value || '').toLowerCase();
   const typeSel = document.getElementById('met-filter-type')?.value || '';
@@ -284,7 +289,7 @@ function filterMetricsTable() {
     const s = _segmentData[idx];
     if (!s) { row.style.display = ''; return; }
     let show = true;
-    if (query && !JSON.stringify(s).toLowerCase().includes(query)) show = false;
+    if (query && !_segHaystack(s).includes(query)) show = false;
     if (typeSel && s.object_type !== typeSel) show = false;
     if (encOnly && !(s.file_path && s.file_path.endsWith('.enc'))) show = false;
     row.style.display = show ? '' : 'none';

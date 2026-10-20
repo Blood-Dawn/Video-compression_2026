@@ -3,23 +3,23 @@ src/gui/routes/setup_bp.py
 
 First-run Setup + destination chooser (FIX 1).
 
-The dashboard used to silently default outputs to a detected OneDrive root. The
-owner wants to CHOOSE the destination explicitly and never have a cloud folder
+The owner CHOOSES the output destination explicitly; a cloud folder is never
 picked implicitly. These routes back a first-run Setup page:
 
   * GET  /api/setup/state         - whether Setup is done + the current choices
   * GET  /api/setup/destinations  - the OFFERED destinations (none auto-picked)
   * POST /api/setup/choose        - persist the user's output + encrypted choice
 
-The actual default-resolution change lives in gui.services.cloud_detection
-(_default_output_dir no longer falls through to a cloud root).
+_default_output_dir (gui.services.cloud_detection) never falls through to a
+cloud root.
 
 Author: Bloodawn (KheivenD), 2026-06-03 (FIX 1 - setup + destinations).
 """
 
-import json
-import urllib.error
-import urllib.request
+import shutil
+# Tests patch setup_bp.urllib.request.urlopen, the same module object
+# update_manager calls.
+import urllib.request  # noqa: F401
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request
@@ -34,11 +34,8 @@ try:
     from gui.state import _state_lock, _status
     from utils.paths import reset_state
     from gui.routes.tokens_bp import _require_password_auth
-    # APP_VERSION is re-exported here (unused directly below) because
-    # tests/test_setup.py asserts setup_bp.APP_VERSION; the actual current-
-    # version value returned by /api/setup/update_check now comes from
-    # update_manager.check_for_update(), which reads the same constant.
-    from utils.version import APP_VERSION
+    # Re-exported for tests/test_setup.py.
+    from utils.version import APP_VERSION  # noqa: F401
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.logging_setup import log
     from src.gui.services.cloud_detection import list_destinations, _default_output_dir
@@ -49,17 +46,9 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.state import _state_lock, _status
     from src.utils.paths import reset_state
     from src.gui.routes.tokens_bp import _require_password_auth
-    from src.utils.version import APP_VERSION
+    from src.utils.version import APP_VERSION  # noqa: F401
 
 setup_bp = Blueprint("setup", __name__)
-
-
-def _default_encrypted_dir(output_dir: str) -> str:
-    """Default encrypted-output location: an ``Encrypted`` subfolder of output."""
-    try:
-        return str(Path(output_dir) / "Encrypted")
-    except Exception:  # noqa: BLE001
-        return ""
 
 
 @setup_bp.route("/api/setup/state", methods=["GET"])
@@ -74,9 +63,8 @@ def api_setup_state():
         "setup_complete": is_setup_complete(),
         "output_dir": out_dir,
         "encrypted_dir": enc_dir,
-        # Last folder the Library browsed (R2.3), so it reopens there.
+        # Last folder the Library browsed, so it reopens there.
         "library_folder": lib_dir,
-        # Neutral local fallback the UI shows when nothing is chosen yet.
         "default_output_dir": _default_output_dir(),
     })
 
@@ -87,7 +75,6 @@ def api_setup_destinations():
     dests = list_destinations()
     return jsonify({
         "destinations": dests,
-        # The neutral local fallback used if the user skips Setup.
         "neutral_default": _default_output_dir(),
     })
 
@@ -123,7 +110,7 @@ def api_setup_choose():
         except ValueError as exc:
             return jsonify({"error": str(exc)}), 400
     else:
-        enc_path = Path(_default_encrypted_dir(str(out_path)))
+        enc_path = out_path / "Encrypted"
 
     # Create the folders now so Start does not fail later on a typo.
     try:
@@ -148,18 +135,13 @@ def _dep_entry(present: bool, path) -> dict:
 
 @setup_bp.route("/api/setup/dependencies", methods=["GET"])
 def api_setup_dependencies():
-    """Report whether the external dependencies are available (FIX 5).
+    """Report whether FFmpeg/FFprobe, the MediaMTX binary and the ONNX model exist.
 
-    Covers FFmpeg/FFprobe (bundled-or-PATH), the MediaMTX RTSP binary (resolved
-    across bundle / %APPDATA% tools / PATH / legacy), and the ONNX detection
-    model. Lets Setup/Help show a clear "installed" status instead of a stale
-    "NOT INSTALLED" caused by checking the wrong path.
+    Each probe is best effort: a resolver that fails for any reason means "not
+    installed" on this screen, never a 500.
     """
-    import shutil
-
     deps = {}
 
-    # FFmpeg / FFprobe.
     try:
         from utils.ffmpeg import ffmpeg_path, ffprobe_path
     except ModuleNotFoundError:  # pragma: no cover - import path shim
@@ -172,7 +154,6 @@ def api_setup_dependencies():
             p, present = "", False
         deps[key] = _dep_entry(present, p if present else "")
 
-    # MediaMTX RTSP server binary.
     try:
         from gui.services.rtsp import _rtsp_mgr
     except ModuleNotFoundError:  # pragma: no cover - import path shim
@@ -183,7 +164,6 @@ def api_setup_dependencies():
         mtx = None
     deps["mediamtx"] = _dep_entry(mtx is not None, mtx)
 
-    # ONNX detection model.
     try:
         from detection.onnx_backend import _default_model_path
     except ModuleNotFoundError:  # pragma: no cover - import path shim
@@ -200,17 +180,15 @@ def api_setup_dependencies():
 
 @setup_bp.route("/api/setup/reset", methods=["POST"])
 def api_setup_reset():
-    """Factory reset (FIX 2): clear per-install state and return to first-run.
+    """Factory reset: clear per-install state and return to first-run.
 
     Deletes the persisted state files (CPU averages, saved prefs, usage consent,
     Flask secret), clears the in-memory CPU-per-mode panel, and forgets the
-    destination choice so the Setup page shows again on reload. The user's
-    compressed output folders are NOT deleted.
+    destination choice. The user's compressed output folders are not deleted.
 
-    Requires the dashboard PASSWORD, never a device token (PT-01, pentest
-    2026-10-03). reset_state() deletes device_tokens.json, so a token that
-    could reset would be a stolen phone unpairing every other phone, which is
-    exactly what the token-management routes already refuse.
+    Requires the dashboard PASSWORD, never a device token (PT-01).
+    reset_state() deletes device_tokens.json, so a token that could reset would
+    let a stolen phone unpair every other phone.
     """
     denied = _require_password_auth()
     if denied is not None:
@@ -225,22 +203,14 @@ def api_setup_reset():
     log.info("Factory reset: removed %s; returning to first-run.", removed or "nothing")
     return jsonify({"ok": True, "removed": removed, "setup_complete": False})
 
+
 @setup_bp.route("/api/setup/update_check", methods=["GET"])
 def api_setup_update_check():
-    """Fall 3.17: check GitHub releases for a newer DESKTOP build.
+    """Check GitHub releases for a newer desktop build (check and notify only).
 
-    Check + notify ONLY - this route itself never downloads or installs
-    anything, just tells the dashboard whether something newer exists and
-    where to get it. Fall 3.18 (see gui.services.update_manager) added the
-    actual download/verify/install pipeline behind separate
-    /api/update/{status,download,install} endpoints; this route's job stays
-    unchanged and is now a thin wrapper around update_manager's shared
-    "what is the newest desktop release" logic, so the two can never
-    disagree about which release is newest.
-
-    Best effort and silent on failure: offline, GitHub unreachable, rate
-    limited, or an unexpected response shape all fall through to
-    update_available=False rather than a 5xx, since a flaky network check on
-    dashboard load must never itself look like an app error.
+    Downloading and installing live behind /api/update/*, which shares
+    update_manager's "newest desktop release" logic. Offline, rate limited or
+    an unexpected response all fall through to update_available=False, never a
+    5xx.
     """
     return jsonify(update_manager.check_for_update())

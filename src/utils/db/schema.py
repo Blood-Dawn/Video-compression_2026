@@ -17,13 +17,37 @@ from __future__ import annotations
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, Union
+from typing import Iterator
 
 from utils.db import DB_NAME
 
+# Columns added after the original M1 table, in the order they were added.
+# initialize_database() adds whichever ones an older database is missing.
+_ADDED_COLUMNS = [
+    ("object_type", "TEXT DEFAULT 'unknown'"),
+    ("avg_sharpness", "REAL DEFAULT NULL"),
+    ("sharpness_label", "TEXT DEFAULT NULL"),
+    ("hidden", "INTEGER DEFAULT 0"),
+    # Enhanced metadata (v2).
+    # JSON array of distinct COCO classes detected, e.g. ["car","person"].
+    ("object_classes", "TEXT DEFAULT NULL"),
+    # Most common color in detected ROI crops (Cody's HSV approach).
+    ("dominant_color", "TEXT DEFAULT NULL"),
+    # highway | intersection | parking | street | unknown
+    ("scene_type", "TEXT DEFAULT 'unknown'"),
+    # day | night | dusk_dawn (derived from the timestamp hour)
+    ("time_of_day", "TEXT DEFAULT NULL"),
+    ("vehicle_count", "INTEGER DEFAULT 0"),
+    ("person_count", "INTEGER DEFAULT 0"),
+    # Person regions (summed across frames) also confirmed by YOLO
+    # pose/keypoint estimation, not just the bbox classifier (planner 6.11,
+    # detection/pose_onnx_backend.py).
+    ("pose_verified_person_count", "INTEGER DEFAULT 0"),
+]
+
 
 @contextmanager
-def get_connection(db_path: Union[str, Path] = DB_NAME) -> Iterator[sqlite3.Connection]:
+def get_connection(db_path: str | Path = DB_NAME) -> Iterator[sqlite3.Connection]:
     """Open a SQLite connection (WAL mode) as a closing context manager.
 
     WAL (Write-Ahead Logging) allows readers and writers to operate
@@ -63,7 +87,7 @@ def get_connection(db_path: Union[str, Path] = DB_NAME) -> Iterator[sqlite3.Conn
         conn.close()
 
 
-def initialize_database(db_path: Union[str, Path] = DB_NAME) -> None:
+def initialize_database(db_path: str | Path = DB_NAME) -> None:
     """Create the segments table and performance indexes if they do not exist.
 
     Safe to call multiple times. All statements use IF NOT EXISTS, and
@@ -89,58 +113,12 @@ def initialize_database(db_path: Union[str, Path] = DB_NAME) -> None:
             )
         """)
 
-        # Idempotent column additions for databases upgraded from M1.
         # Reading PRAGMA table_info once is cheaper than swallowing
         # repeated OperationalError on duplicate columns.
-        cursor = conn.execute("PRAGMA table_info(segments)")
-        columns = [col[1] for col in cursor.fetchall()]
-
-        if "object_type" not in columns:
-            conn.execute("ALTER TABLE segments ADD COLUMN object_type TEXT DEFAULT 'unknown'")
-
-        if "avg_sharpness" not in columns:
-            conn.execute("ALTER TABLE segments ADD COLUMN avg_sharpness REAL DEFAULT NULL")
-
-        if "sharpness_label" not in columns:
-            conn.execute("ALTER TABLE segments ADD COLUMN sharpness_label TEXT DEFAULT NULL")
-
-        if "hidden" not in columns:
-            conn.execute("ALTER TABLE segments ADD COLUMN hidden INTEGER DEFAULT 0")
-
-        # ── Enhanced metadata (v2) ────────────────────────────────────────
-        # object_classes: JSON array of distinct COCO classes detected,
-        # e.g. ["car","person"]
-        if "object_classes" not in columns:
-            conn.execute("ALTER TABLE segments ADD COLUMN object_classes TEXT DEFAULT NULL")
-
-        # dominant_color: most common color in detected ROI crops
-        # (Cody's HSV approach).
-        if "dominant_color" not in columns:
-            conn.execute("ALTER TABLE segments ADD COLUMN dominant_color TEXT DEFAULT NULL")
-
-        # scene_type: highway | intersection | parking | street | unknown
-        if "scene_type" not in columns:
-            conn.execute("ALTER TABLE segments ADD COLUMN scene_type TEXT DEFAULT 'unknown'")
-
-        # time_of_day: day | night | dusk_dawn  (derived from timestamp hour)
-        if "time_of_day" not in columns:
-            conn.execute("ALTER TABLE segments ADD COLUMN time_of_day TEXT DEFAULT NULL")
-
-        # vehicle_count / person_count: per-segment object tallies.
-        if "vehicle_count" not in columns:
-            conn.execute("ALTER TABLE segments ADD COLUMN vehicle_count INTEGER DEFAULT 0")
-
-        if "person_count" not in columns:
-            conn.execute("ALTER TABLE segments ADD COLUMN person_count INTEGER DEFAULT 0")
-
-        # pose_verified_person_count: person regions (summed across frames)
-        # additionally confirmed by YOLO pose/keypoint estimation, not just
-        # the bbox classifier (planner 6.11, detection/pose_onnx_backend.py).
-        if "pose_verified_person_count" not in columns:
-            conn.execute(
-                "ALTER TABLE segments ADD COLUMN pose_verified_person_count "
-                "INTEGER DEFAULT 0"
-            )
+        existing = {col[1] for col in conn.execute("PRAGMA table_info(segments)")}
+        for name, decl in _ADDED_COLUMNS:
+            if name not in existing:
+                conn.execute(f"ALTER TABLE segments ADD COLUMN {name} {decl}")
 
         # Index on (camera_id, timestamp) makes query_recent_targets O(log n).
         # Without this, every query is a full table scan. A problem after

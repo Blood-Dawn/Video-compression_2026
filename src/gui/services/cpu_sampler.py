@@ -10,9 +10,8 @@ Two samplers share gui.state._power_state (under _power_lock):
     during an encode, labels samples by mode, and stamps a per-clip
     cpu_stats.json next to that run's segments.
 
-The always-on sampler used to start at *import* time, which spawned a thread
-merely by importing the module (bad for tests and PyInstaller). It is now an
-explicit start_hw_sampler() invoked from gui.app.create_app().
+start_hw_sampler() is called explicitly from gui.app.create_app() so that
+importing this module never spawns a thread (tests, PyInstaller analysis).
 
 Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - cpu-sampler extraction,
 explicit hw-sampler start).
@@ -49,10 +48,8 @@ _cpu_sampler_stop = threading.Event()
 # Always-on hardware sampler handle (started by start_hw_sampler()).
 _bg_hw_thread: threading.Thread | None = None
 
-# Per-mode CPU benchmarks live here so they persist across server
-# restarts. Now stored under the platform app-data dir alongside the
-# Flask secret; was previously in the repo root, which broke any real
-# installer because Program Files / /Applications are read-only.
+# Per-mode CPU benchmarks persist across restarts in the per-user app-data dir;
+# the install dir (Program Files, /Applications) is read-only.
 # Author: Bloodawn (KheivenD), 2026-05-14 (installer prep, was 2026-05-03).
 _MODE_AVG_FILE = _paths.state_file("mode_cpu_avgs.json")
 
@@ -66,18 +63,18 @@ try:
         _saved_avgs = json.loads(_MODE_AVG_FILE.read_text())
         if isinstance(_saved_avgs, dict):
             with _power_lock:
-                # Sanity-check structure - only accept entries that look
-                # like {"cpu_sum": x, "n": y, "avg": z}
+                # Only accept entries shaped like {"cpu_sum": x, "n": y, "avg": z}.
                 for k, v in _saved_avgs.items():
                     if (isinstance(v, dict)
                         and "cpu_sum" in v and "n" in v and "avg" in v
                         and isinstance(v["n"], int) and v["n"] > 0):
-                        # Mark as historical until this run samples the mode.
+                        # Historical until this run samples the mode.
                         entry = dict(v)
                         entry["historical"] = True
                         _power_state["mode_avgs"][k] = entry
-except Exception as _exc:  # noqa: BLE001
-    # Corrupt file - ignore, will be overwritten on next sampler stop
+except Exception:
+    # Unreadable or corrupt file: ignored, overwritten on the next sampler stop.
+    # Import must never fail on a user-state file, so catch everything.
     pass
 
 
@@ -97,99 +94,111 @@ def reset_mode_avgs() -> None:
         pass
 
 
+def _sample_power_state() -> float:
+    """Take one CPU/RAM/battery reading into _power_state and return the CPU %.
+
+    Blocks for one second: cpu_percent(interval=1.0) measures over that window.
+    """
+    cpu = _psutil.cpu_percent(interval=1.0)
+    mem = _psutil.virtual_memory()
+    bat = _psutil.sensors_battery() if hasattr(_psutil, "sensors_battery") else None
+    with _power_lock:
+        _power_state["cpu_pct"]      = cpu
+        _power_state["ram_pct"]      = mem.percent
+        _power_state["ram_used_mb"]  = mem.used // (1024 * 1024)
+        _power_state["ram_total_mb"] = mem.total // (1024 * 1024)
+        if bat is not None:
+            _power_state["battery_pct"]     = round(bat.percent, 1)
+            _power_state["battery_plugged"] = bat.power_plugged
+            # secsleft: -1 = unknown, -2 = plugged in
+            sl = getattr(bat, "secsleft", -1)
+            _power_state["battery_mins_left"] = round(sl / 60, 1) if sl > 0 else None
+        else:
+            _power_state["battery_pct"]       = None
+            _power_state["battery_plugged"]   = None
+            _power_state["battery_mins_left"] = None
+    return cpu
+
+
 def _cpu_sampler_loop(mode_key: str, output_dir: str | None = None) -> None:
     """Background thread: sample CPU/RAM/battery every 2 s while pipeline runs.
 
     On stop, writes a per-clip ``cpu_stats.json`` into ``output_dir`` so
     the metrics tab can show the CPU% for *this specific* recording
     instead of a global rolling average. The global mode_avgs dict is
-    still updated (for backward compat / fleet-level view) but the
-    detail panel reads the per-clip file.
+    still updated for the fleet-level view.
     Author: Bloodawn (KheivenD), 2026-05-03 (per-clip CPU stats).
     """
-    samples: list[float] = []
+    # Running aggregates instead of a sample list: a 24/7 RTSP run would
+    # otherwise grow the list by one float every two seconds, forever.
+    n = 0
+    cpu_sum = 0.0
+    cpu_min = cpu_max = 0.0
     started_at = time.time()
     while not _cpu_sampler_stop.is_set():
         try:
-            cpu = _psutil.cpu_percent(interval=1.0)   # 1-s blocking measurement
-            mem = _psutil.virtual_memory()
-            bat = _psutil.sensors_battery() if hasattr(_psutil, "sensors_battery") else None
-
-            with _power_lock:
-                _power_state["cpu_pct"]      = cpu
-                _power_state["ram_pct"]      = mem.percent
-                _power_state["ram_used_mb"]  = mem.used // (1024 * 1024)
-                _power_state["ram_total_mb"] = mem.total // (1024 * 1024)
-
-                if bat is not None:
-                    _power_state["battery_pct"]     = round(bat.percent, 1)
-                    _power_state["battery_plugged"] = bat.power_plugged
-                    # secsleft: -1 = unknown, -2 = plugged in
-                    sl = getattr(bat, "secsleft", -1)
-                    _power_state["battery_mins_left"] = round(sl / 60, 1) if sl > 0 else None
-                else:
-                    _power_state["battery_pct"]     = None
-                    _power_state["battery_plugged"] = None
-                    _power_state["battery_mins_left"] = None
-
-            samples.append(cpu)
-
-        except Exception:
+            cpu = _sample_power_state()
+        except Exception:  # noqa: BLE001 - psutil errors vary by platform; skip the sample
             pass
+        else:
+            cpu_min = cpu if n == 0 else min(cpu_min, cpu)
+            cpu_max = cpu if n == 0 else max(cpu_max, cpu)
+            cpu_sum += cpu
+            n += 1
         # Non-blocking 1-s wait so we can stop promptly
         _cpu_sampler_stop.wait(timeout=1.0)
 
-    # Session ended - update per-mode running average and persist it so
-    # the benchmark survives server restarts (was previously lost every
-    # time the user closed the app).
+    if not n:
+        return
+
+    # Fold this session into the per-mode running average and persist it so
+    # the benchmark survives server restarts.
     # Author: Bloodawn (KheivenD), 2026-05-03 (cpu-by-mode persistence).
-    if samples:
-        ended_at = time.time()
-        clip_avg = round(sum(samples) / len(samples), 1)
-        clip_max = round(max(samples), 1)
-        clip_min = round(min(samples), 1)
-        with _power_lock:
-            avgs = _power_state["mode_avgs"]
-            prev = avgs.get(mode_key, {"cpu_sum": 0.0, "n": 0, "avg": 0.0})
-            new_n   = prev["n"] + len(samples)
-            new_sum = prev["cpu_sum"] + sum(samples)
-            avgs[mode_key] = {
-                "cpu_sum": new_sum,
-                "n":       new_n,
-                "avg":     round(new_sum / new_n, 1),
-                # This run sampled the mode, so it is live, not historical.
-                "historical": False,
-            }
-            _session_mode_keys.add(mode_key)
-            # Snapshot for write-out below (drop the transient flag on disk).
-            snapshot = {k: {kk: vv for kk, vv in v.items() if kk != "historical"}
-                        for k, v in avgs.items()}
-        # Persist global running avg outside the lock
+    ended_at = time.time()
+    clip_avg = round(cpu_sum / n, 1)
+    clip_max = round(cpu_max, 1)
+    clip_min = round(cpu_min, 1)
+    with _power_lock:
+        avgs = _power_state["mode_avgs"]
+        prev = avgs.get(mode_key, {"cpu_sum": 0.0, "n": 0, "avg": 0.0})
+        new_n   = prev["n"] + n
+        new_sum = prev["cpu_sum"] + cpu_sum
+        avgs[mode_key] = {
+            "cpu_sum": new_sum,
+            "n":       new_n,
+            "avg":     round(new_sum / new_n, 1),
+            # This run sampled the mode, so it is live, not historical.
+            "historical": False,
+        }
+        _session_mode_keys.add(mode_key)
+        # Snapshot for write-out below (drop the transient flag on disk).
+        snapshot = {k: {kk: vv for kk, vv in v.items() if kk != "historical"}
+                    for k, v in avgs.items()}
+    try:
+        _MODE_AVG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _MODE_AVG_FILE.write_text(json.dumps(snapshot, indent=2))
+    except OSError as exc:
+        log.debug("Could not persist mode_avgs: %s", exc)
+    # Per-clip stats: this is what the metrics detail panel reads.
+    # Author: Bloodawn (KheivenD), 2026-05-03 (per-clip CPU stats).
+    if output_dir:
         try:
-            _MODE_AVG_FILE.parent.mkdir(parents=True, exist_ok=True)
-            _MODE_AVG_FILE.write_text(json.dumps(snapshot, indent=2))
-        except Exception as exc:  # noqa: BLE001
-            log.debug("Could not persist mode_avgs: %s", exc)
-        # Per-clip stats: this is what the metrics detail panel reads.
-        # Author: Bloodawn (KheivenD), 2026-05-03 (per-clip CPU stats).
-        if output_dir:
-            try:
-                stats_path = Path(output_dir) / "cpu_stats.json"
-                stats_path.parent.mkdir(parents=True, exist_ok=True)
-                stats_path.write_text(json.dumps({
-                    "mode":       mode_key,
-                    "avg":        clip_avg,
-                    "max":        clip_max,
-                    "min":        clip_min,
-                    "samples":    len(samples),
-                    "started_at": started_at,
-                    "ended_at":   ended_at,
-                    "duration_s": round(ended_at - started_at, 1),
-                }, indent=2))
-                log.info("CPU stats for %s: avg=%.1f%% max=%.1f%% n=%d → %s",
-                         mode_key, clip_avg, clip_max, len(samples), stats_path)
-            except Exception as exc:  # noqa: BLE001
-                log.debug("Could not write per-clip cpu_stats.json: %s", exc)
+            stats_path = Path(output_dir) / "cpu_stats.json"
+            stats_path.parent.mkdir(parents=True, exist_ok=True)
+            stats_path.write_text(json.dumps({
+                "mode":       mode_key,
+                "avg":        clip_avg,
+                "max":        clip_max,
+                "min":        clip_min,
+                "samples":    n,
+                "started_at": started_at,
+                "ended_at":   ended_at,
+                "duration_s": round(ended_at - started_at, 1),
+            }, indent=2))
+            log.info("CPU stats for %s: avg=%.1f%% max=%.1f%% n=%d → %s",
+                     mode_key, clip_avg, clip_max, n, stats_path)
+        except OSError as exc:
+            log.debug("Could not write per-clip cpu_stats.json: %s", exc)
 
 
 def _start_cpu_sampler(mode_key: str, output_dir: str | None = None) -> None:
@@ -223,11 +232,8 @@ def _stop_cpu_sampler() -> None:
 def _bg_hw_sampler_loop() -> None:
     """Always-on background thread: samples CPU/RAM/battery every 2 s.
 
-    This ensures /api/system_metrics always returns fresh data without doing a
-    blocking cpu_percent() call in the request handler.  The per-pipeline
-    _cpu_sampler_loop continues to run during pipeline execution and handles
-    per-mode averages; this thread simply keeps _power_state current at all
-    times so the dashboard strip is live even when idle.
+    Keeps _power_state current so /api/system_metrics never has to make a
+    blocking cpu_percent() call inside the request handler.
     """
     if not _PSUTIL_OK:
         return
@@ -235,36 +241,17 @@ def _bg_hw_sampler_loop() -> None:
     _psutil.cpu_percent(interval=None)
     while True:
         try:
-            cpu = _psutil.cpu_percent(interval=1.0)
-            mem = _psutil.virtual_memory()
-            bat = _psutil.sensors_battery() if hasattr(_psutil, "sensors_battery") else None
-            with _power_lock:
-                _power_state["cpu_pct"]      = cpu
-                _power_state["ram_pct"]      = mem.percent
-                _power_state["ram_used_mb"]  = mem.used // (1024 * 1024)
-                _power_state["ram_total_mb"] = mem.total // (1024 * 1024)
-                if bat is not None:
-                    _power_state["battery_pct"]      = round(bat.percent, 1)
-                    _power_state["battery_plugged"]  = bat.power_plugged
-                    sl = getattr(bat, "secsleft", -1)
-                    _power_state["battery_mins_left"] = round(sl / 60, 1) if sl > 0 else None
-                else:
-                    _power_state["battery_pct"]      = None
-                    _power_state["battery_plugged"]  = None
-                    _power_state["battery_mins_left"] = None
-        except Exception:
+            _sample_power_state()
+        except Exception:  # noqa: BLE001 - psutil errors vary by platform; skip the sample
             pass
-        # cpu_percent(interval=1.0) already blocks for 1 s; sleep 1 more → 2 s cadence
-        import time as _time
-        _time.sleep(1.0)
+        # The sample already blocked for 1 s; one more gives a 2 s cadence.
+        time.sleep(1.0)
 
 
 def start_hw_sampler() -> None:
     """Start the always-on hardware sampler (idempotent).
 
-    Called from gui.app.create_app(). Previously this thread was started at
-    import time; making it explicit keeps importing gui.app side-effect-free
-    (no stray thread during tests / PyInstaller analysis).
+    Called from gui.app.create_app(), never at import time.
     Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - explicit start).
     """
     global _bg_hw_thread

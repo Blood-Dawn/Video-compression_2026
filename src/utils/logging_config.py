@@ -42,7 +42,6 @@ import logging.handlers
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 
 # ── Console formatter: human-readable single-line ─────────────────────────
@@ -114,7 +113,7 @@ class _JsonFormatter(logging.Formatter):
 def setup_logging(
     level: str = "INFO",
     json_file: bool = True,
-    log_dir: Optional[Path] = None,
+    log_dir: Path | None = None,
 ) -> Path | None:
     """Configure root logger with console + optional rotating JSON file.
 

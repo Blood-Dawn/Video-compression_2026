@@ -19,8 +19,14 @@ from __future__ import annotations
 
 import json
 import threading
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
+
+try:
+    from utils.tail import iter_lines_backwards
+except ModuleNotFoundError:  # pragma: no cover - import path shim
+    from src.utils.tail import iter_lines_backwards
 
 EVENTS_FILENAME = "events.jsonl"
 _lock = threading.Lock()
@@ -71,21 +77,24 @@ def append_events(output_dir, events: list, camera_id: str = "") -> int:
 
 
 def read_recent(output_dir, limit: int = 100) -> list:
-    """Newest-first tail of the events file. Missing file = empty list."""
+    """Newest-first tail of the events file. Missing file = empty list.
+
+    Reads from the end, so the cost tracks ``limit``, not the file's age.
+    """
     path = Path(output_dir) / EVENTS_FILENAME
+    out = []
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        with closing(iter_lines_backwards(path)) as lines:
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    out.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+                if len(out) >= max(1, int(limit)):
+                    break
     except OSError:
         return []
-    out = []
-    for line in reversed(lines):
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            out.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-        if len(out) >= max(1, int(limit)):
-            break
     return out

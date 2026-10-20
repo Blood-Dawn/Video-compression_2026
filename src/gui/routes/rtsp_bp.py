@@ -1,13 +1,17 @@
 """
 src/gui/routes/rtsp_bp.py
 
-rtsp routes blueprint, carved from gui/app.py (TASK 1.3).
-Pure relocation: every URL, method, and response shape is unchanged.
+RTSP server (MediaMTX) control, download, and pushing a stream to it.
+
+Lets developers and demo operators run a local RTSP server with no external
+setup: MediaMTX (MIT-licensed) is downloaded on first use and cached under
+tools/mediamtx/.
 Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - blueprints).
 """
 
+import re
 from pathlib import Path
-import re as _re
+
 from flask import Blueprint, jsonify, request
 
 try:
@@ -19,10 +23,13 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.logging_setup import log
     from src.gui.services.rtsp import _rtsp_mgr
 
-# Repo root (…/src/gui/routes/<bp>_bp.py -> parents[3]).
+# Repo root (.../src/gui/routes/<bp>_bp.py -> parents[3]).
 _ROOT = Path(__file__).resolve().parents[3]
 
+_STREAM_NAME_RE = re.compile(r"^[a-zA-Z0-9_\-]{1,64}$")
+
 rtsp_bp = Blueprint("rtsp", __name__)
+
 
 @rtsp_bp.route("/api/rtsp/status")
 def api_rtsp_status():
@@ -85,12 +92,12 @@ def api_rtsp_push():
     if not video_path:
         return jsonify({"error": "video_path is required"}), 400
 
-    # Sanitize stream_name to alphanumeric + dash/underscore only.
-    # Used directly in an RTSP URL - any shell metacharacter is a command injection risk.
-    if not _re.match(r"^[a-zA-Z0-9_\-]{1,64}$", stream_name):
+    # stream_name goes straight into an RTSP URL, so only alphanumerics, dash
+    # and underscore are allowed (no shell metacharacters).
+    if not _STREAM_NAME_RE.match(stream_name):
         return jsonify({"error": "stream_name must be 1-64 alphanumeric/dash/underscore chars"}), 400
 
-    # Validate video_path is inside the output directory
+    # video_path must sit under the output dir, data/, or outputs/.
     with _state_lock:
         cfg = _status.get("config", {})
     output_dir = Path(cfg.get("output_dir", str(_ROOT / "outputs"))).resolve()
@@ -108,11 +115,11 @@ def api_rtsp_push():
 
     try:
         _rtsp_mgr.push(str(vp), stream_name)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - report any launch failure to the UI
         return jsonify({"error": str(exc)}), 500
 
     rtsp_url = f"rtsp://localhost:8554/{stream_name}"
-    log.info("RTSP push started: %s → %s", vp.name, rtsp_url)
+    log.info("RTSP push started: %s -> %s", vp.name, rtsp_url)
     return jsonify({"ok": True, "rtsp_url": rtsp_url})
 
 
@@ -122,7 +129,3 @@ def api_rtsp_stop_push():
     _rtsp_mgr.stop_push()
     log.info("RTSP push stopped.")
     return jsonify({"ok": True})
-
-
-# ── GPU info ─────────────────────────────────────────────────────────────────
-

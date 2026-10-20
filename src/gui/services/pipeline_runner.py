@@ -50,15 +50,14 @@ _active_encoder = None   # set by _patched_re_init so stop can abort a hung FFmp
 
 
 # ── Frame-count interceptor ───────────────────────────────────────────────────
-# We wrap the FrameSource.read() method at runtime to count decoded frames
+# FrameSource.read() is wrapped at runtime so the GUI can count decoded frames
 # without touching the core pipeline code.
 
 def _patch_frame_source(src_obj):
-    """Monkey-patch src.read() to increment _status['frame_count'].
-    Also reads total_frames from the source so the progress bar knows the denominator.
+    """Count successful reads into _status['frame_count'] and publish total_frames.
+
+    total_frames is 0 for live cameras/RTSP; the progress bar shows a spinner.
     """
-    # Push total frame count into status so the progress bar has a denominator.
-    # total_frames == 0 for live cameras/RTSP; progress bar shows a spinner instead.
     total = getattr(src_obj, "total_frames", 0) or 0
     with _state_lock:
         _status["total_frames"] = int(total)
@@ -77,21 +76,10 @@ def _patch_frame_source(src_obj):
 
 
 # ── Segment-count interceptor ─────────────────────────────────────────────────
-# We patch ROIEncoder.finish_segment() to count encoded segments without
-# modifying roi_encoder.py's encode logic.
-#
-# 2026-09-24 dishonesty audit (task #86): this used to wrap encode_segment(),
-# which roi_encoder.py's own docstrings say the begin_segment/write_frame/
-# finish_segment streaming trio REPLACED - and pipeline.py's real streaming
-# path only ever calls finish_segment(). Nothing in src/ or tests/ calls
-# encode_segment() at all, so the old wrapper silently never fired: a live
-# GUI-driven run's dashboard "segments written" counter stayed at 0 for the
-# entire run no matter how many segments were actually written to disk.
-# Confirmed live: a 1-segment synthetic run left frame_count=150 (correct)
-# and segment_count=0 (wrong) before this fix. Wrapping finish_segment also
-# lets this same patch publish encoder.encryption_failures into _status (see
-# roi_encoder.py's own 2026-09-24 comment) for the same honesty reason the
-# Enhancer patch below reports the real backend instead of the requested one.
+# ROIEncoder.finish_segment() is the one call every streamed segment goes
+# through (encode_segment() is legacy and never called), so wrapping it is what
+# makes the dashboard's "segments written" counter honest. The same hook
+# publishes encoder.encryption_failures so a failed encryption is visible.
 
 def _patch_encoder(enc_obj):
     original_finish = enc_obj.finish_segment
@@ -175,14 +163,12 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
         _status["enhancer_backend"] = None
 
     # Persist the chosen output_dir so the GUI can re-find segments after
-    # a server restart. See _save_gui_state() up top.
+    # a server restart.
     _save_gui_state()
 
-    # Start CPU/RAM/battery sampler (labels samples under the active mode
-    # AND attributes them to this run's output folder so the per-clip
-    # CPU stats land alongside its segments).
-    _mode_key = config.get("mode", "mode0")
-    _start_cpu_sampler(_mode_key, output_dir=config.get("output_dir"))
+    # Samples are labelled with the mode and written next to this run's
+    # segments as a per-clip cpu_stats.json.
+    _start_cpu_sampler(config.get("mode", "mode0"), output_dir=config.get("output_dir"))
 
     log.info("━" * 60)
     log.info("GUI PIPELINE START")
@@ -195,7 +181,7 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
     _orig_re_init = None
     _orig_enh_init = None
     try:
-        # Patch FrameSource and ROIEncoder lazily. Import here so we can wrap.
+        # Imported here, not at module top, so the classes can be wrapped.
         try:
             import utils.frame_source as _fs
             import compression.roi_encoder as _re
@@ -219,11 +205,9 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
         _fs.FrameSource.__init__ = _patched_fs_init
         _re.ROIEncoder.__init__ = _patched_re_init
 
-        # Same pattern for Enhancer: capture the REAL resolved backend
-        # ("realesrgan-<device>" or "bicubic") into _status the moment one
-        # is constructed, so the GUI can show what's actually running
-        # instead of trusting the requested enhance_model, which silently
-        # falls back to bicubic when Real-ESRGAN isn't installed.
+        # Publish the Enhancer's REAL resolved backend ("realesrgan-<device>"
+        # or "bicubic"): the requested enhance_model silently falls back to
+        # bicubic when Real-ESRGAN isn't installed.
         try:
             import enhancement.enhancer as _enh
         except ModuleNotFoundError:
@@ -278,14 +262,10 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             target_vmaf=config.get("target_vmaf"),
         )
         _record_encode_stat(config, success=True)
-        # M4 follow-up (2026-08-16): register file-input outputs in the
-        # compressed index. Auto-compress records its outputs, but a compress
-        # started from the dashboard or the phone (/api/start on a server-side
-        # file) never did, so the fresh output classified as "original" and a
-        # user's just-compressed clip was invisible under the Library's
-        # COMPRESSED view. Interrupted runs never reach this line, and the
-        # helper ffprobe-verifies before recording, so a broken output is
-        # never indexed as a compressed copy.
+        # Register file-input outputs in the compressed index so a dashboard or
+        # phone compress shows up in the Library's COMPRESSED view, just like
+        # auto-compress output. Interrupted runs are skipped, and the helper
+        # ffprobe-verifies first, so a broken output is never indexed.
         if not stop_event.is_set():
             _record_compressed_outputs(config)
 
@@ -295,26 +275,14 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             _status["error"] = str(exc)
         _record_encode_stat(config, success=False, error=exc)
     finally:
-        # Always restore monkey patches, even if run_pipeline raised.
-        try:
-            try:
-                import utils.frame_source as _fs
-                import compression.roi_encoder as _re
-            except ModuleNotFoundError:
-                import src.utils.frame_source as _fs
-                import src.compression.roi_encoder as _re
-            if _orig_fs_init is not None:
-                _fs.FrameSource.__init__ = _orig_fs_init
-            if _orig_re_init is not None:
-                _re.ROIEncoder.__init__ = _orig_re_init
-            try:
-                import enhancement.enhancer as _enh2
-            except ModuleNotFoundError:
-                import src.enhancement.enhancer as _enh2
-            if _orig_enh_init is not None:
-                _enh2.Enhancer.__init__ = _orig_enh_init
-        except Exception:
-            pass
+        # Always restore the patches, even if run_pipeline raised. Each _orig_*
+        # is only set after its module imported, so the module name is bound.
+        if _orig_fs_init is not None:
+            _fs.FrameSource.__init__ = _orig_fs_init
+        if _orig_re_init is not None:
+            _re.ROIEncoder.__init__ = _orig_re_init
+        if _orig_enh_init is not None:
+            _enh.Enhancer.__init__ = _orig_enh_init
 
         with _state_lock:
             _run_error = _status.get("error")
@@ -367,19 +335,21 @@ def _record_compressed_outputs(config: dict) -> None:
             from src.utils import compressed_index as cidx
             from src.utils.ffmpeg import ffprobe_path
         vid_exts = {".mp4", ".mkv", ".avi", ".mov", ".webm"}
-        candidates = []
+        candidates = []  # (mtime, path)
         for p in out_dir.glob(f"{cam}_*"):
+            if p.suffix.lower() not in vid_exts:
+                continue
             try:
-                if (p.is_file() and p.suffix.lower() in vid_exts
-                        and p.stat().st_mtime >= started - 2.0
-                        and p.stat().st_size > 0):
-                    candidates.append(p)
+                if not p.is_file():
+                    continue
+                st = p.stat()
             except OSError:
                 continue
+            if st.st_mtime >= started - 2.0 and st.st_size > 0:
+                candidates.append((st.st_mtime, p))
         if not candidates:
             return
-        candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-        output = candidates[0]
+        output = max(candidates, key=lambda c: c[0])[1]
         probe = subprocess.run(
             [ffprobe_path(), "-v", "error", "-select_streams", "v:0",
              "-show_entries", "stream=codec_type", "-of", "csv=p=0", str(output)],
@@ -392,6 +362,24 @@ def _record_compressed_outputs(config: dict) -> None:
         log.info("Compressed index: %s -> %s", src.name, output.name)
     except Exception as exc:  # noqa: BLE001 - best effort
         log.warning("Compressed-index recording skipped: %s", exc)
+
+
+NO_FRAMES_NOTE = (
+    "No frames could be read from the source, so nothing was compressed. "
+    "Check that the path is right and the file is a supported video."
+)
+NO_CLIPS_NOTE = (
+    "The video was read, but no clips were written. Modes 1 to 3 only keep "
+    "footage where a moving target is detected, and none was found. Lower the "
+    "sensitivity, or use Mode 0 to keep every frame."
+)
+
+
+def no_output_note(status, frames, segments):
+    """Plain-language reason a finished run produced nothing, else None."""
+    if status != "completed" or segments:
+        return None
+    return NO_CLIPS_NOTE if frames else NO_FRAMES_NOTE
 
 
 def _record_job_history(config, stop_event, started, error, frames, segments):
@@ -423,7 +411,8 @@ def _record_job_history(config, stop_event, started, error, frames, segments):
                     "mode": config.get("mode", "mode0"),
                     # M4 job registry: lets a client correlate this history
                     # entry with the job_id it got back from /api/start.
-                    "job_id": config.get("job_id")},
+                    "job_id": config.get("job_id"),
+                    "note": no_output_note(status, frames, segments)},
             error=error,
         )
     except Exception:  # noqa: BLE001 - history must never affect the pipeline

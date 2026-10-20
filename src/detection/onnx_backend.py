@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import List, NamedTuple, Optional, Sequence, Tuple
+from typing import NamedTuple, Sequence
 
 import cv2
 import numpy as np
@@ -35,7 +35,7 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 # Standard 80-class COCO label order that YOLOv8 is trained on. Index == class id.
-COCO_NAMES: Tuple[str, ...] = (
+COCO_NAMES: tuple[str, ...] = (
     "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train",
     "truck", "boat", "traffic light", "fire hydrant", "stop sign",
     "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow",
@@ -56,7 +56,7 @@ class Detection(NamedTuple):
     class_id: int
     class_name: str
     score: float
-    xyxy: Tuple[int, int, int, int]   # (x1, y1, x2, y2) in original image coords
+    xyxy: tuple[int, int, int, int]   # (x1, y1, x2, y2) in original image coords
 
 
 def _default_model_path() -> Path:
@@ -80,7 +80,7 @@ class YoloOnnxDetector:
 
     def __init__(
         self,
-        model_path: Optional[str] = None,
+        model_path: str | None = None,
         confidence: float = 0.25,
         iou: float = 0.45,
         imgsz: int = 640,
@@ -91,7 +91,7 @@ class YoloOnnxDetector:
         self.imgsz = int(imgsz)
         self.model_path = Path(model_path) if model_path else _default_model_path()
         self._session = None
-        self._input_name: Optional[str] = None
+        self._input_name: str | None = None
         self._available = False
         self._inference_error_logged = False
         self._load(device)
@@ -162,7 +162,7 @@ class YoloOnnxDetector:
         return self._available
 
     # ------------------------------------------------------- pre/post-process
-    def _letterbox(self, img: np.ndarray) -> Tuple[np.ndarray, float, Tuple[int, int]]:
+    def _letterbox(self, img: np.ndarray) -> tuple[np.ndarray, float, tuple[int, int]]:
         """Resize keeping aspect ratio, pad to a square self.imgsz.
 
         Returns the padded image, the resize ratio, and the (pad_x, pad_y)
@@ -178,28 +178,26 @@ class YoloOnnxDetector:
         canvas[pad_y:pad_y + nh, pad_x:pad_x + nw] = resized
         return canvas, r, (pad_x, pad_y)
 
-    def infer(self, image_bgr: np.ndarray) -> List[Detection]:
+    def infer(self, image_bgr: np.ndarray) -> list[Detection]:
         """Run detection on a BGR image; return detections in original coords."""
         if not self._available or image_bgr is None or image_bgr.size == 0:
             return []
         h0, w0 = image_bgr.shape[:2]
         canvas, ratio, (pad_x, pad_y) = self._letterbox(image_bgr)
 
-        # BGR->RGB, /255, HWC->CHW, add batch dim.
-        blob = canvas[:, :, ::-1].astype(np.float32) / 255.0
-        blob = np.transpose(blob, (2, 0, 1))[None, ...]
-        blob = np.ascontiguousarray(blob)
+        # BGR->RGB, HWC->CHW and /255 into one preallocated NCHW float32 blob
+        # (float32 math, same values as astype-then-divide, one pass not three).
+        blob = np.empty((1, 3, self.imgsz, self.imgsz), dtype=np.float32)
+        np.divide(canvas[:, :, ::-1].transpose(2, 0, 1), 255.0, out=blob[0],
+                  dtype=np.float32)
 
         try:
             out = self._session.run(None, {self._input_name: blob})[0]
         except Exception as exc:  # noqa: BLE001
-            # This used to be logged at debug level only, so a persistent
-            # per-frame failure (e.g. an input-shape mismatch) was invisible
-            # in normal operation: every call returned [] "successfully" and
-            # object_type/vehicle_count/person_count silently stayed
-            # unknown/0 for the whole video. Warn once per detector instance
-            # so a systemic failure is never silent again, then drop back to
-            # debug to avoid flooding the log once per frame.
+            # A systemic failure (e.g. an input-shape mismatch) makes every
+            # call return [] and leaves object_type/person_count unknown for
+            # the whole video. Warn once per instance so it is visible, then
+            # drop to debug so the log is not flooded once per frame.
             if not self._inference_error_logged:
                 log.warning("ONNX inference failed (%s); object detection will "
                             "return no results until this is fixed. Further "
@@ -259,7 +257,7 @@ class YoloOnnxDetector:
             return []
         idxs = np.array(idxs).flatten()
 
-        dets: List[Detection] = []
+        dets: list[Detection] = []
         for i in idxs:
             cid = int(class_ids[i])
             name = COCO_NAMES[cid] if 0 <= cid < len(COCO_NAMES) else str(cid)
@@ -269,7 +267,7 @@ class YoloOnnxDetector:
             ))
         return dets
 
-    def class_names_in(self, image_bgr: np.ndarray, conf: Optional[float] = None) -> set:
+    def class_names_in(self, image_bgr: np.ndarray, conf: float | None = None) -> set:
         """Convenience: the set of class names detected in an image (>= conf).
 
         Mirrors what ObjectFilter._classify_box_labels collects from a crop.

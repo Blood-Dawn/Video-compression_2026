@@ -44,16 +44,10 @@ function selectPreset(card) {
   document.getElementById('mode-select').value = mode;
   syncModeChips();
 
-  // 2026-10-01 fix: clicking one of these cards used to ONLY flip the
-  // hidden mode-select value. CRF, codec, background CRF, segment length
-  // and the object-filter toggle all kept whatever a previously applied
-  // named preset left behind (the page applies "Continuous CCTV" - mode2
-  // - by default on load), so clicking e.g. "Object Only" silently kept
-  // mode2's background_crf instead of mode3's own defaults. These cards
-  // are the raw mode picker (see presets.js header comment), not a named
-  // preset, so clicking one now clears any active named preset and resets
-  // every option to that mode's own plain defaults - nothing inherited
-  // from whatever was selected before.
+  // These cards are the raw mode picker, not a named preset (see presets.js),
+  // so a click clears any active named preset and resets every option to the
+  // mode's own defaults. Otherwise e.g. "Object Only" would silently inherit
+  // the background_crf of the "Continuous CCTV" preset applied on page load.
   window._svcsPreset = null;
   const presetSelect = document.getElementById('preset-select');
   if (presetSelect) presetSelect.value = '';
@@ -63,9 +57,8 @@ function selectPreset(card) {
     _setField('bg-method', 'MOG2');
     _setField('object-filter-toggle', true);
   }
-  // 2026-10-01 live-camera default: segment length defaults to 10 min when
-  // the current input is a live camera/stream, 60s for a file - matching
-  // whatever _onInputSourceChange would already set for this source. This\n  // only overwrites the slider if the user has not manually dragged it\n  // (_segLenUserTouched), so an explicit choice survives a preset click.
+  // Same per-source segment-length default as _onInputSourceChange; an
+  // explicit slider choice (_segLenUserTouched) survives a preset click.
   if (!_segLenUserTouched) {
     const segSlider = document.getElementById('segment-seconds-slider');
     const srcVal = (document.getElementById('input-source') || {}).value || '';
@@ -97,7 +90,6 @@ const _sensitivityWarmup   = [60, 90, 120, 60, 30];
 function _onSensitivityChange(val) {
   const idx = parseInt(val) - 1;
   document.getElementById('sensitivity-label').textContent = _sensitivityLabels[idx];
-  // Update hidden technical fields
   document.getElementById('bg-method').value    = _sensitivityBgMethod[idx];
   document.getElementById('warmup-frames').value = _sensitivityWarmup[idx];
 }
@@ -107,22 +99,17 @@ function _onObjectFilterChange(enabled) {
 }
 
 // ── Segment length slider ──────────────────────────────────────
+// Set once the operator drags the segment slider, so later preset or
+// source-switch defaulting leaves their choice alone.
 let _segLenUserTouched = false;
 
-// True once the operator connects a camera/stream (vs. a file): the live-
-// camera ask is 'auto-compress once the clip reaches 10 min by default'
-// while file-based runs keep the historical 60s default.
-
-// Returns the right default segment length (seconds) for a given raw
-// #input-source value: 600 (10 min) for a live camera/stream, 60s for a file.
+// Default segment length (seconds) for a raw #input-source value: a live
+// camera/stream compresses every 10 min, a file keeps the 60s default.
 function _defaultSegLenForSource(val) {
   return _isLiveSource(String(val || '')) ? 600 : 60;
 }
 
-// oninput handler wired to the visible slider: marks the length as an
-// explicit user choice so later preset/source-switch defaulting leaves it
-// alone, per the 'can be a different mode/length if they switch it before
-// starting' requirement.
+// oninput handler of the visible slider.
 function _onSegLenUserChange(val) {
   _segLenUserTouched = true;
   _onSegLenChange(val);
@@ -283,12 +270,7 @@ function _onInputSourceChange(val) {
     // Store the auto-derived ID in the hidden field
     document.getElementById('camera-id-auto').value = _autoCamera(val);
   }
-  // 2026-10-01: connecting a camera should auto-compress once the clip
-  // reaches 10 min by default (the product's 'just compress it' live-camera
-  // ask), while a file source keeps the old 60s default. Only apply the
-  // auto-default when the user has not manually dragged the segment slider
-  // this session, so an explicit choice they made before switching sources
-  // is never silently overwritten.
+  // Per-source segment-length default, unless the user already picked one.
   if (!_segLenUserTouched) {
     const segSlider = document.getElementById('segment-seconds-slider');
     const defSeg = _defaultSegLenForSource(val);
@@ -395,11 +377,9 @@ async function _cleanupMissingSegments() {
 let _cloudWebUrl = null;   // populated by _initGDriveOutput, used by _openCloudFolder
 
 async function _initGDriveOutput() {
-  // FIX 1: no silent cloud default. The output folder comes from the user's
-  // explicit Setup choice (see setup.js, /api/setup/state). This function used
-  // to auto-detect OneDrive/Drive and fill the field; it now only refreshes the
-  // status line and hides the "View Online" button unless the chosen path is a
-  // cloud folder. setup.js owns populating #output-dir.
+  // FIX 1: no silent cloud default. setup.js fills #output-dir from the user's
+  // explicit Setup choice; this only resets the status line and hides the
+  // "View Online" button unless the chosen path is a cloud folder.
   const statusEl = document.getElementById('gdrive-status');
   const viewBtn  = document.getElementById('gdrive-view-btn');
   if (viewBtn && !_cloudWebUrl) viewBtn.style.display = 'none';
@@ -584,13 +564,11 @@ function _applyImportedConfig(cfg) {
     const wfEl = document.getElementById('warmup-frames');
     if (cfg.warmup_frames != null && wfEl) wfEl.value = cfg.warmup_frames;
 
-    // Try to snap sensitivity slider to nearest equivalent position
-    const bgMethods  = ['KNN', 'KNN', 'MOG2', 'MOG2', 'MOG2'];
-    const warmupVals = [60, 90, 120, 60, 30];
+    // Snap the sensitivity slider to the first matching position.
     let bestIdx = 2; // default "Balanced"
-    for (let i = 0; i < bgMethods.length; i++) {
-      if (bgMethods[i] === cfg.bg_method &&
-          (cfg.warmup_frames == null || warmupVals[i] === cfg.warmup_frames)) {
+    for (let i = 0; i < _sensitivityBgMethod.length; i++) {
+      if (_sensitivityBgMethod[i] === cfg.bg_method &&
+          (cfg.warmup_frames == null || _sensitivityWarmup[i] === cfg.warmup_frames)) {
         bestIdx = i;
         break;
       }
@@ -686,7 +664,7 @@ function _configImportToast(msg, isError = false) {
 //
 //   • ingest latency - one-shot, FFmpeg-launch → first .ts segment.
 //   • end-to-end avg - rolling median frame age across the last N segments
-//     (ROADMAP 5.1 - Cody's hardware-sizing ask from the April 22 meeting).
+//     (ROADMAP 5.1, used for hardware sizing).
 //
 // We keep polling for the first ~30 s to catch the ingest sample, then
 // downshift to a 5 s cadence so the rolling avg keeps refreshing without
@@ -870,7 +848,7 @@ function _showSegTooltip(evt, seg) {
   }
 
   // Clip info
-  lines.push(`Length:  Length: ${seg.duration_s} seconds`);
+  lines.push(`Length: ${seg.duration_s} seconds`);
   lines.push(`Detections: ${seg.roi_count} motion region${seg.roi_count !== 1 ? 's' : ''} in this clip`);
 
   // Quality

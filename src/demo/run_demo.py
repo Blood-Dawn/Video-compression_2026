@@ -62,7 +62,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import sqlite3
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 # Make src/ importable when this script is run directly (python src/demo/run_demo.py)
@@ -123,21 +125,16 @@ def stitched_name_for_view(mode: str, view: str) -> str:
 
 
 def _aggregate_demo_metadata(mode_output_dirs: dict) -> dict:
-    """Pull aggregated metrics from the per-mode metadata.db files.
+    """Aggregate one mode's metadata.db rows into values for the composite row.
 
-    The split-screen row used to land in the dashboard with empty
-    Color/Scene/Light/Motion columns because we never copied any of
-    that data from the underlying mode runs (which DO have it). Here
-    we walk one mode's metadata.db (any mode - same source clip, so
-    scene/lighting/color are identical) and aggregate the per-segment
-    rows into a single set of values for the composite row.
+    Without this the split-screen row shows empty Color/Scene/Light/Motion
+    columns. Every mode processes the same source clip, so any one mode's
+    scene/lighting/color data stands in for all of them.
 
-    Returns a dict with keys ready to slot into the segments INSERT.
-    Falls back to safe defaults if the per-mode DB can't be read.
+    Returns a dict with keys ready to slot into the segments INSERT, or the
+    safe defaults below if the per-mode DB can't be read.
     Author: Bloodawn (KheivenD), 2026-05-04 (splitscreen metrics).
     """
-    import sqlite3
-
     out = {
         "target_detected": 0,
         "roi_count":       0,
@@ -155,8 +152,6 @@ def _aggregate_demo_metadata(mode_output_dirs: dict) -> dict:
     if not mode_output_dirs:
         return out
 
-    # Use the first mode's DB - all modes process the same source clip,
-    # so scene_type / time_of_day / dominant_color are equivalent.
     sample_dir = next(iter(mode_output_dirs.values()))
     db_path = Path(sample_dir) / "metadata.db"
     if not db_path.exists():
@@ -164,7 +159,8 @@ def _aggregate_demo_metadata(mode_output_dirs: dict) -> dict:
 
     try:
         conn = sqlite3.connect(str(db_path))
-        cur = conn.execute(
+        try:
+            row = conn.execute(
             """
             SELECT
                 MAX(COALESCE(target_detected, 0)),
@@ -181,25 +177,28 @@ def _aggregate_demo_metadata(mode_output_dirs: dict) -> dict:
             FROM segments
             WHERE COALESCE(hidden, 0) = 0
             """
-        ).fetchone()
-        conn.close()
-        if cur:
-            out.update({
-                "target_detected": int(cur[0] or 0),
-                "roi_count":       int(cur[1] or 0),
-                "duration":        float(cur[2] or 0.0),
-                "object_type":     cur[3] or "demo",
-                "avg_sharpness":   float(cur[4]) if cur[4] is not None else None,
-                "sharpness_label": cur[5],
-                "dominant_color":  cur[6],
-                "scene_type":      cur[7] or "unknown",
-                "time_of_day":     cur[8],
-                "vehicle_count":   int(cur[9] or 0),
-                "person_count":    int(cur[10] or 0),
-            })
-    except Exception:
-        pass
+            ).fetchone()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        # Missing table/columns or a locked/corrupt DB: the composite row
+        # still gets written, just with the defaults.
+        return out
 
+    if row:
+        out.update({
+            "target_detected": int(row[0] or 0),
+            "roi_count":       int(row[1] or 0),
+            "duration":        float(row[2] or 0.0),
+            "object_type":     row[3] or "demo",
+            "avg_sharpness":   float(row[4]) if row[4] is not None else None,
+            "sharpness_label": row[5],
+            "dominant_color":  row[6],
+            "scene_type":      row[7] or "unknown",
+            "time_of_day":     row[8],
+            "vehicle_count":   int(row[9] or 0),
+            "person_count":    int(row[10] or 0),
+        })
     return out
 
 
@@ -216,32 +215,19 @@ def _index_demo_outputs(
 ) -> None:
     """Write a single ``metadata.db`` row for the split-screen composite.
 
-    Behavior change 2026-05-04 (Bloodawn / KheivenD): was writing one
-    row per per-mode rendered demo video PLUS one row for the composite
-    - that flooded the metrics tab with 5 rows per demo run. The user
-    wants only the actual stitched output (the one video that contains
-    all selected modes side-by-side). The per-mode renders are still
-    on disk in this folder (you can play them by opening the file), but
-    they're no longer indexed.
-
-    Metadata for the row is aggregated from one of the underlying mode
-    dirs so the Color/Scene/Light/Motion columns aren't empty - every
-    mode processes the same source so the per-clip metadata is shared.
+    Only the composite is indexed so one demo run shows up as one row in the
+    metrics tab; the per-mode renders stay on disk next to it. The row's
+    metadata comes from _aggregate_demo_metadata.
+    Author: Bloodawn (KheivenD), 2026-05-04.
     """
-    import sqlite3
-    from datetime import datetime, timezone
-
     if split_screen_path is None or not Path(split_screen_path).exists():
-        # Single-mode demo (no composite to index). The pipeline already
-        # wrote rows for each mode's own metadata.db, so there's nothing
-        # extra to do here - bailing out is correct.
+        # Single-mode demo: each mode's own metadata.db already has its rows.
         return
 
     db_path = stitched_dir / "metadata.db"
     src_stem = Path(input_path).stem
     cam_short = camera_id if camera_id and camera_id != "cam_00" else src_stem
 
-    # Aggregated metadata pulled from one of the per-mode runs
     meta = _aggregate_demo_metadata(mode_output_dirs or {})
 
     size = Path(split_screen_path).stat().st_size
@@ -273,17 +259,17 @@ def _index_demo_outputs(
         """)
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
-        # Hide any leftover per-mode demo rows from old indexing runs in
-        # this same db (pre-2026-05-04). The user requested that only
-        # the composite show up, so we mark anything but the new
-        # split-screen row as hidden.
+        # Hide per-mode rows left in this DB by older demo runs, which
+        # indexed every render, so only the composite stays visible. A
+        # pre-existing table without a `hidden` column makes this fail; that
+        # is harmless, so carry on to the insert.
         try:
             conn.execute(
                 "UPDATE segments SET hidden = 1 "
                 "WHERE COALESCE(hidden, 0) = 0 AND file_path != ?",
                 (str(split_screen_path),),
             )
-        except Exception:
+        except sqlite3.OperationalError:
             pass
 
         conn.execute(
@@ -338,7 +324,7 @@ def run_all_demos(
         if progress_callback is not None:
             try:
                 progress_callback(msg, kw)
-            except Exception:
+            except Exception:  # noqa: BLE001 - a broken progress UI must not abort the demo run
                 pass
         print(msg)
 
@@ -361,9 +347,8 @@ def run_all_demos(
         mode_dir = (output_root_path / f"demo_{mode}{suffix}").resolve()
         mode_output_dirs[mode] = mode_dir
 
-        # Pass mode_dir on the progress events so the GUI's CPU sampler
-        # can attribute samples to this specific output folder rather
-        # than aggregating across every demo run.
+        # mode_dir on the progress events lets the GUI's CPU sampler
+        # attribute samples to this output folder instead of every demo run.
         # Author: Bloodawn (KheivenD), 2026-05-03 (per-clip CPU stats).
         _cb(
             f"Running pipeline: {mode} ({mode_index + 1}/{mode_total})",
@@ -431,14 +416,12 @@ def run_all_demos(
         "run_suffix": suffix,
         "modes": modes,
         "stitched_dir": str(stitched_dir),
-        "outputs": {},
+        "outputs": {
+            mode: {view: str(stitched_outputs[(mode, view)]) for view in views}
+            for mode in modes
+        },
         "metrics": mode_metrics,
     }
-
-    for mode in modes:
-        manifest["outputs"][mode] = {}
-        for view in views:
-            manifest["outputs"][mode][view] = str(stitched_outputs[(mode, view)])
 
     manifest_path = (stitched_dir / "manifest.json").resolve()
     with open(manifest_path, "w", encoding="utf-8") as f:
@@ -452,11 +435,8 @@ def run_all_demos(
         split_screen_path = build_split_screen_from_manifest(manifest_path)
         _cb("Split-screen ready.", phase="stitch", done=True)
 
-    # ── Index demo outputs into a metadata.db for /api/segments ───────────
-    # Without this the rendered demo videos (per-mode + split-screen)
-    # never appear in the dashboard. Was filed by the user 2026-05-04
-    # ("the vid I just outputed is not showing in search/metrics/recent").
-    # We write one row per output file into <stitched_dir>/metadata.db.
+    # Index the composite into <stitched_dir>/metadata.db so it shows up in
+    # /api/segments (search, metrics, recent).
     # Author: Bloodawn (KheivenD), 2026-05-04.
     try:
         _index_demo_outputs(

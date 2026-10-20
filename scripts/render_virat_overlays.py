@@ -11,7 +11,6 @@ import argparse
 import glob
 import os
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -22,7 +21,7 @@ import yaml
 class Detection:
     track_id: int
     frame_idx: int
-    bbox: Tuple[int, int, int, int]
+    bbox: tuple[int, int, int, int]
 
 
 @dataclass
@@ -30,10 +29,10 @@ class Activity:
     label: str
     frame_start: int
     frame_end: int
-    actor_ids: List[int]
+    actor_ids: list[int]
 
 
-def parse_bbox_g0(g0: str) -> Optional[Tuple[int, int, int, int]]:
+def parse_bbox_g0(g0: str) -> tuple[int, int, int, int] | None:
     parts = [p for p in g0.strip().split() if p]
     if len(parts) < 4:
         return None
@@ -50,9 +49,9 @@ def load_kpf_yaml(path: str) -> list:
     return data if isinstance(data, list) else []
 
 
-def load_types(types_path: str) -> Dict[int, str]:
+def load_types(types_path: str) -> dict[int, str]:
     rows = load_kpf_yaml(types_path)
-    out: Dict[int, str] = {}
+    out: dict[int, str] = {}
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -68,9 +67,9 @@ def load_types(types_path: str) -> Dict[int, str]:
     return out
 
 
-def load_geometry(geom_path: str) -> Tuple[Dict[int, List[Detection]], int, Tuple[int, int]]:
+def load_geometry(geom_path: str) -> tuple[dict[int, list[Detection]], int, tuple[int, int]]:
     rows = load_kpf_yaml(geom_path)
-    tracks: Dict[int, List[Detection]] = {}
+    tracks: dict[int, list[Detection]] = {}
     max_frame = 0
     width = 1920
     height = 1080
@@ -116,9 +115,9 @@ def load_geometry(geom_path: str) -> Tuple[Dict[int, List[Detection]], int, Tupl
     return tracks, max_frame, (width, height)
 
 
-def load_activities(activity_path: str) -> List[Activity]:
+def load_activities(activity_path: str) -> list[Activity]:
     rows = load_kpf_yaml(activity_path)
-    activities: List[Activity] = []
+    activities: list[Activity] = []
     for row in rows:
         if not isinstance(row, dict):
             continue
@@ -144,7 +143,7 @@ def load_activities(activity_path: str) -> List[Activity]:
         except (TypeError, ValueError):
             continue
 
-        actor_ids: List[int] = []
+        actor_ids: list[int] = []
         if isinstance(actors, list):
             for actor in actors:
                 if not isinstance(actor, dict):
@@ -165,13 +164,13 @@ def load_activities(activity_path: str) -> List[Activity]:
     return activities
 
 
-def color_for_track(track_id: int) -> Tuple[int, int, int]:
+def color_for_track(track_id: int) -> tuple[int, int, int]:
     rng = np.random.default_rng(track_id)
     vals = rng.integers(64, 255, size=3)
     return int(vals[0]), int(vals[1]), int(vals[2])
 
 
-def find_or_interpolate(det_list: List[Detection], frame_idx: int) -> Optional[Tuple[int, int, int, int]]:
+def find_or_interpolate(det_list: list[Detection], frame_idx: int) -> tuple[int, int, int, int] | None:
     if not det_list:
         return None
 
@@ -197,8 +196,8 @@ def find_or_interpolate(det_list: List[Detection], frame_idx: int) -> Optional[T
     return x1, y1, x2, y2
 
 
-def parse_video_map(items: List[str]) -> Dict[str, str]:
-    mapping: Dict[str, str] = {}
+def parse_video_map(items: list[str]) -> dict[str, str]:
+    mapping: dict[str, str] = {}
     for item in items:
         if "=" not in item:
             continue
@@ -212,15 +211,15 @@ def parse_video_map(items: List[str]) -> Dict[str, str]:
 
 def render_preview(
     clip_id: str,
-    tracks: Dict[int, List[Detection]],
-    type_map: Dict[int, str],
-    activities: List[Activity],
+    tracks: dict[int, list[Detection]],
+    type_map: dict[int, str],
+    activities: list[Activity],
     max_frame: int,
-    base_size: Tuple[int, int],
+    base_size: tuple[int, int],
     output_path: str,
     fps: int,
     frame_step: int,
-    source_video: Optional[str],
+    source_video: str | None,
 ) -> None:
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
@@ -262,7 +261,7 @@ def render_preview(
                 cv2.LINE_AA,
             )
 
-        active_labels: List[str] = []
+        active_labels: list[str] = []
         for activity in activities:
             if activity.frame_start <= frame_idx <= activity.frame_end:
                 active_labels.append(activity.label)

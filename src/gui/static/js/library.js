@@ -130,9 +130,7 @@ function _renderLibrary(list) {
   });
 }
 
-// Client-side search + type filter + sort over the loaded page.
-// Aggregate stats for the filtered set (2026-09 follow-up).
-// RESEARCH-DESKTOP-DEEPDIVE-2026-09.md Part B2: real counts/sizes only,
+// Aggregate stats for the filtered set: real counts and sizes only, with
 // deliberately no invented compression ratio (see status.js's
 // pollMeasuredSavings comment for why a synthetic ratio is avoided).
 function _fmtBytes(bytes) {
@@ -162,6 +160,7 @@ function _renderLibraryStats(list) {
     ' (' + _fmtBytes(compBytes) + ')</span>';
 }
 
+// Client-side search + type filter + sort over the loaded page.
 function filterLibrary() {
   const all = window._svcsLibrary.all || [];
   const q = ((document.getElementById("library-search") || {}).value || "").trim().toLowerCase();
@@ -176,12 +175,15 @@ function filterLibrary() {
     return true;
   });
   const [field, dir] = sortVal.split("-");
-  const cmp = {
-    name: (a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()),
-    size: (a, b) => a.size - b.size,
-    date: (a, b) => a.mtime - b.mtime,
-  }[field] || ((a, b) => a.mtime - b.mtime);
-  list.sort(cmp);
+  if (field === "name") {
+    // Lowercase each name once instead of twice per comparison; this runs on
+    // every keystroke in the search box.
+    list = list.map((v) => [v.name.toLowerCase(), v])
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map((pair) => pair[1]);
+  } else {
+    list.sort(field === "size" ? (a, b) => a.size - b.size : (a, b) => a.mtime - b.mtime);
+  }
   if (dir === "desc") list.reverse();
   _renderLibraryStats(list);
   _renderLibrary(list);
@@ -207,13 +209,10 @@ async function loadLibrary() {
   _libStatus("Loading...");
   closeLibraryDetail();
   try {
-    // refresh=1 bypasses the server-side listing cache (M2.1a). loadLibrary is
-    // only ever a user-initiated action (the Load button, Enter in the folder
-    // box, picking a folder in Browse), so it must give an exact answer: a user
-    // who just compressed something and clicks Load expects to see it. The
-    // cache exists for the phone client's pagination, where one listing is
-    // fetched a page at a time; forcing it here keeps desktop behavior exactly
-    // as it was.
+    // refresh=1 bypasses the server-side listing cache (M2.1a), which exists
+    // for the phone client's pagination. loadLibrary only runs on a user
+    // action, and a user who just compressed something and clicks Load
+    // expects to see it.
     const base = "/api/library/videos?refresh=1";
     const url = base + (folder ? "&folder=" + _enc(folder) : "");
     const data = await (await fetch(url)).json();
@@ -288,15 +287,11 @@ async function _lbNavigate(path) {
 }
 
 async function browseFolderInto(inputId, onUse) {
-  // Generic version of the picker below: lands the chosen path in whatever
-  // <input> the caller names and, optionally, runs a callback afterward.
-  // Added for Setup's output/encrypted-folder fields (Week 3 TASK 3.13),
-  // which need this exact picker but must not trigger a Library reload.
-  //
-  // Same order as before: try the host's NATIVE folder picker (Windows
-  // Explorer folder dialog) first, and only fall back to the in-app
-  // server-side browser if that is unreachable (e.g. a remote/headless
-  // server).
+  // Lands the chosen path in whatever <input> the caller names and,
+  // optionally, runs a callback afterward (Setup's folder fields use it
+  // without triggering a Library reload). Tries the host's NATIVE folder
+  // picker first and falls back to the in-app server-side browser when that
+  // is unreachable (e.g. a remote/headless server).
   try {
     const data = await (await fetch("/api/library/browse_folder")).json();
     if (data && data.path) {
@@ -326,8 +321,6 @@ async function browseFolderInto(inputId, onUse) {
 window.browseFolderInto = browseFolderInto;
 
 async function browseLibraryFolder() {
-  // The Library tab's own folder field: unchanged behavior, now expressed
-  // as a call into the generic picker above.
   await browseFolderInto("library-folder", () => loadLibrary());
 }
 window.browseLibraryFolder = browseLibraryFolder;

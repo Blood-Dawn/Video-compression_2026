@@ -1,8 +1,8 @@
 """
 src/gui/routes/queries_bp.py
 
-queries routes blueprint, carved from gui/app.py (TASK 1.3).
-Pure relocation: every URL, method, and response shape is unchanged.
+Archive queries: structured segment search, natural-language search,
+daily summary and busiest hours.
 Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - blueprints).
 """
 
@@ -18,6 +18,7 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.utils.db import (query_by_type, query_daily_storage_summary, query_segments_by_target_count)
 
 queries_bp = Blueprint("queries", __name__)
+
 
 @queries_bp.route("/api/query_segments")
 def api_query_segments():
@@ -55,7 +56,7 @@ def api_query_segments():
 
 @queries_bp.route("/api/nl_search")
 def api_nl_search():
-    """R5 TASK 5.4: structured natural-language search over segment metadata.
+    """Structured natural-language search over segment metadata.
 
     Query params:
         q      - required phrase, e.g. "red car after 9pm on cam2"
@@ -130,14 +131,7 @@ def api_busiest():
     return jsonify({"segments": _rows_to_segment_list(rows, db_path.parent), "db_path": str(db_path)})
 
 
-# ── Demo / comparison routes (Riley's render system) ─────────────────────────
-# _demo_lock / _demo_state now live in gui.state (imported at the top).
-
-
-# Now that _demo_state exists, replay any persisted output paths from disk
-# so the GUI can find the user's last pipeline + demo segments after a
-# server restart. See _load_gui_state() above for details.
+# Replay the persisted output paths at import so the GUI finds the last
+# pipeline and demo segments after a restart.
 # Author: Bloodawn (KheivenD), 2026-05-04 (output-dir persistence).
 _load_gui_state()
-
-

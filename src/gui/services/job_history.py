@@ -23,7 +23,6 @@ import json
 import re
 import threading
 import time
-from typing import List, Optional
 
 try:
     from utils import paths as _paths
@@ -42,7 +41,7 @@ _jobs_lock = threading.Lock()
 _CRED_URL_RE = re.compile(r"(\w[\w+.-]*://)([^/@\s]+)@")
 
 
-def _scrub_credentials(text: Optional[str]) -> Optional[str]:
+def _scrub_credentials(text: str | None) -> str | None:
     if not text:
         return text
     return _CRED_URL_RE.sub(r"\1***@", str(text))
@@ -58,7 +57,7 @@ def _jobs_file():
     return _paths.state_file("job_history.json")
 
 
-def _load() -> List[dict]:
+def _load() -> list[dict]:
     try:
         f = _jobs_file()
         if not f.exists():
@@ -72,14 +71,14 @@ def _load() -> List[dict]:
 def record_job(
     kind: str,
     label: str = "",
-    started_at: Optional[float] = None,
-    ended_at: Optional[float] = None,
+    started_at: float | None = None,
+    ended_at: float | None = None,
     status: str = "completed",
-    counts: Optional[dict] = None,
+    counts: dict | None = None,
     bytes_in: int = 0,
     bytes_out: int = 0,
-    error: Optional[str] = None,
-) -> Optional[dict]:
+    error: str | None = None,
+) -> dict | None:
     """Append one finished job to the history. Returns the entry, or None.
 
     kind: "pipeline" (a manual run) or "autocompress" (one batch pass).
@@ -134,7 +133,7 @@ def record_job(
         return None
 
 
-def recent_jobs(limit: int = 20) -> List[dict]:
+def recent_jobs(limit: int = 20) -> list[dict]:
     """Return the newest ``limit`` job entries (newest first). Never raises."""
     try:
         limit = max(1, min(int(limit), _MAX_JOBS))

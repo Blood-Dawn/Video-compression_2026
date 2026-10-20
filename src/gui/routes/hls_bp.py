@@ -1,17 +1,15 @@
 """
 src/gui/routes/hls_bp.py
 
-hls routes blueprint, carved from gui/app.py (TASK 1.3).
-Pure relocation: every URL, method, and response shape is unchanged.
+Live HLS streaming: start/stop the stream, latency stats, and serving
+the playlist and .ts segments.
 Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - blueprints).
 
-HLS live streaming (task 4.1): OpenCV VideoCapture -> BackgroundSubtractor ->
-ROI boxes and corner overlay drawn on each frame -> rawvideo piped to FFmpeg
-stdin -> .m3u8 + .ts -> Flask serves /api/hls/<camera_id>/ -> hls.js plays in
-the browser. Frames are annotated in Python before encoding so the live stream
-shows the same green ROI boxes as the demo comparison output. The worker and
-its rebindable process/thread handles live in gui.services.hls_runner.
-(This note used to trail the end of demo_bp.py, left behind by the carve.)
+Pipeline: OpenCV VideoCapture -> BackgroundSubtractor -> ROI boxes and corner
+overlay drawn on each frame -> rawvideo piped to FFmpeg stdin -> .m3u8 + .ts ->
+Flask serves /api/hls/<camera_id>/ -> hls.js. Frames are annotated before
+encoding so the live stream shows the same green ROI boxes as the demo output.
+The worker and its rebindable handles live in gui.services.hls_runner.
 """
 
 import threading
@@ -51,8 +49,8 @@ def api_hls_start():
     Returns:
         {"ok": true, "playlist_url": "/api/hls/<camera_id>/playlist.m3u8"}
     """
-    # _hls_thread / _hls_stop_event are owned by gui.services.hls_runner; assign
-    # through the module so the forwarder, the annotator, and stop() agree.
+    # _hls_thread / _hls_stop_event live in hls_runner; assign through that
+    # module so the forwarder, the annotator, and stop() agree.
     with _hls_lock:
         if _hls_state["running"]:
             return jsonify({"error": "HLS stream already running"}), 409
@@ -64,17 +62,15 @@ def api_hls_start():
     if not _ok:
         return jsonify({"error": f"input_source not allowed: {_why}"}), 400
     camera_id = str(data.get("camera_id", "cam_00")).strip()
-    # HLS .ts chunks should sync alongside saved segments - OneDrive when
-    # available, local fallback otherwise. Was hard-coded to local in the
-    # initial M3 implementation. Author: Bloodawn (KheivenD), 2026-05-02.
+    # HLS chunks land next to saved segments, in the chosen output folder.
+    # Author: Bloodawn (KheivenD), 2026-05-02.
     output_dir = str(data.get("output_dir", "")).strip() or _default_output_dir()
     mode_label = str(data.get("mode", "Mode 0")).strip()
 
     hls_dir = _hls_dir_for(camera_id, output_dir)
     hls_dir.mkdir(parents=True, exist_ok=True)
 
-    # Clear stale segments from any previous session so FFmpeg starts fresh
-    # and hls.js cannot accidentally serve old video from a different source.
+    # Clear segments from any previous session so hls.js cannot serve old video.
     for _stale in list(hls_dir.glob("*.ts")) + list(hls_dir.glob("*.m3u8")):
         try:
             _stale.unlink()
@@ -82,8 +78,7 @@ def api_hls_start():
             pass
     log.debug("HLS: cleared stale segments from %s", hls_dir)
 
-    # Cache-bust the playlist URL so the browser never serves a stale playlist
-    # from a previous session when the camera_id is reused.
+    # Cache-bust so a reused camera_id never gets a stale playlist.
     _session_ts = int(time.time())
     playlist_url = f"/api/hls/{camera_id}/playlist.m3u8?t={_session_ts}"
 
@@ -96,8 +91,7 @@ def api_hls_start():
             hls_dir=str(hls_dir),
             error=None,
         )
-        # Reset the rolling latency window so a new run does not inherit
-        # samples from the previous camera/source. (ROADMAP 5.1)
+        # Reset the rolling latency window so a new run starts clean.
         # Author: Bloodawn (KheivenD)
         _hls_frame_ts_dq.clear()
         _hls_segment_latencies.clear()
@@ -106,14 +100,9 @@ def api_hls_start():
         _hls_state["latency_last_s"]   = None
         _hls_state["latency_samples"]  = 0
         _hls_state["stream_start_time"] = None
-        # Clear the previous stream's last-fetch timestamp, or the idle
-        # watchdog inherits it and reaps THIS stream before any client can
-        # possibly reach it. The watchdog's generous startup grace
-        # (HLS_STARTUP_GRACE_S) only applies while the value is None; a stale
-        # value from a stream that ended more than HLS_IDLE_TIMEOUT_S ago takes
-        # the other branch and trips on the first 5s tick. Measured against a
-        # running server: a stream started 32s after the previous one ended was
-        # reaped 8.1s in, with nobody having fetched anything.
+        # Clear the last-fetch timestamp, or the idle watchdog inherits it and
+        # reaps this stream before a client connects (HLS_STARTUP_GRACE_S only
+        # applies while it is None).
         # Author: Bloodawn (KheivenD), 2026-07-19 (M3).
         _hls_state["last_segment_fetch"] = None
 
@@ -126,24 +115,23 @@ def api_hls_start():
     )
     _hls_runner._hls_thread.start()
 
-    log.info(f"HLS annotator started: {input_source} → {hls_dir}/playlist.m3u8")
+    log.info("HLS annotator started: %s -> %s/playlist.m3u8", input_source, hls_dir)
     return jsonify({"ok": True, "playlist_url": playlist_url})
 
 
 @hls_bp.route("/api/hls/stop", methods=["POST"])
 def api_hls_stop():
     """Stop the running HLS annotator and FFmpeg encoder."""
-    # The process/thread/stop-event handles are owned by hls_runner; read and
-    # clear them through the module so the forwarder stays consistent.
+    # Handles live in hls_runner; go through that module so the forwarder
+    # stays consistent.
     with _hls_lock:
         if not _hls_state["running"]:
             return jsonify({"error": "HLS stream not running"}), 409
 
-    # Signal the annotator thread to stop reading frames
     if _hls_runner._hls_stop_event:
         _hls_runner._hls_stop_event.set()
 
-    # Also terminate FFmpeg directly so we don't wait for the file to end
+    # Terminate FFmpeg directly rather than waiting for the input to end.
     with _hls_lock:
         proc = _hls_runner._hls_process
     if proc and proc.poll() is None:
@@ -169,12 +157,9 @@ def api_hls_stop():
 def api_hls_status():
     """Return current HLS stream state, with the camera password removed.
 
-    This returns the whole state dict, which includes input_source. An RTSP
-    URL commonly embeds the camera's credentials, so echoing it verbatim
-    handed the camera password to anyone holding a device token - a weaker
-    credential than the dashboard password by design. Redact on the way out
-    rather than at write time: the runner needs the working URL to open the
-    stream, only the client-facing copy has to be sanitised.
+    An RTSP input_source commonly embeds the camera's credentials, and a device
+    token is a weaker credential than the dashboard password. Redact on the way
+    out, not at write time: the runner needs the working URL.
     """
     with _hls_lock:
         snap = dict(_hls_state)
@@ -189,17 +174,13 @@ def api_hls_latency():
 
     Two latency metrics are exposed:
 
-    1. ``ingest_latency_s`` - one-shot startup latency from FFmpeg launch
-       to first .ts segment. Useful as a "did the stream connect quickly?"
-       check; set once at the start of a run.
+    1. ``ingest_latency_s``: one-shot startup latency from FFmpeg launch to
+       the first .ts segment, set once per run.
 
-    2. ``latency_avg_s`` / ``latency_last_s`` / ``latency_samples``  - 
-       rolling steady-state latency added 2026-05-02 (ROADMAP 5.1) so
-       Cody's sponsor team can size hardware against real ingest → playable
-       chunk delay. ``latency_avg_s`` is the median frame age across the
-       last ``latency_window`` segments. ``measuring`` flips to false once
-       the rolling watcher has at least one sample, even while the stream
-       continues running.
+    2. ``latency_avg_s`` / ``latency_last_s`` / ``latency_samples``: rolling
+       steady-state latency for sizing hardware against the real ingest to
+       playable chunk delay. ``latency_avg_s`` is the median frame age across
+       the last ``latency_window`` segments.
 
     Response fields:
         stream_start_time  - epoch timestamp when FFmpeg launched (float or null)
@@ -221,8 +202,7 @@ def api_hls_latency():
         latency_window = _hls_state.get("latency_window", 20)
         running        = _hls_state.get("running", False)
 
-    # `measuring` is true only while we have neither a one-shot ingest sample
-    # nor a rolling sample yet - the front-end uses it to keep polling.
+    # True until any latency sample exists; the front-end keeps polling on it.
     measuring = running and (ingest is None) and (latency_avg is None)
 
     return jsonify({
@@ -271,38 +251,17 @@ def api_hls_segment(camera_id: str, ts_file: str):
         abort(403)
 
     seg = Path(hls_dir) / Path(ts_file).name   # strip any path traversal
-    if not seg.exists() or not seg.is_file():
+    if not seg.is_file():
         abort(404)
 
-    # Liveness signal for the idle watchdog (see hls_runner._hls_idle_watchdog).
-    # Stamped on a real segment hit only, so 404 probes cannot keep a dead
-    # stream alive.
+    # Liveness signal for hls_runner._hls_idle_watchdog, stamped on a real
+    # segment hit only so 404 probes cannot keep a dead stream alive.
     with _hls_lock:
         _hls_state["last_segment_fetch"] = time.monotonic()
 
-    # Force the MPEG-TS type. ".ts" is absent from CPython's builtin table, so
-    # an unqualified send_from_directory takes whatever the HOST says, and the
-    # host is wrong in different ways on each ship target: Windows resolves it
-    # to video/vnd.dlna.mpeg-tts, a bare python:3.11-slim container has no
-    # /etc/mime.types and falls back to application/octet-stream, and a desktop
-    # Linux with media-types installed returns text/vnd.trolltech.linguist
-    # (".ts" is also a Qt translation file). ExoPlayer fails on a wrong
-    # Content-Type in ways that are painful to diagnose from a phone.
+    # Force the MPEG-TS type: ".ts" is absent from CPython's table, so the host
+    # decides (Windows: video/vnd.dlna.mpeg-tts, slim containers:
+    # application/octet-stream, desktop Linux: text/vnd.trolltech.linguist) and
+    # ExoPlayer fails on a wrong Content-Type.
     return send_from_directory(str(Path(hls_dir)), seg.name,
                                mimetype="video/mp2t")
-
-
-# ── Local RTSP server (optional MediaMTX integration) ────────────────────────
-#
-# Allows developers and demo operators to spin up a local RTSP server
-# without any external dependency.  MediaMTX is downloaded on first use
-# and cached in <project_root>/tools/mediamtx/.  It is MIT-licensed.
-#
-# Routes:
-#   GET  /api/rtsp/status         - current state of the manager
-#   POST /api/rtsp/download       - start background download of MediaMTX binary
-#   POST /api/rtsp/start          - start the MediaMTX server process
-#   POST /api/rtsp/stop           - stop server (and any active push)
-#   POST /api/rtsp/push           - start FFmpeg looping a file into the server
-#   POST /api/rtsp/stop_push      - stop the FFmpeg push
-

@@ -15,10 +15,10 @@ Night mode:
        which significantly reduces bloom/halo effects from point light sources
        (streetlamps, vehicle headlights). Frames are converted to LAB colorspace,
        CLAHE is applied to the L (luminance) channel only, then converted back to BGR.
-    2. Higher var_threshold: the default MOG2 varThreshold of 16 is calibrated for
-       daytime pixel variance. At night, sensor noise and light flicker raise the
-       baseline variance. Increasing this threshold to 30 reduces false positives
-       from static noise without missing real objects.
+    2. Higher var_threshold: at night, sensor noise and light flicker raise the
+       baseline pixel variance, so night mode uses VAR_THRESHOLD_NIGHT instead of
+       VAR_THRESHOLD_DAY to cut false positives from static noise without missing
+       real objects.
 
 Usage:
     # Daytime (default):
@@ -39,7 +39,6 @@ Author: Bloodawn (KheivenD)
 import cv2
 import numpy as np
 from dataclasses import dataclass
-from typing import List, Tuple, Optional
 
 
 @dataclass
@@ -51,7 +50,7 @@ class ForegroundRegion:
     h: int
     area: int
 
-    def to_tuple(self) -> Tuple[int, int, int, int]:
+    def to_tuple(self) -> tuple[int, int, int, int]:
         return (self.x, self.y, self.w, self.h)
 
     def expand(self, pad: int, frame_w: int, frame_h: int) -> "ForegroundRegion":
@@ -80,8 +79,8 @@ class BackgroundSubtractor:
     # must deviate from the background model to be classified as foreground.
     # At night, ambient noise raises this baseline, so we need a higher threshold
     # to avoid flagging sensor grain and light flicker as foreground objects.
-    VAR_THRESHOLD_DAY = 50    # OpenCV default -- calibrated for daytime footage
-    VAR_THRESHOLD_NIGHT = 60  # Raised to reduce false positives from night noise
+    VAR_THRESHOLD_DAY = 50    # OpenCV's own default is 16
+    VAR_THRESHOLD_NIGHT = 60  # higher still for night sensor grain and light flicker
 
     def __init__(
         self,
@@ -94,7 +93,7 @@ class BackgroundSubtractor:
         use_clahe: bool = False,
         clahe_clip_limit: float = 2.0,
         clahe_tile_size: int = 8,
-        var_threshold: Optional[int] = None,
+        var_threshold: int | None = None,
     ):
         """
         Args:
@@ -224,26 +223,22 @@ class BackgroundSubtractor:
             Binary mask as uint8 array with same spatial dimensions as frame.
             255 = foreground pixel, 0 = background pixel.
         """
-        # Preprocess if CLAHE is active -- use the enhanced frame for the model
-        # but the calling code (pipeline, encoder) still receives the raw frame
         model_input = self._apply_clahe(frame) if self.use_clahe else frame
 
         raw_mask = self._subtractor.apply(model_input, learningRate=self.learning_rate)
 
-        # Threshold: remove shadows (127) and keep only hard foreground (255)
+        # KNN marks shadows as 127; keep only hard foreground (255).
         _, binary = cv2.threshold(raw_mask, 200, 255, cv2.THRESH_BINARY)
 
-        # Morphological cleanup: close gaps, remove noise
+        # Close fills small gaps inside objects, then open removes speckle noise.
         cleaned = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, self._kernel)
-        cleaned = cv2.morphologyEx(cleaned, cv2.MORPH_OPEN, self._kernel)
-
-        return cleaned
+        return cv2.morphologyEx(cleaned, cv2.MORPH_OPEN, self._kernel)
 
     def get_foreground_regions(
         self,
         mask: np.ndarray,
         pad: int = 20,
-    ) -> List[ForegroundRegion]:
+    ) -> list[ForegroundRegion]:
         """
         Find bounding boxes of foreground objects in the mask.
 
@@ -274,8 +269,8 @@ class BackgroundSubtractor:
     def draw_regions(
         self,
         frame: np.ndarray,
-        regions: List[ForegroundRegion],
-        color: Tuple[int, int, int] = (0, 255, 0),
+        regions: list[ForegroundRegion],
+        color: tuple[int, int, int] = (0, 255, 0),
         thickness: int = 2,
     ) -> np.ndarray:
         """Draw bounding boxes on a copy of the frame for visualization."""
@@ -283,9 +278,3 @@ class BackgroundSubtractor:
         for r in regions:
             cv2.rectangle(vis, (r.x, r.y), (r.x + r.w, r.y + r.h), color, thickness)
         return vis
-
-cv2.createBackgroundSubtractorMOG2(
-    history=500,
-    varThreshold=50,
-    detectShadows=True
-)

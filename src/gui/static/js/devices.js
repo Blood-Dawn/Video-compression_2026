@@ -3,11 +3,9 @@
  *
  * Paired mobile devices (M0.10 UI).
  *
- * tokens_bp.py has had list/mint/revoke/revoke_all since M0.10, but nothing
- * in this dashboard ever called it - pairing a phone or revoking a lost one
- * required raw curl/PowerShell against /api/auth/tokens. This panel is the
- * missing front end for that existing, already-secure API (password-gated,
- * hash-only storage, no route that can re-reveal a secret).
+ * Front end for tokens_bp.py's list/mint/revoke/revoke_all API
+ * (password-gated, hash-only storage, no route that can re-reveal a secret),
+ * so pairing a phone or revoking a lost one needs no raw curl.
  *
  * The mint flow shows the returned secret exactly once, in a copyable box,
  * with a loud "this will not be shown again" - mirroring what the API

@@ -1,13 +1,10 @@
 """
 src/gui/routes/autocompress_bp.py
 
-Auto-compress routes (R3.1b).
-
-The HTTP surface for the AUTO-COMPRESS tab. It drives the opt-in auto-compress
-daemon (``gui.services.autocompress_runner``), which watches a folder and
+Auto-compress routes: the HTTP surface for the AUTO-COMPRESS tab. It drives the
+opt-in daemon (``gui.services.autocompress_runner``), which watches a folder and
 compresses any video that lands in it into ``<output_dir>/compressed/``. The
-daemon NEVER starts on app launch - it starts only when the user POSTs to
-``/start`` from the UI.
+daemon never starts on app launch, only when the user POSTs to ``/start``.
 
 Endpoints:
   * POST /api/autocompress/start    {folder, mode|preset, profile?, delete_original?}
@@ -120,15 +117,13 @@ def api_autocompress_scan_now():
                     "status": ac.get_status()})
 
 
-# ── Retention / disk-budget (R4 Phase 3) ──────────────────────────────────────
-
 @autocompress_bp.route("/api/retention", methods=["GET", "POST"])
 def api_retention():
     """GET: retention policy + a free-disk/bitrate headroom estimate.
     POST {enabled, max_age_days, max_total_gb}: update the policy.
 
-    The policy bounds the auto-compressed footage under ``<output_dir>/compressed``
-    (docs/RESEARCH-COMPETITORS.md - the ZoneMinder/Frigate retention gap).
+    The policy bounds the auto-compressed footage under
+    ``<output_dir>/compressed``.
     """
     if request.method == "POST":
         body = request.get_json(silent=True) or {}

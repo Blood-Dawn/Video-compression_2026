@@ -35,7 +35,6 @@ Author: Bloodawn (KheivenD), 2026-05-14 (audit split).
 
 from __future__ import annotations
 
-from typing import Tuple
 
 # ── Shared constants ──────────────────────────────────────────────────────
 # Default database filename. Override via the db_path argument on every
@@ -48,7 +47,7 @@ DB_NAME = "metadata.db"
 #  duration, file_path, object_type) + the v2 enhanced-metadata columns
 # are appended on the right; we keep the alias narrow for callers that
 # only consume the legacy columns.
-SegmentRow = Tuple[int, str, str, int, int, int, float, str, str]
+SegmentRow = tuple[int, str, str, int, int, int, float, str, str]
 
 
 # ── Public re-exports ─────────────────────────────────────────────────────

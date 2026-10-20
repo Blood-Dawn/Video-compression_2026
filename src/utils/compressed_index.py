@@ -29,7 +29,6 @@ import json
 import threading
 import time
 from pathlib import Path
-from typing import Optional
 
 try:
     from utils import paths as _paths
@@ -46,12 +45,19 @@ SCHEMA_VERSION = 1
 # daemon's record() and retention's prune_missing() can run concurrently).
 _index_lock = threading.Lock()
 
+# lookup() and classify() run once per file on every auto-compress scan, so
+# re-parsing the whole index each time made a scan quadratic in library size.
+# Read-only callers share one parsed copy, keyed on the index file's path,
+# mtime and size; writers (record, prune_missing) always re-read under
+# _index_lock.
+_read_cache: tuple = (None, {}, frozenset())
 
-def _index_file(index_path: Optional[Path] = None) -> Path:
+
+def _index_file(index_path: Path | None = None) -> Path:
     return Path(index_path) if index_path is not None else _paths.state_file(INDEX_FILENAME)
 
 
-def _load(index_path: Optional[Path] = None) -> dict:
+def _load(index_path: Path | None = None) -> dict:
     p = _index_file(index_path)
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
@@ -62,13 +68,34 @@ def _load(index_path: Optional[Path] = None) -> dict:
     return {"schema": SCHEMA_VERSION, "entries": {}}
 
 
-def _save(data: dict, index_path: Optional[Path] = None) -> None:
+def _save(data: dict, index_path: Path | None = None) -> None:
     p = _index_file(index_path)
     try:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(data, indent=2), encoding="utf-8")
     except OSError:  # pragma: no cover - best effort; never crash a compress
         pass
+
+
+def _entries_for_read(index_path: Path | None = None) -> "tuple[dict, frozenset]":
+    """(entries, recorded output paths) for read-only callers. Do not mutate."""
+    global _read_cache
+    p = _index_file(index_path)
+    try:
+        st = p.stat()
+        key = (str(p), st.st_mtime_ns, st.st_size)
+    except OSError:
+        key = None
+    cached_key, entries, outputs = _read_cache
+    if key is not None and key == cached_key:
+        return entries, outputs
+    entries = _load(index_path)["entries"]
+    outputs = frozenset(
+        out for e in entries.values()
+        if isinstance(e, dict) and isinstance(out := e.get("output"), str))
+    if key is not None:
+        _read_cache = (key, entries, outputs)
+    return entries, outputs
 
 
 def _resolved(source) -> Path:
@@ -90,9 +117,9 @@ def signature(source) -> str:
         return f"{p}|0|0"
 
 
-def record(source, output, preset: Optional[str] = None,
-           mode: Optional[str] = None, when: Optional[float] = None,
-           index_path: Optional[Path] = None) -> dict:
+def record(source, output, preset: str | None = None,
+           mode: str | None = None, when: float | None = None,
+           index_path: Path | None = None) -> dict:
     """Record that ``source`` was compressed to ``output``. Returns the entry."""
     sig = signature(source)
     entry = {
@@ -112,7 +139,7 @@ def record(source, output, preset: Optional[str] = None,
     return entry
 
 
-def prune_missing(index_path: Optional[Path] = None) -> int:
+def prune_missing(index_path: Path | None = None) -> int:
     """Drop entries whose recorded output file no longer exists. Returns count.
 
     Locked read-modify-write (shares ``_index_lock`` with ``record``), so
@@ -135,14 +162,16 @@ def prune_missing(index_path: Optional[Path] = None) -> int:
         return 0
 
 
-def lookup(source, index_path: Optional[Path] = None):
+def lookup(source, index_path: Path | None = None):
     """Return the recorded entry for ``source`` if its CURRENT signature matches,
     else None. (A replaced file has a new signature and will not match.)"""
-    data = _load(index_path)
-    return data["entries"].get(signature(source))
+    entries, _outputs = _entries_for_read(index_path)
+    entry = entries.get(signature(source))
+    # A copy, so a caller editing the entry cannot change the shared cache.
+    return dict(entry) if isinstance(entry, dict) else entry
 
 
-def is_compressed(source, index_path: Optional[Path] = None) -> bool:
+def is_compressed(source, index_path: Path | None = None) -> bool:
     """True only if a matching entry exists AND its output file still exists.
 
     If the recorded output was deleted, the source is treated as not-compressed
@@ -158,7 +187,7 @@ def is_compressed(source, index_path: Optional[Path] = None) -> bool:
         return False
 
 
-def classify(path, index_path: Optional[Path] = None) -> str:
+def classify(path, index_path: Path | None = None) -> str:
     """Classify a path as "compressed" or "original".
 
     A path is "compressed" if it lives under a ``compressed`` folder (where
@@ -168,12 +197,8 @@ def classify(path, index_path: Optional[Path] = None) -> str:
     p = _resolved(path)
     if COMPRESSED_DIRNAME in {part.lower() for part in p.parts}:
         return "compressed"
-    data = _load(index_path)
-    target = str(p)
-    for entry in data["entries"].values():
-        if entry.get("output") == target:
-            return "compressed"
-    return "original"
+    _entries, outputs = _entries_for_read(index_path)
+    return "compressed" if str(p) in outputs else "original"
 
 
 def compressed_subdir(output_dir, create: bool = True) -> Path:

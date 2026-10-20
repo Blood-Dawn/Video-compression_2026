@@ -17,6 +17,8 @@ Author: Bloodawn (KheivenD), 2026-08-16 (R5 TASK 5.4).
 from __future__ import annotations
 
 import re
+import sqlite3
+from datetime import date, timedelta
 from typing import Any
 
 # Controlled vocabulary. Keys are the words a person types; values are what the
@@ -113,7 +115,6 @@ def parse(q: str) -> dict[str, Any]:
         text = text.replace(m.group(0), " ")
     for word, delta in (("today", 0), ("yesterday", 1)):
         if re.search(rf"\b{word}\b", text):
-            from datetime import date, timedelta
             day = (date.today() - timedelta(days=delta)).isoformat()
             clauses.append("timestamp LIKE ? || '%'")
             params.append(day)
@@ -195,8 +196,6 @@ def search(q: str, db_path: str, limit: int = 100) -> dict[str, Any]:
     with "no such column: object_classes". initialize_database() is designed
     to be re-run against old databases and adds only what is missing.
     """
-    import sqlite3
-
     try:
         from utils.db.schema import initialize_database
     except ModuleNotFoundError:  # pragma: no cover - import path shim

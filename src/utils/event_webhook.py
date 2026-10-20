@@ -51,10 +51,12 @@ from pathlib import Path
 
 try:
     from utils import paths as _paths
-    from utils.push_notify import is_safe_push_url, pin_resolution, validate_push_url
+    from utils.push_notify import (
+        _NoRedirect, is_safe_push_url, pin_resolution, validate_push_url)
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.utils import paths as _paths
-    from src.utils.push_notify import is_safe_push_url, pin_resolution, validate_push_url
+    from src.utils.push_notify import (
+        _NoRedirect, is_safe_push_url, pin_resolution, validate_push_url)
 
 log = logging.getLogger(__name__)
 
@@ -161,13 +163,6 @@ def sign_body(body: bytes, secret: str) -> str:
         return ""
     mac = hmac.new(secret.encode("utf-8"), body, hashlib.sha256)
     return "sha256=" + mac.hexdigest()
-
-
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    """A 3xx becomes an error instead of a second, unvalidated request."""
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        return None
 
 
 def _post(cfg: dict, event_type: str, payload: dict,

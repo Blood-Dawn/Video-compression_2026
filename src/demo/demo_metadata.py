@@ -16,10 +16,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable
 
 
-def _normalize_regions(regions: Iterable[object]) -> List[list]:
+def _normalize_regions(regions: Iterable[object]) -> list[list]:
     """
     Convert a list of region objects or tuples into plain JSON-safe bbox lists.
 
@@ -27,7 +27,7 @@ def _normalize_regions(regions: Iterable[object]) -> List[list]:
     - objects with .to_tuple() -> (x, y, w, h)
     - tuples/lists already shaped like (x, y, w, h)
     """
-    out: List[list] = []
+    out: list[list] = []
 
     for region in regions:
         if hasattr(region, "to_tuple"):

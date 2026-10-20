@@ -23,7 +23,11 @@ a hotfix for a compression bitrate bug found in 1.2.0-beta; notes drafted in
    version must match in three places: `pyproject.toml`,
    `installer/svcs.iss` (`MyAppVersion`) and `src/utils/version.py`
    (`APP_VERSION`, which also feeds the in-app update check and
-   `/api/capabilities`). `tests/test_version_consistency.py` checks the
+   /api/capabilities). Stamp all three at once with
+   `python scripts/stamp_release_version.py v<version>-beta` before building;
+   an installer built from a `dev` version looks older than its own tag, so
+   a fresh install offers an update to itself. `--check` reports drift
+   without writing. 	ests/test_version_consistency.py checks the
    first two. Then `uv sync --frozen --extra enhance --extra crash-reporting`.
 2. **run_tests.** `uv run pytest` (or `pwsh scripts/run_tests.ps1`). Everything
    passes or has a documented skip, on the Linux and Windows CI matrix too.

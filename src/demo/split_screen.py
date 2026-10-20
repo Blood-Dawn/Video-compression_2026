@@ -21,26 +21,22 @@ def load_manifest(path: Path) -> dict:
 def resolve_mode_videos(manifest: dict) -> list[tuple[str, Path]]:
     """Resolve one video per mode for split-screen compositing.
 
-    When multiple views exist for a mode (e.g. "standard" and "roi_tint"),
-    prefer "standard"; fall back to the first available view.
-    This avoids crashing when run_all_demos() renders more than one view.
+    When a mode has several views (e.g. "standard" and "roi_tint"), prefer
+    "standard" and otherwise take the first one listed, so a run that rendered
+    more than one view still composites.
     """
     outputs = manifest.get("outputs", {})
     if not outputs:
         raise RuntimeError("Manifest contains no outputs")
 
     resolved: list[tuple[str, Path]] = []
-
     for mode, mode_outputs in outputs.items():
         if not isinstance(mode_outputs, dict) or not mode_outputs:
             raise RuntimeError(f"No rendered outputs found for mode '{mode}'")
-
-        # Prefer "standard" view for the split screen; fall back to first available
         if "standard" in mode_outputs:
             chosen_path = mode_outputs["standard"]
         else:
             chosen_path = next(iter(mode_outputs.values()))
-
         resolved.append((mode, Path(chosen_path)))
 
     return resolved
@@ -74,27 +70,31 @@ def choose_layout(n: int) -> tuple[int, int] | None:
     raise RuntimeError(f"split_screen.py supports at most 4 modes, got {n}")
 
 
-def fit_frame(frame: np.ndarray, cell_w: int, cell_h: int) -> np.ndarray:
+def _fit_into(frame: np.ndarray, cell: np.ndarray) -> None:
+    """Letterbox `frame` into the (zeroed) `cell` view, keeping aspect ratio."""
+    cell_h, cell_w = cell.shape[:2]
     h, w = frame.shape[:2]
     scale = min(cell_w / w, cell_h / h)
     new_w = max(1, int(w * scale))
     new_h = max(1, int(h * scale))
 
     resized = cv2.resize(frame, (new_w, new_h))
-    canvas = np.zeros((cell_h, cell_w, 3), dtype=np.uint8)
-
     x = (cell_w - new_w) // 2
     y = (cell_h - new_h) // 2
-    canvas[y:y + new_h, x:x + new_w] = resized
+    cell[y:y + new_h, x:x + new_w] = resized
+
+
+def fit_frame(frame: np.ndarray, cell_w: int, cell_h: int) -> np.ndarray:
+    canvas = np.zeros((cell_h, cell_w, 3), dtype=np.uint8)
+    _fit_into(frame, canvas)
     return canvas
 
 
 def draw_label(frame: np.ndarray, text: str) -> None:
-    """Tiny top-left mode tag for each quadrant.
+    """Tiny top-left mode tag ("mode0" -> "M0") drawn in-place.
 
-    Was a big chunky label (scale 0.8, thickness 2, padded 8px) that
-    chewed up ~10% of every quadrant. Shrunk to a discreet badge so
-    the underlying video is actually visible.
+    No longer used by build_composite_frame (see there); kept for callers that
+    want a label on an unlabeled frame.
     Author: Bloodawn (KheivenD), 2026-05-04 (corner overlays).
     """
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -104,15 +104,13 @@ def draw_label(frame: np.ndarray, text: str) -> None:
     x = 8
     y_baseline = 18
 
-    # Normalize "mode0" → "M0" so all four labels fit in tight quadrants.
+    # Short tags so all four labels fit in tight quadrants.
     short = text
-    low = text.lower()
-    if low.startswith("mode") and len(text) > 4:
+    if text.lower().startswith("mode") and len(text) > 4:
         short = "M" + text[4:]
 
     (tw, th), baseline = cv2.getTextSize(short, font, scale, thickness)
 
-    # Translucent dark pad
     overlay = frame.copy()
     cv2.rectangle(
         overlay,
@@ -134,31 +132,30 @@ def build_composite_frame(
     cell_w: int,
     cell_h: int,
 ) -> np.ndarray:
-    total_cells = rows * cols
-    blank = np.zeros((cell_h, cell_w, 3), dtype=np.uint8)
-
-    # Each per-mode demo video is rendered with corner labels already
-    # stamped by add_bottom_right_labels() in src/demo/demo.py
-    # (top-left "MODE N · SEG N", top-right "TIME"). If we call
-    # draw_label() again here we get a second small "M0" badge stacked
-    # on top of the existing "MODE 0 · SEG 1" label, which is the
-    # "modes on top of each other" defect Riley flagged 2026-05-04.
-    # Skip the second draw and just stitch the already-labeled cells.
+    # The per-mode videos already carry demo.py's corner labels
+    # (add_bottom_right_labels), so draw_label is deliberately NOT called
+    # here: a second "M0" badge would stack on top of "MODE 0 · SEG 1", the
+    # overlapping-labels defect Riley flagged on 2026-05-04.
     # Author: Bloodawn (KheivenD), 2026-05-04 (split-screen label fix).
-    prepared: list[np.ndarray] = []
-    for _mode, frame in labeled_frames:
-        prepared.append(fit_frame(frame, cell_w, cell_h))
+    #
+    # Each frame is fitted straight into its cell of one preallocated
+    # canvas; unused cells stay black.
+    out = np.zeros((rows * cell_h, cols * cell_w, 3), dtype=np.uint8)
+    for i, (_mode, frame) in enumerate(labeled_frames[:rows * cols]):
+        r, c = divmod(i, cols)
+        _fit_into(frame, out[r * cell_h:(r + 1) * cell_h, c * cell_w:(c + 1) * cell_w])
+    return out
 
-    while len(prepared) < total_cells:
-        prepared.append(blank.copy())
 
-    row_imgs = []
-    idx = 0
-    for _ in range(rows):
-        row_imgs.append(cv2.hconcat(prepared[idx:idx + cols]))
-        idx += cols
-
-    return cv2.vconcat(row_imgs)
+def _read_next(caps: list[tuple[str, cv2.VideoCapture]]) -> list[tuple[str, np.ndarray]] | None:
+    """One frame from every capture, or None as soon as any of them runs out."""
+    frames: list[tuple[str, np.ndarray]] = []
+    for mode, cap in caps:
+        ok, frame = cap.read()
+        if not ok:
+            return None
+        frames.append((mode, frame))
+    return frames
 
 
 def build_split_screen_from_manifest(manifest_path: Path) -> Path | None:
@@ -182,45 +179,28 @@ def build_split_screen_from_manifest(manifest_path: Path) -> Path | None:
             return None
 
         rows, cols = rows_cols
-
         cell_w = max(info["width"] for info in infos)
         cell_h = max(info["height"] for info in infos)
 
-        first_frames: list[tuple[str, np.ndarray]] = []
+        current_frames: list[tuple[str, np.ndarray]] | None = []
         for mode, cap in caps:
             ok, frame = cap.read()
             if not ok:
                 raise RuntimeError(f"Could not read first frame for mode '{mode}'")
-            first_frames.append((mode, frame))
-
-        first_composite = build_composite_frame(first_frames, rows, cols, cell_w, cell_h)
+            current_frames.append((mode, frame))
 
         output_path = stitched_dir / "demo_splitscreen.mp4"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        writer = H264Writer(
-            str(output_path),
-            fps,
-            first_composite.shape[1],
-            first_composite.shape[0],
-        )
+        writer = H264Writer(str(output_path), fps, cols * cell_w, rows * cell_h)
         if not writer.isOpened():
             raise RuntimeError(f"Failed to open H264Writer for: {output_path}")
 
         try:
-            current_frames = first_frames
-            while True:
-                composite = build_composite_frame(current_frames, rows, cols, cell_w, cell_h)
-                writer.write(composite)
-
-                next_frames: list[tuple[str, np.ndarray]] = []
-                for mode, cap in caps:
-                    ok, frame = cap.read()
-                    if not ok:
-                        return output_path
-                    next_frames.append((mode, frame))
-
-                current_frames = next_frames
+            while current_frames is not None:
+                writer.write(build_composite_frame(current_frames, rows, cols, cell_w, cell_h))
+                current_frames = _read_next(caps)
+            return output_path
         finally:
             writer.release()
 

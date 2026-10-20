@@ -50,7 +50,7 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass, field, asdict
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Sequence
 
 import cv2
 import numpy as np
@@ -85,11 +85,11 @@ class PlateRead:
     confidence: float
     ocr_confidence_avg: float
     votes: int
-    frames: List[int]
+    frames: list[int]
     verdict: str
-    bbox_first: Tuple[int, int, int, int]
+    bbox_first: tuple[int, int, int, int]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -101,8 +101,9 @@ class PlateReadResult:
         video_path:        Source clip path (echoed for the caller).
         frames_examined:   Number of frames the OCR engine looked at.
         frames_total:      Total frames in the clip (for context).
-        backend:           Which OCR engine actually ran ("paddleocr",
-                           "easyocr", or "none" if neither installed).
+        backend:           Which OCR engine actually ran ("onnx-alpr",
+                           "easyocr", "paddleocr", "tesseract", or "none"
+                           when no engine is installed).
         sr_backend:        Which SR backend the Enhancer used.
         candidate_plates:  All consensus-grouped reads, sorted by confidence.
         best_read:         Highest-confidence text, or None when nothing was
@@ -115,11 +116,11 @@ class PlateReadResult:
     frames_total: int
     backend: str
     sr_backend: str
-    candidate_plates: List[PlateRead] = field(default_factory=list)
-    best_read: Optional[str] = None
-    warnings: List[str] = field(default_factory=list)
+    candidate_plates: list[PlateRead] = field(default_factory=list)
+    best_read: str | None = None
+    warnings: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["candidate_plates"] = [p.to_dict() if isinstance(p, PlateRead) else p
                                  for p in self.candidate_plates]
@@ -143,7 +144,7 @@ _AMBIGUOUS_PAIRS = {("0", "O"), ("1", "I"), ("1", "L"), ("5", "S"),
                     ("8", "B"), ("2", "Z"), ("6", "G"), ("Q", "0")}
 
 
-def _normalise_plate_text(raw: str) -> Optional[str]:
+def _normalise_plate_text(raw: str) -> str | None:
     """Squash whitespace, uppercase, strip non-alphanumerics, length-check.
 
     Returns None when the raw string is too short / too long to be a plate.
@@ -156,7 +157,7 @@ def _normalise_plate_text(raw: str) -> Optional[str]:
     return cleaned
 
 
-def _score_candidate(votes: int, ocr_avg: float, frames_examined: int) -> Tuple[float, str]:
+def _score_candidate(votes: int, ocr_avg: float, frames_examined: int) -> tuple[float, str]:
     """Combine per-frame OCR confidence with multi-frame consensus.
 
     The blend rewards both raw OCR strength and reproducibility: a single
@@ -201,7 +202,7 @@ class _OcrBackend:
 
     name = "none"
 
-    def ocr(self, frame: np.ndarray) -> List[Tuple[str, float, Tuple[int, int, int, int]]]:
+    def ocr(self, frame: np.ndarray) -> list[tuple[str, float, tuple[int, int, int, int]]]:
         raise NotImplementedError
 
     @property
@@ -284,7 +285,7 @@ class _FastPlateOcrBackend(_OcrBackend):
             pass
         return self._NO_PROB_CONFIDENCE
 
-    def _detect_boxes(self, frame: np.ndarray) -> List[Tuple[int, int, int, int]]:
+    def _detect_boxes(self, frame: np.ndarray) -> list[tuple[int, int, int, int]]:
         """Plate boxes (x, y, w, h) from the detector, or [] if unavailable."""
         if self._detector is None:
             return []
@@ -293,7 +294,7 @@ class _FastPlateOcrBackend(_OcrBackend):
         except Exception as exc:  # noqa: BLE001
             log.debug("plate detector.predict raised %s; skipping detection", exc)
             return []
-        boxes: List[Tuple[int, int, int, int]] = []
+        boxes: list[tuple[int, int, int, int]] = []
         h, w = frame.shape[:2]
         for d in dets:
             bb = getattr(d, "bounding_box", None)
@@ -338,10 +339,10 @@ class _FastPlateOcrBackend(_OcrBackend):
             log.debug("fast-plate-ocr run raised %s; skipping crop", exc)
             return []
 
-    def ocr(self, frame: np.ndarray) -> List[Tuple[str, float, Tuple[int, int, int, int]]]:
+    def ocr(self, frame: np.ndarray) -> list[tuple[str, float, tuple[int, int, int, int]]]:
         if self._recognizer is None:
             return []
-        results: List[Tuple[str, float, Tuple[int, int, int, int]]] = []
+        results: list[tuple[str, float, tuple[int, int, int, int]]] = []
         boxes = self._detect_boxes(frame)
         if boxes:
             for (x, y, bw, bh) in boxes:
@@ -397,7 +398,7 @@ class _PaddleOcrBackend(_OcrBackend):
     def available(self) -> bool:
         return self._engine is not None
 
-    def ocr(self, frame: np.ndarray) -> List[Tuple[str, float, Tuple[int, int, int, int]]]:
+    def ocr(self, frame: np.ndarray) -> list[tuple[str, float, tuple[int, int, int, int]]]:
         if self._engine is None:
             return []
         try:
@@ -407,7 +408,7 @@ class _PaddleOcrBackend(_OcrBackend):
             return []
 
         # PaddleOCR returns nested lists: [[ [points, (text, score)], ... ]]
-        results: List[Tuple[str, float, Tuple[int, int, int, int]]] = []
+        results: list[tuple[str, float, tuple[int, int, int, int]]] = []
         if not raw:
             return results
         page = raw[0] if isinstance(raw[0], list) else raw
@@ -418,8 +419,8 @@ class _PaddleOcrBackend(_OcrBackend):
                 ys = [int(p[1]) for p in points]
                 bbox = (min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))
                 results.append((str(text), float(score), bbox))
-            except Exception:  # noqa: BLE001
-                continue
+            except (TypeError, ValueError, IndexError):
+                continue  # malformed entry from the engine; skip it
         return results
 
 
@@ -444,7 +445,7 @@ class _EasyOcrBackend(_OcrBackend):
     def available(self) -> bool:
         return self._reader is not None
 
-    def ocr(self, frame: np.ndarray) -> List[Tuple[str, float, Tuple[int, int, int, int]]]:
+    def ocr(self, frame: np.ndarray) -> list[tuple[str, float, tuple[int, int, int, int]]]:
         if self._reader is None:
             return []
         try:
@@ -453,7 +454,7 @@ class _EasyOcrBackend(_OcrBackend):
             log.debug("EasyOCR.readtext raised %s; skipping frame", exc)
             return []
 
-        results: List[Tuple[str, float, Tuple[int, int, int, int]]] = []
+        results: list[tuple[str, float, tuple[int, int, int, int]]] = []
         for entry in raw:
             try:
                 points, text, score = entry
@@ -461,8 +462,8 @@ class _EasyOcrBackend(_OcrBackend):
                 ys = [int(p[1]) for p in points]
                 bbox = (min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))
                 results.append((str(text), float(score), bbox))
-            except Exception:  # noqa: BLE001
-                continue
+            except (TypeError, ValueError, IndexError):
+                continue  # malformed entry from the engine; skip it
         return results
 
 
@@ -496,7 +497,7 @@ class _TesseractBackend(_OcrBackend):
     def available(self) -> bool:
         return self._available
 
-    def ocr(self, frame: np.ndarray) -> List[Tuple[str, float, Tuple[int, int, int, int]]]:
+    def ocr(self, frame: np.ndarray) -> list[tuple[str, float, tuple[int, int, int, int]]]:
         if not self._available:
             return []
         try:
@@ -507,7 +508,7 @@ class _TesseractBackend(_OcrBackend):
         except Exception:  # noqa: BLE001
             return []
 
-        out: List[Tuple[str, float, Tuple[int, int, int, int]]] = []
+        out: list[tuple[str, float, tuple[int, int, int, int]]] = []
         for i, txt in enumerate(data.get("text", [])):
             txt = (txt or "").strip()
             if not txt:
@@ -516,8 +517,7 @@ class _TesseractBackend(_OcrBackend):
                 conf = float(data["conf"][i]) / 100.0
             except (KeyError, ValueError, TypeError):
                 conf = 0.0
-            if conf < 0.0:
-                conf = 0.0
+            conf = max(conf, 0.0)  # tesseract reports -1 for non-text boxes
             try:
                 x = int(data["left"][i]); y = int(data["top"][i])
                 w = int(data["width"][i]); h = int(data["height"][i])
@@ -581,7 +581,7 @@ class PlateReader:
     """Post-process license-plate reader.
 
     Combines the existing Real-ESRGAN ``Enhancer`` with a permissive-licensed
-    OCR backend (PaddleOCR or EasyOCR). Multi-frame consensus voting is the
+    OCR backend (see _select_backend). Multi-frame consensus voting is the
     accuracy multiplier - single-frame reads from low-resolution footage are
     flagged as uncertain by design.
 
@@ -597,9 +597,9 @@ class PlateReader:
 
     def __init__(
         self,
-        enhancer: Optional[Any] = None,
+        enhancer: Any | None = None,
         ocr_backend: str = "auto",
-        device: Optional[str] = None,
+        device: str | None = None,
         sr_scale: int = 4,
         min_ocr_confidence: float = 0.40,
     ) -> None:
@@ -608,7 +608,8 @@ class PlateReader:
             enhancer:           Reuse an existing ``Enhancer`` instance, or
                                 pass ``None`` to lazily create one with the
                                 same device / scale as this PlateReader.
-            ocr_backend:        "auto" | "paddleocr" | "easyocr".
+            ocr_backend:        "auto" | "onnx" | "easyocr" | "paddleocr" |
+                                "tesseract".
             device:             "cuda" | "mps" | "cpu" | None (auto).
                                 Forwarded to the Enhancer + OCR backend.
             sr_scale:           Real-ESRGAN scale factor (2 or 4). 4 is
@@ -642,7 +643,7 @@ class PlateReader:
     def ocr_available(self) -> bool:
         return self._ocr.available
 
-    def status(self) -> Dict[str, Any]:
+    def status(self) -> dict[str, Any]:
         """Return install/availability info for the GUI's diagnostic panel."""
         sr_backend = self._sr_backend_name()
         # Surface the ONNX detector state so an operator can see when the plate
@@ -678,7 +679,7 @@ class PlateReader:
         video_path,
         sample_every_n_frames: int = 5,
         max_frames: int = 60,
-        roi_boxes: Optional[Sequence[Tuple[int, int, int, int]]] = None,
+        roi_boxes: Sequence[tuple[int, int, int, int]] | None = None,
         min_consensus_votes: int = 1,
     ) -> PlateReadResult:
         """Read plate text from a saved video clip.
@@ -702,7 +703,7 @@ class PlateReader:
         Author: Bloodawn (KheivenD)
         """
         path = Path(video_path)
-        warnings: List[str] = []
+        warnings: list[str] = []
 
         if not path.exists():
             return PlateReadResult(
@@ -731,9 +732,9 @@ class PlateReader:
             self._enhancer = self._make_enhancer()
 
         # Walk the video. Group reads by normalised text across frames.
-        per_text_frames: Dict[str, List[int]] = defaultdict(list)
-        per_text_confs:  Dict[str, List[float]] = defaultdict(list)
-        per_text_bboxes: Dict[str, Tuple[int, int, int, int]] = {}
+        per_text_frames: dict[str, list[int]] = defaultdict(list)
+        per_text_confs:  dict[str, list[float]] = defaultdict(list)
+        per_text_bboxes: dict[str, tuple[int, int, int, int]] = {}
 
         frame_idx = 0
         examined = 0
@@ -741,15 +742,18 @@ class PlateReader:
         cap_max = max(1, int(max_frames))
 
         while examined < cap_max:
+            if frame_idx % stride != 0:
+                # grab() advances without decoding into a BGR array; only the
+                # sampled frames pay for read().
+                if not cap.grab():
+                    break
+                frame_idx += 1
+                continue
             ok, frame = cap.read()
             if not ok or frame is None:
                 break
-            if frame_idx % stride != 0:
-                frame_idx += 1
-                continue
 
-            crops = self._crops_for_frame(frame, roi_boxes)
-            for crop in crops:
+            for crop in self._crops_for_frame(frame, roi_boxes):
                 upscaled = self._upscale(crop)
                 for text, ocr_conf, bbox in self._ocr.ocr(upscaled):
                     norm = _normalise_plate_text(text)
@@ -765,7 +769,7 @@ class PlateReader:
         cap.release()
 
         # Aggregate into PlateRead candidates and rank.
-        candidates: List[PlateRead] = []
+        candidates: list[PlateRead] = []
         for text, frames in per_text_frames.items():
             confs = per_text_confs[text]
             ocr_avg = sum(confs) / len(confs)
@@ -810,10 +814,8 @@ class PlateReader:
     # ------------------------------------------------------------------
 
     def _make_enhancer(self):
-        """Lazy-create an Enhancer with the same device + scale settings."""
+        # Imported here so a status check never pulls in the SR stack.
         try:
-            # Local import: avoids loading torch when the module is just
-            # imported for a status check.
             from enhancement.enhancer import Enhancer  # type: ignore
         except ImportError:
             from src.enhancement.enhancer import Enhancer  # type: ignore
@@ -822,8 +824,8 @@ class PlateReader:
     def _crops_for_frame(
         self,
         frame: np.ndarray,
-        roi_boxes: Optional[Sequence[Tuple[int, int, int, int]]],
-    ) -> List[np.ndarray]:
+        roi_boxes: Sequence[tuple[int, int, int, int]] | None,
+    ) -> list[np.ndarray]:
         """Return the regions to OCR from one frame.
 
         When the caller passes ``roi_boxes`` we crop just those regions and
@@ -834,7 +836,7 @@ class PlateReader:
         if not roi_boxes:
             return [frame]
         h, w = frame.shape[:2]
-        crops: List[np.ndarray] = []
+        crops: list[np.ndarray] = []
         for (x, y, bw, bh) in roi_boxes:
             x1, y1 = max(0, int(x)), max(0, int(y))
             x2, y2 = min(w, int(x + bw)), min(h, int(y + bh))
@@ -842,25 +844,23 @@ class PlateReader:
                 crops.append(frame[y1:y2, x1:x2])
         return crops
 
+    def _bicubic(self, image: np.ndarray) -> np.ndarray:
+        h, w = image.shape[:2]
+        return cv2.resize(
+            image,
+            (w * self._sr_scale, h * self._sr_scale),
+            interpolation=cv2.INTER_CUBIC,
+        )
+
     def _upscale(self, image: np.ndarray) -> np.ndarray:
         """Upscale via the Enhancer (bicubic when SR is unavailable)."""
         if self._enhancer is None:
-            h, w = image.shape[:2]
-            return cv2.resize(
-                image,
-                (w * self._sr_scale, h * self._sr_scale),
-                interpolation=cv2.INTER_CUBIC,
-            )
+            return self._bicubic(image)
         try:
             return self._enhancer.upscale_frame(image, scale=self._sr_scale)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001 - any SR backend failure degrades to bicubic
             log.debug("Enhancer.upscale_frame failed (%s); falling back to bicubic.", exc)
-            h, w = image.shape[:2]
-            return cv2.resize(
-                image,
-                (w * self._sr_scale, h * self._sr_scale),
-                interpolation=cv2.INTER_CUBIC,
-            )
+            return self._bicubic(image)
 
 
 __all__ = [

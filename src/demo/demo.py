@@ -62,7 +62,7 @@ import json
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Iterator
 
 import cv2
 import numpy as np
@@ -75,24 +75,21 @@ except ImportError:
     from src.demo.video_writer import H264Writer
 
 
+_BOX_COLOR = (0, 255, 0)
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
 def format_time_hhmmss(seconds: float) -> str:
-    """
-    Format seconds as HH:MM:SS.mmm
-    """
+    """Format seconds as HH:MM:SS.mmm"""
     total_ms = int(round(seconds * 1000))
-    hours = total_ms // 3_600_000
-    total_ms %= 3_600_000
-    minutes = total_ms // 60_000
-    total_ms %= 60_000
-    secs = total_ms // 1000
-    millis = total_ms % 1000
+    hours, total_ms = divmod(total_ms, 3_600_000)
+    minutes, total_ms = divmod(total_ms, 60_000)
+    secs, millis = divmod(total_ms, 1000)
     return f"{hours:02d}:{minutes:02d}:{secs:02d}.{millis:03d}"
-
 
 
 def _draw_corner_label(
@@ -105,9 +102,9 @@ def _draw_corner_label(
 ) -> None:
     """Stamp a single small label into one corner of `frame` (in-place).
 
-    Tight padding, semi-transparent background pad, white text - designed
-    to take up almost no real estate so the user can actually see the
-    underlying video. Author: Bloodawn (KheivenD), 2026-05-04 (corner overlays).
+    Tight padding, semi-transparent background pad, white text, so the label
+    takes up almost no room over the video.
+    Author: Bloodawn (KheivenD), 2026-05-04 (corner overlays).
     """
     h, w = frame.shape[:2]
     font = cv2.FONT_HERSHEY_SIMPLEX
@@ -126,13 +123,44 @@ def _draw_corner_label(
         x1, y1 = w - box_w - 8, h - box_h - 8
     x2, y2 = x1 + box_w, y1 + box_h
 
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (x1, y1), (x2, y2), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, dst=frame)
+    # Darken only the pad. Blending the whole frame against a copy with a
+    # filled rectangle gives the same pixels (outside the pad the blend is
+    # 0.55*p + 0.45*p = p) but costs a full-frame copy and blend per label.
+    # The filled rectangle covered x1..x2 and y1..y2 inclusive, clipped.
+    cx1, cy1 = max(0, x1), max(0, y1)
+    cx2, cy2 = min(w, x2 + 1), min(h, y2 + 1)
+    if cx2 > cx1 and cy2 > cy1:
+        pad = frame[cy1:cy2, cx1:cx2]
+        pad[:] = cv2.addWeighted(np.zeros_like(pad), 0.55, pad, 0.45, 0)
 
     text_y = y1 + pad_y + th
     cv2.putText(frame, text, (x1 + pad_x, text_y), font, font_scale,
                 (255, 255, 255), thickness, cv2.LINE_AA)
+
+
+def _stamp_corner_labels(
+    frame: np.ndarray,
+    *,
+    time_text: str,
+    mode: str,
+    segment_index: int,
+    view: str,
+) -> None:
+    """In-place body of add_bottom_right_labels."""
+    # "mode0" -> "MODE 0"; anything else (e.g. "splitscreen") is just uppercased.
+    raw_mode = str(mode or "").strip()
+    if raw_mode.lower().startswith("mode"):
+        mode_short = "MODE " + raw_mode[4:]
+    else:
+        mode_short = raw_mode.upper()
+
+    view_str = (view or "").upper()
+    tl_text = f"{mode_short}  ·  SEG {segment_index + 1}"
+    if view_str and view_str != "STANDARD":
+        tl_text += f"  ·  {view_str}"
+
+    _draw_corner_label(frame, tl_text, corner="tl")
+    _draw_corner_label(frame, time_text, corner="tr")
 
 
 def add_bottom_right_labels(
@@ -143,44 +171,24 @@ def add_bottom_right_labels(
     segment_index: int,
     view: str,
 ) -> np.ndarray:
-    """Stamp small unobtrusive labels in the corners.
+    """Return a copy of `frame` with small labels stamped in the corners.
 
-    Was a single big bottom-right block (TIME/MODE/SEGMENT/VIEW stacked
-    in one large box that covered ~25% of the frame). The user could
-    barely see the actual video. Now:
+      * Top-left:  ``MODE N  ·  SEG N`` (plus the view when it is not standard)
+      * Top-right: the source time
 
-      • Top-LEFT corner:  ``MODE  ·  SEGMENT N``
-      • Top-RIGHT corner: ``TIME``  (only - view is implicit when standard)
-
-    Function name kept for backward compatibility with run_demo.py
-    even though it no longer draws bottom-right.
+    The name is kept for backward compatibility with run_demo.py even though
+    nothing is drawn bottom-right any more.
 
     Author: Bloodawn (KheivenD), 2026-05-04 (corner overlays).
     """
     out = frame.copy()
-
-    # Compact mode label - strips the leading "mode" prefix when present
-    # so "mode0" → "MODE 0", "splitscreen" stays as-is.
-    raw_mode = str(mode or "").strip()
-    if raw_mode.lower().startswith("mode"):
-        mode_short = "MODE " + raw_mode[4:]
-    else:
-        mode_short = raw_mode.upper()
-
-    seg_label = f"SEG {segment_index + 1}"
-    view_str  = (view or "").upper()
-    tl_text = f"{mode_short}  ·  {seg_label}"
-    if view_str and view_str != "STANDARD":
-        tl_text += f"  ·  {view_str}"
-
-    _draw_corner_label(out, tl_text,    corner="tl")
-    _draw_corner_label(out, time_text,  corner="tr")
-
+    _stamp_corner_labels(
+        out, time_text=time_text, mode=mode, segment_index=segment_index, view=view,
+    )
     return out
 
 
-
-def clip_bbox(x: int, y: int, w: int, h: int, frame_w: int, frame_h: int) -> Tuple[int, int, int, int] | None:
+def clip_bbox(x: int, y: int, w: int, h: int, frame_w: int, frame_h: int) -> tuple[int, int, int, int] | None:
     """
     Clip bbox coordinates to frame bounds and return (x1, y1, x2, y2).
     """
@@ -193,10 +201,35 @@ def clip_bbox(x: int, y: int, w: int, h: int, frame_w: int, frame_h: int) -> Tup
     return x1, y1, x2, y2
 
 
+def _clipped_regions(regions: list[list[int]], frame_w: int, frame_h: int) -> Iterator[tuple[int, int, int, int]]:
+    """Yield (x1, y1, x2, y2) for every well-formed [x, y, w, h] region inside the frame."""
+    for bbox in regions:
+        if len(bbox) != 4:
+            continue
+        clipped = clip_bbox(bbox[0], bbox[1], bbox[2], bbox[3], frame_w, frame_h)
+        if clipped is not None:
+            yield clipped
+
+
+def _focus_background_lut(dim_alpha: float, tint_strength: float) -> np.ndarray:
+    """256-entry, 3-channel lookup table for the dimmed + tinted background.
+
+    The background treatment is a pure per-channel function of the input
+    value: darken (float32 multiply, truncate) and then addWeighted against a
+    constant tint. Computing it for the 256 possible inputs and applying it
+    with cv2.LUT gives the same pixels as running the arithmetic on every
+    pixel of the frame, without the float32 frame copy and the extra
+    full-frame tint buffer.
+    """
+    values = np.repeat(np.arange(256, dtype=np.uint8).reshape(256, 1, 1), 3, axis=2)
+    darkened = (values.astype(np.float32) * dim_alpha).clip(0, 255).astype(np.uint8)
+    bg_tint = np.full_like(darkened, (20, 28, 20), dtype=np.uint8)
+    return cv2.addWeighted(darkened, 1.0 - tint_strength, bg_tint, tint_strength, 0)
+
 
 def build_roi_focus_frame(
     frame: np.ndarray,
-    regions: List[List[int]],
+    regions: list[list[int]],
     *,
     background_dim_alpha: float = 0.45,
     background_tint_strength: float = 0.08,
@@ -212,98 +245,76 @@ def build_roi_focus_frame(
     This keeps the scene readable while making the detected foreground pop.
     """
     if not draw_tint:
-        out = frame.copy()
-        h, w = out.shape[:2]
+        return draw_region_boxes(frame, regions) if draw_boxes else frame.copy()
+
+    h, w = frame.shape[:2]
+
+    # Same look as demo_detection.py's green foreground treatment: dim the
+    # whole frame, then paste the ROI regions back at full brightness.
+    out = cv2.LUT(frame, _focus_background_lut(background_dim_alpha, background_tint_strength))
+
+    for x1, y1, x2, y2 in _clipped_regions(regions, w, h):
+        out[y1:y2, x1:x2] = frame[y1:y2, x1:x2]
         if draw_boxes:
-            for bbox in regions:
-                if len(bbox) != 4:
-                    continue
-                clipped = clip_bbox(bbox[0], bbox[1], bbox[2], bbox[3], w, h)
-                if clipped is not None:
-                    x1, y1, x2, y2 = clipped
-                    cv2.rectangle(out, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        return out
-
-    out = frame.copy()
-    h, w = out.shape[:2]
-
-    # Inspired by demo_detection.py's easy-to-read green foreground treatment:
-    # the background is dimmed globally, then ROI regions are restored and given
-    # a subtle green emphasis instead of being heavily stylized.
-    darkened = (frame.astype(np.float32) * background_dim_alpha).clip(0, 255).astype(np.uint8)
-    bg_tint = np.full_like(frame, (20, 28, 20), dtype=np.uint8)
-    out = cv2.addWeighted(darkened, 1.0 - background_tint_strength, bg_tint, background_tint_strength, 0)
-
-    for bbox in regions:
-        if len(bbox) != 4:
-            continue
-        clipped = clip_bbox(bbox[0], bbox[1], bbox[2], bbox[3], w, h)
-        if clipped is None:
-            continue
-
-        x1, y1, x2, y2 = clipped
-        roi = frame[y1:y2, x1:x2]
-        if roi.size == 0:
-            continue
-
-        out[y1:y2, x1:x2] = roi
-
-        if draw_boxes:
-            cv2.rectangle(out, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.rectangle(out, (x1, y1), (x2, y2), _BOX_COLOR, 2)
 
     return out
 
 
-
-def draw_regions(frame: np.ndarray, regions: List[List[int]]) -> np.ndarray:
+def draw_regions(frame: np.ndarray, regions: list[list[int]]) -> np.ndarray:
     """
-    Draw ROI boxes from JSONL metadata.
+    Draw ROI boxes from JSONL metadata, with a light green tint inside each.
     Each region is [x, y, w, h].
     """
     out = frame.copy()
     h, w = out.shape[:2]
 
-    for bbox in regions:
-        if len(bbox) != 4:
-            continue
-
-        clipped = clip_bbox(bbox[0], bbox[1], bbox[2], bbox[3], w, h)
-        if clipped is None:
-            continue
-
-        x1, y1, x2, y2 = clipped
-        cv2.rectangle(out, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
+    for x1, y1, x2, y2 in _clipped_regions(regions, w, h):
+        cv2.rectangle(out, (x1, y1), (x2, y2), _BOX_COLOR, 2)
         roi = out[y1:y2, x1:x2]
-        if roi.size > 0:
-            tint = np.zeros_like(roi)
-            tint[:, :] = (0, 60, 0)
-            out[y1:y2, x1:x2] = cv2.addWeighted(roi, 0.8, tint, 0.2, 0)
+        tint = np.full_like(roi, (0, 60, 0))
+        out[y1:y2, x1:x2] = cv2.addWeighted(roi, 0.8, tint, 0.2, 0)
 
     return out
 
 
-
-def draw_region_boxes(frame: np.ndarray, regions: List[List[int]]) -> np.ndarray:
+def draw_region_boxes(frame: np.ndarray, regions: list[list[int]]) -> np.ndarray:
     """
     Draw ROI boxes from JSONL metadata without applying any tint.
     """
     out = frame.copy()
     h, w = out.shape[:2]
-
-    for bbox in regions:
-        if len(bbox) != 4:
-            continue
-
-        clipped = clip_bbox(bbox[0], bbox[1], bbox[2], bbox[3], w, h)
-        if clipped is None:
-            continue
-
-        x1, y1, x2, y2 = clipped
-        cv2.rectangle(out, (x1, y1), (x2, y2), (0, 255, 0), 2)
-
+    for x1, y1, x2, y2 in _clipped_regions(regions, w, h):
+        cv2.rectangle(out, (x1, y1), (x2, y2), _BOX_COLOR, 2)
     return out
 
+
+def _render_skip_card(
+    width: int,
+    height: int,
+    *,
+    mode: str,
+    skip_seconds: float,
+    next_time_seconds: float,
+) -> np.ndarray:
+    text_lines = [
+        f"MODE: {mode}",
+        f"SKIP -> {skip_seconds:.2f}s",
+        f"NEXT TIME: {format_time_hhmmss(next_time_seconds)}",
+    ]
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.9
+    thickness = 2
+    spacing = 40
+    start_y = (height // 2) - (len(text_lines) * spacing // 2)
+
+    img = np.zeros((height, width, 3), dtype=np.uint8)
+    for i, line in enumerate(text_lines):
+        (tw, _th), _ = cv2.getTextSize(line, font, font_scale, thickness)
+        x = (width - tw) // 2
+        y = start_y + i * spacing
+        cv2.putText(img, line, (x, y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
+    return img
 
 
 def make_skip_card(
@@ -314,46 +325,21 @@ def make_skip_card(
     skip_seconds: float,
     next_time_seconds: float,
     frame_count: int,
-) -> List[np.ndarray]:
+) -> list[np.ndarray]:
     """
     Create black placeholder frames for a measured number of skipped frames.
     """
     if frame_count <= 0:
         return []
-
-    frames: List[np.ndarray] = []
-
-    text_lines = [
-        f"MODE: {mode}",
-        f"SKIP -> {skip_seconds:.2f}s",
-        f"NEXT TIME: {format_time_hhmmss(next_time_seconds)}",
+    return [
+        _render_skip_card(
+            width, height, mode=mode, skip_seconds=skip_seconds, next_time_seconds=next_time_seconds,
+        )
+        for _ in range(frame_count)
     ]
 
-    for _ in range(frame_count):
-        img = np.zeros((height, width, 3), dtype=np.uint8)
 
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        font_scale = 0.9
-        thickness = 2
-        spacing = 40
-
-        sizes = [cv2.getTextSize(line, font, font_scale, thickness)[0] for line in text_lines]
-        total_h = len(text_lines) * spacing
-        start_y = (height // 2) - (total_h // 2)
-
-        for i, line in enumerate(text_lines):
-            tw, th = sizes[i]
-            x = (width - tw) // 2
-            y = start_y + i * spacing
-            cv2.putText(img, line, (x, y), font, font_scale, (255, 255, 255), thickness, cv2.LINE_AA)
-
-        frames.append(img)
-
-    return frames
-
-
-
-def make_hold_frames(previous_frame: np.ndarray, frame_count: int) -> List[np.ndarray]:
+def make_hold_frames(previous_frame: np.ndarray, frame_count: int) -> list[np.ndarray]:
     """
     Duplicate the previous rendered frame for a measured number of missing frames.
     This preserves timeline alignment without flashing to black.
@@ -389,20 +375,7 @@ def format_storage_change(space_saved_pct: object) -> str:
     return f"{saved:.1f}% saved"
 
 
-def make_metrics_card(
-    width: int,
-    height: int,
-    *,
-    mode: str,
-    metrics: dict,
-    frame_count: int,
-) -> List[np.ndarray]:
-    """
-    Create repeated end-card frames summarizing per-mode demo metrics.
-    """
-    if frame_count <= 0:
-        return []
-
+def _render_metrics_card(width: int, height: int, *, mode: str, metrics: dict) -> np.ndarray:
     cpu = metrics.get("cpu") or {}
     latency = metrics.get("latency_ms")
     latency_text = "N/A for file demo" if latency is None else format_metric_value(latency, " ms")
@@ -419,7 +392,6 @@ def make_metrics_card(
         f"Latency: {latency_text}",
     ]
 
-    frames: List[np.ndarray] = []
     font = cv2.FONT_HERSHEY_SIMPLEX
     title_scale = max(0.85, min(width, height) / 520)
     body_scale = max(0.52, min(width, height) / 820)
@@ -429,28 +401,40 @@ def make_metrics_card(
     available_h = max(24, height - start_y - 24)
     spacing = max(20, min(max(28, int(height * 0.07)), available_h // max(1, len(lines) - 1)))
 
-    for _ in range(frame_count):
-        img = np.zeros((height, width, 3), dtype=np.uint8)
-        cv2.rectangle(img, (0, 0), (width, height), (18, 24, 21), -1)
-        cv2.rectangle(img, (0, 0), (width, max(8, height // 44)), (0, 180, 90), -1)
+    img = np.zeros((height, width, 3), dtype=np.uint8)
+    cv2.rectangle(img, (0, 0), (width, height), (18, 24, 21), -1)
+    cv2.rectangle(img, (0, 0), (width, max(8, height // 44)), (0, 180, 90), -1)
 
-        for idx, line in enumerate(lines):
-            is_title = idx == 0
-            scale = title_scale if is_title else body_scale
-            thickness = title_thickness if is_title else body_thickness
-            color = (120, 255, 175) if is_title else (238, 246, 240)
-            (tw, th), _ = cv2.getTextSize(line, font, scale, thickness)
-            x = max(18, (width - tw) // 2 if is_title else int(width * 0.12))
-            y = start_y + idx * spacing
-            cv2.putText(img, line, (x, y), font, scale, color, thickness, cv2.LINE_AA)
+    for idx, line in enumerate(lines):
+        is_title = idx == 0
+        scale = title_scale if is_title else body_scale
+        thickness = title_thickness if is_title else body_thickness
+        color = (120, 255, 175) if is_title else (238, 246, 240)
+        (tw, _th), _ = cv2.getTextSize(line, font, scale, thickness)
+        x = max(18, (width - tw) // 2 if is_title else int(width * 0.12))
+        y = start_y + idx * spacing
+        cv2.putText(img, line, (x, y), font, scale, color, thickness, cv2.LINE_AA)
 
-        frames.append(img)
-
-    return frames
+    return img
 
 
+def make_metrics_card(
+    width: int,
+    height: int,
+    *,
+    mode: str,
+    metrics: dict,
+    frame_count: int,
+) -> list[np.ndarray]:
+    """
+    Create repeated end-card frames summarizing per-mode demo metrics.
+    """
+    if frame_count <= 0:
+        return []
+    return [_render_metrics_card(width, height, mode=mode, metrics=metrics) for _ in range(frame_count)]
 
-def load_segment_rows(db_path: str | Path, mode_records: List[dict]) -> List[Tuple[int, str]]:
+
+def load_segment_rows(db_path: str | Path, mode_records: list[dict]) -> list[tuple[int, str]]:
     """
     Load segment file paths from metadata.db in chronological order.
 
@@ -460,22 +444,21 @@ def load_segment_rows(db_path: str | Path, mode_records: List[dict]) -> List[Tup
     if not mode_records:
         return []
 
-    max_segment_index = max(r["segment_index"] for r in mode_records)
+    needed_count = max(r["segment_index"] for r in mode_records) + 1
 
     conn = sqlite3.connect(str(db_path))
     try:
+        # LIMIT keeps a long-lived DB from being read in full. SQLite treats a
+        # negative LIMIT as "no limit", and the slice then reproduces Python's
+        # negative-slice result, so every needed_count behaves as rows[:needed_count].
         rows = conn.execute(
-            """
-            SELECT timestamp, file_path
-            FROM segments
-            ORDER BY timestamp ASC
-            """
-        ).fetchall()
+            "SELECT timestamp, file_path FROM segments ORDER BY timestamp ASC LIMIT ?",
+            (needed_count,),
+        ).fetchall()[:needed_count]
     finally:
         conn.close()
 
-    needed = rows[: max_segment_index + 1]
-    return [(i, file_path) for i, (_, file_path) in enumerate(needed)]
+    return [(i, file_path) for i, (_, file_path) in enumerate(rows)]
 
 
 def load_sparse_mode3_metadata(path: str | Path) -> tuple[Path, dict] | None:
@@ -504,6 +487,15 @@ def build_sparse_frame_lookup(metadata: dict) -> dict[int, dict]:
     }
 
 
+def _imread_cached(path: Path, flags: int, cache: dict[Path, np.ndarray] | None) -> np.ndarray | None:
+    if cache is not None and path in cache:
+        return cache[path]
+    image = cv2.imread(str(path), flags)
+    if cache is not None and image is not None:
+        cache[path] = image
+    return image
+
+
 def render_sparse_mode3_frame(
     artifact_dir: Path,
     metadata: dict,
@@ -524,39 +516,26 @@ def render_sparse_mode3_frame(
         if len(bbox) != 4:
             continue
         x, y, w, h = [int(v) for v in bbox]
-        x1 = max(0, x)
-        y1 = max(0, y)
-        x2 = min(width, x + max(0, w))
-        y2 = min(height, y + max(0, h))
-        if x2 <= x1 or y2 <= y1:
+        clipped = clip_bbox(x, y, w, h, width, height)
+        if clipped is None:
             continue
+        x1, y1, x2, y2 = clipped
+        box_w, box_h = x2 - x1, y2 - y1
 
-        crop_path = (artifact_dir / obj["crop_path"]).resolve()
-        if image_cache is not None and crop_path in image_cache:
-            crop = image_cache[crop_path]
-        else:
-            crop = cv2.imread(str(crop_path), cv2.IMREAD_COLOR)
-            if image_cache is not None and crop is not None:
-                image_cache[crop_path] = crop
+        crop = _imread_cached((artifact_dir / obj["crop_path"]).resolve(), cv2.IMREAD_COLOR, image_cache)
         if crop is None:
             continue
-        if crop.shape[1] != (x2 - x1) or crop.shape[0] != (y2 - y1):
-            crop = cv2.resize(crop, (x2 - x1, y2 - y1))
+        if crop.shape[1] != box_w or crop.shape[0] != box_h:
+            crop = cv2.resize(crop, (box_w, box_h))
 
         mask_path = obj.get("mask_path")
         if mask_path:
-            resolved_mask_path = (artifact_dir / mask_path).resolve()
-            if image_cache is not None and resolved_mask_path in image_cache:
-                mask = image_cache[resolved_mask_path]
-            else:
-                mask = cv2.imread(str(resolved_mask_path), cv2.IMREAD_GRAYSCALE)
-                if image_cache is not None and mask is not None:
-                    image_cache[resolved_mask_path] = mask
+            mask = _imread_cached((artifact_dir / mask_path).resolve(), cv2.IMREAD_GRAYSCALE, image_cache)
             if mask is not None:
-                if mask.shape[1] != (x2 - x1) or mask.shape[0] != (y2 - y1):
-                    mask = cv2.resize(mask, (x2 - x1, y2 - y1), interpolation=cv2.INTER_NEAREST)
-                roi = canvas[y1:y2, x1:x2]
-                roi[mask > 0] = crop[mask > 0]
+                if mask.shape[1] != box_w or mask.shape[0] != box_h:
+                    mask = cv2.resize(mask, (box_w, box_h), interpolation=cv2.INTER_NEAREST)
+                keep = mask > 0
+                canvas[y1:y2, x1:x2][keep] = crop[keep]
                 continue
 
         canvas[y1:y2, x1:x2] = crop
@@ -564,12 +543,11 @@ def render_sparse_mode3_frame(
     return canvas
 
 
-
 def compute_missing_frame_count(
     previous_time: float,
     current_time: float,
     fps: float,
-) -> Tuple[int, float]:
+) -> tuple[int, float]:
     """
     Convert a source-time gap into an integer number of missing frames.
     """
@@ -583,10 +561,9 @@ def compute_missing_frame_count(
     return missing_frames, skip_seconds
 
 
-
 def render_view(
     frame: np.ndarray,
-    regions: List[List[int]],
+    regions: list[list[int]],
     *,
     view: str,
     draw_boxes: bool,
@@ -604,6 +581,13 @@ def render_view(
         return draw_region_boxes(frame, regions)
 
     return frame.copy()
+
+
+def _write_repeated(writer, frame: np.ndarray, count: int) -> None:
+    # Writing the same array N times keeps a long gap at O(1) memory instead
+    # of materialising N full frames first.
+    for _ in range(count):
+        writer.write(frame)
 
 
 # ---------------------------------------------------------------------------
@@ -631,7 +615,7 @@ def render_demo(
     if not records:
         raise ValueError(f"No records found in metadata sidecar: {metadata_path}")
 
-    records_by_segment: Dict[int, List[dict]] = defaultdict(list)
+    records_by_segment: dict[int, list[dict]] = defaultdict(list)
     for record in records:
         records_by_segment[record["segment_index"]].append(record)
 
@@ -668,12 +652,13 @@ def render_demo(
         previous_time = None
         previous_rendered_frame = None
 
-        for segment_index, segment_path in segment_rows:
+        for row_number, (segment_index, segment_path) in enumerate(segment_rows):
             segment_records = records_by_segment.get(segment_index, [])
             if not segment_records:
                 continue
 
-            sparse = load_sparse_mode3_metadata(segment_path)
+            # The first row's metadata.json was already parsed for the probe.
+            sparse = first_sparse if row_number == 0 else load_sparse_mode3_metadata(segment_path)
             cap = None
             sparse_artifact_dir = None
             sparse_metadata = None
@@ -716,21 +701,19 @@ def render_demo(
 
                         if missing_frames > 0:
                             if skip_seconds < min_black_skip_seconds and previous_rendered_frame is not None:
-                                hold_frames = make_hold_frames(previous_rendered_frame, missing_frames)
-                                for hold_frame in hold_frames:
-                                    writer.write(hold_frame)
+                                _write_repeated(writer, previous_rendered_frame, missing_frames)
                             else:
-                                skip_frames = make_skip_card(
+                                card = _render_skip_card(
                                     width,
                                     height,
                                     mode=record["mode"],
                                     skip_seconds=skip_seconds,
                                     next_time_seconds=current_time,
-                                    frame_count=missing_frames,
                                 )
-                                for skip_frame in skip_frames:
-                                    writer.write(skip_frame)
+                                _write_repeated(writer, card, missing_frames)
 
+                    # render_view always returns a fresh array, so the labels
+                    # can be stamped into it without another full-frame copy.
                     rendered = render_view(
                         frame,
                         record["regions"],
@@ -738,7 +721,7 @@ def render_demo(
                         draw_boxes=draw_boxes,
                         draw_tint=draw_tint,
                     )
-                    rendered = add_bottom_right_labels(
+                    _stamp_corner_labels(
                         rendered,
                         time_text=format_time_hhmmss(current_time),
                         mode=record["mode"],
@@ -755,15 +738,13 @@ def render_demo(
                     cap.release()
 
         if metrics is not None and metrics_screen_seconds > 0:
-            metric_frames = make_metrics_card(
+            card = _render_metrics_card(
                 width,
                 height,
                 mode=str(metrics.get("mode") or records[0].get("mode") or "mode"),
                 metrics=metrics,
-                frame_count=max(1, int(round(metrics_screen_seconds * fps))),
             )
-            for metric_frame in metric_frames:
-                writer.write(metric_frame)
+            _write_repeated(writer, card, max(1, int(round(metrics_screen_seconds * fps))))
 
     finally:
         writer.release()
@@ -819,8 +800,6 @@ if __name__ == "__main__":
     args = parser.parse_args()
     metrics = None
     if args.metrics_json:
-        import json
-
         with open(args.metrics_json, "r", encoding="utf-8") as f:
             metrics = json.load(f)
 

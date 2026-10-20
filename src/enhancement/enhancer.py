@@ -36,7 +36,6 @@ import os
 import sys
 import types
 from pathlib import Path
-from typing import Dict, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -82,14 +81,14 @@ _VALID_SCALES = {2, 3, 4, 8}
 #   RealESRGAN/RealESRNet: xinntao/Real-ESRGAN release assets (BSD-3-Clause)
 # ─────────────────────────────────────────────────────────────────────────────
 
-_DNN_SR_MODELS: Dict[str, Dict] = {
+_DNN_SR_MODELS: dict[str, dict] = {
     "espcn":  {"algo": "espcn",  "scales": (2, 3, 4),    "filename": "ESPCN_x{s}.pb"},
     "fsrcnn": {"algo": "fsrcnn", "scales": (2, 3, 4),    "filename": "FSRCNN_x{s}.pb"},
     "edsr":   {"algo": "edsr",   "scales": (2, 3, 4),    "filename": "EDSR_x{s}.pb"},
     "lapsrn": {"algo": "lapsrn", "scales": (2, 4, 8),    "filename": "LapSRN_x{s}.pb"},
 }
 
-_RRDBNET_MODELS: Dict[str, str] = {
+_RRDBNET_MODELS: dict[str, str] = {
     "realesrgan": "RealESRGAN_x4plus.pth",
     "realesrnet": "RealESRNet_x4plus.pth",
 }
@@ -118,19 +117,16 @@ def _nearest_supported_scale(model_id: str, requested: int) -> int:
 
 
 def _ensure_torchvision_functional_tensor_shim() -> None:
-    """Patch around a real, currently-live basicsr/torchvision incompatibility.
+    """Patch around a live basicsr/torchvision incompatibility.
 
     basicsr.data.degradations imports
     ``torchvision.transforms.functional_tensor.rgb_to_grayscale``, a module
     torchvision removed in 0.17+ (the function moved to
     ``torchvision.transforms.functional``, unchanged). Without this shim,
     ``from basicsr.archs.rrdbnet_arch import RRDBNet`` raises
-    ModuleNotFoundError on any current torchvision - which the existing
-    ``except ImportError`` in _load_model_rrdbnet() already caught, so this
-    was never a crash, just Real-ESRGAN/RealESRNet silently never activating
-    and every run quietly using bicubic instead, no matter how correctly it
-    was configured. Discovered and fixed 2026-09-24 while wiring up
-    RealESRNet - it also explains why Real-ESRGAN itself was inert.
+    ModuleNotFoundError on any current torchvision, which _load_rrdbnet()
+    catches as ImportError, so Real-ESRGAN/RealESRNet would silently never
+    activate and every run would quietly use bicubic.
     """
     mod_name = "torchvision.transforms.functional_tensor"
     if mod_name in sys.modules:
@@ -148,7 +144,7 @@ def _ensure_torchvision_functional_tensor_shim() -> None:
 # GPU / device detection helpers (importable by app.py for /api/gpu_info)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def detect_gpu() -> Dict:
+def detect_gpu() -> dict:
     """
     Probe the system for GPU acceleration support.
 
@@ -165,7 +161,7 @@ def detect_gpu() -> Dict:
         note           str   (human-readable summary)
         mobile_note    str   (warning about mobile / integrated GPU)
     """
-    result: Dict = {
+    result: dict = {
         "available": False,
         "backend": "cpu",
         "device_name": "CPU only",
@@ -198,7 +194,6 @@ def detect_gpu() -> Dict:
             result["vram_mb"]     = vram_mb
             result["will_work"]   = vram_mb >= 2048  # Real-ESRGAN needs ~2 GB VRAM minimum
 
-            # Warn on low-VRAM / integrated / mobile GPUs
             name_lower = name.lower()
             is_mobile = any(x in name_lower for x in [
                 "mx", "gtx 9", "gtx 10", "rtx 20",  # older low-VRAM cards
@@ -254,12 +249,14 @@ def detect_gpu() -> Dict:
 
 
 def best_device() -> str:
-    """Return the best available torch device string: 'cuda', 'mps', or 'cpu'."""
+    """Return the best available torch device string: 'cuda', 'mps', or 'cpu'.
+
+    The ``ENHANCER_DEVICE`` environment variable wins when it names a valid device.
+    """
     env = os.environ.get("ENHANCER_DEVICE", "").strip().lower()
     if env in ("cuda", "mps", "cpu"):
         return env
-    info = detect_gpu()
-    return info["backend"]
+    return detect_gpu()["backend"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -293,10 +290,10 @@ class Enhancer:
 
     def __init__(
         self,
-        model_path: Optional[str] = None,
-        models_dir: Optional[str] = None,
+        model_path: str | None = None,
+        models_dir: str | None = None,
         scale: int = 4,
-        device: Optional[str] = None,
+        device: str | None = None,
         use_nn: bool = True,
         model: str = "realesrgan",
     ) -> None:
@@ -331,13 +328,11 @@ class Enhancer:
         self._models_dir = Path(models_dir) if models_dir else _DEFAULT_MODELS_DIR
         self._explicit_model_path = Path(model_path) if model_path else None
 
-        # Resolve device (realesrgan/realesrnet only - dnn_superres is CPU-only
-        # with the pip opencv-contrib-python wheels this project ships).
-        if device:
-            self._device = device.strip().lower()
-        else:
-            env = os.environ.get("ENHANCER_DEVICE", "").strip().lower()
-            self._device = env if env in ("cuda", "mps", "cpu") else best_device()
+        # Only realesrgan/realesrnet use a torch device (dnn_superres is
+        # CPU-only with the pip opencv-contrib-python wheels). Auto-detecting
+        # it imports torch and probes CUDA, which takes seconds, so it is
+        # deferred to the first read of .device instead of every construction.
+        self._device: str | None = device.strip().lower() if device else None
 
         self._upsampler = None      # cv2.dnn_superres.DnnSuperResImpl, when active
         self._rrdb_upsampler = None  # RealESRGANer, when active
@@ -397,7 +392,7 @@ class Enhancer:
                 "%s loaded: %s (x%d) on CPU",
                 self.model_id.upper(), weights_path.name, target_scale,
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - cv2.error or a bad weights file; degrade to bicubic
             log.warning(
                 "%s failed to initialise (%s: %s). Using bicubic fallback.",
                 self.model_id.upper(), type(exc).__name__, exc,
@@ -443,10 +438,9 @@ class Enhancer:
             )
         self._active_scale = 4
 
-        # Validate device availability and downgrade if necessary
         resolved_device = self._resolve_device()
 
-        try:
+        def build_upsampler(device: str):
             model = RRDBNet(
                 num_in_ch=3,
                 num_out_ch=3,
@@ -455,55 +449,41 @@ class Enhancer:
                 num_grow_ch=32,
                 scale=4,
             )
-            use_half = (resolved_device == "cuda")  # fp16 only on CUDA
             # pre_pad=0: RealESRGANer's default pre_pad=10 reflect-pads every
-            # side before inference, and PyTorch's reflect pad requires the
-            # pad amount to be strictly less than the dimension it is padding -
-            # a small tracked-object crop (e.g. 10x19px) fails that check and
-            # raises RuntimeError('Padding size should be less than the
-            # corresponding input dimension...'). Dropping pre_pad removes
-            # this failure mode entirely; _enhance_rrdbnet() below adds its
-            # own safe minimum-size padding for genuinely tiny crops instead.
-            self._rrdb_upsampler = RealESRGANer(
+            # side, and PyTorch's reflect pad needs the pad to be smaller than
+            # the dimension it pads, so a small crop (e.g. 10x19px) raised
+            # RuntimeError('Padding size should be less than the corresponding
+            # input dimension...'). _enhance_rrdbnet() pads tiny crops safely.
+            return RealESRGANer(
                 scale=4,
                 model_path=str(weights_path),
                 model=model,
-                device=resolved_device,
-                half=use_half,
+                device=device,
+                half=(device == "cuda"),  # fp16 only on CUDA
                 pre_pad=0,
             )
+
+        try:
+            self._rrdb_upsampler = build_upsampler(resolved_device)
             self._using_nn  = True
             self._device    = resolved_device
             log.info(
                 "%s loaded: %s (x4) on %s",
                 self.model_id, weights_path.name, resolved_device.upper()
             )
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - torch/model init can fail many ways; degrade, never crash
             if resolved_device != "cpu":
-                # Try again on CPU before giving up entirely
                 log.warning(
                     "%s failed on %s (%s: %s). Retrying on CPU.",
                     self.model_id, resolved_device.upper(), type(exc).__name__, exc,
                 )
                 try:
-                    model2 = RRDBNet(
-                        num_in_ch=3, num_out_ch=3,
-                        num_feat=64, num_block=23, num_grow_ch=32,
-                        scale=4,
-                    )
-                    self._rrdb_upsampler = RealESRGANer(
-                        scale=4,
-                        model_path=str(weights_path),
-                        model=model2,
-                        device="cpu",
-                        half=False,
-                        pre_pad=0,
-                    )
+                    self._rrdb_upsampler = build_upsampler("cpu")
                     self._using_nn = True
                     self._device   = "cpu"
                     log.info("%s loaded on CPU (GPU fallback).", self.model_id)
                     return
-                except Exception as exc2:
+                except Exception as exc2:  # noqa: BLE001
                     log.warning("CPU fallback also failed (%s). Using bicubic.", exc2)
             else:
                 log.warning(
@@ -515,12 +495,12 @@ class Enhancer:
 
     def _resolve_device(self) -> str:
         """Validate the requested device and downgrade if unavailable."""
-        requested = self._device
+        requested = self.device
         try:
             import torch
             if requested == "cuda":
                 if torch.cuda.is_available():
-                    # Check VRAM (Real-ESRGAN needs ~2 GB)
+                    # Real-ESRGAN needs ~2 GB of VRAM.
                     vram = torch.cuda.get_device_properties(0).total_memory // (1024 * 1024)
                     if vram < 2048:
                         log.warning(
@@ -584,7 +564,9 @@ class Enhancer:
 
     @property
     def device(self) -> str:
-        """Return the active compute device string."""
+        """Return the active compute device string (auto-detected on first use)."""
+        if self._device is None:
+            self._device = best_device()
         return self._device
 
     @property
@@ -597,7 +579,7 @@ class Enhancer:
     def upscale_frame(
         self,
         frame: np.ndarray,
-        scale: Optional[int] = None,
+        scale: int | None = None,
     ) -> np.ndarray:
         """
         Upscale an entire BGR frame.
@@ -632,8 +614,8 @@ class Enhancer:
     def upscale_roi(
         self,
         frame: np.ndarray,
-        bbox: Tuple[int, int, int, int],
-        scale: Optional[int] = None,
+        bbox: tuple[int, int, int, int],
+        scale: int | None = None,
         measure_quality: bool = False,
     ) -> np.ndarray:
         """

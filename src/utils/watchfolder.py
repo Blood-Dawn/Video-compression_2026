@@ -31,7 +31,6 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -79,7 +78,7 @@ class WatchProfile:
     description: str
     recursive: bool = False
     auto_preset: bool = True
-    preset: Optional[str] = None
+    preset: str | None = None
     stable_checks: int = 2
     settle_seconds: float = 1.0
     camera_prefix: str = "external"
@@ -97,7 +96,7 @@ class WatchProfile:
 
 
 # Ordered registry of layouts. Adding a layout is one entry - no code branch.
-_PROFILE_LIST: List[WatchProfile] = [
+_PROFILE_LIST: list[WatchProfile] = [
     WatchProfile(
         key="continuous",
         label="Timestamped continuous recordings",
@@ -148,11 +147,11 @@ _PROFILE_LIST: List[WatchProfile] = [
     ),
 ]
 
-WATCHFOLDER_PROFILES: Dict[str, WatchProfile] = {p.key: p for p in _PROFILE_LIST}
+WATCHFOLDER_PROFILES: dict[str, WatchProfile] = {p.key: p for p in _PROFILE_LIST}
 DEFAULT_PROFILE = "generic"
 
 
-def list_profiles() -> List[dict]:
+def list_profiles() -> list[dict]:
     """Catalog of profiles (key/label/description) for docs and the CLI."""
     return [
         {"key": p.key, "label": p.label, "description": p.description,
@@ -282,6 +281,25 @@ def _resolve_encode_config(video_path: Path, auto_preset: bool, preset):
     }, key
 
 
+def _find_candidates(watch_dir: Path, recursive: bool) -> list[Path]:
+    """Supported video files under ``watch_dir`` that have no ``.ingested`` sentinel.
+
+    The sentinels sit next to their videos, so one directory walk already
+    lists them. Checking against that set replaces an ``exists()`` call per
+    video, and testing the extension first skips the ``is_file()`` stat for
+    sentinels, markers and other non-video files.
+    """
+    walker = watch_dir.rglob("*") if recursive else watch_dir.iterdir()
+    entries = list(walker)
+    present = set(entries)
+    return [
+        f for f in entries
+        if f.suffix.lower() in SUPPORTED_EXTENSIONS
+        and f.with_suffix(f.suffix + INGESTED_SUFFIX) not in present
+        and f.is_file()
+    ]
+
+
 def _build_camera_id(video_path: Path, prefix: str) -> str:
     """
     Build a camera ID from the file name and a prefix.
@@ -346,15 +364,7 @@ def scan_and_ingest(
         Number of files ingested in this scan.
     """
     ingested_count = 0
-
-    walker = watch_dir.rglob("*") if recursive else watch_dir.iterdir()
-    candidates = [
-        f for f in walker
-        if f.is_file()
-        and f.suffix.lower() in SUPPORTED_EXTENSIONS
-        and not _already_ingested(f)
-    ]
-
+    candidates = _find_candidates(watch_dir, recursive)
     if not candidates:
         return 0
 
@@ -425,7 +435,7 @@ def run_watchfolder(
     auto_preset: bool = False,
     preset=None,
     recursive: bool = False,
-    profile: Optional[str] = None,
+    profile: str | None = None,
 ) -> None:
     """
     Run the watchfolder daemon loop indefinitely.

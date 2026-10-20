@@ -25,10 +25,10 @@ Usage:
                     process(frame, cam_idx)
 """
 
+import logging
 import threading
 import time
-import logging
-from typing import List, Optional, Tuple
+from collections import deque
 
 import cv2
 import numpy as np
@@ -60,13 +60,14 @@ class _StreamReader:
         self.cam_index = cam_index
         self.cam_id = f"cam_{cam_index:02d}"
 
-        self._cap: Optional[cv2.VideoCapture] = None
+        self._cap: cv2.VideoCapture | None = None
         self._lock = threading.Lock()
-        self._buffer: List[np.ndarray] = []
+        # A full deque drops its oldest frame on append.
+        self._buffer: deque[np.ndarray] = deque(maxlen=BUFFER_SIZE)
         self._running = False
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._last_frame_time: float = 0.0
-        self._error: Optional[str] = None
+        self._error: str | None = None
 
         # Metadata (set after capture opens)
         self.fps: float = 30.0
@@ -118,12 +119,10 @@ class _StreamReader:
                 self._running = False
                 break
             with self._lock:
-                if len(self._buffer) >= BUFFER_SIZE:
-                    self._buffer.pop(0)
                 self._buffer.append(frame)
                 self._last_frame_time = time.time()
 
-    def get_frame(self) -> Tuple[bool, Optional[np.ndarray]]:
+    def get_frame(self) -> tuple[bool, np.ndarray | None]:
         """
         Return the latest buffered frame.
 
@@ -142,7 +141,7 @@ class _StreamReader:
         with self._lock:
             if not self._buffer:
                 return False, None
-            frame = self._buffer.pop(0)
+            frame = self._buffer.popleft()
         return True, frame
 
     def is_alive(self) -> bool:
@@ -180,7 +179,7 @@ class MultiFrameSource:
                         process(frame)
     """
 
-    def __init__(self, sources: List[str]):
+    def __init__(self, sources: list[str]):
         """
         Args:
             sources: List of RTSP URLs or video file paths.
@@ -191,7 +190,7 @@ class MultiFrameSource:
         if not sources:
             raise ValueError("MultiFrameSource requires at least one source.")
 
-        self._readers: List[_StreamReader] = [
+        self._readers: list[_StreamReader] = [
             _StreamReader(src, idx) for idx, src in enumerate(sources)
         ]
         self.source_count = len(sources)
@@ -207,7 +206,7 @@ class MultiFrameSource:
         log.info(f"MultiFrameSource: {opened}/{self.source_count} streams opened.")
         return opened
 
-    def read_all(self) -> List[Tuple[bool, Optional[np.ndarray]]]:
+    def read_all(self) -> list[tuple[bool, np.ndarray | None]]:
         """
         Read the latest frame from every stream.
 
@@ -226,7 +225,7 @@ class MultiFrameSource:
         """Return the number of streams currently running."""
         return sum(r.is_alive() for r in self._readers)
 
-    def get_metadata(self) -> List[dict]:
+    def get_metadata(self) -> list[dict]:
         """
         Return metadata for all streams.
 

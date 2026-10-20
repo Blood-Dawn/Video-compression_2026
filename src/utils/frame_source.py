@@ -25,10 +25,10 @@ import os
 import queue
 import subprocess
 import threading
+from pathlib import Path
+
 import cv2
 import numpy as np
-from pathlib import Path
-from typing import Optional, Tuple
 
 log = logging.getLogger(__name__)
 
@@ -37,6 +37,9 @@ log = logging.getLogger(__name__)
 # FFmpeg wedged on a corrupt stream - we end the read rather than hang forever
 # (R4 Phase 6 review fix - blocking pipe read is offloaded to a reader thread).
 _FF_READ_TIMEOUT = 30.0
+
+_URL_SCHEMES = ("rtsp://", "rtsps://", "rtmp://", "http://", "https://")
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp"}
 
 
 class FrameSource:
@@ -81,21 +84,21 @@ class FrameSource:
         self.width = 0
         self.height = 0
         self.total_frames = 0
-        self.temporal_roi: Optional[Tuple[int, int]] = None  # (start, end) frame numbers
+        self.temporal_roi: tuple[int, int] | None = None  # (start, end) frame numbers
         # R4 Phase 6: FFmpeg-pipe decode mode for vendor/DVR containers OpenCV
         # cannot demux. None unless the FFmpeg fallback is active. A reader
         # thread drains FFmpeg's stdout into _ff_queue so a stalled decode can
         # never block the pipeline thread indefinitely.
-        self._ff_proc: Optional[subprocess.Popen] = None
+        self._ff_proc: subprocess.Popen | None = None
         self._ff_frame_bytes = 0
-        self._ff_queue: Optional[queue.Queue] = None
-        self._ff_stop: Optional[threading.Event] = None
-        self._ff_reader: Optional[threading.Thread] = None
+        self._ff_queue: queue.Queue | None = None
+        self._ff_stop: threading.Event | None = None
+        self._ff_reader: threading.Thread | None = None
         self.decoder = "opencv"
         # A frame consumed by the open-time probe read, returned first so the
         # probe never DROPS a frame (seeking back is unreliable on non-seekable
         # containers like MPEG-TS - R4 Phase 6 review-safety).
-        self._pending_frame: Optional[np.ndarray] = None
+        self._pending_frame: np.ndarray | None = None
 
         # Integer device index (e.g. 0 for the built-in webcam)
         if isinstance(input_path, int):
@@ -109,8 +112,7 @@ class FrameSource:
 
         # Network stream URLs must bypass filesystem checks. Path() may mangle
         # RTSP URLs on Windows (backslash-separating the host/path portions).
-        _URL_SCHEMES = ("rtsp://", "rtsps://", "rtmp://", "http://", "https://")
-        if any(input_path.lower().startswith(s) for s in _URL_SCHEMES):
+        if input_path.lower().startswith(_URL_SCHEMES):
             self._init_video_url(input_path)
             return
 
@@ -149,7 +151,7 @@ class FrameSource:
     def _init_video_url(self, url: str):
         """Set up reading from a network stream URL (RTSP, HTTP, RTMP, etc.).
 
-        cv2.VideoCapture can handle these natively; dimensions may read as 0×0
+        cv2.VideoCapture can handle these natively; dimensions may read as 0x0
         until the first frame arrives (normal for live RTSP streams; the caller
         should probe the first frame to get real dimensions).
         """
@@ -178,33 +180,26 @@ class FrameSource:
         annotation range. Frames before temporal_roi[0] are warmup frames
         in the CDnet benchmark -- use this value as warmup_frames.
         """
-        # Determine where the actual image files are
         if (path / "input").is_dir():
             input_dir = path / "input"
             scene_dir = path
         else:
-            # We were given the input/ folder directly
             input_dir = path
             scene_dir = path.parent
 
-        # Read temporalROI.txt if available (CDnet valid frame range)
         roi_file = scene_dir / "temporalROI.txt"
         if roi_file.exists():
             parts = roi_file.read_text().strip().split()
             if len(parts) >= 2:
                 self.temporal_roi = (int(parts[0]), int(parts[1]))
 
-        # Collect and sort all image files in the input folder
-        IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp"}
-        self.frame_files = sorted([
-            f for f in input_dir.iterdir()
-            if f.suffix.lower() in IMAGE_EXTS
-        ])
+        self.frame_files = sorted(
+            f for f in input_dir.iterdir() if f.suffix.lower() in _IMAGE_EXTS
+        )
 
         if not self.frame_files:
             raise RuntimeError(f"No image files found in {input_dir}")
 
-        # Read first frame to get spatial dimensions
         first_frame = cv2.imread(str(self.frame_files[0]))
         if first_frame is None:
             raise RuntimeError(f"Cannot decode first frame: {self.frame_files[0]}")
@@ -342,32 +337,38 @@ class FrameSource:
         q = self._ff_queue
         if proc is None or proc.stdout is None or q is None or stop is None:
             return
+
+        def publish(item) -> None:
+            # Short timeouts so release() can stop us even when the consumer
+            # is paused or gone and the queue is full.
+            while not stop.is_set():
+                try:
+                    q.put(item, timeout=0.5)
+                    return
+                except queue.Full:
+                    continue
+
         try:
             while not stop.is_set():
-                buf = bytearray()
-                while len(buf) < need:
+                # Fill one buffer per frame in place and hand it over as is;
+                # _read_ffmpeg wraps it with np.frombuffer, so the frame bytes
+                # are copied once (pipe to buffer) instead of three times.
+                buf = bytearray(need)
+                view = memoryview(buf)
+                got = 0
+                while got < need:
                     if stop.is_set():
                         return
-                    chunk = proc.stdout.read(need - len(buf))
-                    if not chunk:
-                        q.put(None)       # EOF sentinel
+                    n = proc.stdout.readinto(view[got:])
+                    if not n:
+                        publish(None)       # EOF sentinel
                         return
-                    buf.extend(chunk)
-                # Publish the frame; block with a short timeout so a paused
-                # consumer plus a set() stop can still tear us down promptly.
-                while not stop.is_set():
-                    try:
-                        q.put(bytes(buf), timeout=0.5)
-                        break
-                    except queue.Full:
-                        continue
+                    got += n
+                publish(buf)
         except (OSError, ValueError):
-            try:
-                q.put(None)
-            except Exception:  # noqa: BLE001
-                pass
+            publish(None)
 
-    def _read_ffmpeg(self) -> Tuple[bool, Optional[np.ndarray]]:
+    def _read_ffmpeg(self) -> tuple[bool, np.ndarray | None]:
         """Return the next FFmpeg-decoded BGR frame, or (False, None) on end/stall."""
         q = self._ff_queue
         if q is None:
@@ -387,7 +388,7 @@ class FrameSource:
     # Public interface
     # ------------------------------------------------------------------
 
-    def read(self) -> Tuple[bool, Optional[np.ndarray]]:
+    def read(self) -> tuple[bool, np.ndarray | None]:
         """
         Read the next frame. Identical signature to cv2.VideoCapture.read().
 
@@ -403,15 +404,14 @@ class FrameSource:
             if frame is None:
                 return False, None
             return True, frame
-        elif self._ff_proc is not None:
+        if self._ff_proc is not None:
             return self._read_ffmpeg()
-        else:
-            # Return the open-time probe frame first (seek-free; see _init_video).
-            if self._pending_frame is not None:
-                frame = self._pending_frame
-                self._pending_frame = None
-                return True, frame
-            return self._cap.read()
+        # Return the open-time probe frame first (seek-free; see _init_video).
+        if self._pending_frame is not None:
+            frame = self._pending_frame
+            self._pending_frame = None
+            return True, frame
+        return self._cap.read()
 
     def release(self):
         """Release the underlying video capture / FFmpeg decode process."""

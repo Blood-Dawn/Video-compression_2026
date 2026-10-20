@@ -28,7 +28,7 @@ import threading
 import urllib.request
 import zipfile
 from pathlib import Path
-from typing import Callable, List, Optional
+from typing import Callable
 
 try:                                       # bundled-first ffmpeg resolution (TASK 2.3)
     from utils.ffmpeg import ffmpeg_path
@@ -73,27 +73,27 @@ def _platform_asset() -> tuple[str, str]:
 class RtspServerManager:
     """Download, start, stop, and monitor a local MediaMTX RTSP server."""
 
-    def __init__(self, tools_dir: Path, extra_search_dirs: Optional[List[Path]] = None):
+    def __init__(self, tools_dir: Path, extra_search_dirs: list[Path] | None = None):
         # tools_dir is the WRITABLE location downloads land in (under %APPDATA%
         # for an installed app). extra_search_dirs are additional read-only
         # places an existing binary may already live (the frozen bundle, the
         # legacy repo tools/ dir). FIX 5.
         self.tools_dir = tools_dir
-        self.extra_search_dirs: List[Path] = list(extra_search_dirs or [])
+        self.extra_search_dirs: list[Path] = list(extra_search_dirs or [])
         self._lock = threading.Lock()
 
         # subprocess handles
-        self._proc: Optional[subprocess.Popen] = None
-        self._push_proc: Optional[subprocess.Popen] = None
+        self._proc: subprocess.Popen | None = None
+        self._push_proc: subprocess.Popen | None = None
 
         # mutable state (all access under _lock)
         self._server_running: bool = False
         self._pushing: bool = False
-        self._push_source: Optional[str] = None
-        self._push_stream: Optional[str] = None
-        self._download_progress: Optional[str] = None  # "0%" … "100%" | "extracting" | "done"
-        self._download_error: Optional[str] = None
-        self._server_error: Optional[str] = None
+        self._push_source: str | None = None
+        self._push_stream: str | None = None
+        self._download_progress: str | None = None  # "0%" … "100%" | "extracting" | "done"
+        self._download_error: str | None = None
+        self._server_error: str | None = None
         self._downloading: bool = False
 
     # ── paths ─────────────────────────────────────────────────────────────────
@@ -109,7 +109,7 @@ class RtspServerManager:
         EXISTING binary is done by resolved_binary(), which checks more places."""
         return self.tools_dir / "mediamtx" / self._exe_name
 
-    def _search_locations(self) -> List[Path]:
+    def _search_locations(self) -> list[Path]:
         """Candidate mediamtx paths, in priority order (FIX 5).
 
         Order: the writable tools dir (where we download), then any extra search
@@ -117,13 +117,13 @@ class RtspServerManager:
         the executable, then PATH. The first one that exists wins.
         """
         exe = self._exe_name
-        cands: List[Path] = [self.tools_dir / "mediamtx" / exe]
+        cands: list[Path] = [self.tools_dir / "mediamtx" / exe]
         for d in self.extra_search_dirs:
             cands.append(Path(d) / "mediamtx" / exe)
             cands.append(Path(d) / exe)
 
         # Frozen bundle: next to the executable and the PyInstaller _MEIPASS root.
-        roots: List[Path] = []
+        roots: list[Path] = []
         if getattr(sys, "frozen", False):
             roots.append(Path(sys.executable).resolve().parent)
         meipass = getattr(sys, "_MEIPASS", None)
@@ -140,7 +140,7 @@ class RtspServerManager:
             cands.append(Path(on_path))
         return cands
 
-    def resolved_binary(self) -> Optional[Path]:
+    def resolved_binary(self) -> Path | None:
         """Return the first existing mediamtx binary across all locations, or None."""
         for p in self._search_locations():
             try:
@@ -155,7 +155,7 @@ class RtspServerManager:
 
     # ── download ──────────────────────────────────────────────────────────────
 
-    def start_download(self, progress_cb: Optional[Callable[[str], None]] = None) -> threading.Thread:
+    def start_download(self, progress_cb: Callable[[str], None] | None = None) -> threading.Thread:
         """Start the download in a daemon thread.  Returns the thread."""
         with self._lock:
             if self._downloading:
@@ -179,7 +179,7 @@ class RtspServerManager:
         t.start()
         return t
 
-    def _do_download(self, progress_cb: Optional[Callable[[str], None]]) -> None:
+    def _do_download(self, progress_cb: Callable[[str], None] | None) -> None:
         fname, _exe = _platform_asset()
         url = f"{_GITHUB_BASE}/{fname}"
         dest_dir = self.tools_dir / "mediamtx"
@@ -206,11 +206,16 @@ class RtspServerManager:
                 z.extractall(dest_dir)
         else:
             with tarfile.open(archive, "r:gz") as t:
-                t.extractall(dest_dir)
+                # The "data" filter refuses absolute paths, "../" members and
+                # links that escape dest_dir (CVE-2007-4559). Pythons older
+                # than 3.11.4 lack it and keep the old behavior.
+                if hasattr(tarfile, "data_filter"):
+                    t.extractall(dest_dir, filter="data")
+                else:
+                    t.extractall(dest_dir)
 
         archive.unlink(missing_ok=True)
 
-        # Make executable on Unix/macOS
         if platform.system() != "Windows":
             self.binary_path.chmod(0o755)
 

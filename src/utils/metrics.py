@@ -11,30 +11,20 @@ Metrics:
   - Foreground pixel coverage ratio (what fraction of pixels were "kept")
 """
 
-import cv2
-import numpy as np
 import os
 import sqlite3
 import time
 from pathlib import Path
 from typing import Callable, TypeVar
-from skimage.metrics import structural_similarity as ssim_fn
-from skimage.metrics import peak_signal_noise_ratio as psnr_fn
+
+import cv2
+import numpy as np
+
+# scikit-image is imported inside compute_psnr / compute_ssim, not here.
+# skimage.metrics drags in scipy.stats, which cost about 5.6 s of a cold
+# pipeline start even though the pipeline only needs compute_sharpness.
 
 T = TypeVar("T")
-
-"""
-Enhancement metrics
--------------------
-Note on "resolution" equivalence:
-  The enhancer does NOT change frame resolution. upscale_roi() runs SR then
-  downsamples back to the original bbox dimensions. So we measure *sharpness*
-  (Laplacian variance) instead of pixel count, and map it to a rough
-  perceptual label so log output reads like "480p → 720p".
-
-Laplacian variance thresholds were tuned against CDnet clips at various blur
-levels. Treat the labels as approximate. They convey trend, not ground truth.
-"""
 
 
 def compute_psnr(original: np.ndarray, compressed: np.ndarray) -> float:
@@ -45,16 +35,20 @@ def compute_psnr(original: np.ndarray, compressed: np.ndarray) -> float:
     if np.array_equal(original, compressed):
         return float("inf")
 
-    return float(psnr_fn(original, compressed, data_range=255))
+    from skimage.metrics import peak_signal_noise_ratio
+
+    return float(peak_signal_noise_ratio(original, compressed, data_range=255))
 
 
 def compute_ssim(original: np.ndarray, compressed: np.ndarray) -> float:
     """SSIM in [0, 1]. Higher is better. >0.95 is considered very good."""
     if original.shape != compressed.shape:
         raise ValueError("original and compressed must have the same shape")
+    from skimage.metrics import structural_similarity
+
     gray_orig = cv2.cvtColor(original, cv2.COLOR_BGR2GRAY)
     gray_comp = cv2.cvtColor(compressed, cv2.COLOR_BGR2GRAY)
-    return float(ssim_fn(gray_orig, gray_comp, data_range=255))
+    return float(structural_similarity(gray_orig, gray_comp, data_range=255))
 
 
 def compute_vmaf(reference_path: str, distorted_path: str,
@@ -74,6 +68,7 @@ def compute_vmaf(reference_path: str, distorted_path: str,
     order.
     """
     import json
+    import shutil
     import subprocess
     import tempfile
 
@@ -122,7 +117,6 @@ def compute_vmaf(reference_path: str, distorted_path: str,
     except (OSError, subprocess.SubprocessError, ValueError, KeyError):
         return None
     finally:
-        import shutil
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
@@ -153,6 +147,13 @@ def foreground_coverage(mask: np.ndarray) -> float:
     return fg / total if total > 0 else 0.0
 
 
+# The enhancer does not change frame resolution: upscale_roi() runs SR and
+# then downsamples back to the original bbox size. So enhancement is measured
+# as sharpness (Laplacian variance) and mapped to a rough perceptual label.
+# The thresholds were tuned against CDnet clips at several blur levels; they
+# show a trend, not ground truth.
+
+
 def compute_sharpness(frame: np.ndarray) -> float:
     """
     Laplacian variance (a measure of perceived sharpness).
@@ -164,7 +165,7 @@ def compute_sharpness(frame: np.ndarray) -> float:
         frame: BGR or grayscale numpy array.
 
     Returns:
-        Float ≥ 0. Returns 0.0 on an empty or single-pixel input.
+        Float >= 0. Returns 0.0 on an empty or single-pixel input.
     """
     if frame is None or frame.size == 0:
         return 0.0
@@ -227,11 +228,7 @@ def storage_savings_report(original_size_bytes: int, compressed_size_bytes: int)
     """
     Summarise storage savings from a single encode.
 
-    Uses compute_compression_ratio() for consistent handling of zero/negative
-    inputs. Same rules as the rest of this module.
-
-    Raises ValueError if either size is negative (delegated to
-    compute_compression_ratio).
+    Raises ValueError if either size is negative.
 
     Returns:
         Dict with keys: original_mb, compressed_mb, saved_mb,

@@ -24,10 +24,9 @@ from __future__ import annotations
 
 import threading
 from pathlib import Path
-from typing import Set
 
 _lock = threading.Lock()
-_active: Set[str] = set()
+_active: set[str] = set()
 
 
 def _key(path) -> str:
@@ -61,7 +60,7 @@ def is_active(path) -> bool:
         return _key(path) in _active
 
 
-def snapshot() -> Set[str]:
+def snapshot() -> set[str]:
     """A copy of the currently-active resolved paths."""
     with _lock:
         return set(_active)

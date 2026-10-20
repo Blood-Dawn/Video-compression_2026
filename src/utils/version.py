@@ -18,23 +18,16 @@ Author: Bloodawn (KheivenD), 2026-09-22 (Fall 3.17 - in-app update check).
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 # Keep this in sync with pyproject.toml's [project].version and
 # installer/svcs.iss's MyAppVersion. All three change together on release.
 #
-# IMPORTANT (found 2026-09-24): this must be bumped PAST a release's own
-# tag number the moment that release is cut, not just re-labelled with the
-# same number. v2.2.0-beta was tagged while this stayed at "2.2.0.dev1" -
-# same major.minor.patch, lower stage - so is_newer() correctly and
-# permanently reported that release as newer than the running dev build,
-# no matter how many times the exact same installer was reinstalled. The
-# comparison logic isn't the bug (see test_beta_release_is_newer_than_
-# current_dev_build in test_version.py, which documents that a same-number
-# beta SHOULD outrank a same-number dev build); the fix is always to move
-# this to the NEXT version number in dev stage right after tagging, e.g.
-# 2.2.0-beta -> "2.2.1.dev0" here. tests/test_version_consistency.py pins
-# this file's value and includes a tripwire against the last published tag.
+# Right after tagging a release, move this to the NEXT version in dev stage
+# (2.2.0-beta -> "2.2.1.dev0"). A same-number beta correctly outranks a
+# same-number dev build, so leaving this at the tagged number makes the
+# update check report that release as newer forever.
+# tests/test_version_consistency.py pins this value and trips on the last
+# published tag.
 APP_VERSION = "2.2.4.dev0"
 
 # Release-stage ordering for comparison purposes. Anything not recognized
@@ -74,7 +67,7 @@ def parse_version(raw: str) -> tuple[int, int, int, int, int]:
     )
 
 
-def is_newer(candidate: str, current: Optional[str] = None) -> bool:
+def is_newer(candidate: str, current: str | None = None) -> bool:
     """True if `candidate` (e.g. a GitHub release tag) is a newer version
     than `current` (defaults to this build's own APP_VERSION)."""
     return parse_version(candidate) > parse_version(current or APP_VERSION)

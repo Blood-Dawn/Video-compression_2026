@@ -21,11 +21,11 @@ Author: Bloodawn (KheivenD), Week 3 (3.7).
 
 from __future__ import annotations
 
+import functools
 import logging
 import re
 import time
 from pathlib import Path
-from typing import Optional
 
 try:
     from utils.paths import camera_frames_dir
@@ -44,12 +44,12 @@ PLACEHOLDER_WIDTH = 640
 PLACEHOLDER_HEIGHT = 360
 
 
-def _safe_id(camera_id: str) -> Optional[str]:
+def _safe_id(camera_id: str) -> str | None:
     camera_id = str(camera_id or "")
     return camera_id if _CAM_RE.match(camera_id) else None
 
 
-def frame_cache_path(camera_id: str) -> Optional[Path]:
+def frame_cache_path(camera_id: str) -> Path | None:
     """The on-disk path for one camera's cached still, or None if the id is unsafe."""
     safe = _safe_id(camera_id)
     if safe is None:
@@ -68,12 +68,13 @@ class ThrottledFrameWriter:
     def __init__(self, camera_id: str, interval_s: float = DEFAULT_WRITE_INTERVAL_S):
         self.camera_id = camera_id
         self.interval_s = max(0.5, float(interval_s))
-        self._last_write = 0.0
+        self._last_write: float | None = None
 
     def maybe_save(self, frame) -> bool:
         """Save ``frame`` (BGR ndarray) if the interval has elapsed. Best effort."""
-        now = time.time()
-        if now - self._last_write < self.interval_s:
+        # Monotonic, so a wall-clock jump backwards cannot stall the cache.
+        now = time.monotonic()
+        if self._last_write is not None and now - self._last_write < self.interval_s:
             return False
         self._last_write = now
         return save_frame(self.camera_id, frame)
@@ -102,7 +103,7 @@ def save_frame(camera_id: str, frame) -> bool:
         return False
 
 
-def load_frame_bytes(camera_id: str) -> Optional[bytes]:
+def load_frame_bytes(camera_id: str) -> bytes | None:
     """The cached JPEG bytes for one camera, or None if nothing is cached yet."""
     path = frame_cache_path(camera_id)
     if path is None or not path.exists():
@@ -114,6 +115,7 @@ def load_frame_bytes(camera_id: str) -> Optional[bytes]:
         return None
 
 
+@functools.lru_cache(maxsize=1)
 def placeholder_jpeg_bytes() -> bytes:
     """A solid black JPEG the same shape UIs can expect, for "nothing yet"."""
     import cv2

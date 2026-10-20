@@ -28,7 +28,6 @@ from __future__ import annotations
 import json
 import threading
 from pathlib import Path
-from typing import Optional
 
 try:
     from utils.paths import state_file
@@ -39,11 +38,11 @@ _FILE_NAME = "zones_config.json"
 _lock = threading.Lock()
 
 
-def _config_path(path_override: Optional[Path] = None) -> Path:
+def _config_path(path_override: Path | None = None) -> Path:
     return Path(path_override) if path_override else state_file(_FILE_NAME)
 
 
-def _load_all(path_override: Optional[Path] = None) -> dict:
+def _load_all(path_override: Path | None = None) -> dict:
     p = _config_path(path_override)
     try:
         return json.loads(p.read_text(encoding="utf-8"))
@@ -51,7 +50,7 @@ def _load_all(path_override: Optional[Path] = None) -> dict:
         return {}
 
 
-def load_camera_config(camera_id: str, path_override: Optional[Path] = None) -> dict:
+def load_camera_config(camera_id: str, path_override: Path | None = None) -> dict:
     """The stored config for one camera, with every key defaulted."""
     cfg = _load_all(path_override).get(str(camera_id), {})
     return {
@@ -64,7 +63,7 @@ def load_camera_config(camera_id: str, path_override: Optional[Path] = None) -> 
 
 
 def save_camera_config(camera_id: str, cfg: dict,
-                       path_override: Optional[Path] = None) -> dict:
+                       path_override: Path | None = None) -> dict:
     """Validate + persist one camera's config. Returns the stored shape.
 
     Geometry values are clamped into 0..1; junk entries are dropped rather

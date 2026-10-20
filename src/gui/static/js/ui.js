@@ -18,6 +18,9 @@ function setPipelineRunning(running) {
 
   pill.className = 'pill ' + (running ? 'running' : 'offline');
   text.textContent = running ? 'RUNNING' : 'OFFLINE';
+  pill.title = running
+    ? 'Compression pipeline is running.'
+    : 'Pipeline is idle: nothing is compressing right now. The web server itself is up. Press Start to begin.';
   btnStart.disabled = running;
   btnStop.disabled  = !running;
 

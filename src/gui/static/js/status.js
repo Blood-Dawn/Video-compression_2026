@@ -194,15 +194,18 @@ function _updateHeroStrip(data) {
   if (data.running) {
     dot.className   = 'home-hero-dot running';
     label.textContent = 'LIVE';
+    label.title = 'Compression pipeline is running.';
     label.style.color = 'var(--green)';
   } else if (data.error) {
     dot.className   = 'home-hero-dot error';
     label.textContent = 'ERROR';
+    label.title = 'The last run stopped with an error. See the error banner.';
     label.style.color = 'var(--red)';
   } else {
     dot.className   = 'home-hero-dot';
     label.textContent = 'OFFLINE';
     label.style.color = 'var(--text-dim)';
+    label.title = 'Pipeline is idle: nothing is compressing right now. The web server itself is up. Press Start to begin.';
   }
 
   if (data.config) {
@@ -222,7 +225,7 @@ function _updateHeroStrip(data) {
   } else if (data.running) {
     upChip.textContent = 'Starting…';
   } else {
-    upChip.textContent = 'Uptime:  - ';
+    upChip.textContent = 'Idle, press Start to begin';
   }
 }
 

@@ -49,6 +49,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -490,7 +494,13 @@ private fun RunningView(s: CompressState, vm: CompressViewModel) {
         SvcsPanel(modifier = Modifier.fillMaxWidth(), accent = SvcsAmber) {
             SvcsStatusPill(if (s.analyzing) "Checking for activity" else "Encoding", SvcsAmber, live = true)
             Spacer(Modifier.height(14.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                modifier = Modifier.clearAndSetSemantics {
+                    contentDescription = if (s.analyzing) "Checking the video for activity" else "Compression progress, $p percent"
+                    if (!s.analyzing) progressBarRangeInfo = ProgressBarRangeInfo(p / 100f, 0f..1f)
+                },
+            ) {
                 Text(
                     if (s.analyzing) "--" else "$p",
                     fontFamily = SvcsDisplay,

@@ -2300,7 +2300,7 @@ header{min-height:56px;height:auto}
       {% endif %}
     </div>
     <div class="header-right">
-<div id="status-pill" class="pill offline" title="Pipeline is idle: nothing is compressing right now. The web server itself is up. Press Start to begin.">
+<div id="status-pill" role="status" aria-live="polite" class="pill offline" title="Pipeline is idle: nothing is compressing right now. The web server itself is up. Press Start to begin.">
         <span class="pill-dot"></span>
         <span id="status-text">OFFLINE</span>
       </div>
@@ -3476,7 +3476,7 @@ header{min-height:56px;height:auto}
 
         <!-- Scrollable content body -->
         <div class="home-body" id="content-top">
-          <div id="error-banner"></div>
+          <div id="error-banner" role="alert"></div>
 
           <div class="stats-grid">
             <div class="stat-card">
@@ -4135,7 +4135,7 @@ header{min-height:56px;height:auto}
 </div>
 
 <!-- ═══════════════════ HELP MODAL ═══════════════════ -->
-<div class="help-overlay" id="help-overlay" onclick="_helpOverlayClick(event)">
+<div class="help-overlay" id="help-overlay" role="dialog" aria-modal="true" aria-label="Help" onclick="_helpOverlayClick(event)">
   <div class="help-modal">
     <div class="help-modal-header">
       <span class="help-modal-title">SVCS Help &amp; Reference</span>
@@ -4465,7 +4465,7 @@ header{min-height:56px;height:auto}
 </div><!-- /help-overlay -->
 
 <!-- ── Decrypt Modal ──────────────────────────────────────────────────────── -->
-<div class="help-overlay" id="decrypt-overlay" onclick="_decryptOverlayClick(event)">
+<div class="help-overlay" id="decrypt-overlay" role="dialog" aria-modal="true" aria-label="Decrypt a video" onclick="_decryptOverlayClick(event)">
   <div class="help-modal" style="max-width:400px;">
     <div class="help-header">
       <span> DECRYPT SEGMENT</span>
@@ -4514,7 +4514,7 @@ header{min-height:56px;height:auto}
        files; load order matches the original single-script execution order, so
        behavior is identical. strings.js (i18n catalog) loads first. -->
   <!-- First-run Setup overlay (FIX 1): explicit destination choice, no cloud default -->
-  <div id="setup-overlay" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(8,9,12,0.86);align-items:center;justify-content:center;">
+  <div id="setup-overlay" role="dialog" aria-modal="true" aria-label="Welcome to SVCS" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(8,9,12,0.86);align-items:center;justify-content:center;">
     <div style="background:var(--panel,#181b22);border:1px solid var(--border,#2a2f3a);border-radius:10px;max-width:560px;width:calc(100% - 40px);padding:22px 24px;box-shadow:0 12px 40px rgba(0,0,0,.5);">
       <h2 style="margin:0 0 6px;font-size:1.2rem;">Welcome to SVCS</h2>
       <p style="margin:0 0 16px;color:var(--text-dim,#9aa3b2);font-size:0.8rem;line-height:1.5;">
@@ -4542,7 +4542,7 @@ header{min-height:56px;height:auto}
 
   <!-- Library folder browser (R2.3 follow-up): server-side navigator that works
        in the frozen app and remotely, unlike a native OS dialog. -->
-  <div id="library-browse-modal" style="display:none;position:fixed;inset:0;z-index:10001;background:rgba(8,9,12,0.86);align-items:center;justify-content:center;">
+  <div id="library-browse-modal" role="dialog" aria-modal="true" aria-label="Browse for a folder" style="display:none;position:fixed;inset:0;z-index:10001;background:rgba(8,9,12,0.86);align-items:center;justify-content:center;">
     <div style="background:var(--panel,#181b22);border:1px solid var(--border,#2a2f3a);border-radius:10px;max-width:600px;width:calc(100% - 40px);padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.5);">
       <h3 style="margin:0 0 10px;font-size:1.05rem;">Choose a folder</h3>
       <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.5rem;">
@@ -4611,7 +4611,7 @@ header{min-height:56px;height:auto}
 </div>
 
 <!-- AI Plate Reader modal - Bloodawn (KheivenD), 2026-05-02 -->
-<div id="plate-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center;">
+<div id="plate-modal" role="dialog" aria-modal="true" aria-label="Plate details" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center;">
   <div style="background:var(--surface1);border:1px solid var(--border);border-radius:6px;width:min(640px,90vw);max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.45);">
     <div class="panel-header" style="padding:0.5rem 0.75rem;">
       <span class="panel-title" style="font-family:var(--mono);font-size: 0.75rem;color:var(--teal);">AI PLATE READER</span>

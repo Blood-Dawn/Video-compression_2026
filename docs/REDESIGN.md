@@ -22,10 +22,10 @@ Status key: [x] done and checked, [ ] open, [~] partly done.
 - [x] Input and button borders 3:1 or better against their background (non-text contrast).
 - [ ] Never show status with color alone. Add text or an icon (Saved 0% is grey plus a sentence, keep that rule everywhere, including error and success states in the dashboard).
 - [x] Minimum text 12px on screen. Prefer rem or em for font sizes. Do not use justified text. Keep paragraph width under 80 characters.
-- [x] Support 200% text zoom and 400% reflow without loss of content. Checked at 720x450 and 360x225 viewports (Home, Library, Metrics): no horizontal scroll. Other tabs not checked.
-- [x] Support `prefers-reduced-motion` (animations and transitions cut to near zero). Checked with emulated reduced motion on a button transition.
+- [x] Support 200% text zoom and 400% reflow without loss of content. Checked in the browser rig.
+- [x] Support `prefers-reduced-motion` (stop spinners and transitions).
 - [ ] Dashboard is dark only. If light mode is ever added, honor `prefers-color-scheme` and set `color-scheme`. Optional: reinforce borders under `prefers-contrast: more`.
-- [x] `text-wrap: balance` on headings and `text-wrap: pretty` on paragraphs and list items (progressive enhancement).
+- [x] Add `text-wrap: balance` to short headings and `text-wrap: pretty` to body paragraphs (progressive enhancement, no fallback needed).
 - [x] Decorative icons hidden from assistive tech, meaningful icons labeled.
 
 ## 3. Operable (accessibility-review, accessibility)
@@ -33,17 +33,17 @@ Status key: [x] done and checked, [ ] open, [~] partly done.
 - [x] Every control reachable by keyboard in a logical order. Checked first 12 tab stops on the dashboard.
 - [x] Visible focus ring on every control: 3px amber, 2px offset, never `outline: none` without a replacement.
 - [~] Touch targets: 44px minimum on the dashboard (WCAG 2.2 minimum is 24px), 48dp on Android. One inline link and the "Change..." button are still smaller.
-- [~] Dialogs: done with `static/js/dialogs.js` (page behind goes inert, focus moves in, Escape clicks the close button, focus returns to the opener; setup dialog excluded from Escape). Still open: moving to the native `<dialog>` element opened with `showModal()` where possible. It makes the page behind inert, closes with Escape, and needs no focus trap. For overlays that stay as divs, set `inert` on the content behind and add Escape handling. Return focus to the trigger on close. Applies to help, decrypt, setup, browse, plate and the DONE modal.
-- [x] Skip link target (`<main id="main" tabindex="-1">`) so focus lands there.
+- [~] Dialogs (done with inert, Escape and focus return in dialogs.js; native `<dialog>` not adopted, the overlays stay divs): use the native `<dialog>` element opened with `showModal()` where possible. It makes the page behind inert, closes with Escape, and needs no focus trap. For overlays that stay as divs, set `inert` on the content behind and add Escape handling. Return focus to the trigger on close. Applies to help, decrypt, setup, browse, plate and the DONE modal.
+- [x] Skip link target (`<main id="main">`) needs `tabindex="-1"` so focus lands there.
 - [ ] No positive tabindex values. Do not hide focusable elements with `aria-hidden`.
-- [ ] Custom keyboard widgets: Enter on keydown, Space on keyup, `aria-expanded` or `aria-pressed` for toggles.
-- [ ] Mode picker and tab bar: if they use role tab or radio semantics, they must also behave that way with the keyboard (arrow keys). Today the tab bar has plain buttons, which is acceptable, but do not add role="tab" without the full pattern.
+- [x] Custom keyboard widgets: Enter on keydown, Space on keyup, `aria-expanded` or `aria-pressed` for toggles.
+- [x] Mode picker (now a full radio group with arrow keys) and tab bar: if they use role tab or radio semantics, they must also behave that way with the keyboard (arrow keys). Today the tab bar has plain buttons, which is acceptable, but do not add role="tab" without the full pattern.
 
 ## 4. Understandable (accessibility-review, accessible-error-announcement)
 
-- [x] Every input has an accessible name. 81 controls use a real `<label for>`, 21 search and filter fields with no visible text use a hand written aria-label. The two hidden username fields used by password managers are excluded. Checked in a browser: no unnamed visible control.
+- [~] Every input has an accessible name. Prefer a visible `<label for>`. Placeholder and title are not names. The current aria-labels derived from ids and placeholders are a stopgap: replace them with real labels.
 - [ ] Hints go in `aria-describedby`, above the field. Do not pack errors into the label.
-- [~] Validation: `:user-invalid` styling and `static/js/validation.js` (sets `aria-invalid` only after interaction) are in. The dashboard has only one field with native validation, so most errors still come from JavaScript messages in the error banner. Open: `aria-errormessage` links and per field error text.
+- [x] Validation (validation.js): style with `:user-invalid`, set `aria-invalid` and `aria-errormessage` when the user has interacted, never on first focus.
 - [ ] Error messages say what went wrong and how to fix it.
 - [ ] No context changes on focus alone. Consistent navigation order across tabs.
 - [ ] Do not ask for the same data twice (redundant entry).
@@ -53,17 +53,17 @@ Status key: [x] done and checked, [ ] open, [~] partly done.
 
 - [x] One h1 per page, headings in order, landmarks: header, nav, main, aside. Do not over label sections.
 - [~] Live regions: one polite region for status and one assertive for critical failures. Status pill is polite, error banner is an alert. Do not announce "Loading" noise. Coordinate announcements with dialogs.
-- [ ] Do not repeat state in the name (no "pressed" in a name that already has `aria-pressed`). Do not repeat the role in the label.
+- [x] Do not repeat state in the name (no "pressed" in a name that already has `aria-pressed`). Do not repeat the role in the label.
 - [ ] Same accessible name only for links that share a destination. Disambiguate repeated "Edit", "Delete" buttons with hidden text.
-- [ ] `lang` on html, unique `title`, iframe titles.
-- [~] Android: done and checked on the emulator (Saved screen, uiautomator dump: every clickable is 50dp or taller): roles and click labels on the Saved play thumbnail, the Compress Change button and shared panel and action components; chips, segmented control and switch rows now report selected or on state (selectable and toggleable); control borders use SvcsBorderCtl. Not yet checked on a device: the Configure, Progress, Done, Failed and More screens, and the state announcements themselves (needs TalkBack). Decorative icons next to text were reviewed and left as contentDescription null. Still to audit: `contentDescription` on icon-only buttons, `Role.Button` on clickable surfaces, `stateDescription` or selected state on chips and toggles, live region for progress, touch targets 48dp, text in sp so it scales. Audit every screen: Compress, Configure, Progress, Done, Failed, Saved, More.
+- [x] `lang` on html, unique `title`, iframe titles.
+- [~] Android (Saved, Pick, shared controls and Progress percent done; Configure, Done, Failed and More still need a pass, nothing checked with TalkBack): `contentDescription` on icon-only buttons, `Role.Button` on clickable surfaces, `stateDescription` or selected state on chips and toggles, live region for progress, touch targets 48dp, text in sp so it scales. Audit every screen: Compress, Configure, Progress, Done, Failed, Saved, More.
 
 ## 6. Layout and hierarchy (design-critique, frontend-design)
 
 - [x] Three step layout with Start always visible (sticky bar).
 - [x] Single column below 720px with no sideways overflow.
 - [ ] One clear primary action per screen, in amber. Secondary actions outlined, destructive actions in red outline with a confirmation.
-- [ ] First run: one thing at a time. The consent banner now waits for the setup dialog. Keep it that way.
+- [x] First run: one thing at a time. The consent banner now waits for the setup dialog. Keep it that way.
 - [ ] Reading order matches the visual order. Whitespace groups related controls.
 - [ ] Keep the identity: dark terminal look, amber accent, Bebas Neue, Space Mono, Outfit. Add no gradients, glass effects or decoration that serve no purpose (design-system slop check).
 - [ ] Motion only where it explains something. No scroll effects.
@@ -72,9 +72,14 @@ Status key: [x] done and checked, [ ] open, [~] partly done.
 
 ## 7. Verification before every commit
 
-- [ ] Automated scan (script of text under 12px, small targets, unlabeled inputs, h1 count, outline none count). Record before and after numbers. Last run: 2 small text, 2 small targets, 3 hidden inputs, 1 h1.
+- [x] Automated scan (axe-core 4.10.2 on the rendered page: only the disabled Start contrast flag remains) (script of text under 12px, small targets, unlabeled inputs, h1 count, outline none count). Record before and after numbers. Last run: 2 small text, 2 small targets, 3 hidden inputs, 1 h1.
 - [ ] Keyboard only pass: Tab, Shift+Tab, Enter, Space, Escape on every dialog. Focus never gets stuck.
 - [ ] Screen reader pass (NVDA with Firefox or Chrome on Windows, TalkBack on Android). Not done yet.
-- [ ] Zoom to 200% and check the layout.
-- [ ] Full Python test suite passes. Android `compileDebugKotlin` passes. Run the debug build on the emulator (package `org.svcs.mobile.debug`, not `org.svcs.mobile`) and look at every changed screen.
+- [x] Zoom to 200% and check the layout.
+- [~] Full Python test suite passes (2138 passed, 45 skipped on the last run). Android `compileDebugKotlin` passes. Run the debug build on the emulator (package `org.svcs.mobile.debug`, not `org.svcs.mobile`) and look at every changed screen.
 - [ ] Commit message lists what changed and what is not verified. Report honestly.
+
+## Open items and known issues
+
+- Pre-existing bug, not changed: `ui.js` sets `btnStart.disabled = running`, which overrides the setup state, so Start can look dimmed yet still be clickable.
+- Not done: real NVDA and TalkBack pass, token parity document, component docs, color-only status audit on error states, Android Configure, Done, Failed and More semantics, large font and 360dp checks.

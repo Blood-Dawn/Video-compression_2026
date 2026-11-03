@@ -21,7 +21,11 @@ function setPipelineRunning(running) {
   pill.title = running
     ? 'Compression pipeline is running.'
     : 'Pipeline is idle: nothing is compressing right now. The web server itself is up. Press Start to begin.';
-  btnStart.disabled = running;
+  // Start stays locked until Setup is complete, even when the pipeline is idle.
+  const setupDone = !!(window._svcsSetup && window._svcsSetup.complete);
+  btnStart.disabled = running || !setupDone;
+  btnStart.style.opacity = btnStart.disabled ? "0.5" : "";
+  btnStart.style.pointerEvents = btnStart.disabled ? "none" : "";
   btnStop.disabled  = !running;
 
   // Disable config fields while running

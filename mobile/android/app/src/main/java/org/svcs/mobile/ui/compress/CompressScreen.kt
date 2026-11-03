@@ -552,7 +552,12 @@ private fun DoneView(s: CompressState, vm: CompressViewModel) {
             SvcsStatusPill("Done", SvcsGreen)
             Spacer(Modifier.height(12.dp))
             if (known) {
-                Row(verticalAlignment = Alignment.Bottom) {
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                    modifier = Modifier.clearAndSetSemantics {
+                        contentDescription = if (savedPct >= 0) "$savedPct percent smaller" else "${-savedPct} percent larger"
+                    },
+                ) {
                     Text(
                         if (savedPct >= 0) "-$savedPct%" else "+${-savedPct}%",
                         fontFamily = SvcsDisplay,
@@ -626,7 +631,7 @@ private fun DoneView(s: CompressState, vm: CompressViewModel) {
 
 @Composable
 private fun SizeBar(label: String, bytes: Long, fraction: Float, color: Color) {
-    Column {
+    Column(Modifier.clearAndSetSemantics { contentDescription = "$label, ${humanBytes(bytes)}" }) {
         Row {
             Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = SvcsTextDim, modifier = Modifier.weight(1f))
             Text(humanBytes(bytes), fontFamily = SvcsMono, fontSize = 12.sp, color = SvcsTextBright)

@@ -88,7 +88,7 @@ fun SvcsPanel(
             .clip(Sharp)
             .background(SvcsSurface2)
             .border(1.dp, SvcsBorder, Sharp)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+            .then(if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier),
     ) {
         if (accent != null) {
             Box(Modifier.fillMaxWidth().height(2.dp).background(accent.copy(alpha = 0.6f)))
@@ -119,8 +119,8 @@ fun SvcsSectionLabel(
                 color = SvcsAmber,
                 modifier = Modifier
                     .clip(Sharp)
-                    .clickable(onClick = onAction)
-                    .padding(horizontal = 6.dp, vertical = 8.dp),
+                    .clickable(role = Role.Button, onClick = onAction)
+                    .padding(horizontal = 10.dp, vertical = 14.dp),
             )
         }
     }

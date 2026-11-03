@@ -2300,7 +2300,7 @@ header{min-height:56px;height:auto}
       {% endif %}
     </div>
     <div class="header-right">
-<div id="status-pill" role="status" aria-live="polite" class="pill offline" title="Pipeline is idle: nothing is compressing right now. The web server itself is up. Press Start to begin.">
+<div id="status-pill" class="pill offline" title="Pipeline is idle: nothing is compressing right now. The web server itself is up. Press Start to begin." role="status" aria-live="polite">
         <span class="pill-dot"></span>
         <span id="status-text">OFFLINE</span>
       </div>
@@ -2325,7 +2325,7 @@ header{min-height:56px;height:auto}
   </header>
 
   <!-- ═══════════════════ MAIN ═══════════════════ -->
-  <main id="main">
+  <main id="main" tabindex="-1">
 
     <!-- ════════ SIDEBAR - Configuration ════════ -->
     <aside class="sidebar" aria-label="Compression setup">
@@ -4590,6 +4590,7 @@ header{min-height:56px;height:auto}
   <script src="{{ url_for('static', filename='js/webhook.js') }}"></script>
   <script src="{{ url_for('static', filename='js/devices.js') }}"></script>
   <script src="{{ url_for('static', filename='js/timelapse.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/dialogs.js') }}"></script>
 
 <!-- Global server-activity drawer: visible on every tab (not just Home),
      fed by the same /api/status poll and /api/logs SSE stream that already

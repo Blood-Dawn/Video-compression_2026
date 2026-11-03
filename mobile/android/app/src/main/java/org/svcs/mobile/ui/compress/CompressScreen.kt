@@ -405,8 +405,8 @@ private fun SourceCard(s: CompressState, onChange: () -> Unit) {
                 color = SvcsAmber,
                 modifier = Modifier
                     .clip(RoundedCornerShape(2.dp))
-                    .clickable(onClick = onChange)
-                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                    .clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "Change video", onClick = onChange)
+                    .padding(horizontal = 12.dp, vertical = 16.dp),
             )
         }
     }

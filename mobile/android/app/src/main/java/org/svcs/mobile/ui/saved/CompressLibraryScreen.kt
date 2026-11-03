@@ -285,7 +285,7 @@ private fun LibraryRow(
 
     SvcsPanel(modifier = Modifier.fillMaxWidth(), contentPadding = 10.dp) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.clickable(onClick = onPlay)) {
+            Box(Modifier.clickable(role = Role.Button, onClickLabel = "Play video", onClick = onPlay)) {
                 VideoThumbnail(Uri.parse(record.outputUri), Modifier.size(84.dp))
                 Box(
                     Modifier.align(Alignment.Center).size(30.dp).clip(RoundedCornerShape(50)).background(Color(0x99000000)),

@@ -152,7 +152,7 @@ fun CompressLibraryScreen(vm: CompressLibraryViewModel) {
                 shape = RoundedCornerShape(2.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = SvcsAmber,
-                    unfocusedBorderColor = SvcsBorder,
+                    unfocusedBorderColor = SvcsBorderCtl,
                     cursorColor = SvcsAmber,
                 ),
                 modifier = Modifier.fillMaxWidth(),

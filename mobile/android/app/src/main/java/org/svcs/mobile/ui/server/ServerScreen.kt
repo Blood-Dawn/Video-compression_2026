@@ -45,6 +45,8 @@ import org.svcs.mobile.ui.theme.SvcsAmber
 import org.svcs.mobile.ui.theme.SvcsBorder
 import org.svcs.mobile.ui.theme.SvcsSurface
 import org.svcs.mobile.ui.theme.SvcsTextDim
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.layout.heightIn
 
 /** The Server Mode sections, shown as top tabs inside the SERVER tab. */
 enum class ServerTab(val label: String, val icon: ImageVector) {
@@ -133,7 +135,8 @@ private fun ServerTabStrip(tabs: List<ServerTab>, current: ServerTab, onSelect: 
                 val on = t == current
                 Column(
                     Modifier
-                        .clickable(role = Role.Tab) { onSelect(t) }
+                        .selectable(selected = on, role = Role.Tab, onClick = { onSelect(t) })
+                        .heightIn(min = 48.dp)
                         .padding(horizontal = 10.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {

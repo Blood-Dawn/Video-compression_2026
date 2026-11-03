@@ -77,6 +77,7 @@ import org.svcs.mobile.ui.theme.SvcsAmber
 import org.svcs.mobile.ui.theme.SvcsAmberContainer
 import org.svcs.mobile.ui.theme.SvcsBg
 import org.svcs.mobile.ui.theme.SvcsBorder
+import org.svcs.mobile.ui.theme.SvcsBorderCtl
 import org.svcs.mobile.ui.theme.SvcsBorderBright
 import org.svcs.mobile.ui.theme.SvcsDisplay
 import org.svcs.mobile.ui.theme.SvcsGreen
@@ -91,6 +92,8 @@ import org.svcs.mobile.ui.VideoIntents
 import org.svcs.mobile.ui.clock
 import org.svcs.mobile.ui.decimalMb
 import org.svcs.mobile.ui.humanBytes
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 
 /**
  * COMPRESS tab (Fall roadmap Phase 1): the standalone, server-free compressor.
@@ -151,7 +154,7 @@ fun CompressScreen(vm: CompressViewModel) {
 @Composable
 private fun ScreenHeader(title: String, subtitle: String) {
     Column(Modifier.fillMaxWidth()) {
-        Text(title, style = MaterialTheme.typography.titleLarge, color = SvcsTextBright)
+        Text(title, style = MaterialTheme.typography.titleLarge, color = SvcsTextBright, modifier = Modifier.semantics { heading() })
         Text(subtitle.uppercase(), style = MaterialTheme.typography.labelSmall, color = SvcsTextDim)
     }
 }
@@ -325,7 +328,7 @@ private fun ConfigureView(s: CompressState, vm: CompressViewModel, onPick: () ->
                     shape = RoundedCornerShape(2.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = SvcsAmber,
-                        unfocusedBorderColor = SvcsBorder,
+                        unfocusedBorderColor = SvcsBorderCtl,
                         focusedLabelColor = SvcsAmber,
                         cursorColor = SvcsAmber,
                     ),

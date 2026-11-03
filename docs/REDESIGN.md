@@ -56,7 +56,7 @@ Status key: [x] done and checked, [ ] open, [~] partly done.
 - [x] Do not repeat state in the name (no "pressed" in a name that already has `aria-pressed`). Do not repeat the role in the label.
 - [ ] Same accessible name only for links that share a destination. Disambiguate repeated "Edit", "Delete" buttons with hidden text.
 - [x] `lang` on html, unique `title`, iframe titles.
-- [~] Android (Saved, Pick, shared controls and Progress percent done; Configure, Done, Failed and More still need a pass, nothing checked with TalkBack): `contentDescription` on icon-only buttons, `Role.Button` on clickable surfaces, `stateDescription` or selected state on chips and toggles, live region for progress, touch targets 48dp, text in sp so it scales. Audit every screen: Compress, Configure, Progress, Done, Failed, Saved, More.
+- [~] Android (all screens now have headings, selected states, 48dp targets and spoken progress and result values; Compress, Saved and More checked on the emulator by dump and screenshot; server Library and Events screens changed but not seen on a device; nothing checked with TalkBack): `contentDescription` on icon-only buttons, `Role.Button` on clickable surfaces, `stateDescription` or selected state on chips and toggles, live region for progress, touch targets 48dp, text in sp so it scales. Audit every screen: Compress, Configure, Progress, Done, Failed, Saved, More.
 
 ## 6. Layout and hierarchy (design-critique, frontend-design)
 
@@ -81,5 +81,5 @@ Status key: [x] done and checked, [ ] open, [~] partly done.
 
 ## Open items and known issues
 
-- Pre-existing bug, not changed: `ui.js` sets `btnStart.disabled = running`, which overrides the setup state, so Start can look dimmed yet still be clickable.
-- Not done: real NVDA and TalkBack pass, token parity document, component docs, color-only status audit on error states, Android Configure, Done, Failed and More semantics, large font and 360dp checks.
+- Fixed: Start button now stays locked until Setup is complete and while running (ui.js and setup.js).
+- Not done: real NVDA and TalkBack pass, token parity document, component docs, color-only status audit on error states, large font and 360dp checks on Android, server Library and Events on a device.

@@ -22,10 +22,10 @@ Status key: [x] done and checked, [ ] open, [~] partly done.
 - [x] Input and button borders 3:1 or better against their background (non-text contrast).
 - [ ] Never show status with color alone. Add text or an icon (Saved 0% is grey plus a sentence, keep that rule everywhere, including error and success states in the dashboard).
 - [x] Minimum text 12px on screen. Prefer rem or em for font sizes. Do not use justified text. Keep paragraph width under 80 characters.
-- [ ] Support 200% text zoom and 400% reflow without loss of content. Not tested yet.
-- [ ] Support `prefers-reduced-motion` (stop spinners and transitions). Not checked.
+- [x] Support 200% text zoom and 400% reflow without loss of content. Checked at 720x450 and 360x225 viewports (Home, Library, Metrics): no horizontal scroll. Other tabs not checked.
+- [x] Support `prefers-reduced-motion` (animations and transitions cut to near zero). Checked with emulated reduced motion on a button transition.
 - [ ] Dashboard is dark only. If light mode is ever added, honor `prefers-color-scheme` and set `color-scheme`. Optional: reinforce borders under `prefers-contrast: more`.
-- [ ] Add `text-wrap: balance` to short headings and `text-wrap: pretty` to body paragraphs (progressive enhancement, no fallback needed).
+- [x] `text-wrap: balance` on headings and `text-wrap: pretty` on paragraphs and list items (progressive enhancement).
 - [x] Decorative icons hidden from assistive tech, meaningful icons labeled.
 
 ## 3. Operable (accessibility-review, accessibility)
@@ -41,9 +41,9 @@ Status key: [x] done and checked, [ ] open, [~] partly done.
 
 ## 4. Understandable (accessibility-review, accessible-error-announcement)
 
-- [~] Every input has an accessible name. Prefer a visible `<label for>`. Placeholder and title are not names. The current aria-labels derived from ids and placeholders are a stopgap: replace them with real labels.
+- [x] Every input has an accessible name. 81 controls use a real `<label for>`, 21 search and filter fields with no visible text use a hand written aria-label. The two hidden username fields used by password managers are excluded. Checked in a browser: no unnamed visible control.
 - [ ] Hints go in `aria-describedby`, above the field. Do not pack errors into the label.
-- [ ] Validation: style with `:user-invalid`, set `aria-invalid` and `aria-errormessage` when the user has interacted, never on first focus.
+- [~] Validation: `:user-invalid` styling and `static/js/validation.js` (sets `aria-invalid` only after interaction) are in. The dashboard has only one field with native validation, so most errors still come from JavaScript messages in the error banner. Open: `aria-errormessage` links and per field error text.
 - [ ] Error messages say what went wrong and how to fix it.
 - [ ] No context changes on focus alone. Consistent navigation order across tabs.
 - [ ] Do not ask for the same data twice (redundant entry).

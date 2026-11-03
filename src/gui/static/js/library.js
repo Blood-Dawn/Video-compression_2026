@@ -52,8 +52,8 @@ function setLibraryKind(kind) {
     const btn = document.getElementById("library-kind-" + k);
     if (!btn) return;
     const on = k === window._svcsLibrary.kind;
-    btn.style.color = on ? "#ff9e5e" : "";
-    btn.style.borderColor = on ? "#ff9e5e" : "";
+    btn.style.color = on ? "var(--tab-library)" : "";
+    btn.style.borderColor = on ? "var(--tab-library)" : "";
   });
   filterLibrary();
 }
@@ -118,7 +118,7 @@ function _renderLibrary(list) {
     // R3.1d: tag compressed outputs, and mark originals that already have one.
     let tag = "";
     if (v.kind === "compressed") {
-      tag = '<span style="display:inline-block;font-size:0.75rem;font-weight:700;color:#ff5fa2;border:1px solid #ff5fa2;border-radius:3px;padding:0 0.25rem;margin-right:0.3rem;">COMPRESSED</span>';
+      tag = '<span style="display:inline-block;font-size:0.75rem;font-weight:700;color:var(--tab-autocompress);border:1px solid var(--tab-autocompress);border-radius:3px;padding:0 0.25rem;margin-right:0.3rem;">COMPRESSED</span>';
     } else if (v.compressed) {
       tag = '<span title="A compressed version exists" style="color:var(--green,#39d353);margin-right:0.3rem;">&#10003;</span>';
     }

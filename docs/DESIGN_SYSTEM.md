@@ -4,7 +4,7 @@ Companion to `docs/REDESIGN.md`. This file records the tokens and the reusable c
 
 ## Token parity
 
-The values below are the same on both platforms. The dashboard names are CSS variables in the `:root` block of `index.html`. The Android names are vals in `ui/theme/Color.kt`.
+The values below are the dark theme, and they are the same on both platforms. Light values are in the Light theme section. The dashboard names are CSS variables in the `:root` block of `index.html`. The Android names are vals in `ui/theme/Color.kt`.
 
 | Role | Dashboard | Android | Value |
 | --- | --- | --- | --- |
@@ -70,3 +70,22 @@ Android `CompressLibraryScreen` card. Thumbnail (tap to play, labelled "Play vid
 ## Status messages
 
 Result and error text on the dashboard (encryption, streaming, upload, drive, keygen) is colored green or red, and the words say what happened. Those containers are polite live regions (`widgets.js`) so the message is announced. Critical failures use `#error-banner`, which is `role="alert"`.
+
+## Light theme
+
+Both apps support a light theme. Dark is still the home of the design, and the dashboard stays dark unless the system or the user asks otherwise.
+
+Dashboard: `static/js/theme.js` (loaded in the head so the page does not flash) sets `html[data-theme]` from the saved choice, or from the system setting when there is none. The header button flips it and remembers the choice in `localStorage` (per browser). The light values are in one block at the end of the template's `<style>`, under `html[data-theme="light"]`. Android: the app follows the system light or dark setting. `Color.kt` holds `SvcsDarkPalette` and `SvcsLightPalette`, and every `Svcs...` name is a composable getter that reads the active palette, so those names can only be read from composable code.
+
+Light values (the same on both platforms):
+
+| Role | Value | Note |
+| --- | --- | --- |
+| Background, surfaces | #f3f6fa, #ffffff, #eaf0f7, #e1e9f2 | |
+| Border, bright border, control border | #b9c8da, #9db2cb, #587394 | control border 4:1 or better |
+| Primary accent | #8f5400 | darker than dark mode's #ffb900 so it reads as text on white; buttons use white text |
+| Accent text, green, teal, yellow, purple, red | #7d4a00, #09694a, #08706a, #6f5600, #6a3fc2, #b71c1c | each 4.8:1 or better on all four surfaces |
+| Orange (Android warnings), blue (Android) | #a34700, #0b5aa8 | |
+| Text, dim text, bright text | #14233a, #475a73, #0a1626 | dim text 5.7:1 or better |
+
+Dashboard per-tab accents are tokens too (`--tab-library`, `--tab-autocompress`, `--tab-tools`) so JS and CSS never hardcode them. Use the tokens in new code. Hardcoded colors left on purpose: video player backgrounds (#000), modal scrims, and the vehicle color swatches (data, not theme). The metrics chart reads its colors when it is built, so a theme change shows on the next time the METRICS tab opens.

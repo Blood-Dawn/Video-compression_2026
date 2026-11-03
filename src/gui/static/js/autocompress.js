@@ -180,7 +180,7 @@ function _acRenderStatus(st) {
   const badge = document.getElementById("ac-state-badge");
   if (badge) {
     badge.textContent = _acRunning ? "ON" : "OFF";
-    badge.style.color = _acRunning ? "#ff5fa2" : "var(--text-dim)";
+    badge.style.color = _acRunning ? "var(--tab-autocompress)" : "var(--text-dim)";
   }
   const btn = document.getElementById("ac-toggle-btn");
   if (btn) btn.textContent = _acRunning ? "Turn OFF" : "Turn ON";

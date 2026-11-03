@@ -2259,6 +2259,15 @@ input[type="checkbox"],input[type="radio"]{min-height:0;width:20px;height:20px}
 #btn-stop{min-height:52px}
 .btn-browse,.btn-ghost,.log-clear-btn{min-height:44px;min-width:44px}
 b,strong{font-size:max(1em,12px)}
+/* Validation: show the error state only after the user has interacted (modern-web-guidance) */
+input:user-invalid,select:user-invalid,textarea:user-invalid{border-color:var(--red);box-shadow:0 0 0 1px var(--red)}
+/* Headings balance, body copy avoids orphans (progressive enhancement) */
+h1,h2,h3,h4{text-wrap:balance}
+p,li{text-wrap:pretty}
+/* Reduced motion: stop animation and transitions for people who ask for it */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:0.001ms !important;animation-iteration-count:1 !important;transition-duration:0.001ms !important;scroll-behavior:auto !important}
+}
 .sidebar .btn-row:has(#btn-start){position:sticky;bottom:0;z-index:5;background:var(--surface2);border-top:1px solid var(--border-ctl);padding:0.75rem 1rem;margin-left:-1rem;margin-right:-1rem}
 header{min-height:56px;height:auto}
 @media (max-width:720px){
@@ -2353,7 +2362,7 @@ header{min-height:56px;height:auto}
             <div class="input-with-btn">
               <input type="text" id="input-source" value="data/test_clip.mp4"
                      placeholder="file path, 0 for webcam, rtsp://…"
-                     oninput="_onInputSourceChange(this.value)" aria-label="file path, 0 for webcam, rtsp://…"/>
+                     oninput="_onInputSourceChange(this.value)" aria-label="Video file path, camera number, or stream address"/>
               <button class="btn-browse" onclick="browseFile()" title="Browse files on the server PC">…</button>
               <button class="btn btn-ghost" onclick="scanVideos()" title="Scan data/ folder">⟳</button>
             </div>
@@ -2366,9 +2375,9 @@ header{min-height:56px;height:auto}
             <div style="margin-top:0.6rem;border-top:1px solid var(--border);padding-top:0.5rem;">
               <div class="input-with-btn" style="gap:6px;">
                 <input type="text" id="camera-username" placeholder="camera username (optional)"
-                       autocomplete="off" style="flex:1;" aria-label="camera username (optional)"/>
+                       autocomplete="off" style="flex:1;" aria-label="Camera username (optional)"/>
                 <input type="password" id="camera-password" placeholder="password (optional)"
-                       autocomplete="off" style="flex:1;" aria-label="password (optional)"/>
+                       autocomplete="off" style="flex:1;" aria-label="Camera password (optional)"/>
               </div>
               <button class="btn btn-ghost" style="margin-top:5px;width:100%;"
                       onclick="discoverCameras()" title="Scan the LAN for ONVIF cameras">
@@ -2471,7 +2480,7 @@ header{min-height:56px;height:auto}
             </label>
             <div id="targetvmaf-row" style="display:none;margin-top:0.35rem;">
               <input type="number" id="targetvmaf-input" min="85" max="97" step="1" value="93"
-                     style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="targetvmaf input"/>
+                     style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="Target VMAF quality score"/>
               <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
                 Spends only the bits needed to hit this perceived quality (85 to 97; 93 is a good
                 default). Smallest file at constant quality. Adds a short one-time search per clip;
@@ -2595,11 +2604,11 @@ header{min-height:56px;height:auto}
       <!-- Segment length -->
       <div class="config-section" style="padding-top:0.5rem;padding-bottom:0.5rem;">
         <div class="config-field" style="margin-bottom:0;">
-          <label class="config-label" for="segment-seconds">Segment Length
+          <label class="config-label" for="segment-seconds-slider">Segment Length
             <span style="color:var(--amber);font-size: 0.75rem;margin-left:4px;" id="seg-len-val">60s</span>
           </label>
           <input type="range" id="segment-seconds-slider" min="10" max="1800" step="10" value="60"
-                 oninput="_onSegLenUserChange(this.value)" aria-label="segment seconds slider"/>
+                 oninput="_onSegLenUserChange(this.value)"/>
           <input type="hidden" id="segment-seconds" value="60" />
           <div class="slider-endpoints">
             <span>10s (many small files)</span>
@@ -2946,7 +2955,7 @@ header{min-height:56px;height:auto}
       </div>
       <!-- Hidden file picker for config import -->
       <input type="file" id="config-import-input" accept=".json"
-             style="display:none;" onchange="_onConfigFileSelected(event)" aria-label="config import input"/>
+             style="display:none;" onchange="_onConfigFileSelected(event)" aria-label="Import a saved configuration file"/>
     </aside>
 
     <!-- ════════════════════════════════════════════════════════ -->
@@ -3190,17 +3199,17 @@ header{min-height:56px;height:auto}
 
               <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;margin-bottom:0.5rem;">
                 <input type="text" id="zone-camera-id" placeholder="camera id, e.g. cam_00"
-                       style="width:160px;font-family:var(--mono);font-size: 0.75rem;" aria-label="camera id, e.g. cam 00"/>
+                       style="width:160px;font-family:var(--mono);font-size: 0.75rem;" aria-label="Camera ID for this zone"/>
                 <button class="btn btn-ghost" onclick="zoneEditorLoad()">Load</button>
                 <span style="flex:1;"></span>
-                <label style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);">Draw:</label>
-                <select id="zone-draw-mode" style="font-family:var(--mono);font-size: 0.75rem;" aria-label="zone draw mode">
+                <label style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);" for="zone-draw-mode">Draw:</label>
+                <select id="zone-draw-mode" style="font-family:var(--mono);font-size: 0.75rem;" aria-label="Zone drawing mode">
                   <option value="exclude">Exclude region</option>
                   <option value="line">Crossing line</option>
                   <option value="zone">Loiter zone</option>
                 </select>
                 <input type="text" id="zone-shape-id" placeholder="id (line/zone only)"
-                       style="width:120px;font-family:var(--mono);font-size: 0.75rem;" aria-label="id (line/zone only)"/>
+                       style="width:120px;font-family:var(--mono);font-size: 0.75rem;" aria-label="Shape ID (line or zone only)"/>
               </div>
 
               <div style="border:1px solid var(--border);display:inline-block;line-height:0;">
@@ -3287,7 +3296,7 @@ header{min-height:56px;height:auto}
         <!-- Folder picker (Browse opens a native folder dialog) + Load -->
         <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap;">
           <input type="text" id="library-folder" placeholder="folder to browse (defaults to your output folder)"
-                 style="flex:1;min-width:180px;" onkeydown="if(event.key==='Enter')loadLibrary()" aria-label="folder to browse (defaults to your output folder)"/>
+                 style="flex:1;min-width:180px;" onkeydown="if(event.key==='Enter')loadLibrary()" aria-label="Folder to browse"/>
           <button class="btn btn-ghost" id="library-browse-btn" onclick="browseLibraryFolder()">Browse...</button>
           <button class="btn btn-ghost" onclick="loadLibrary()">Load</button>
         </div>
@@ -3295,13 +3304,13 @@ header{min-height:56px;height:auto}
         <!-- Search + filters + sort + view toggle -->
         <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;">
           <input type="text" id="library-search" placeholder="search by name..."
-                 style="flex:1;min-width:140px;" oninput="filterLibrary()" aria-label="search by name..."/>
+                 style="flex:1;min-width:140px;" oninput="filterLibrary()" aria-label="Search the library by name"/>
           <select id="library-ext" onchange="filterLibrary()" title="File type"
-                  style="font-family:var(--mono);font-size: 0.75rem;" aria-label="File type">
+                  style="font-family:var(--mono);font-size: 0.75rem;" aria-label="Filter by file type">
             <option value="">All types</option>
           </select>
           <select id="library-sort" onchange="filterLibrary()" title="Sort"
-                  style="font-family:var(--mono);font-size: 0.75rem;" aria-label="Sort">
+                  style="font-family:var(--mono);font-size: 0.75rem;" aria-label="Sort order">
             <option value="date-desc">Newest</option>
             <option value="date-asc">Oldest</option>
             <option value="name-asc">Name (A-Z)</option>
@@ -3375,20 +3384,20 @@ header{min-height:56px;height:auto}
         <!-- Watched folder picker -->
         <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap;">
           <input type="text" id="ac-folder" placeholder="folder to watch for new videos"
-                 style="flex:1;min-width:200px;" aria-label="folder to watch for new videos"/>
+                 style="flex:1;min-width:200px;" aria-label="Folder to watch for new videos"/>
           <button class="btn btn-ghost" id="ac-browse-btn" onclick="acBrowseFolder()">Browse...</button>
         </div>
 
         <!-- Default compression + watch-folder layout -->
         <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;">
-          <label style="font-size: 0.75rem;color:var(--text-dim);">Compression</label>
-          <select id="ac-mode" title="Default compression" style="font-family:var(--mono);font-size: 0.75rem;" aria-label="Default compression">
+          <label style="font-size: 0.75rem;color:var(--text-dim);" for="ac-mode">Compression</label>
+          <select id="ac-mode" title="Default compression" style="font-family:var(--mono);font-size: 0.75rem;" aria-label="Default compression mode">
             <option value="mode:mode0">Mode 0 - record every frame (default)</option>
             <option value="mode:mode1">Mode 1 - motion segments</option>
             <option value="mode:mode2">Mode 2 - ROI AV1</option>
             <option value="mode:mode3">Mode 3 - ROI AV1 (max)</option>
           </select>
-          <label style="font-size: 0.75rem;color:var(--text-dim);">Layout</label>
+          <label style="font-size: 0.75rem;color:var(--text-dim);" for="ac-profile">Layout</label>
           <select id="ac-profile" title="Watch-folder layout profile" style="font-family:var(--mono);font-size: 0.75rem;" aria-label="Watch folder layout profile">
             <option value="">Generic drop folder</option>
             <option value="continuous">Continuous CCTV recordings</option>
@@ -3842,9 +3851,9 @@ header{min-height:56px;height:auto}
              so a misread can be corrected instead of silently trusted. -->
         <div class="archive-filters" style="align-items:flex-end;">
           <div class="archive-filter-group" style="flex:1 1 320px;">
-            <label>Smart search (plain English)</label>
+            <label for="nl-search-q">Smart search (plain English)</label>
             <input id="nl-search-q" type="text" placeholder="red car after 9pm on cam2"
-                   onkeydown="if(event.key==='Enter')runNlSearch()" style="width:100%;" aria-label="red car after 9pm on cam2"/>
+                   onkeydown="if(event.key==='Enter')runNlSearch()" style="width:100%;" aria-label="Smart search, in plain English"/>
           </div>
           <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.35rem 0.7rem;"
                   onclick="runNlSearch()">SMART SEARCH</button>
@@ -3854,8 +3863,8 @@ header{min-height:56px;height:auto}
 
         <div class="archive-filters">
           <div class="archive-filter-group">
-            <label>Object Type</label>
-            <select id="arc-object-type" aria-label="arc object type">
+            <label for="arc-object-type">Object Type</label>
+            <select id="arc-object-type">
               <option value="">Any type</option>
               <option value="vehicle">Vehicle</option>
               <option value="person">Person</option>
@@ -3866,8 +3875,8 @@ header{min-height:56px;height:auto}
             </select>
           </div>
           <div class="archive-filter-group">
-            <label>Color</label>
-            <select id="arc-color" aria-label="arc color">
+            <label for="arc-color">Color</label>
+            <select id="arc-color">
               <option value="">Any color</option>
               <option value="red"> Red</option>
               <option value="orange"> Orange</option>
@@ -3882,8 +3891,8 @@ header{min-height:56px;height:auto}
             </select>
           </div>
           <div class="archive-filter-group">
-            <label>Scene Type</label>
-            <select id="arc-scene" aria-label="arc scene">
+            <label for="arc-scene">Scene Type</label>
+            <select id="arc-scene">
               <option value="">Any scene</option>
               <option value="highway">Highway</option>
               <option value="intersection">Intersection / 4-way</option>
@@ -3894,8 +3903,8 @@ header{min-height:56px;height:auto}
             </select>
           </div>
           <div class="archive-filter-group">
-            <label>Time of Day</label>
-            <select id="arc-tod" aria-label="arc tod">
+            <label for="arc-tod">Time of Day</label>
+            <select id="arc-tod">
               <option value="">Any time</option>
               <option value="day">️ Day</option>
               <option value="night"> Night</option>
@@ -3903,20 +3912,20 @@ header{min-height:56px;height:auto}
             </select>
           </div>
           <div class="archive-filter-group">
-            <label>Camera ID</label>
-            <input type="text" id="arc-camera-id" placeholder="e.g. cam_00" aria-label="e.g. cam 00"/>
+            <label for="arc-camera-id">Camera ID</label>
+            <input type="text" id="arc-camera-id" placeholder="e.g. cam_00"/>
           </div>
           <div class="archive-filter-group">
-            <label>Date From</label>
-            <input type="date" id="arc-date-from" aria-label="arc date from"/>
+            <label for="arc-date-from">Date From</label>
+            <input type="date" id="arc-date-from"/>
           </div>
           <div class="archive-filter-group">
-            <label>Date To</label>
-            <input type="date" id="arc-date-to" aria-label="arc date to"/>
+            <label for="arc-date-to">Date To</label>
+            <input type="date" id="arc-date-to"/>
           </div>
           <div class="archive-filter-group">
-            <label title="Filter to clips with at least this many motion regions">Min Motion</label>
-            <input type="number" id="arc-min-rois" placeholder="0" min="0" style="width:100%;" aria-label="0"/>
+            <label title="Filter to clips with at least this many motion regions" for="arc-min-rois">Min Motion</label>
+            <input type="number" id="arc-min-rois" placeholder="0" min="0" style="width:100%;"/>
           </div>
           <div class="archive-filter-group" style="justify-content:flex-end;">
             <label>&nbsp;</label>
@@ -4039,8 +4048,8 @@ header{min-height:56px;height:auto}
                      style="width:100%;" aria-label="AES 256 passphrase"/>
             </div>
             <div class="enc-field-group" id="enc-keyfile-group" style="display:none;">
-              <label>Key File Path</label>
-              <input type="text" id="enc-keyfile-path" placeholder="…/camera.key" style="width:100%;" aria-label="…/camera.key"/>
+              <label for="enc-keyfile-path">Key File Path</label>
+              <input type="text" id="enc-keyfile-path" placeholder="…/camera.key" style="width:100%;"/>
             </div>
             <div style="display:flex;gap:0.5rem;margin-top:0.6rem;align-items:center;">
               <button class="btn btn-primary" style="padding:0.3rem 1.1rem;font-size: 0.75rem;background:var(--yellow);color:#000;border-color:var(--yellow);"
@@ -4084,8 +4093,8 @@ header{min-height:56px;height:auto}
                      style="width:100%;" aria-label="AES 256 passphrase"/>
             </div>
             <div class="enc-field-group" id="dec-keyfile-group" style="display:none;">
-              <label>Key File Path</label>
-              <input type="text" id="dec-keyfile-path" placeholder="…/camera.key" style="width:100%;" aria-label="…/camera.key"/>
+              <label for="dec-keyfile-path">Key File Path</label>
+              <input type="text" id="dec-keyfile-path" placeholder="…/camera.key" style="width:100%;"/>
             </div>
             <div style="display:flex;gap:0.5rem;margin-top:0.6rem;align-items:center;">
               <button class="btn btn-primary" style="padding:0.3rem 1.1rem;font-size: 0.75rem;"
@@ -4099,7 +4108,7 @@ header{min-height:56px;height:auto}
 
         <div class="enc-keygen-strip">
           <span style="font-size: 0.75rem;color:var(--text-dim);">Need a key file?</span>
-          <input type="text" id="enc-keygen-name" placeholder="camera.key" style="width:130px;font-size: 0.75rem;padding:0.15rem 0.4rem;" aria-label="camera.key"/>
+          <input type="text" id="enc-keygen-name" placeholder="camera.key" style="width:130px;font-size: 0.75rem;padding:0.15rem 0.4rem;" aria-label="Key file name"/>
           <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.2rem 0.7rem;color:var(--yellow);border-color:var(--yellow);"
                   onclick="generateKeyFile()"> GEN KEY</button>
           <span id="enc-keygen-result" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
@@ -4487,14 +4496,14 @@ header{min-height:56px;height:auto}
                name="decrypt-passphrase-no-save"
                style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);
                       font-family:var(--mono);font-size: 0.75rem;padding:0.4rem 0.6rem;border-radius:4px;width:100%;box-sizing:border-box;"
-               onkeydown="if(event.key==='Enter')doDecrypt()" aria-label="leave blank if using key file">
+               onkeydown="if(event.key==='Enter')doDecrypt()" aria-label="Password (leave blank if using a key file)">
       </div>
       <div style="display:flex;flex-direction:column;gap:0.4rem;">
-        <label style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);">KEY FILE PATH (optional)</label>
+        <label style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);" for="decrypt-keyfile">KEY FILE PATH (optional)</label>
         <input id="decrypt-keyfile" type="text" placeholder="e.g. C:\outputs\camera.key"
                style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);
                       font-family:var(--mono);font-size: 0.75rem;padding:0.4rem 0.6rem;border-radius:4px;width:100%;box-sizing:border-box;"
-               onkeydown="if(event.key==='Enter')doDecrypt()" aria-label="e.g. C:\outputs\camera.key">
+               onkeydown="if(event.key==='Enter')doDecrypt()" aria-label="Key file path (optional)">
       </div>
       <div id="decrypt-error" style="color:var(--red);font-family:var(--mono);font-size: 0.75rem;display:none;"></div>
       <button id="decrypt-btn" class="btn btn-primary" onclick="doDecrypt()" style="align-self:flex-end;padding:0.4rem 1.2rem;">
@@ -4591,6 +4600,7 @@ header{min-height:56px;height:auto}
   <script src="{{ url_for('static', filename='js/devices.js') }}"></script>
   <script src="{{ url_for('static', filename='js/timelapse.js') }}"></script>
   <script src="{{ url_for('static', filename='js/dialogs.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/validation.js') }}"></script>
 
 <!-- Global server-activity drawer: visible on every tab (not just Home),
      fed by the same /api/status poll and /api/logs SSE stream that already

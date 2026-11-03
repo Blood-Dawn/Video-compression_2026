@@ -558,15 +558,15 @@ private fun DoneView(s: CompressState, vm: CompressViewModel) {
                 Row(
                     verticalAlignment = Alignment.Bottom,
                     modifier = Modifier.clearAndSetSemantics {
-                        contentDescription = if (savedPct >= 0) "$savedPct percent smaller" else "${-savedPct} percent larger"
+                        contentDescription = if (savedPct >= 5) "$savedPct percent smaller" else if (savedPct >= 0) "Barely smaller, $savedPct percent" else "${-savedPct} percent larger"
                     },
                 ) {
                     Text(
-                        if (savedPct >= 0) "-$savedPct%" else "+${-savedPct}%",
+                        if (savedPct >= 5) "-$savedPct%" else if (savedPct >= 0) "$savedPct%" else "+${-savedPct}%",
                         fontFamily = SvcsDisplay,
                         fontSize = 80.sp,
                         lineHeight = 76.sp,
-                        color = if (savedPct >= 0) SvcsGreen else SvcsOrange,
+                        color = if (savedPct >= 5) SvcsGreen else if (savedPct >= 0) SvcsTextDim else SvcsOrange,
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
@@ -574,6 +574,14 @@ private fun DoneView(s: CompressState, vm: CompressViewModel) {
                         style = MaterialTheme.typography.labelMedium,
                         color = SvcsTextDim,
                         modifier = Modifier.padding(bottom = 12.dp),
+                    )
+                }
+                if (savedPct in 0..4) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "This video was already compact, so there was little to save. Try Low quality or a size limit.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SvcsOrange,
                     )
                 }
                 Spacer(Modifier.height(12.dp))

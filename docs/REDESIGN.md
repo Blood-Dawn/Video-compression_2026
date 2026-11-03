@@ -12,15 +12,15 @@ Status key: [x] done and checked, [ ] open, [~] partly done.
 
 - [x] Use tokens, never raw values: text-dim #95a9c0, control border #5d7da3, amber text #d99a00 (dashboard CSS variables, Android `Color.kt`).
 - [~] Hunt hardcoded hex values and arbitrary px/rem sizes in templates and Compose files and move them to tokens. The dashboard still has hundreds of inline styles.
-- [ ] Define a spacing scale (4, 8, 16, 24) and use it for new code. Define a type scale and name it.
-- [ ] Keep the dashboard and Android token names in step. Note that `Color.kt` was hand edited after the original generation.
-- [ ] Document each reusable component with variants, states (default, hover, active, disabled, loading, error, empty), sizes and accessibility notes. Start with button, input, tab, mode card, stat card, status pill, saved card.
+- [x] (documented in docs/DESIGN_SYSTEM.md, applied to new code only) Define a spacing scale (4, 8, 16, 24) and use it for new code. Define a type scale and name it.
+- [x] (table in docs/DESIGN_SYSTEM.md) Keep the dashboard and Android token names in step. Note that `Color.kt` was hand edited after the original generation.
+- [x] (docs/DESIGN_SYSTEM.md) Document each reusable component with variants, states (default, hover, active, disabled, loading, error, empty), sizes and accessibility notes. Start with button, input, tab, mode card, stat card, status pill, saved card.
 
 ## 2. Perceivable (accessibility-review, accessibility, modern-web-guidance)
 
 - [x] Normal text contrast 4.5:1 or better. Large text and UI parts 3:1 or better. Measure, do not guess.
 - [x] Input and button borders 3:1 or better against their background (non-text contrast).
-- [ ] Never show status with color alone. Add text or an icon (Saved 0% is grey plus a sentence, keep that rule everywhere, including error and success states in the dashboard).
+- [~] (dashboard messages carry their meaning in words and are announced as live regions; Saved and Done follow the rule; not every inline style audited) Never show status with color alone. Add text or an icon (Saved 0% is grey plus a sentence, keep that rule everywhere, including error and success states in the dashboard).
 - [x] Minimum text 12px on screen. Prefer rem or em for font sizes. Do not use justified text. Keep paragraph width under 80 characters.
 - [x] Support 200% text zoom and 400% reflow without loss of content. Checked in the browser rig.
 - [x] Support `prefers-reduced-motion` (stop spinners and transitions).
@@ -35,7 +35,7 @@ Status key: [x] done and checked, [ ] open, [~] partly done.
 - [~] Touch targets: 44px minimum on the dashboard (WCAG 2.2 minimum is 24px), 48dp on Android. One inline link and the "Change..." button are still smaller.
 - [~] Dialogs (done with inert, Escape and focus return in dialogs.js; native `<dialog>` not adopted, the overlays stay divs): use the native `<dialog>` element opened with `showModal()` where possible. It makes the page behind inert, closes with Escape, and needs no focus trap. For overlays that stay as divs, set `inert` on the content behind and add Escape handling. Return focus to the trigger on close. Applies to help, decrypt, setup, browse, plate and the DONE modal.
 - [x] Skip link target (`<main id="main">`) needs `tabindex="-1"` so focus lands there.
-- [ ] No positive tabindex values. Do not hide focusable elements with `aria-hidden`.
+- [x] No positive tabindex values. Do not hide focusable elements with `aria-hidden`.
 - [x] Custom keyboard widgets: Enter on keydown, Space on keyup, `aria-expanded` or `aria-pressed` for toggles.
 - [x] Mode picker (now a full radio group with arrow keys) and tab bar: if they use role tab or radio semantics, they must also behave that way with the keyboard (arrow keys). Today the tab bar has plain buttons, which is acceptable, but do not add role="tab" without the full pattern.
 
@@ -68,7 +68,7 @@ Status key: [x] done and checked, [ ] open, [~] partly done.
 - [ ] Keep the identity: dark terminal look, amber accent, Bebas Neue, Space Mono, Outfit. Add no gradients, glass effects or decoration that serve no purpose (design-system slop check).
 - [ ] Motion only where it explains something. No scroll effects.
 - [ ] Handle empty, loading, error and long text states (truncate with ellipsis, wrap tags) on every list and card.
-- [ ] Responsive check at 1440, 1024, 768 and 390 widths, and Android at 360dp and 411dp wide plus large font scale.
+- [~] Responsive check (dashboard done at 1440, 1024, 768 and 390; Android checked on the emulator at about 393dp wide and at 1.6x font, 360dp and 411dp not done). Original item: 1440, 1024, 768 and 390 widths, and Android at 360dp and 411dp wide plus large font scale.
 
 ## 7. Verification before every commit
 

@@ -66,6 +66,18 @@
     sync();
   }
 
-  function init() { initCards(); initAdvanced(); }
+  // Result and status messages are plain text that other scripts rewrite. Mark them as polite
+  // live regions so a screen reader hears "Saved" or an error without the user hunting for it.
+  // The text itself carries the meaning, so colour is never the only signal.
+  var MESSAGE_IDS = ["enc-encrypt-status", "enc-decrypt-status", "archive-status", "hls-sidebar-msg",
+    "hls-status-msg", "keygen-result", "enc-keygen-result", "upload-status", "gdrive-status",
+    "rtsp-server-msg", "rtsp-push-msg", "rtsp-dl-label"];
+  function initMessages() {
+    MESSAGE_IDS.forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && !el.hasAttribute("aria-live")) el.setAttribute("aria-live", "polite");
+    });
+  }
+  function init() { initCards(); initAdvanced(); initMessages(); }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 })();

@@ -186,10 +186,22 @@ private fun EmptyView(lifetime: CompressViewModel.Lifetime, onPick: () -> Unit) 
                     color = SvcsText,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
+                Spacer(Modifier.height(16.dp))
+                androidx.compose.material3.Button(
+                    onClick = onPick,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                    shape = RoundedCornerShape(3.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = SvcsAmber,
+                        contentColor = org.svcs.mobile.ui.theme.SvcsBg,
+                    ),
+                ) {
+                    Text("Pick a video", style = MaterialTheme.typography.titleMedium)
+                }
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "OR SHARE ONE TO SVCS FROM ANY APP",
-                    style = MaterialTheme.typography.labelSmall,
+                    "You can also share a video to SVCS from any app.",
+                    style = MaterialTheme.typography.bodySmall,
                     color = SvcsTextDim,
                 )
             }
@@ -213,10 +225,10 @@ private fun EmptyView(lifetime: CompressViewModel.Lifetime, onPick: () -> Unit) 
                 )
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Step("1", "Pick", Modifier.weight(1f))
-            Step("2", "Choose", Modifier.weight(1f))
-            Step("3", "Share", Modifier.weight(1f))
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Step("1", "Pick a video", Modifier.fillMaxWidth())
+            Step("2", "Choose quality or a size limit", Modifier.fillMaxWidth())
+            Step("3", "Share or save the result", Modifier.fillMaxWidth())
         }
     }
 }
@@ -224,12 +236,17 @@ private fun EmptyView(lifetime: CompressViewModel.Lifetime, onPick: () -> Unit) 
 @Composable
 private fun Step(n: String, label: String, modifier: Modifier) {
     Row(
-        modifier.border(1.dp, SvcsBorder, RoundedCornerShape(2.dp)).padding(10.dp),
+        modifier.padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(n, fontFamily = SvcsDisplay, fontSize = 22.sp, color = SvcsAmber)
-        Spacer(Modifier.width(8.dp))
-        Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = SvcsText)
+        Box(
+            Modifier.size(24.dp).border(1.dp, org.svcs.mobile.ui.theme.SvcsBorderCtl, RoundedCornerShape(50)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(n, style = MaterialTheme.typography.labelSmall, color = SvcsText)
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = SvcsTextDim)
     }
 }
 

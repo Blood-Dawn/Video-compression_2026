@@ -274,7 +274,7 @@ function _demoRenderResults(result) {
 
   const items = _demoCollectPlayables(result);
   if (!items.length) {
-    list.innerHTML = '<div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);">No playable output found.</div>';
+    list.innerHTML = '<div style="font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);">No playable output found.</div>';
     panel.style.display = '';
     return;
   }
@@ -282,7 +282,7 @@ function _demoRenderResults(result) {
   list.innerHTML = items.map(function(it) {
     const safeUrl   = it.url.replace(/'/g, "\\'");
     const safeLabel = it.label.replace(/'/g, "\\'");
-    return '<div style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.6rem;">' +
+    return '<div style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.75rem;">' +
              '<span style="flex:1;color:var(--text);">' + it.label + '</span>' +
              '<button class="btn-play-sm" onclick="_demoPlayResult(\'' + safeUrl + '\',\'' + safeLabel + '\')">&#9654; PLAY</button>' +
            '</div>';
@@ -390,11 +390,11 @@ async function loadSearchDemoVideos() {
   if (!body) return;
   try {
     const res  = await fetch('/api/demo/history');
-    if (!res.ok) { body.innerHTML = '<div style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);padding:0.5rem 0;">Could not load demo runs.</div>'; return; }
+    if (!res.ok) { body.innerHTML = '<div style="font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);padding:0.5rem 0;">Could not load demo runs.</div>'; return; }
     const runs = await res.json();
 
     if (!runs.length) {
-      body.innerHTML = '<div style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);padding:0.5rem 0;">No demo runs found. Run a demo from the sidebar to generate comparison videos.</div>';
+      body.innerHTML = '<div style="font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);padding:0.5rem 0;">No demo runs found. Run a demo from the sidebar to generate comparison videos.</div>';
       if (count) count.textContent = '';
       return;
     }
@@ -416,17 +416,17 @@ async function loadSearchDemoVideos() {
     if (count) count.textContent = allVids.length + ' video' + (allVids.length !== 1 ? 's' : '') + ' in ' + runs.length + ' run' + (runs.length !== 1 ? 's' : '');
 
     const rows = allVids.map(v => `<tr>
-        <td style="color:var(--text-dim);font-size:0.6rem;">${v.run}</td>
+        <td style="color:var(--text-dim);font-size:0.75rem;">${v.run}</td>
         <td>${(v.modes || []).map(m => m.toUpperCase()).join(', ')}</td>
         <td style="color:var(--teal);">${v.label}</td>
-        <td style="color:var(--text-dim);font-size:0.6rem;">${v.date}</td>
+        <td style="color:var(--text-dim);font-size:0.75rem;">${v.date}</td>
         <td><button class="btn-play-sm" onclick="playSearchDemoVid(${JSON.stringify(v.url)})">▶ PLAY</button></td>
       </tr>`).join('');
     body.innerHTML = '<table class="demo-history-table" style="width:100%;">' +
       '<thead><tr><th>Run</th><th>Modes</th><th>Video</th><th>Date</th><th></th></tr></thead><tbody>' +
       rows + '</tbody></table>';
   } catch(e) {
-    body.innerHTML = '<div style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);padding:0.5rem 0;">[!] Error loading demo videos: ' + e.message + '</div>';
+    body.innerHTML = '<div style="font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);padding:0.5rem 0;">[!] Error loading demo videos: ' + e.message + '</div>';
   }
 }
 

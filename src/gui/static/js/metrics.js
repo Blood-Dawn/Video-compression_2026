@@ -197,7 +197,7 @@ function _applyHardwareMetrics(d) {
       const maxAvg = Math.max(1, ...keys.map(k => avgs[k]?.avg || 0));
       rows.innerHTML = keys.map(k => {
         const a = avgs[k];
-        if (!a) return `<div class="metrics-library-row" style="opacity:0.4"><span>${modeLabels[k]}</span><span style="font-size:0.65rem;color:var(--text-dim);">no data yet</span></div>`;
+        if (!a) return `<div class="metrics-library-row" style="opacity:0.4"><span>${modeLabels[k]}</span><span style="font-size:0.75rem;color:var(--text-dim);">no data yet</span></div>`;
         const pct = (a.avg / Math.max(maxAvg, 100)) * 100;
         const color = a.avg > 70 ? 'var(--red)' : a.avg > 40 ? 'var(--amber)' : 'var(--green)';
         // FIX 2: samples loaded from a prior install are flagged historical so
@@ -205,7 +205,7 @@ function _applyHardwareMetrics(d) {
         const histTag = a.historical
           ? ` <span style="color:var(--text-dim);font-style:italic;">(previous runs)</span>` : '';
         return `<div style="margin:0.25rem 0;">
-          <div style="display:flex;justify-content:space-between;font-size:0.68rem;margin-bottom:2px;">
+          <div style="display:flex;justify-content:space-between;font-size:0.75rem;margin-bottom:2px;">
             <span style="color:var(--text-dim);">${modeLabels[k]}</span>
             <span style="font-family:var(--mono);color:${color};">${a.avg}% avg · ${a.n} samples${histTag}</span>
           </div>

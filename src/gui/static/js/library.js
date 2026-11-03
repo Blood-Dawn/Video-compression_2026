@@ -114,11 +114,11 @@ function _renderLibrary(list) {
       : "width:100%;height:108px;object-fit:cover;background:#000;display:block;";
     img.onerror = () => _placeholderThumb(img, ext);
     const label = document.createElement("div");
-    label.style.cssText = "font-family:var(--mono);font-size:0.6rem;padding:0.3rem;color:var(--text);word-break:break-all;";
+    label.style.cssText = "font-family:var(--mono);font-size:0.75rem;padding:0.3rem;color:var(--text);word-break:break-all;";
     // R3.1d: tag compressed outputs, and mark originals that already have one.
     let tag = "";
     if (v.kind === "compressed") {
-      tag = '<span style="display:inline-block;font-size:0.5rem;font-weight:700;color:#ff5fa2;border:1px solid #ff5fa2;border-radius:3px;padding:0 0.25rem;margin-right:0.3rem;">COMPRESSED</span>';
+      tag = '<span style="display:inline-block;font-size:0.75rem;font-weight:700;color:#ff5fa2;border:1px solid #ff5fa2;border-radius:3px;padding:0 0.25rem;margin-right:0.3rem;">COMPRESSED</span>';
     } else if (v.compressed) {
       tag = '<span title="A compressed version exists" style="color:var(--green,#39d353);margin-right:0.3rem;">&#10003;</span>';
     }

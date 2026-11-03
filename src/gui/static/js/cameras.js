@@ -68,7 +68,7 @@ function _renderCameras(cameras) {
     const row = document.createElement("div");
     row.style.cssText = "display:flex;justify-content:space-between;align-items:center;gap:6px;padding:3px 0;";
     const text = document.createElement("span");
-    text.style.cssText = "font-family:var(--mono);font-size:0.65rem;";
+    text.style.cssText = "font-family:var(--mono);font-size:0.75rem;";
     text.textContent = `${label} (${cam.address})`;
     const btn = document.createElement("button");
     btn.className = "btn btn-ghost";

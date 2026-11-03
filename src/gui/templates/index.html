@@ -2941,7 +2941,8 @@ header{min-height:56px;height:auto}
       </div><!-- /advanced-panel -->
 
       <!-- Action buttons -->
-      <div class="btn-row" style="margin-top:auto;">
+            <div id="start-hint" role="status" hidden style="margin-top:auto;margin-bottom:0.4rem;font-size:0.8rem;color:var(--amber-text);">Choose an output destination in Setup first.</div>
+      <div class="btn-row" style="margin-top:0;">
         <button id="btn-start" class="btn btn-primary" onclick="startPipeline()">▶ START</button>
         <button id="btn-stop" class="btn btn-danger" onclick="stopPipeline()" disabled>■ STOP</button>
       </div>
@@ -3715,7 +3716,7 @@ header{min-height:56px;height:auto}
               breathe vertically.
               Author: Bloodawn (KheivenD), 2026-05-03 (UI cleanup pass).
             -->
-            <div class="table-wrap" id="metrics-table-wrap" style="flex:1;">
+            <div class="table-wrap" id="metrics-table-wrap" style="flex:1;" tabindex="0" role="region" aria-label="Recorded files">
               <table id="metrics-table">
                 <thead>
                   <tr>
@@ -3758,7 +3759,7 @@ header{min-height:56px;height:auto}
           <div class="metrics-right" id="metrics-right">
 
             <div class="metrics-detail-empty" id="metrics-no-selection">
-              <span style="font-size:1.6rem;opacity:0.35;letter-spacing:0.4em;">[ ▷ ]</span>
+              <span aria-hidden="true" style="font-size:1.6rem;opacity:0.35;letter-spacing:0.4em;">[ ▷ ]</span>
               <span>Click a row to preview &amp; inspect</span>
             </div>
 
@@ -4601,11 +4602,12 @@ header{min-height:56px;height:auto}
   <script src="{{ url_for('static', filename='js/timelapse.js') }}"></script>
   <script src="{{ url_for('static', filename='js/dialogs.js') }}"></script>
   <script src="{{ url_for('static', filename='js/validation.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/widgets.js') }}"></script>
 
 <!-- Global server-activity drawer: visible on every tab (not just Home),
      fed by the same /api/status poll and /api/logs SSE stream that already
      run continuously in the background. Author: Bloodawn (KheivenD), 2026-09-30. -->
-<div id="global-drawer">
+<div id="global-drawer" role="region" aria-label="Server activity log">
   <div class="global-drawer-head">
     <span class="global-drawer-title">Server activity</span>
     <span id="global-status-msg">Idle.</span>

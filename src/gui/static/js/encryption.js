@@ -241,9 +241,9 @@ function _renderArchiveSegments(segments, showToast) {
       <td title="${escHtml(s.camera_id)}">${escHtml(camDisplay)}</td>
       <td style="color:${modeColor};font-weight:bold;letter-spacing:0.04em;">${escHtml(mode)}</td>
       <td><span class="arc-badge ${typeCls}">${escHtml(s.object_type || 'unknown')}</span></td>
-      <td style="font-size:0.63rem">${colorCell}</td>
-      <td style="font-size:0.63rem">${sceneCell}</td>
-      <td style="font-size:0.63rem">${todCell}</td>
+      <td style="font-size:0.75rem">${colorCell}</td>
+      <td style="font-size:0.75rem">${sceneCell}</td>
+      <td style="font-size:0.75rem">${todCell}</td>
       <td style="color:var(--amber);text-align:center">${s.roi_count}</td>
       <td style="color:var(--text-dim)">${s.duration_s}s</td>
       <td style="color:var(--text-dim)">${sizeMb} MB</td>

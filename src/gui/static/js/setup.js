@@ -23,6 +23,8 @@ function _setStartEnabled(enabled) {
   btn.style.opacity = enabled ? "" : "0.5";
   btn.style.pointerEvents = enabled ? "" : "none";
   btn.title = enabled ? "" : "Choose an output destination in Setup first";
+  const hint = document.getElementById("start-hint");
+  if (hint) hint.hidden = enabled;
 }
 
 function _setOutputFields(path) {

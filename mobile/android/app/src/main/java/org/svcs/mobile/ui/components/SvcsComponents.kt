@@ -9,6 +9,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,6 +50,7 @@ import org.svcs.mobile.ui.theme.SvcsAmberContainer
 import org.svcs.mobile.ui.theme.SvcsBg
 import org.svcs.mobile.ui.theme.SvcsBorder
 import org.svcs.mobile.ui.theme.SvcsBorderBright
+import org.svcs.mobile.ui.theme.SvcsBorderCtl
 import org.svcs.mobile.ui.theme.SvcsDisplay
 import org.svcs.mobile.ui.theme.SvcsMono
 import org.svcs.mobile.ui.theme.SvcsOnAmber
@@ -170,7 +173,7 @@ fun SvcsSecondaryButton(
             .height(48.dp)
             .clip(Sharp)
             .background(if (danger) SvcsRedContainer else Color.Transparent)
-            .border(1.dp, if (danger) SvcsRed else SvcsBorderBright, Sharp)
+            .border(1.dp, if (danger) SvcsRed else SvcsBorderCtl, Sharp)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 14.dp),
         horizontalArrangement = Arrangement.Center,
@@ -198,8 +201,8 @@ fun SvcsChip(
             .heightIn(min = 40.dp)
             .clip(shape)
             .background(if (selected) SvcsAmberContainer else Color.Transparent)
-            .border(1.dp, if (selected) SvcsAmber else SvcsBorder, shape)
-            .clickable(role = Role.RadioButton, onClick = onClick)
+            .border(1.dp, if (selected) SvcsAmber else SvcsBorderCtl, shape)
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -225,7 +228,7 @@ fun SvcsSegmented(
             .fillMaxWidth()
             .height(46.dp)
             .clip(Sharp)
-            .border(1.dp, SvcsBorder, Sharp),
+            .border(1.dp, SvcsBorderCtl, Sharp),
     ) {
         options.forEachIndexed { i, label ->
             val selected = i == selectedIndex
@@ -236,7 +239,7 @@ fun SvcsSegmented(
                     .fillMaxWidth()
                     .height(46.dp)
                     .background(if (selected) SvcsAmberContainer else Color.Transparent)
-                    .clickable(role = Role.Tab) { onSelect(i) },
+                    .selectable(selected = selected, role = Role.Tab) { onSelect(i) },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -283,7 +286,7 @@ fun SvcsSwitchRow(
         modifier
             .fillMaxWidth()
             .clip(Sharp)
-            .clickable(role = Role.Switch) { onCheckedChange(!checked) }
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onCheckedChange)
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -296,12 +299,12 @@ fun SvcsSwitchRow(
         Spacer(Modifier.width(12.dp))
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange,
+            onCheckedChange = null, // whole row is the toggle target
             colors = SwitchDefaults.colors(
                 checkedTrackColor = SvcsAmber,
                 checkedThumbColor = SvcsBg,
                 uncheckedTrackColor = SvcsBg,
-                uncheckedBorderColor = SvcsBorderBright,
+                uncheckedBorderColor = SvcsBorderCtl,
                 uncheckedThumbColor = SvcsTextDim,
             ),
         )

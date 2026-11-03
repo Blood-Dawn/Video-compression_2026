@@ -33,8 +33,8 @@ Status key: [x] done and checked, [ ] open, [~] partly done.
 - [x] Every control reachable by keyboard in a logical order. Checked first 12 tab stops on the dashboard.
 - [x] Visible focus ring on every control: 3px amber, 2px offset, never `outline: none` without a replacement.
 - [~] Touch targets: 44px minimum on the dashboard (WCAG 2.2 minimum is 24px), 48dp on Android. One inline link and the "Change..." button are still smaller.
-- [ ] Dialogs: use the native `<dialog>` element opened with `showModal()` where possible. It makes the page behind inert, closes with Escape, and needs no focus trap. For overlays that stay as divs, set `inert` on the content behind and add Escape handling. Return focus to the trigger on close. Applies to help, decrypt, setup, browse, plate and the DONE modal.
-- [ ] Skip link target (`<main id="main">`) needs `tabindex="-1"` so focus lands there.
+- [~] Dialogs: done with `static/js/dialogs.js` (page behind goes inert, focus moves in, Escape clicks the close button, focus returns to the opener; setup dialog excluded from Escape). Still open: moving to the native `<dialog>` element opened with `showModal()` where possible. It makes the page behind inert, closes with Escape, and needs no focus trap. For overlays that stay as divs, set `inert` on the content behind and add Escape handling. Return focus to the trigger on close. Applies to help, decrypt, setup, browse, plate and the DONE modal.
+- [x] Skip link target (`<main id="main" tabindex="-1">`) so focus lands there.
 - [ ] No positive tabindex values. Do not hide focusable elements with `aria-hidden`.
 - [ ] Custom keyboard widgets: Enter on keydown, Space on keyup, `aria-expanded` or `aria-pressed` for toggles.
 - [ ] Mode picker and tab bar: if they use role tab or radio semantics, they must also behave that way with the keyboard (arrow keys). Today the tab bar has plain buttons, which is acceptable, but do not add role="tab" without the full pattern.
@@ -56,7 +56,7 @@ Status key: [x] done and checked, [ ] open, [~] partly done.
 - [ ] Do not repeat state in the name (no "pressed" in a name that already has `aria-pressed`). Do not repeat the role in the label.
 - [ ] Same accessible name only for links that share a destination. Disambiguate repeated "Edit", "Delete" buttons with hidden text.
 - [ ] `lang` on html, unique `title`, iframe titles.
-- [ ] Android: `contentDescription` on icon-only buttons, `Role.Button` on clickable surfaces, `stateDescription` or selected state on chips and toggles, live region for progress, touch targets 48dp, text in sp so it scales. Audit every screen: Compress, Configure, Progress, Done, Failed, Saved, More.
+- [~] Android: done so far: roles and click labels on the Saved play thumbnail, the Compress Change button and the shared panel and action components, 48dp targets there. Still to audit: `contentDescription` on icon-only buttons, `Role.Button` on clickable surfaces, `stateDescription` or selected state on chips and toggles, live region for progress, touch targets 48dp, text in sp so it scales. Audit every screen: Compress, Configure, Progress, Done, Failed, Saved, More.
 
 ## 6. Layout and hierarchy (design-critique, frontend-design)
 

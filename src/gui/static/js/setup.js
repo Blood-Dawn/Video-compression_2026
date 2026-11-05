@@ -19,10 +19,15 @@ window._svcsSetup = { complete: false, output_dir: "", encrypted_dir: "" };
 function _setStartEnabled(enabled) {
   const btn = document.getElementById("btn-start");
   if (!btn) return;
-  btn.disabled = !enabled;
-  btn.style.opacity = enabled ? "" : "0.5";
-  btn.style.pointerEvents = enabled ? "" : "none";
+  const stop = document.getElementById("btn-stop");
+  const running = !!(stop && !stop.disabled);
+  const usable = enabled && !running;
+  btn.disabled = !usable;
+  btn.style.opacity = usable ? "" : "0.5";
+  btn.style.pointerEvents = usable ? "" : "none";
   btn.title = enabled ? "" : "Choose an output destination in Setup first";
+  const hint = document.getElementById("start-hint");
+  if (hint) hint.hidden = enabled;
 }
 
 function _setOutputFields(path) {

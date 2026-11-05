@@ -231,14 +231,14 @@ async function scanVideos() {
     const data = await res.json();
     const listEl = document.getElementById('video-list');
     if (!data.videos.length) {
-      listEl.innerHTML = `<div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);">
+      listEl.innerHTML = `<div style="font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);">
         No videos found in ${escHtml(data.data_dir)}</div>`;
       return;
     }
     listEl.innerHTML = data.videos.map(v => {
       const name = v.split('/').pop();
       return `<div onclick="document.getElementById('input-source').value='${jsAttr(v)}';_onInputSourceChange('${jsAttr(v)}')"
-                   style="font-family:var(--mono);font-size:0.62rem;color:var(--amber);
+                   style="font-family:var(--mono);font-size:0.75rem;color:var(--amber);
                           cursor:pointer;padding:0.2rem 0;border-bottom:1px solid var(--border);"
                    title="${escHtml(v)}">▸ ${escHtml(name)}</div>`;
     }).join('');

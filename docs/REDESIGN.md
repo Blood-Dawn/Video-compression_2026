@@ -1,0 +1,85 @@
+# SVCS redesign checklist
+
+Read this before touching any UI code on the `design/ui-redesign` branch. It collects what the skills on the Personal MCP skills server ask for, applied to the Windows dashboard (`src/gui/templates/index.html`, `src/gui/static/js/*.js`) and the Android app (`mobile/android/.../ui`). Tick an item only after checking it in a running build, not just in the source.
+
+Source skills (ids on the server): `design/accessibility-review`, `everything-claude-code/accessibility`, `design/design-critique`, `design/design-handoff`, `design/design-system`, `everything-claude-code/design-system`, `everything-claude-code/frontend-design`, and the guides inside `modern-web-guidance/modern-web-guidance` (accessibility, platform-controls-dismiss-dialog, accessible-error-announcement, improve-text-layout-and-legibility).
+
+Rules for working on this branch: never edit compression code, view models or navigation. No push or merge unless the user says so. Keep behavior and element ids unchanged so the script blocks and the tests keep working. Run the full test suite and the Android compile before each commit.
+
+Status key: [x] done and checked, [ ] open, [~] partly done.
+
+## 1. Design tokens (design-system, design-handoff)
+
+- [x] Use tokens, never raw values: text-dim #95a9c0, control border #5d7da3, amber text #d99a00 (dashboard CSS variables, Android `Color.kt`).
+- [~] Hunt hardcoded hex values and arbitrary px/rem sizes in templates and Compose files and move them to tokens. The dashboard still has hundreds of inline styles.
+- [x] (documented in docs/DESIGN_SYSTEM.md, applied to new code only) Define a spacing scale (4, 8, 16, 24) and use it for new code. Define a type scale and name it.
+- [x] (table in docs/DESIGN_SYSTEM.md) Keep the dashboard and Android token names in step. Note that `Color.kt` was hand edited after the original generation.
+- [x] (docs/DESIGN_SYSTEM.md) Document each reusable component with variants, states (default, hover, active, disabled, loading, error, empty), sizes and accessibility notes. Start with button, input, tab, mode card, stat card, status pill, saved card.
+
+## 2. Perceivable (accessibility-review, accessibility, modern-web-guidance)
+
+- [x] Normal text contrast 4.5:1 or better. Large text and UI parts 3:1 or better. Measure, do not guess.
+- [x] Input and button borders 3:1 or better against their background (non-text contrast).
+- [~] (dashboard messages carry their meaning in words and are announced as live regions; Saved and Done follow the rule; not every inline style audited) Never show status with color alone. Add text or an icon (Saved 0% is grey plus a sentence, keep that rule everywhere, including error and success states in the dashboard).
+- [x] Minimum text 12px on screen. Prefer rem or em for font sizes. Do not use justified text. Keep paragraph width under 80 characters.
+- [x] Support 200% text zoom and 400% reflow without loss of content. Checked in the browser rig.
+- [x] Support `prefers-reduced-motion` (stop spinners and transitions).
+- [ ] Dashboard is dark only. If light mode is ever added, honor `prefers-color-scheme` and set `color-scheme`. Optional: reinforce borders under `prefers-contrast: more`.
+- [x] Add `text-wrap: balance` to short headings and `text-wrap: pretty` to body paragraphs (progressive enhancement, no fallback needed).
+- [x] Decorative icons hidden from assistive tech, meaningful icons labeled.
+
+## 3. Operable (accessibility-review, accessibility)
+
+- [x] Every control reachable by keyboard in a logical order. Checked first 12 tab stops on the dashboard.
+- [x] Visible focus ring on every control: 3px amber, 2px offset, never `outline: none` without a replacement.
+- [~] Touch targets: 44px minimum on the dashboard (WCAG 2.2 minimum is 24px), 48dp on Android. One inline link and the "Change..." button are still smaller.
+- [~] Dialogs (done with inert, Escape and focus return in dialogs.js; native `<dialog>` not adopted, the overlays stay divs): use the native `<dialog>` element opened with `showModal()` where possible. It makes the page behind inert, closes with Escape, and needs no focus trap. For overlays that stay as divs, set `inert` on the content behind and add Escape handling. Return focus to the trigger on close. Applies to help, decrypt, setup, browse, plate and the DONE modal.
+- [x] Skip link target (`<main id="main">`) needs `tabindex="-1"` so focus lands there.
+- [x] No positive tabindex values. Do not hide focusable elements with `aria-hidden`.
+- [x] Custom keyboard widgets: Enter on keydown, Space on keyup, `aria-expanded` or `aria-pressed` for toggles.
+- [x] Mode picker (now a full radio group with arrow keys) and tab bar: if they use role tab or radio semantics, they must also behave that way with the keyboard (arrow keys). Today the tab bar has plain buttons, which is acceptable, but do not add role="tab" without the full pattern.
+
+## 4. Understandable (accessibility-review, accessible-error-announcement)
+
+- [~] Every input has an accessible name. Prefer a visible `<label for>`. Placeholder and title are not names. The current aria-labels derived from ids and placeholders are a stopgap: replace them with real labels.
+- [ ] Hints go in `aria-describedby`, above the field. Do not pack errors into the label.
+- [x] Validation (validation.js): style with `:user-invalid`, set `aria-invalid` and `aria-errormessage` when the user has interacted, never on first focus.
+- [ ] Error messages say what went wrong and how to fix it.
+- [ ] No context changes on focus alone. Consistent navigation order across tabs.
+- [ ] Do not ask for the same data twice (redundant entry).
+- [ ] Plain wording: one sentence reasons for odd states ("Encoder fallback" is explained on Saved).
+
+## 5. Robust (accessibility, modern-web-guidance)
+
+- [x] One h1 per page, headings in order, landmarks: header, nav, main, aside. Do not over label sections.
+- [~] Live regions: one polite region for status and one assertive for critical failures. Status pill is polite, error banner is an alert. Do not announce "Loading" noise. Coordinate announcements with dialogs.
+- [x] Do not repeat state in the name (no "pressed" in a name that already has `aria-pressed`). Do not repeat the role in the label.
+- [ ] Same accessible name only for links that share a destination. Disambiguate repeated "Edit", "Delete" buttons with hidden text.
+- [x] `lang` on html, unique `title`, iframe titles.
+- [~] Android (all screens now have headings, selected states, 48dp targets and spoken progress and result values; Pick, Configure, Progress, Done, Failed, Saved and More checked on the emulator with a real on-device compression, and Done and More at 1.6x font scale; server Library and Events screens changed but not seen on a device; nothing checked with TalkBack): `contentDescription` on icon-only buttons, `Role.Button` on clickable surfaces, `stateDescription` or selected state on chips and toggles, live region for progress, touch targets 48dp, text in sp so it scales. Audit every screen: Compress, Configure, Progress, Done, Failed, Saved, More.
+
+## 6. Layout and hierarchy (design-critique, frontend-design)
+
+- [x] Three step layout with Start always visible (sticky bar).
+- [x] Single column below 720px with no sideways overflow.
+- [ ] One clear primary action per screen, in amber. Secondary actions outlined, destructive actions in red outline with a confirmation.
+- [x] First run: one thing at a time. The consent banner now waits for the setup dialog. Keep it that way.
+- [ ] Reading order matches the visual order. Whitespace groups related controls.
+- [ ] Keep the identity: dark terminal look, amber accent, Bebas Neue, Space Mono, Outfit. Add no gradients, glass effects or decoration that serve no purpose (design-system slop check).
+- [ ] Motion only where it explains something. No scroll effects.
+- [ ] Handle empty, loading, error and long text states (truncate with ellipsis, wrap tags) on every list and card.
+- [~] Responsive check (dashboard done at 1440, 1024, 768 and 390; Android checked on the emulator at about 393dp wide and at 1.6x font, 360dp and 411dp not done). Original item: 1440, 1024, 768 and 390 widths, and Android at 360dp and 411dp wide plus large font scale.
+
+## 7. Verification before every commit
+
+- [x] Automated scan (axe-core 4.10.2 on the rendered page: only the disabled Start contrast flag remains) (script of text under 12px, small targets, unlabeled inputs, h1 count, outline none count). Record before and after numbers. Last run: 2 small text, 2 small targets, 3 hidden inputs, 1 h1.
+- [ ] Keyboard only pass: Tab, Shift+Tab, Enter, Space, Escape on every dialog. Focus never gets stuck.
+- [ ] Screen reader pass (NVDA with Firefox or Chrome on Windows, TalkBack on Android). Not done yet.
+- [x] Zoom to 200% and check the layout.
+- [~] Full Python test suite passes (2138 passed, 45 skipped on the last run). Android `compileDebugKotlin` passes. Run the debug build on the emulator (package `org.svcs.mobile.debug`, not `org.svcs.mobile`) and look at every changed screen.
+- [ ] Commit message lists what changed and what is not verified. Report honestly.
+
+## Open items and known issues
+
+- Fixed: Start button now stays locked until Setup is complete and while running (ui.js and setup.js).
+- Not done: real NVDA and TalkBack pass, token parity document, component docs, color-only status audit on error states, 360dp width check on Android, server Library and Events on a device.

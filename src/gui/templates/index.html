@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
   <title>SVCS: Surveillance Video Compression System</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -53,13 +54,18 @@
       --purple:      #b888ff;
       --purple-dim:  rgba(184,136,255,0.14);
       --text:        #d8e8f5;
-      --text-dim:    #7a8fa8;
+      --text-dim:    #95a9c0;   /* was #7a8fa8: 3.55:1 on surface3, now 4.89:1 */
+      --border-ctl:  #5d7da3;   /* control borders, 3.7:1 or better */
+      --amber-text:  #d99a00;   /* readable dim amber text, 7.9:1 */
       --text-bright: #f0f8ff;
       --text-primary: #d8e8f5;       /* alias of --text */
       --mono:        'Space Mono', monospace;
       --display:     'Bebas Neue', sans-serif;
       --body:        'Outfit', sans-serif;
       --radius:      2px;
+      --tab-library: #ff9e5e;       /* per-tab accents, see docs/DESIGN_SYSTEM.md */
+      --tab-autocompress: #ff5fa2;
+      --tab-tools:   #5aa9ff;
     }
 
     html { font-size: 16px; }
@@ -125,7 +131,7 @@
     }
     .logo-sub {
       font-family: var(--mono);
-      font-size: 0.55rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       text-transform: uppercase;
       letter-spacing: 0.2em;
@@ -138,7 +144,7 @@
     }
     .pill {
       font-family: var(--mono);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       letter-spacing: 0.12em;
       text-transform: uppercase;
       padding: 0.25rem 0.7rem;
@@ -201,7 +207,7 @@
     }
     .resize-divider-v::after {
       content: '⋯';
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       letter-spacing: 0.15em;
       pointer-events: none;
@@ -258,7 +264,7 @@
       border-radius: 3px;
       padding: 0.55rem 0.8rem;
       font-family: var(--mono);
-      font-size: 0.68rem;
+      font-size: 0.75rem;
       color: var(--text);
       pointer-events: none;
       opacity: 0;
@@ -292,7 +298,7 @@
     }
     .panel-badge {
       font-family: var(--mono);
-      font-size: 0.6rem;
+      font-size: 0.75rem;
       letter-spacing: 0.15em;
       text-transform: uppercase;
       color: var(--text-dim);
@@ -328,7 +334,7 @@
     .config-field:last-child { margin-bottom: 0; }
     .config-hint {
       margin: 0.35rem 0 0;
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       color: var(--text-dim, #888);
       line-height: 1.4;
     }
@@ -349,7 +355,7 @@
       font-family: var(--mono);
       font-size: 0.85rem;
       padding: 0.5rem 0.7rem;
-      outline: none;
+      outline: none; /* ring supplied by :focus-visible below */
       transition: border-color 0.15s;
       -webkit-appearance: none;
       appearance: none;
@@ -362,13 +368,13 @@
       padding-right: 2rem;
     }
     select option {
-      background: #0a0e14;
-      color: #d8e8f5;
+      background: var(--bg);
+      color: var(--text);
     }
     select option:checked,
     select option:hover {
-      background: #162238;
-      color: #f0f8ff;
+      background: var(--surface2);
+      color: var(--text-bright);
     }
     input[type="checkbox"] {
       width: 14px; height: 14px;
@@ -383,7 +389,7 @@
     }
     .toggle-row label {
       font-family: var(--mono);
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       color: var(--text);
       cursor: pointer;
     }
@@ -425,7 +431,7 @@
       border-color: var(--border);
       color: var(--text-dim);
       font-family: var(--mono);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       padding: 0.4rem 0.75rem;
     }
     .btn-ghost:hover:not(:disabled) { border-color: var(--border-bright); color: var(--text); }
@@ -467,7 +473,7 @@
     .stat-card.red::before { background: var(--red); }
     .stat-label {
       font-family: var(--mono);
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       letter-spacing: 0.2em;
       text-transform: uppercase;
       color: var(--text-dim);
@@ -482,7 +488,7 @@
     }
     .stat-unit {
       font-family: var(--mono);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       margin-top: 0.2rem;
     }
@@ -495,7 +501,7 @@
     }
     .mode-chip {
       font-family: var(--mono);
-      font-size: 0.62rem;
+      font-size: 0.75rem;
       letter-spacing: 0.1em;
       text-transform: uppercase;
       padding: 0.25rem 0.7rem;
@@ -547,7 +553,7 @@
     .log-line.DEBUG { color: var(--text-dim); }
     .log-clear-btn {
       font-family: var(--mono);
-      font-size: 0.6rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       background: none;
       border: none;
@@ -579,7 +585,7 @@
     }
     thead th {
       font-family: var(--mono);
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       letter-spacing: 0.18em;
       text-transform: uppercase;
       color: var(--text-dim);
@@ -621,7 +627,7 @@
       text-align: center;
       padding: 3rem 1rem;
       font-family: var(--mono);
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       letter-spacing: 0.1em;
     }
@@ -671,7 +677,7 @@
       padding: 0.9rem;
       overflow-y: auto;
       font-family: var(--mono);
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       color: var(--text);
       line-height: 1.7;
     }
@@ -702,7 +708,7 @@
       display: flex; align-items: baseline; gap: 0.75rem;
       padding: 0.45rem 0.75rem;
       font-family: var(--mono);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       border-bottom: 1px solid var(--border);
     }
     .job-row:last-child { border-bottom: none; }
@@ -715,7 +721,7 @@
     .jobs-empty {
       padding: 0.8rem 0.75rem;
       font-family: var(--mono);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
     }
 
@@ -751,7 +757,7 @@
     }
     .progress-pct {
       font-family: var(--mono);
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       color: var(--amber);
       min-width: 42px;
       text-align: right;
@@ -759,7 +765,7 @@
     }
     .progress-label {
       font-family: var(--mono);
-      font-size: 0.62rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       min-width: 60px;
       text-align: right;
@@ -773,7 +779,7 @@
       border-radius: var(--radius);
       padding: 0.6rem 1rem;
       font-family: var(--mono);
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       color: var(--red);
       margin-bottom: 0.75rem;
     }
@@ -797,7 +803,7 @@
     /* ─────────────── CONFIG COLLAPSE ─────────────── */
     details > summary {
       font-family: var(--mono);
-      font-size: 0.62rem;
+      font-size: 0.75rem;
       letter-spacing: 0.15em;
       text-transform: uppercase;
       color: var(--amber);
@@ -810,7 +816,7 @@
     }
     details > summary::before {
       content: '▶';
-      font-size: 0.5rem;
+      font-size: 0.75rem;
       transition: transform 0.2s;
     }
     details[open] > summary::before { transform: rotate(90deg); }
@@ -856,13 +862,13 @@
       font-weight: 700;
     }
     .upload-zone-text {
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       color: var(--text);
       line-height: 1.5;
     }
     .upload-zone-text small {
       color: var(--text-dim);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
     }
 
     /* ─────────────── SOURCE ADVANCED TOGGLE ─────────────── */
@@ -871,7 +877,7 @@
     }
     .source-advanced-summary {
       font-family: var(--mono);
-      font-size: 0.62rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       text-transform: uppercase;
       letter-spacing: 0.1em;
@@ -884,7 +890,7 @@
     }
     .source-advanced-summary::before {
       content: '▶';
-      font-size: 0.5rem;
+      font-size: 0.75rem;
       transition: transform 0.15s;
     }
     details[open] > .source-advanced-summary::before {
@@ -942,7 +948,7 @@
     }
     .demo-mode-tab {
       font-family: var(--mono);
-      font-size: 0.6rem;
+      font-size: 0.75rem;
       letter-spacing: 0.1em;
       text-transform: uppercase;
       padding: 0.25rem 0.65rem;
@@ -963,7 +969,7 @@
       align-items: center;
       gap: 0.6rem;
       font-family: var(--mono);
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       padding: 1rem 0.75rem;
     }
@@ -979,7 +985,7 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     #demo-status-msg {
       font-family: var(--mono);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       padding: 0 0.75rem 0.5rem;
     }
@@ -1015,7 +1021,7 @@
     .tab-nav .tab-nav-right { flex-shrink: 0; }
     .tab-btn {
       font-family: var(--mono);
-      font-size: 0.62rem;
+      font-size: 0.75rem;
       letter-spacing: 0.1em;
       text-transform: uppercase;
       padding: 0 1.1rem;
@@ -1035,11 +1041,11 @@
     .tab-btn:hover { color: var(--text-primary); }
     .tab-btn[data-tab="home"].active    { color: var(--amber);  border-bottom-color: var(--amber); }
     .tab-btn[data-tab="upload"].active  { color: var(--purple); border-bottom-color: var(--purple); }
-    .tab-btn[data-tab="library"].active { color: #ff9e5e;       border-bottom-color: #ff9e5e; }
-    .tab-btn[data-tab="autocompress"].active { color: #ff5fa2;  border-bottom-color: #ff5fa2; }
+    .tab-btn[data-tab="library"].active { color: var(--tab-library);       border-bottom-color: var(--tab-library); }
+    .tab-btn[data-tab="autocompress"].active { color: var(--tab-autocompress);  border-bottom-color: var(--tab-autocompress); }
     .tab-btn[data-tab="metrics"].active { color: var(--green);  border-bottom-color: var(--green); }
     .tab-btn[data-tab="search"].active  { color: var(--teal);   border-bottom-color: var(--teal); }
-    .tab-btn[data-tab="tools"].active   { color: #5aa9ff;       border-bottom-color: #5aa9ff; }
+    .tab-btn[data-tab="tools"].active   { color: var(--tab-tools);       border-bottom-color: var(--tab-tools); }
     .tab-btn[data-tab="encrypt"].active { color: var(--yellow); border-bottom-color: var(--yellow); }
     .tab-btn[data-tab="demo"].active    { color: var(--amber);  border-bottom-color: var(--amber); }
     .tab-nav-right {
@@ -1066,7 +1072,7 @@
     }
     .tab-page-title {
       font-family: var(--mono);
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       font-weight: 700;
       letter-spacing: 0.08em;
       color: var(--text-primary);
@@ -1088,7 +1094,7 @@
       align-items: center;
       gap: 0.5rem;
       font-family: var(--mono);
-      font-size: 0.68rem;
+      font-size: 0.75rem;
       letter-spacing: 0.1em;
       text-transform: uppercase;
       font-weight: 700;
@@ -1111,7 +1117,7 @@
     }
     .home-hero-chip {
       font-family: var(--mono);
-      font-size: 0.58rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       border: 1px solid var(--border);
       padding: 0.12rem 0.5rem;
@@ -1230,7 +1236,7 @@
     .metrics-mini-search input,
     .metrics-mini-search select {
       font-family: var(--mono);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       background: var(--bg-secondary);
       border: 1px solid var(--border);
       color: var(--text-primary);
@@ -1242,13 +1248,13 @@
     .metrics-mini-search input  { width: 110px; min-width: 90px; }
     .metrics-mini-search select { width: 110px; min-width: 90px; }
     .metrics-mini-search input:focus,
-    .metrics-mini-search select:focus { border-color: var(--teal); outline: none; }
+    .metrics-mini-search select:focus { border-color: var(--teal); outline: none; /* ring supplied by :focus-visible below */ }
     .metrics-mini-search .enc-toggle {
       display: flex;
       align-items: center;
       gap: 0.25rem;
       font-family: var(--mono);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       cursor: pointer;
       white-space: nowrap;
@@ -1257,7 +1263,7 @@
     }
     .metrics-mini-search .enc-toggle input { width: 14px; height: 14px; margin: 0; }
     .metrics-mini-search .clear-btn {
-      font-size: 0.62rem;
+      font-size: 0.75rem;
       padding: 0.2rem 0.55rem;
       margin-left: auto;
       flex-shrink: 0;
@@ -1281,7 +1287,7 @@
       gap: 0.5rem;
       color: var(--text-dim);
       font-family: var(--mono);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       letter-spacing: 0.06em;
       min-height: 160px;
       border: 1px dashed var(--border);
@@ -1307,12 +1313,12 @@
     .metrics-meta-row { display: flex; flex-direction: column; gap: 0.1rem; }
     .metrics-meta-label {
       font-family: var(--mono);
-      font-size: 0.53rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       text-transform: uppercase;
       letter-spacing: 0.08em;
     }
-    .metrics-meta-value { font-family: var(--mono); font-size: 0.65rem; color: var(--text-primary); }
+    .metrics-meta-value { font-family: var(--mono); font-size: 0.75rem; color: var(--text-primary); }
     .metrics-library-card {
       background: var(--bg-tertiary);
       border: 1px solid var(--border);
@@ -1321,7 +1327,7 @@
     }
     .metrics-library-title {
       font-family: var(--mono);
-      font-size: 0.6rem;
+      font-size: 0.75rem;
       text-transform: uppercase;
       letter-spacing: 0.1em;
       color: var(--text-dim);
@@ -1331,7 +1337,7 @@
       display: flex;
       justify-content: space-between;
       font-family: var(--mono);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       padding: 0.2rem 0;
       border-bottom: 1px solid var(--border);
     }
@@ -1367,7 +1373,7 @@
       border-radius: 4px;
       padding: 0.55rem 0.8rem;
       font-family: var(--mono);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       color: var(--text);
       max-width: 340px;
       display: flex;
@@ -1380,7 +1386,7 @@
     .notif-card.notif-info    { border-color: var(--teal);  }
     .notif-card.notif-error   { border-color: var(--red);   }
     .notif-body { flex: 1; line-height: 1.45; }
-    .notif-title { font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase;
+    .notif-title { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase;
                    color: var(--text-dim); margin-bottom: 0.15rem; }
     .notif-msg { color: var(--text-bright); }
     .notif-actions { display: flex; gap: 0.35rem; margin-top: 0.35rem; flex-wrap: wrap; }
@@ -1389,7 +1395,7 @@
       border: 1px solid var(--border-bright);
       color: var(--teal);
       font-family: var(--mono);
-      font-size: 0.6rem;
+      font-size: 0.75rem;
       padding: 0.15rem 0.45rem;
       border-radius: 2px;
       cursor: pointer;
@@ -1415,7 +1421,7 @@
     .demo-sidebar-progress {
       margin-top: 0.5rem;
       font-family: var(--mono);
-      font-size: 0.62rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
     }
     .demo-sidebar-bar-wrap {
@@ -1434,7 +1440,7 @@
     }
     .demo-empty-state {
       font-family: var(--mono);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       padding: 0.75rem 0.5rem;
     }
@@ -1458,7 +1464,7 @@
     }
     .archive-title {
       font-family: var(--mono);
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       color: var(--teal);
       letter-spacing: 0.08em;
       font-weight: 600;
@@ -1477,7 +1483,7 @@
     }
     .archive-filter-group label {
       font-family: var(--mono);
-      font-size: 0.6rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       letter-spacing: 0.06em;
       text-transform: uppercase;
@@ -1485,7 +1491,7 @@
     .archive-filter-group input,
     .archive-filter-group select {
       font-family: var(--mono);
-      font-size: 0.68rem;
+      font-size: 0.75rem;
       background: var(--bg-tertiary);
       border: 1px solid var(--border);
       color: var(--text-primary);
@@ -1495,7 +1501,7 @@
     .archive-filter-group input:focus,
     .archive-filter-group select:focus {
       border-color: var(--teal);
-      outline: none;
+      outline: none; /* ring supplied by :focus-visible below */
     }
     .archive-action-row {
       display: flex;
@@ -1518,7 +1524,7 @@
     }
     .archive-results-wrap thead th {
       font-family: var(--mono);
-      font-size: 0.6rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       letter-spacing: 0.08em;
       padding: 0.35rem 0.6rem;
@@ -1539,14 +1545,14 @@
     .archive-results-wrap tbody tr:hover { background: rgba(31,212,200,0.04); }
     .archive-results-wrap tbody td {
       font-family: var(--mono);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       padding: 0.3rem 0.6rem;
       color: var(--text-primary);
       white-space: nowrap;
     }
     .archive-status {
       font-family: var(--mono);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       padding: 0.75rem;
       text-align: center;
@@ -1555,12 +1561,12 @@
       display: inline-block;
       padding: 0.1rem 0.3rem;
       border-radius: 2px;
-      font-size: 0.6rem;
+      font-size: 0.75rem;
       font-family: var(--mono);
     }
     .arc-badge-vehicle  { background: rgba(31,212,200,0.12); color: var(--teal); }
     .arc-badge-person   { background: rgba(255,200,0,0.12);  color: var(--yellow); }
-    .arc-badge-mixed    { background: rgba(150,120,255,0.12); color: #a88eee; }
+    .arc-badge-mixed    { background: rgba(150,120,255,0.12); color: var(--arc-mixed, #a88eee); }
     .arc-badge-unknown  { background: rgba(100,100,100,0.18); color: var(--text-dim); }
     /* color dot */
     .color-dot {
@@ -1575,7 +1581,7 @@
     .query-result-row { display:none; }
     .btn-play-sm {
       font-family: var(--mono);
-      font-size: 0.6rem;
+      font-size: 0.75rem;
       padding: 0.15rem 0.45rem;
       background: var(--teal-dim);
       border: 1px solid var(--teal);
@@ -1628,13 +1634,13 @@
       flex-wrap: wrap;
     }
     .hw-cell { display: flex; align-items: center; gap: 0.4rem; min-width: 100px; }
-    .hw-label { font-family: var(--mono); font-size: 0.6rem; color: var(--text-dim); min-width: 28px; letter-spacing: 0.06em; }
+    .hw-label { font-family: var(--mono); font-size: 0.75rem; color: var(--text-dim); min-width: 28px; letter-spacing: 0.06em; }
     .hw-bar-track { width: 72px; height: 6px; background: var(--surface3); border-radius: 3px; overflow: hidden; }
     .hw-bar-fill { height: 100%; border-radius: 3px; transition: width 0.8s ease, background 0.4s; }
     .hw-bar-fill.cpu { background: var(--amber); }
     .hw-bar-fill.ram { background: var(--teal); }
     .hw-bar-fill.bat { background: var(--green); }
-    .hw-val { font-family: var(--mono); font-size: 0.62rem; color: var(--text); min-width: 36px; }
+    .hw-val { font-family: var(--mono); font-size: 0.75rem; color: var(--text); min-width: 36px; }
     .hw-val-big { font-family: var(--mono); font-size: 0.75rem; color: var(--text); }
     .hw-rate-cell, .hw-eta-cell { flex-direction: column; align-items: flex-start; gap: 0.1rem; }
 
@@ -1644,8 +1650,8 @@
     #segments-tbody tr.row-selected td { background: rgba(31,212,200,0.08) !important; }
 
     /* ── Metrics meta detail grid ── */
-    .metrics-meta-row { display: flex; gap: 0.5rem; padding: 0.25rem 0; border-bottom: 1px solid rgba(42,68,102,0.5); font-size: 0.72rem; }
-    .metrics-meta-key { color: var(--text-dim); min-width: 110px; flex-shrink: 0; font-family: var(--mono); font-size: 0.68rem; }
+    .metrics-meta-row { display: flex; gap: 0.5rem; padding: 0.25rem 0; border-bottom: 1px solid rgba(42,68,102,0.5); font-size: 0.75rem; }
+    .metrics-meta-key { color: var(--text-dim); min-width: 110px; flex-shrink: 0; font-family: var(--mono); font-size: 0.75rem; }
     .metrics-meta-val { color: var(--text); word-break: break-all; }
 
     /* ── Home log expand ── */
@@ -1746,7 +1752,7 @@
     }
     .enc-col-title {
       font-family: var(--mono);
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       font-weight: 700;
       color: var(--yellow);
       letter-spacing: 0.06em;
@@ -1755,7 +1761,7 @@
     }
     .enc-col + .enc-col .enc-col-title { color: var(--teal); }
     .enc-col-desc {
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       line-height: 1.55;
       margin: 0 0 0.2rem;
@@ -1775,7 +1781,7 @@
     }
     .enc-field-group label {
       font-family: var(--mono);
-      font-size: 0.6rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       text-transform: uppercase;
       letter-spacing: 0.06em;
@@ -1783,14 +1789,14 @@
     .enc-field-group input[type="text"],
     .enc-field-group input[type="password"] {
       font-family: var(--mono);
-      font-size: 0.68rem;
+      font-size: 0.75rem;
       background: var(--bg-tertiary);
       border: 1px solid var(--border);
       color: var(--text-primary);
       padding: 0.3rem 0.45rem;
       border-radius: 3px;
     }
-    .enc-field-group input:focus { border-color: var(--yellow); outline: none; }
+    .enc-field-group input:focus { border-color: var(--yellow); outline: none; /* ring supplied by :focus-visible below */ }
     .enc-col + .enc-col .enc-field-group input:focus { border-color: var(--teal); }
     .enc-keygen-strip {
       display: flex;
@@ -1827,7 +1833,7 @@
     }
     #seg-preview-label {
       font-family: var(--mono);
-      font-size: 0.6rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       margin-top: 0.25rem;
       word-break: break-all;
@@ -1842,7 +1848,7 @@
     }
     .mode-check-row label {
       font-family: var(--mono);
-      font-size: 0.68rem;
+      font-size: 0.75rem;
       color: var(--text);
     }
     .mode-check-row.disabled label { color: var(--text-dim); }
@@ -1864,7 +1870,7 @@
       border: 1px solid var(--amber);
       color: var(--amber);
       font-family: var(--mono);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       font-weight: 700;
       display: flex;
       align-items: center;
@@ -1879,7 +1885,7 @@
     }
     .step-sub {
       font-family: var(--mono);
-      font-size: 0.55rem;
+      font-size: 0.75rem;
       letter-spacing: 0.12em;
       color: var(--text-dim);
       text-transform: uppercase;
@@ -1939,7 +1945,7 @@
     .preset-card.selected .preset-name { color: var(--amber); }
     .preset-desc {
       font-family: var(--mono);
-      font-size: 0.58rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       letter-spacing: 0.05em;
       line-height: 1.4;
@@ -1950,7 +1956,7 @@
       position: absolute;
       top: 0.3rem; right: 0.4rem;
       font-family: var(--mono);
-      font-size: 0.5rem;
+      font-size: 0.75rem;
       letter-spacing: 0.1em;
       text-transform: uppercase;
       color: var(--amber);
@@ -1972,7 +1978,7 @@
     .slider-label-row .config-label { margin-bottom: 0; }
     .slider-value-badge {
       font-family: var(--mono);
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       color: var(--amber);
       font-weight: 700;
     }
@@ -1983,7 +1989,7 @@
     }
     .slider-endpoints span {
       font-family: var(--mono);
-      font-size: 0.55rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       letter-spacing: 0.08em;
     }
@@ -2002,7 +2008,7 @@
       cursor: pointer;
       color: var(--text-dim);
       font-family: var(--mono);
-      font-size: 0.6rem;
+      font-size: 0.75rem;
       letter-spacing: 0.1em;
       text-transform: uppercase;
       border-top: 1px solid var(--border);
@@ -2012,7 +2018,7 @@
     .advanced-toggle:hover { color: var(--amber); }
     .advanced-toggle::before {
       content: '▶';
-      font-size: 0.45rem;
+      font-size: 0.75rem;
       transition: transform 0.2s;
     }
     .advanced-toggle.open::before { transform: rotate(90deg); }
@@ -2038,7 +2044,7 @@
     .stat-card.savings::before { background: var(--teal); }
     .savings-ratio {
       font-family: var(--mono);
-      font-size: 0.6rem;
+      font-size: 0.75rem;
       color: var(--teal);
       margin-top: 0.15rem;
     }
@@ -2084,7 +2090,7 @@
       border: 1px solid var(--border);
       color: var(--text-dim);
       font-family: var(--mono);
-      font-size: 0.7rem;
+      font-size: 0.75rem;
       padding: 0.3rem 0.7rem;
       cursor: pointer;
       border-radius: 2px;
@@ -2125,7 +2131,7 @@
     }
     .help-term {
       font-family: var(--mono);
-      font-size: 0.72rem;
+      font-size: 0.75rem;
       color: var(--teal);
       letter-spacing: 0.06em;
       font-weight: 700;
@@ -2141,7 +2147,7 @@
       background: var(--surface2);
       border-left: 2px solid var(--amber);
       font-family: var(--mono);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       color: var(--text-dim);
       line-height: 1.6;
       border-radius: 0 2px 2px 0;
@@ -2153,7 +2159,7 @@
     /* ─────────────── SEGMENT COUNT BADGE ─────────────── */
     .seg-count-badge {
       font-family: var(--mono);
-      font-size: 0.65rem;
+      font-size: 0.75rem;
       letter-spacing: 0.1em;
       padding: 0.2rem 0.5rem;
       border-radius: 1rem;
@@ -2224,49 +2230,127 @@
     padding:0.4rem 0.75rem; border-bottom:1px solid var(--border);
   }
   .global-drawer-title {
-    font-family:var(--mono); font-size:0.65rem; letter-spacing:0.06em;
+    font-family:var(--mono); font-size: 0.75rem; letter-spacing:0.06em;
     color:var(--text-dim); text-transform:uppercase; flex-shrink:0;
   }
   #global-status-msg {
-    font-family:var(--mono); font-size:0.68rem; color:var(--text);
+    font-family:var(--mono); font-size: 0.75rem; color:var(--text);
     flex-shrink:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
     max-width:32vw;
   }
   .global-progress-row { display:flex; align-items:center; gap:0.4rem; flex:1; min-width:120px; }
   #global-drawer-body { flex:1; overflow-y:auto; }
   .global-log-terminal {
-    font-family:var(--mono); font-size:0.66rem; padding:0.4rem 0.75rem;
+    font-family:var(--mono); font-size: 0.75rem; padding:0.4rem 0.75rem;
     display:flex; flex-direction:column; white-space:pre-wrap;
   }
   body.global-drawer-open #notif-dock { bottom: 320px; }
+</style>
+
+<style>
+/* ── UI redesign 2026-11 (design/ui-redesign) ─────────────────────────
+   Contrast, focus, touch targets and phone layout. Behavior and ids are
+   unchanged. Source: Claude Design board "SVCS App Redesign". */
+.skip-link{position:absolute;left:-9999px;top:0;z-index:3000;background:var(--amber);color:var(--bg);padding:0.75rem 1rem;font-weight:700}
+.skip-link:focus{left:0}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--amber) !important;outline-offset:2px}
+input,select,textarea,.btn,.tab-btn,button{border-color:var(--border-ctl)}
+input,select,textarea{min-height:44px}
+input[type="checkbox"],input[type="radio"]{min-height:0;width:20px;height:20px}
+.btn,.tab-btn,.global-activity-toggle{min-height:44px}
+.global-activity-toggle,header button[aria-label]{min-width:44px;min-height:44px;width:44px;height:44px}
+#btn-start{min-height:52px;font-size:1rem}
+#btn-stop{min-height:52px}
+.btn-browse,.btn-ghost,.log-clear-btn{min-height:44px;min-width:44px}
+b,strong{font-size:max(1em,12px)}
+/* Validation: show the error state only after the user has interacted (modern-web-guidance) */
+input:user-invalid,select:user-invalid,textarea:user-invalid{border-color:var(--red);box-shadow:0 0 0 1px var(--red)}
+/* Headings balance, body copy avoids orphans (progressive enhancement) */
+h1,h2,h3,h4{text-wrap:balance}
+p,li{text-wrap:pretty}
+/* Reduced motion: stop animation and transitions for people who ask for it */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:0.001ms !important;animation-iteration-count:1 !important;transition-duration:0.001ms !important;scroll-behavior:auto !important}
+}
+.sidebar .btn-row:has(#btn-start){position:sticky;bottom:0;z-index:5;background:var(--surface2);border-top:1px solid var(--border-ctl);padding:0.75rem 1rem;margin-left:-1rem;margin-right:-1rem}
+header{min-height:56px;height:auto}
+@media (max-width:720px){
+  html{font-size:16px}
+  main{display:block;height:auto}
+  .sidebar{max-height:none;border-right:0;overflow:visible}
+  .tab-area{min-height:60vh}
+  .tab-nav{position:sticky;bottom:0;z-index:20;display:flex;overflow-x:auto;background:var(--surface);border-top:1px solid var(--border-ctl)}
+  .tab-btn{flex:1 0 auto;padding:0 1rem}
+  .stats-grid{grid-template-columns:1fr 1fr}
+  header{flex-wrap:wrap;gap:0.5rem;padding:0.5rem 1rem}
+  .logo-sub{display:none}
+  .page{grid-template-columns:minmax(0,1fr)}
+  main,.sidebar,.tab-area,header,.header-right{min-width:0;max-width:100%}
+  .header-right{flex-wrap:wrap;gap:0.25rem}
+  .step-sub{display:none}
+  .btn-row{flex-wrap:wrap}
+.sidebar .btn-row:has(#btn-start){margin-left:0;margin-right:0}
+  input,select,textarea{max-width:100%}
+}
+/* ── Light theme ─────────────────────────────────────────────────────────
+   Set by theme.js through html[data-theme="light"]. Accent colors are darker here
+   because the dark theme's bright amber, green and teal fail contrast on a light page.
+   Measured: text 14:1 or better, dim text 5.7:1, every accent 4.8:1 or better on all four
+   surfaces, control borders 4:1. Update docs/DESIGN_SYSTEM.md with any change. */
+:root{color-scheme:dark}
+html[data-theme="light"]{
+  color-scheme:light;
+  --bg:#f3f6fa; --surface:#ffffff; --surface2:#eaf0f7; --surface3:#e1e9f2;
+  --surface1:#ffffff; --bg-secondary:#ffffff; --bg-tertiary:#eaf0f7;
+  --border:#b9c8da; --border-bright:#9db2cb; --border-ctl:#587394;
+  --amber:#8f5400; --amber-dim:#c99a4a; --amber-glow:rgba(143,84,0,0.14); --amber-text:#7d4a00;
+  --yellow:#6f5600; --yellow-dim:rgba(111,86,0,0.12);
+  --teal:#08706a; --teal-dim:rgba(8,112,106,0.12);
+  --red:#b71c1c; --red-dim:rgba(183,28,28,0.10);
+  --green:#09694a; --green-dim:rgba(9,105,74,0.12);
+  --purple:#6a3fc2; --purple-dim:rgba(106,63,194,0.12);
+  --text:#14233a; --text-dim:#475a73; --text-bright:#0a1626; --text-primary:#14233a;
+  --tab-library:#a34700; --tab-autocompress:#b01a5c; --tab-tools:#0b5aa8; --arc-mixed:#6a3fc2;
+  --panel:#ffffff; --on-yellow:#ffffff;
+}
+html[data-theme="light"] body::before{display:none}
+html[data-theme="light"] header{background-color:#ffffff;box-shadow:0 1px 0 var(--border),0 2px 8px rgba(20,35,58,0.08)}
+html[data-theme="light"] .config-hint code,html[data-theme="light"] code{background:rgba(20,35,58,0.07)}
+html[data-theme="light"] thead th{box-shadow:0 1px 0 0 var(--border),0 2px 6px rgba(20,35,58,0.10)}
+html[data-theme="light"] [style*="#6ab0f5"]{color:#0b5aa8 !important}
+html[data-theme="light"] .btn-primary{color:#ffffff}
+html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;border-color:#a15f00}
+.theme-toggle{background:none;border:1px solid var(--border-ctl);border-radius:50%;width:44px;height:44px;flex-shrink:0;color:var(--text-dim);font-size:1rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s}
+.theme-toggle:hover{border-color:var(--amber);color:var(--amber)}
 </style>
 </head>
 
 <body>
 <div class="page">
+<a href="#main" class="skip-link">Skip to main content</a>
 
   <!-- ═══════════════════ HEADER ═══════════════════ -->
   <header>
     <div class="logo">
       <span class="logo-main">SVCS</span>
       <div>
-        <div class="logo-sub">Surveillance Video Compression System</div>
+        <h1 class="logo-sub" style="font-weight:400">Surveillance Video Compression System</h1>
       </div>
       {% if not server_features %}
       <span title="Offline field build: local compression only, no network server features"
-            style="font-family:var(--mono);font-size:0.5rem;font-weight:700;letter-spacing:0.08em;
+            style="font-family:var(--mono);font-size: 0.75rem;font-weight:700;letter-spacing:0.08em;
                    color:var(--teal);border:1px solid var(--teal);border-radius:3px;
                    padding:1px 5px;align-self:center;">OFFLINE BUILD</span>
       {% endif %}
     </div>
     <div class="header-right">
-<div id="status-pill" class="pill offline" title="Pipeline is idle: nothing is compressing right now. The web server itself is up. Press Start to begin.">
+<div id="status-pill" class="pill offline" title="Pipeline is idle: nothing is compressing right now. The web server itself is up. Press Start to begin." role="status" aria-live="polite">
         <span class="pill-dot"></span>
         <span id="status-text">OFFLINE</span>
       </div>
-      <button class="global-activity-toggle" id="global-activity-toggle"
+      <button class="global-activity-toggle" id="global-activity-toggle" aria-label="Server activity"
               onclick="toggleGlobalStatus()" title="Server activity: live status and log">&#8801;</button>
-      <button onclick="sendFeedback()" title="Send feedback"
+      <button onclick="sendFeedback()" title="Send feedback" aria-label="Send feedback"
               style="background:none;border:1px solid var(--border);border-radius:50%;
                      width:26px;height:26px;color:var(--text-dim);font-family:var(--mono);
                      font-size:0.85rem;cursor:pointer;display:flex;align-items:center;
@@ -2274,7 +2358,7 @@
                      margin-right:6px;"
               onmouseover="this.style.borderColor='var(--amber)';this.style.color='var(--amber)'"
               onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">&#9993;</button>
-      <button onclick="openHelp()" title="Help"
+      <button onclick="openHelp()" title="Help" aria-label="Help"
               style="background:none;border:1px solid var(--border);border-radius:50%;
                      width:26px;height:26px;color:var(--text-dim);font-family:var(--mono);
                      font-size:0.75rem;cursor:pointer;display:flex;align-items:center;
@@ -2285,10 +2369,10 @@
   </header>
 
   <!-- ═══════════════════ MAIN ═══════════════════ -->
-  <main>
+  <main id="main" tabindex="-1">
 
     <!-- ════════ SIDEBAR - Configuration ════════ -->
-    <aside class="sidebar">
+    <aside class="sidebar" aria-label="Compression setup">
 
       <!-- ── STEP 1: Source ─────────────────────── -->
       <div class="step-header">
@@ -2313,11 +2397,11 @@
             <div class="input-with-btn">
               <input type="text" id="input-source" value="data/test_clip.mp4"
                      placeholder="file path, 0 for webcam, rtsp://…"
-                     oninput="_onInputSourceChange(this.value)" />
+                     oninput="_onInputSourceChange(this.value)" aria-label="Video file path, camera number, or stream address"/>
               <button class="btn-browse" onclick="browseFile()" title="Browse files on the server PC">…</button>
               <button class="btn btn-ghost" onclick="scanVideos()" title="Scan data/ folder">⟳</button>
             </div>
-            <div style="font-size:0.6rem;color:var(--text-dim);margin-top:3px;line-height:1.4;">
+            <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:3px;line-height:1.4;">
               Browse opens a dialog on the <em>server PC</em>, not your device.<br>
               Use Upload above if you're on a different machine.
             </div>
@@ -2326,18 +2410,18 @@
             <div style="margin-top:0.6rem;border-top:1px solid var(--border);padding-top:0.5rem;">
               <div class="input-with-btn" style="gap:6px;">
                 <input type="text" id="camera-username" placeholder="camera username (optional)"
-                       autocomplete="off" style="flex:1;" />
+                       autocomplete="off" style="flex:1;" aria-label="Camera username (optional)"/>
                 <input type="password" id="camera-password" placeholder="password (optional)"
-                       autocomplete="off" style="flex:1;" />
+                       autocomplete="off" style="flex:1;" aria-label="Camera password (optional)"/>
               </div>
               <button class="btn btn-ghost" style="margin-top:5px;width:100%;"
                       onclick="discoverCameras()" title="Scan the LAN for ONVIF cameras">
                 ⟳ Discover ONVIF cameras
               </button>
               <div id="camera-discover-status"
-                   style="font-size:0.6rem;color:var(--text-dim);margin-top:4px;line-height:1.4;"></div>
+                   style="font-size: 0.75rem;color:var(--text-dim);margin-top:4px;line-height:1.4;"></div>
               <div id="camera-list" style="margin-top:4px;"></div>
-              <div style="font-size:0.58rem;color:var(--text-dim);margin-top:3px;line-height:1.4;">
+              <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:3px;line-height:1.4;">
                 Credentials are sent only to your local SVCS server to build the RTSP URL and are never logged.<br>
                 Ring / Nest / Arlo?
                 <a href="#" onclick="showBridgeHelp(); return false;"
@@ -2349,26 +2433,26 @@
 
         <div class="config-field" id="camera-id-field" style="display:none;margin-top:0.5rem;">
           <label class="config-label" for="camera-id">Camera ID</label>
-          <input type="text" id="camera-id" value="cam_00" placeholder="e.g. cam_front, cam_01" />
-          <div style="font-size:0.62rem;color:var(--text-dim);margin-top:2px;">Used in output filenames.</div>
+          <input type="text" id="camera-id" value="cam_00" placeholder="e.g. cam_front, cam_01" aria-label="e.g. cam front, cam 01"/>
+          <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:2px;">Used in output filenames.</div>
         </div>
         <input type="hidden" id="camera-id-auto" value="" />
         <div class="config-field">
           <label class="config-label" for="output-dir">Save To</label>
           <div style="display:flex;gap:0.4rem;align-items:center;">
-            <input type="text" id="output-dir" placeholder="Chosen in Setup (or type a folder)" style="flex:1;" />
+            <input type="text" id="output-dir" placeholder="Chosen in Setup (or type a folder)" style="flex:1;" aria-label="Chosen in Setup (or type a folder)"/>
             <button type="button" id="gdrive-view-btn"
               onclick="_openCloudFolder()"
               title="Open cloud sync folder in browser"
-              style="display:none;padding:0.25rem 0.55rem;font-size:0.65rem;background:#0078d420;border:1px solid #0078d460;border-radius:4px;color:#6ab0f5;cursor:pointer;white-space:nowrap;font-family:var(--mono);flex-shrink:0;">
+              style="display:none;padding:0.25rem 0.55rem;font-size: 0.75rem;background:#0078d420;border:1px solid #0078d460;border-radius:4px;color:#6ab0f5;cursor:pointer;white-space:nowrap;font-family:var(--mono);flex-shrink:0;">
               View Online
             </button>
             <button type="button" onclick="openSetup()" title="Change output destination"
-              style="padding:0.25rem 0.55rem;font-size:0.65rem;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--text-dim);cursor:pointer;white-space:nowrap;font-family:var(--mono);flex-shrink:0;">
+              style="padding:0.25rem 0.55rem;font-size: 0.75rem;background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--text-dim);cursor:pointer;white-space:nowrap;font-family:var(--mono);flex-shrink:0;">
               Change...
             </button>
           </div>
-          <div id="gdrive-status" style="font-size:0.6rem;margin-top:3px;padding:3px 6px;border-radius:3px;font-family:var(--mono);color:var(--text-dim);">
+          <div id="gdrive-status" style="font-size: 0.75rem;margin-top:3px;padding:3px 6px;border-radius:3px;font-family:var(--mono);color:var(--text-dim);">
           </div>
         </div>
         <!--
@@ -2381,7 +2465,7 @@
         -->
         <div class="config-field" style="margin-top:0.4rem;">
           <label class="config-label" for="codec-select">Codec</label>
-          <select id="codec-select" style="width:100%;font-family:var(--mono);font-size:0.65rem;">
+          <select id="codec-select" style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="codec select">
             <option value="auto" selected>Auto (per-mode) - recommended</option>
             <option value="libsvtav1">libsvtav1 (AV1 / SVT-AV1)</option>
             <option value="libaom-av1">libaom-av1 (AV1 reference - slower)</option>
@@ -2393,7 +2477,7 @@
               <option value="av1_nvenc">av1_nvenc (GPU AV1 - RTX 40+)</option>
             </optgroup>
           </select>
-          <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
+          <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
             Auto: H.264 for Mode 0/1 (universal playback), AV1 for Mode 2/3 (max savings).
             GPU (NVENC) codecs are best for real-time camera ingest; server auto-falls-back
             to libx264 if a chosen encoder is missing from your ffmpeg build.
@@ -2409,8 +2493,8 @@
           <label class="config-label" for="crf-input">Quality (CRF)</label>
           <input type="number" id="crf-input" min="0" max="63"
                  placeholder="auto · 18 (Mode 0/1/2) · 38 (Mode 3)"
-                 style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
-          <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
+                 style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="auto · 18 (Mode 0/1/2) · 38 (Mode 3)"/>
+          <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
             Lower = sharper / bigger. Higher = blurrier / smaller. Try 38-45 for tiny output.
           </div>
         </div>
@@ -2419,20 +2503,20 @@
              disclosure: collapsed by default so non-technical operators are
              not shown encoder internals. -->
         <details class="source-advanced" style="margin-top:0.5rem;">
-          <summary style="cursor:pointer;font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);">
+          <summary style="cursor:pointer;font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);">
             Storage &amp; quality (advanced)
           </summary>
           <!-- R5 TASK 5.1: target perceptual quality instead of a fixed CRF.
                Off by default, so the fixed-CRF modes are untouched. -->
           <div class="config-field">
-            <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.62rem;cursor:pointer;">
-              <input type="checkbox" id="targetvmaf-toggle" onchange="onTargetVmafToggle()" />
+            <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;">
+              <input type="checkbox" id="targetvmaf-toggle" onchange="onTargetVmafToggle()" aria-label="targetvmaf toggle"/>
               Target quality (VMAF) instead of fixed CRF
             </label>
             <div id="targetvmaf-row" style="display:none;margin-top:0.35rem;">
               <input type="number" id="targetvmaf-input" min="85" max="97" step="1" value="93"
-                     style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
-              <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
+                     style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="Target VMAF quality score"/>
+              <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
                 Spends only the bits needed to hit this perceived quality (85 to 97; 93 is a good
                 default). Smallest file at constant quality. Adds a short one-time search per clip;
                 the result is cached. Falls back to the fixed CRF if VMAF is unavailable.
@@ -2442,36 +2526,36 @@
           <div class="config-field" style="margin-top:0.4rem;">
             <label class="config-label" for="maxbitrate-input">Max bitrate cap (kbps)</label>
             <input type="number" id="maxbitrate-input" min="0" max="200000" placeholder="0 = uncapped"
-                   style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
-            <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
+                   style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="0 = uncapped"/>
+            <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
               Bounds file size while keeping CRF quality targeting (capped CRF). 0 = no cap.
             </div>
           </div>
           <div class="config-field" style="margin-top:0.4rem;">
             <label class="config-label" for="gop-input">Keyframe interval (seconds)</label>
             <input type="number" id="gop-input" min="0" max="600" placeholder="20"
-                   style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
-            <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
+                   style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="20"/>
+            <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
               Longer = smaller for static cameras. 20s is a good default; higher hurts seeking.
             </div>
           </div>
           <div class="config-field" style="margin-top:0.4rem;">
             <label class="config-label" for="denoise-select">Denoise (night / IR)</label>
-            <select id="denoise-select" style="width:100%;font-family:var(--mono);font-size:0.65rem;">
+            <select id="denoise-select" style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="denoise select">
               <option value="" selected>Off</option>
               <option value="hqdn3d">hqdn3d (light, fast)</option>
               <option value="atadenoise">atadenoise (temporal, static cams)</option>
             </select>
-            <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
+            <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
               Cuts noisy night/IR bitrate. Costs CPU and can soften plates/faces, so keep off by day.
             </div>
           </div>
           <div class="config-field" style="margin-top:0.4rem;">
-            <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.62rem;cursor:pointer;">
-              <input type="checkbox" id="roiqp-toggle" />
+            <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;">
+              <input type="checkbox" id="roiqp-toggle" aria-label="roiqp toggle"/>
               Encoder-level ROI (x264/x265)
             </label>
-            <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
+            <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
               Degrades long-static areas at the encoder instead of by pixel edit. Adapts after the
               first couple of segments. No effect on AV1 or GPU codecs.
             </div>
@@ -2491,14 +2575,14 @@
            from /api/presets. -->
       <div class="config-field" style="margin-bottom:0.5rem;">
         <label class="config-label" for="preset-select">Surveillance preset</label>
-        <select id="preset-select" style="width:100%;font-family:var(--mono);font-size:0.7rem;"></select>
-        <div style="font-size:0.55rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
+        <select id="preset-select" style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="preset select"></select>
+        <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:3px;font-family:var(--mono);">
           Pick what the camera watches - we set the mode + codec. Fine-tune with the cards below or Advanced.
         </div>
       </div>
       <div class="preset-grid">
         <!-- hidden select kept for backward compat with JS startPipeline() -->
-        <select id="mode-select" style="display:none;">
+        <select id="mode-select" style="display:none;" aria-label="mode select">
           <option value="mode0" selected>Mode 0</option>
           <option value="mode1">Mode 1</option>
           <option value="mode2">Mode 2</option>
@@ -2545,7 +2629,7 @@
           <span class="slider-value-badge" id="sensitivity-label">Balanced</span>
         </div>
         <input type="range" id="sensitivity-slider" min="1" max="5" step="1" value="3"
-               oninput="_onSensitivityChange(this.value)" />
+               oninput="_onSensitivityChange(this.value)" aria-label="sensitivity slider"/>
         <div class="slider-endpoints">
           <span>Low (less alerts)</span>
           <span>High (catch everything)</span>
@@ -2555,11 +2639,11 @@
       <!-- Segment length -->
       <div class="config-section" style="padding-top:0.5rem;padding-bottom:0.5rem;">
         <div class="config-field" style="margin-bottom:0;">
-          <label class="config-label" for="segment-seconds">Segment Length
-            <span style="color:var(--amber);font-size:0.7rem;margin-left:4px;" id="seg-len-val">60s</span>
+          <label class="config-label" for="segment-seconds-slider">Segment Length
+            <span style="color:var(--amber);font-size: 0.75rem;margin-left:4px;" id="seg-len-val">60s</span>
           </label>
           <input type="range" id="segment-seconds-slider" min="10" max="1800" step="10" value="60"
-                 oninput="_onSegLenUserChange(this.value)" />
+                 oninput="_onSegLenUserChange(this.value)"/>
           <input type="hidden" id="segment-seconds" value="60" />
           <div class="slider-endpoints">
             <span>10s (many small files)</span>
@@ -2571,8 +2655,8 @@
       <!-- Enhancement toggle (friendly) -->
       <div class="config-section" style="padding-top:0.5rem;padding-bottom:0.5rem;">
         <div class="toggle-row">
-          <input type="checkbox" id="enhance-toggle" onchange="updateEnhanceFields()" />
-          <label for="enhance-toggle" style="font-family:var(--mono);font-size:0.7rem;color:var(--text);cursor:pointer;">
+          <input type="checkbox" id="enhance-toggle" onchange="updateEnhanceFields()" aria-label="enhance toggle"/>
+          <label for="enhance-toggle" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text);cursor:pointer;">
             SR  Sharpen detections (AI super-resolution)
           </label>
         </div>
@@ -2581,8 +2665,8 @@
       <!-- Encryption toggle (friendly) -->
       <div class="config-section" style="padding-top:0.5rem;padding-bottom:0.75rem;">
         <div class="toggle-row">
-          <input type="checkbox" id="encrypt-toggle" onchange="updateEncryptFields()" />
-          <label for="encrypt-toggle" style="font-family:var(--mono);font-size:0.7rem;color:var(--text);cursor:pointer;">
+          <input type="checkbox" id="encrypt-toggle" onchange="updateEncryptFields()" aria-label="encrypt toggle"/>
+          <label for="encrypt-toggle" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text);cursor:pointer;">
             AES  Encrypt output (AES-256)
           </label>
         </div>
@@ -2601,20 +2685,20 @@
                 <!-- GPU device selector -->
                 <div class="config-field">
                   <label class="config-label" for="enhance-device">Compute Device</label>
-                  <select id="enhance-device">
+                  <select id="enhance-device" aria-label="enhance device">
                     <option value="auto" selected>Auto-detect (recommended)</option>
                     <option value="cuda">NVIDIA GPU (CUDA)</option>
                     <option value="mps">Apple Silicon (MPS)</option>
                     <option value="cpu">CPU only</option>
                   </select>
-                  <div id="gpu-status-msg" style="font-family:var(--mono);font-size:0.6rem;
+                  <div id="gpu-status-msg" style="font-family:var(--mono);font-size: 0.75rem;
                        color:var(--text-dim);margin-top:0.3rem;line-height:1.5;"></div>
-                  <button class="btn btn-ghost" style="margin-top:0.3rem;font-size:0.6rem;padding:0.2rem 0.6rem;"
+                  <button class="btn btn-ghost" style="margin-top:0.3rem;font-size: 0.75rem;padding:0.2rem 0.6rem;"
                           onclick="checkGpu()">Check GPU</button>
                 </div>
                 <div class="config-field">
                   <label class="config-label" for="enhance-model">SR Model</label>
-                  <select id="enhance-model">
+                  <select id="enhance-model" aria-label="enhance model">
                     <option value="bicubic" selected>Bicubic (fast, no AI, always available)</option>
                     <option value="espcn">ESPCN (AI, fastest, needs downloaded weights)</option>
                     <option value="fsrcnn">FSRCNN (AI, fast, needs downloaded weights)</option>
@@ -2623,7 +2707,7 @@
                     <option value="realesrgan">Real-ESRGAN (AI, best quality, needs the "enhance" install extra + weights)</option>
                     <option value="realesrnet">RealESRNet (AI, same family as Real-ESRGAN without the GAN sharpening, needs the "enhance" install extra + weights)</option>
                   </select>
-                  <div style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);margin-top:0.3rem;line-height:1.5;">
+                  <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.3rem;line-height:1.5;">
                     Missing weights silently fall back to bicubic - the SR ENHANCE chip on the Home tab always
                     shows the backend that actually ran, not just what was requested. Run
                     <code>scripts/download_enhance_models.py</code> or see DEV.md to fetch every model's weights.
@@ -2631,7 +2715,7 @@
                 </div>
                 <div class="config-field">
                   <label class="config-label" for="enhance-scale">Scale</label>
-                  <select id="enhance-scale">
+                  <select id="enhance-scale" aria-label="enhance scale">
                     <option value="2">2×</option>
                     <option value="4" selected>4×</option>
                   </select>
@@ -2641,18 +2725,18 @@
                     Enhance every N frames <span id="enhance-every-n-val" style="color:var(--amber);margin-left:4px;">5</span>
                   </label>
                   <input type="range" id="enhance-every-n" min="1" max="25" step="1" value="5"
-                         oninput="document.getElementById('enhance-every-n-val').textContent=this.value" style="width:100%;margin-top:4px">
+                         oninput="document.getElementById('enhance-every-n-val').textContent=this.value" style="width:100%;margin-top:4px" aria-label="enhance every n">
                 </div>
                 <div class="config-field">
                   <label class="config-label" for="enhance-max-roi">
                     Max ROI size (px) <span id="enhance-max-roi-val" style="color:var(--amber);margin-left:4px;">200</span>
                   </label>
                   <input type="range" id="enhance-max-roi" min="64" max="640" step="16" value="200"
-                         oninput="document.getElementById('enhance-max-roi-val').textContent=this.value" style="width:100%;margin-top:4px">
+                         oninput="document.getElementById('enhance-max-roi-val').textContent=this.value" style="width:100%;margin-top:4px" aria-label="enhance max roi">
                 </div>
                 <div class="toggle-row" style="margin-top:0.75rem;">
-                  <input type="checkbox" id="upscale-output-toggle" />
-                  <label for="upscale-output-toggle" style="font-family:var(--mono);font-size:0.7rem;color:var(--text);cursor:pointer;">
+                  <input type="checkbox" id="upscale-output-toggle" aria-label="upscale output toggle"/>
+                  <label for="upscale-output-toggle" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text);cursor:pointer;">
                     ↑ Upscale output resolution (×scale factor)
                   </label>
                 </div>
@@ -2669,21 +2753,21 @@
               <div id="encrypt-extra" style="opacity:0.4;pointer-events:none;">
                 <div class="config-field">
                   <label class="config-label" for="encrypt-password">Passphrase</label>
-                  <input type="password" id="encrypt-password" placeholder="Leave blank to use key file" />
+                  <input type="password" id="encrypt-password" placeholder="Leave blank to use key file" aria-label="Leave blank to use key file"/>
                 </div>
                 <div class="config-field">
                   <label class="config-label" for="encrypt-keyfile">Key File Path</label>
                   <div style="display:flex;gap:0.4rem;align-items:center;">
-                    <input type="text" id="encrypt-keyfile" placeholder="path/to/camera.key" style="flex:1;" />
-                    <button class="btn btn-ghost" style="font-size:0.62rem;padding:0.25rem 0.5rem;white-space:nowrap;"
+                    <input type="text" id="encrypt-keyfile" placeholder="path/to/camera.key" style="flex:1;" aria-label="path/to/camera.key"/>
+                    <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.25rem 0.5rem;white-space:nowrap;"
                             title="Generate a new random 32-byte key file in the output folder"
                             onclick="generateKeyFile()">GEN KEY</button>
                   </div>
                 </div>
-                <p style="font-family:var(--mono);font-size:0.6rem;color:var(--amber);line-height:1.5;margin-top:0.5rem;">
+                <p style="font-family:var(--mono);font-size: 0.75rem;color:var(--amber);line-height:1.5;margin-top:0.5rem;">
                    Plaintext .mp4 deleted after encryption.<br>AES-256-GCM · PBKDF2 · SHA-256 · 600k iters.
                 </p>
-                <p id="keygen-result" style="font-family:var(--mono);font-size:0.62rem;color:var(--green);margin-top:0.3rem;display:none;"></p>
+                <p id="keygen-result" style="font-family:var(--mono);font-size: 0.75rem;color:var(--green);margin-top:0.3rem;display:none;"></p>
               </div>
             </div>
           </details>
@@ -2696,25 +2780,25 @@
             <div style="padding-top:0.75rem;">
               <div class="config-field">
                 <label class="config-label" for="bg-method">BG Subtraction Method</label>
-                <select id="bg-method">
+                <select id="bg-method" aria-label="bg method">
                   <option value="MOG2" selected>MOG2 (recommended)</option>
                   <option value="KNN">KNN</option>
                 </select>
               </div>
               <div class="config-field">
                 <label class="config-label" for="warmup-frames">Warmup Frames</label>
-                <input type="number" id="warmup-frames" value="120" min="0" max="9999" />
+                <input type="number" id="warmup-frames" value="120" min="0" max="9999" aria-label="warmup frames"/>
               </div>
               <div class="config-field" style="margin-top:0.75rem;">
                 <label class="config-label" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
-                  <input type="checkbox" id="object-filter-toggle" onchange="_onObjectFilterChange(this.checked)" />
+                  <input type="checkbox" id="object-filter-toggle" onchange="_onObjectFilterChange(this.checked)" aria-label="object filter toggle"/>
                   Smart filter &amp; object detection (recommended)
                 </label>
                 <p class="config-hint">Uses YOLOv8-nano to confirm each moving region is a real target (person, vehicle, animal) before recording, eliminating false triggers from trees, flags, and lighting changes. This is also the only source of the Object Type, Color, and Person/Vehicle Count data shown in Metrics and used by Search - leave it off and every segment will be recorded as type "unknown" regardless of what is actually in the video.</p>
               </div>
               <div class="config-field" style="margin-top:0.75rem;">
                 <label class="config-label" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
-                  <input type="checkbox" id="verbose-toggle" />
+                  <input type="checkbox" id="verbose-toggle" aria-label="verbose toggle"/>
                   Verbose logging
                 </label>
                 <p class="config-hint">Normal shows the key steps. Verbose adds per-frame progress and per-segment detail (detections, size, ratio, percent done) to the live log and console.</p>
@@ -2722,7 +2806,7 @@
               <div class="config-field" id="filter-confidence-row" style="display:none;">
                 <label class="config-label" for="filter-confidence">Filter Confidence</label>
                 <input type="range" id="filter-confidence" min="0.10" max="0.70" step="0.05" value="0.30"
-                       oninput="document.getElementById('filter-conf-val').textContent=(+this.value).toFixed(2)" />
+                       oninput="document.getElementById('filter-conf-val').textContent=(+this.value).toFixed(2)" aria-label="filter confidence"/>
                 <span id="filter-conf-val" class="slider-value-badge">0.30</span>
                 <p class="config-hint">Minimum YOLO confidence to keep a detection. Lower = more sensitive (may re-introduce false positives); higher = stricter (may miss distant targets).</p>
               </div>
@@ -2735,27 +2819,27 @@
           <details id="demo-sidebar-details">
             <summary>Demo / Compare Modes</summary>
             <div style="padding-top:0.75rem;">
-              <p style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.5;">
+              <p style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.5;">
                 Run the pipeline on the current source in multiple modes and render annotated output videos. Outputs are saved to OneDrive / the configured folder.
               </p>
               <div class="config-field">
                 <label class="config-label">Modes to compare</label>
                 <div style="display:flex;flex-direction:column;gap:0.25rem;">
-                  <label style="font-family:var(--mono);font-size:0.6rem;display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="demo-mode0" value="mode0" checked /> Mode 0 - Live Surveillance</label>
-                  <label style="font-family:var(--mono);font-size:0.6rem;display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="demo-mode1" value="mode1" checked /> Mode 1 - Event Recording</label>
-                  <label style="font-family:var(--mono);font-size:0.6rem;display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="demo-mode2" value="mode2" /> Mode 2 - Smart Compress</label>
-                  <label style="font-family:var(--mono);font-size:0.6rem;display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="demo-mode3" value="mode3" /> Mode 3 - Object Only</label>
+                  <label style="font-family:var(--mono);font-size: 0.75rem;display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="demo-mode0" value="mode0" checked aria-label="demo mode0"/> Mode 0 - Live Surveillance</label>
+                  <label style="font-family:var(--mono);font-size: 0.75rem;display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="demo-mode1" value="mode1" checked aria-label="demo mode1"/> Mode 1 - Event Recording</label>
+                  <label style="font-family:var(--mono);font-size: 0.75rem;display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="demo-mode2" value="mode2" aria-label="demo mode2"/> Mode 2 - Smart Compress</label>
+                  <label style="font-family:var(--mono);font-size: 0.75rem;display:flex;align-items:center;gap:0.4rem;"><input type="checkbox" id="demo-mode3" value="mode3" aria-label="demo mode3"/> Mode 3 - Object Only</label>
                 </div>
               </div>
               <div class="config-field" style="margin-top:0.5rem;">
                 <label class="config-label" for="demo-output-dir">Output Folder</label>
-                <input type="text" id="demo-output-dir" placeholder="Default: outputs/" style="width:100%;" />
+                <input type="text" id="demo-output-dir" placeholder="Default: outputs/" style="width:100%;" aria-label="Default: outputs/"/>
               </div>
-              <label style="font-family:var(--mono);font-size:0.6rem;display:flex;align-items:center;gap:0.4rem;margin-top:0.35rem;">
-                <input type="checkbox" id="demo-no-boxes" /> Disable ROI boxes
+              <label style="font-family:var(--mono);font-size: 0.75rem;display:flex;align-items:center;gap:0.4rem;margin-top:0.35rem;">
+                <input type="checkbox" id="demo-no-boxes" aria-label="demo no boxes"/> Disable ROI boxes
               </label>
-              <label style="font-family:var(--mono);font-size:0.6rem;display:flex;align-items:center;gap:0.4rem;margin-top:0.35rem;">
-                <input type="checkbox" id="demo-no-tint" /> Disable ROI tint
+              <label style="font-family:var(--mono);font-size: 0.75rem;display:flex;align-items:center;gap:0.4rem;margin-top:0.35rem;">
+                <input type="checkbox" id="demo-no-tint" aria-label="demo no tint"/> Disable ROI tint
               </label>
               <button class="btn btn-primary btn-full" style="margin-top:0.75rem;"
                       onclick="runDemo()" id="btn-run-demo">&#9654; RUN DEMO</button>
@@ -2774,8 +2858,8 @@
               -->
               <div id="demo-result-panel" style="display:none;margin-top:0.6rem;padding:0.5rem;background:var(--surface1);border:1px solid var(--border);border-radius:4px;">
                 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.4rem;">
-                  <span style="font-family:var(--mono);font-size:0.6rem;color:var(--teal);letter-spacing:0.05em;">DEMO OUTPUT</span>
-                  <button class="btn btn-ghost" style="font-size:0.55rem;padding:0.05rem 0.35rem;" onclick="_demoClearResults()" title="Hide this list">CLEAR</button>
+                  <span style="font-family:var(--mono);font-size: 0.75rem;color:var(--teal);letter-spacing:0.05em;">DEMO OUTPUT</span>
+                  <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.05rem 0.35rem;" onclick="_demoClearResults()" title="Hide this list">CLEAR</button>
                 </div>
                 <div id="demo-result-list" style="display:flex;flex-direction:column;gap:0.25rem;"></div>
               </div>
@@ -2788,28 +2872,28 @@
           <details>
             <summary>Live Stream (HLS)</summary>
             <div style="padding-top:0.75rem;">
-              <p style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.5;">
+              <p style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.5;">
                 Stream a live camera feed to the browser via HLS.
               </p>
               <div class="config-field">
                 <label class="config-label" for="hls-input">Input Source</label>
-                <input type="text" id="hls-input" placeholder="rtsp://… or 0 for webcam" />
+                <input type="text" id="hls-input" placeholder="rtsp://… or 0 for webcam" aria-label="rtsp://… or 0 for webcam"/>
                 <div style="display:flex;gap:0.35rem;margin-top:0.3rem;flex-wrap:wrap;">
-                  <span style="font-family:var(--mono);font-size:0.57rem;color:var(--text-dim);align-self:center;"> Hawaii live:</span>
-                  <button class="btn btn-ghost" style="font-size:0.57rem;padding:0.08rem 0.4rem;"
+                  <span style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);align-self:center;"> Hawaii live:</span>
+                  <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.08rem 0.4rem;"
                           onclick="document.getElementById('hls-input').value='https://58b7a509c7348.streamlock.net/live/smil:H1Cam3CapH.smil/playlist.m3u8'"
                           title="H1 Freeway live traffic cam from gookami.org">H1 Freeway</button>
-                  <button class="btn btn-ghost" style="font-size:0.57rem;padding:0.08rem 0.4rem;"
+                  <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.08rem 0.4rem;"
                           onclick="document.getElementById('hls-input').value='https://58b7a509c7348.streamlock.net/live/smil:WaimCamH.smil/playlist.m3u8'"
                           title="Waikele traffic cam from gookami.org">Waikele</button>
-                  <button class="btn btn-ghost" style="font-size:0.57rem;padding:0.08rem 0.4rem;"
+                  <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.08rem 0.4rem;"
                           onclick="document.getElementById('hls-input').value='https://58b7a509c7348.streamlock.net/live/smil:H3Cam3CapH.smil/playlist.m3u8'"
                           title="H3 Highway cam from gookami.org">H3 Hwy</button>
                 </div>
               </div>
               <div class="config-field">
                 <label class="config-label" for="hls-camera-id">Camera ID</label>
-                <input type="text" id="hls-camera-id" value="cam_00" />
+                <input type="text" id="hls-camera-id" value="cam_00" aria-label="hls camera id"/>
               </div>
               <div style="display:flex;gap:0.4rem;margin-top:0.5rem;">
                 <button class="btn btn-ghost" style="flex:1;" id="btn-hls-start"
@@ -2817,7 +2901,7 @@
                 <button class="btn btn-ghost" style="flex:1;opacity:0.4;" id="btn-hls-stop"
                         onclick="hlsStop()" disabled>■ STOP</button>
               </div>
-              <div id="hls-sidebar-msg" style="font-family:var(--mono);font-size:0.6rem;
+              <div id="hls-sidebar-msg" style="font-family:var(--mono);font-size: 0.75rem;
                    color:var(--text-dim);margin-top:0.5rem;"></div>
             </div>
           </details>
@@ -2826,13 +2910,13 @@
         <!-- Local RTSP Server -->
         <div class="config-section">
           <details id="rtsp-server-details">
-            <summary>Local RTSP Server <span id="rtsp-server-badge" style="font-size:0.6rem;font-family:var(--mono);color:var(--text-dim);margin-left:0.3rem;"></span></summary>
+            <summary>Local RTSP Server <span id="rtsp-server-badge" style="font-size: 0.75rem;font-family:var(--mono);color:var(--text-dim);margin-left:0.3rem;"></span></summary>
             <div style="padding-top:0.75rem;">
-              <p style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.5;">
+              <p style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-bottom:0.75rem;line-height:1.5;">
                 Spin up a local <a href="https://github.com/bluenviron/mediamtx" target="_blank" style="color:var(--green);">MediaMTX</a> RTSP server and push a video into it.
               </p>
               <div id="rtsp-dl-section">
-                <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">STEP 1: DOWNLOAD BINARY</div>
+                <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-bottom:0.3rem;">STEP 1: DOWNLOAD BINARY</div>
                 <div style="display:flex;gap:0.4rem;align-items:center;">
                   <button class="btn btn-ghost" style="flex:1;" id="btn-rtsp-dl" onclick="rtspDownload()">⬇ DOWNLOAD MediaMTX</button>
                 </div>
@@ -2840,41 +2924,41 @@
                   <div style="background:var(--surface2);border-radius:3px;height:6px;overflow:hidden;">
                     <div id="rtsp-dl-bar" style="height:100%;width:0%;background:var(--green);transition:width 0.3s;"></div>
                   </div>
-                  <div id="rtsp-dl-label" style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);margin-top:0.2rem;"></div>
+                  <div id="rtsp-dl-label" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.2rem;"></div>
                 </div>
               </div>
               <div style="margin-top:0.75rem;">
-                <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">STEP 2: START SERVER</div>
+                <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-bottom:0.3rem;">STEP 2: START SERVER</div>
                 <div style="display:flex;gap:0.4rem;">
                   <button class="btn btn-ghost" style="flex:1;" id="btn-rtsp-start" onclick="rtspStart()" disabled>▶ START</button>
                   <button class="btn btn-ghost" style="flex:1;opacity:0.4;" id="btn-rtsp-stop" onclick="rtspStop()" disabled>■ STOP</button>
                 </div>
-                <div id="rtsp-server-msg" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:0.3rem;"></div>
+                <div id="rtsp-server-msg" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.3rem;"></div>
               </div>
               <div style="margin-top:0.75rem;" id="rtsp-push-section">
-                <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">STEP 3: PUSH VIDEO</div>
+                <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-bottom:0.3rem;">STEP 3: PUSH VIDEO</div>
                 <div class="config-field">
                   <label class="config-label" for="rtsp-push-path">Video File</label>
                   <div style="display:flex;gap:0.25rem;">
-                    <input type="text" id="rtsp-push-path" placeholder="path/to/video.mp4" style="flex:1;" />
-                    <button class="btn btn-ghost" style="padding:0 0.5rem;font-size:0.65rem;" onclick="rtspBrowse()">…</button>
+                    <input type="text" id="rtsp-push-path" placeholder="path/to/video.mp4" style="flex:1;" aria-label="path/to/video.mp4"/>
+                    <button class="btn btn-ghost" style="padding:0 0.5rem;font-size: 0.75rem;" onclick="rtspBrowse()">…</button>
                   </div>
                 </div>
                 <div class="config-field">
                   <label class="config-label" for="rtsp-stream-name">Stream Name</label>
-                  <input type="text" id="rtsp-stream-name" value="live" placeholder="e.g. highway" style="width:100%;" />
+                  <input type="text" id="rtsp-stream-name" value="live" placeholder="e.g. highway" style="width:100%;" aria-label="e.g. highway"/>
                 </div>
                 <div style="display:flex;gap:0.4rem;margin-top:0.3rem;">
                   <button class="btn btn-ghost" style="flex:1;" id="btn-rtsp-push" onclick="rtspPush()" disabled>▶ PUSH VIDEO</button>
                   <button class="btn btn-ghost" style="flex:1;opacity:0.4;" id="btn-rtsp-stop-push" onclick="rtspStopPush()" disabled>■ STOP PUSH</button>
                 </div>
-                <div id="rtsp-push-msg" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:0.3rem;"></div>
+                <div id="rtsp-push-msg" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.3rem;"></div>
               </div>
               <div id="rtsp-url-box" style="display:none;margin-top:0.75rem;padding:0.5rem;background:var(--surface2);border-radius:4px;border:1px solid var(--border);">
-                <div style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);margin-bottom:0.25rem;">RTSP URL</div>
+                <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-bottom:0.25rem;">RTSP URL</div>
                 <div style="display:flex;gap:0.3rem;align-items:center;">
-                  <code id="rtsp-url-text" style="font-family:var(--mono);font-size:0.65rem;color:var(--green);flex:1;word-break:break-all;"></code>
-                  <button class="btn btn-ghost" style="padding:0.2rem 0.4rem;font-size:0.6rem;white-space:nowrap;" onclick="rtspCopyUrl()">⧉ USE</button>
+                  <code id="rtsp-url-text" style="font-family:var(--mono);font-size: 0.75rem;color:var(--green);flex:1;word-break:break-all;"></code>
+                  <button class="btn btn-ghost" style="padding:0.2rem 0.4rem;font-size: 0.75rem;white-space:nowrap;" onclick="rtspCopyUrl()">⧉ USE</button>
                 </div>
               </div>
             </div>
@@ -2883,7 +2967,7 @@
 
         <!-- Archive Search shortcut -->
         <div class="config-section">
-          <button class="btn btn-ghost" style="width:100%;font-size:0.68rem;letter-spacing:0.06em;"
+          <button class="btn btn-ghost" style="width:100%;font-size: 0.75rem;letter-spacing:0.06em;"
                   onclick="toggleArchivePanel()" id="btn-archive-toggle">
             ARCHIVE SEARCH
           </button>
@@ -2892,7 +2976,8 @@
       </div><!-- /advanced-panel -->
 
       <!-- Action buttons -->
-      <div class="btn-row" style="margin-top:auto;">
+            <div id="start-hint" role="status" hidden style="margin-top:auto;margin-bottom:0.4rem;font-size:0.8rem;color:var(--amber-text);">Choose an output destination in Setup first.</div>
+      <div class="btn-row" style="margin-top:0;">
         <button id="btn-start" class="btn btn-primary" onclick="startPipeline()">▶ START</button>
         <button id="btn-stop" class="btn btn-danger" onclick="stopPipeline()" disabled>■ STOP</button>
       </div>
@@ -2906,7 +2991,7 @@
       </div>
       <!-- Hidden file picker for config import -->
       <input type="file" id="config-import-input" accept=".json"
-             style="display:none;" onchange="_onConfigFileSelected(event)" />
+             style="display:none;" onchange="_onConfigFileSelected(event)" aria-label="Import a saved configuration file"/>
     </aside>
 
     <!-- ════════════════════════════════════════════════════════ -->
@@ -2915,7 +3000,7 @@
     <div class="tab-area" id="tab-area">
 
       <!-- Tab strip -->
-      <nav class="tab-nav">
+      <nav class="tab-nav" aria-label="Sections">
         <button class="tab-btn active" data-tab="home"    onclick="switchTab('home')">HOME</button>
         <button class="tab-btn"        data-tab="upload"  onclick="switchTab('upload')">UPLOAD</button>
         <button class="tab-btn"        data-tab="library" onclick="switchTab('library')">LIBRARY</button>
@@ -2927,7 +3012,7 @@
         {% endif %}
         <button class="tab-btn"        data-tab="encrypt" onclick="switchTab('encrypt')">ENCRYPT</button>
         <div class="tab-nav-right">
-          <button class="btn btn-ghost" style="font-size:0.6rem;padding:0.2rem 0.6rem;" onclick="loadSegments()" title="Refresh segments">↻</button>
+          <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.2rem 0.6rem;" onclick="loadSegments()" title="Refresh segments">↻</button>
         </div>
       </nav>
 
@@ -2940,15 +3025,15 @@
           <!-- Primary: drag-and-drop / click-to-upload zone (moved from sidebar) -->
           <label class="upload-zone" for="upload-input" id="upload-zone">
             <input type="file" id="upload-input" accept="video/*,.mp4,.avi,.mov,.mkv,.h264,.m4v"
-                   style="display:none" onchange="_uploadVideo(this)" />
+                   style="display:none" onchange="_uploadVideo(this)" aria-label="upload input"/>
             <span class="upload-zone-icon">+</span>
             <span class="upload-zone-text">Click to upload a video<br>
               <small>MP4, AVI, MOV, MKV supported</small>
             </span>
           </label>
-          <div id="upload-status" style="font-size:0.7rem;color:var(--text-dim);margin-top:0.5rem;min-height:1.1em;"></div>
+          <div id="upload-status" style="font-size: 0.75rem;color:var(--text-dim);margin-top:0.5rem;min-height:1.1em;"></div>
           <div id="video-list" style="margin-top:0.5rem;"></div>
-          <div style="font-size:0.65rem;color:var(--text-dim);margin-top:0.8rem;line-height:1.5;">
+          <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:0.8rem;line-height:1.5;">
             After uploading, pick a <strong>preset</strong> and press <strong>Start</strong>
             in the sidebar. For a live camera or a server-side file, use
             <em>Server file path (advanced)</em> in the sidebar.
@@ -2965,7 +3050,7 @@
           <span class="tab-page-title">Tools</span>
         </div>
         <div id="tab-tools-body" style="overflow-y:auto;padding-right:4px;">
-          <p style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);line-height:1.5;margin-bottom:0.75rem;">
+          <p style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.5;margin-bottom:0.75rem;">
             Advanced streaming tools: run a local RTSP server (MediaMTX) and view a live HLS stream in the browser.
           </p>
 
@@ -2982,12 +3067,12 @@
               APP UPDATES
             </summary>
             <div style="padding:0.5rem 0 0;">
-              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
+              <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
                 Checks this install's version against the newest one published on GitHub. If one is
                 found, SVCS downloads it, verifies it, and installs it for you - no GitHub visit needed.
               </div>
               <button class="btn btn-ghost" onclick="checkForUpdate()">Check for updates</button>
-              <span id="tools-update-result" style="display:block;margin-top:4px;font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);"></span>
+              <span id="tools-update-result" style="display:block;margin-top:4px;font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
             </div>
           </details>
 
@@ -2999,40 +3084,40 @@
               PHONE ALERTS WHILE THE APP IS CLOSED
             </summary>
             <div style="padding:0.5rem 0 0;">
-              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
+              <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
                 Posts alerts to an <b>ntfy</b> topic that you host, so your phone hears about a line
                 crossing or a finished compression even with the SVCS app closed. Nothing goes to a
                 third party: you run the ntfy server, you pick the topic. See docs/PUSH-NOTIFICATIONS.md.
               </div>
-              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.64rem;cursor:pointer;margin-bottom:0.5rem;">
-                <input type="checkbox" id="push-enabled" />
+              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;margin-bottom:0.5rem;">
+                <input type="checkbox" id="push-enabled" aria-label="push enabled"/>
                 Send alerts to my ntfy topic
               </label>
               <div class="config-field">
                 <label class="config-label" for="push-url">Topic URL</label>
                 <input type="text" id="push-url" placeholder="http://192.168.1.50:8080/svcs-alerts"
-                       style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
+                       style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="http://192.168.1.50:8080/svcs alerts"/>
               </div>
               <div class="config-field" style="margin-top:0.4rem;">
                 <label class="config-label" for="push-token">Access token</label>
                 <input type="password" id="push-token" autocomplete="new-password"
                        placeholder="optional, for a topic that requires auth"
-                       style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
+                       style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="optional, for a topic that requires auth"/>
               </div>
-              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.64rem;cursor:pointer;margin-top:0.5rem;">
-                <input type="checkbox" id="push-on-jobs" checked />
+              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;margin-top:0.5rem;">
+                <input type="checkbox" id="push-on-jobs" checked aria-label="push on jobs"/>
                 Tell me when a compression finishes or fails
               </label>
-              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.64rem;cursor:pointer;margin-top:0.3rem;">
-                <input type="checkbox" id="push-on-events" checked />
+              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;margin-top:0.3rem;">
+                <input type="checkbox" id="push-on-events" checked aria-label="push on events"/>
                 Tell me about line crossings and loitering
               </label>
               <div style="margin-top:0.6rem;display:flex;gap:0.4rem;flex-wrap:wrap;">
                 <button class="btn btn-ghost" id="push-test-btn" onclick="pushCfgTest()">Send test</button>
                 <button class="btn btn-primary" id="push-save-btn" onclick="pushCfgSave()">Save</button>
               </div>
-              <div id="push-status" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
-              <div style="font-size:0.55rem;color:var(--text-dim);margin-top:0.4rem;font-family:var(--mono);">
+              <div id="push-status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
+              <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:0.4rem;font-family:var(--mono);">
                 Alerts carry the event kind, camera id, and class label only. No plate text, no file
                 paths, no camera credentials. Loopback and LAN addresses are accepted; cloud
                 metadata endpoints are refused.
@@ -3049,45 +3134,45 @@
               OUTBOUND WEBHOOK
             </summary>
             <div style="padding:0.5rem 0 0;">
-              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
+              <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
                 Posts a plain JSON message to any URL you point it at: your own server, a
                 Discord/Slack incoming webhook, a SIEM ingest endpoint. Same URL rules as the
                 phone-alerts panel above, loopback and LAN addresses are accepted, cloud
                 metadata endpoints are refused. Optional signing secret so the receiver can
                 verify the delivery came from this SVCS instance.
               </div>
-              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.64rem;cursor:pointer;margin-bottom:0.5rem;">
-                <input type="checkbox" id="webhook-enabled" />
+              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;margin-bottom:0.5rem;">
+                <input type="checkbox" id="webhook-enabled" aria-label="webhook enabled"/>
                 Send job and event deliveries to my webhook
               </label>
               <div class="config-field">
                 <label class="config-label" for="webhook-url">Webhook URL</label>
                 <input type="text" id="webhook-url" placeholder="https://your-server/svcs-webhook"
-                       style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
+                       style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="https://your server/svcs webhook"/>
               </div>
               <div class="config-field" style="margin-top:0.4rem;">
                 <label class="config-label" for="webhook-secret">Signing secret</label>
                 <input type="password" id="webhook-secret" autocomplete="new-password"
                        placeholder="optional, adds an X-SVCS-Signature header"
-                       style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
+                       style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="optional, adds an X SVCS Signature header"/>
               </div>
-              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.64rem;cursor:pointer;margin-top:0.4rem;">
-                <input type="checkbox" id="webhook-clear-secret" />
+              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;margin-top:0.4rem;">
+                <input type="checkbox" id="webhook-clear-secret" aria-label="webhook clear secret"/>
                 Clear the stored signing secret on save
               </label>
-              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.64rem;cursor:pointer;margin-top:0.5rem;">
-                <input type="checkbox" id="webhook-on-jobs" checked />
+              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;margin-top:0.5rem;">
+                <input type="checkbox" id="webhook-on-jobs" checked aria-label="webhook on jobs"/>
                 Tell it when a compression finishes or fails
               </label>
-              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.64rem;cursor:pointer;margin-top:0.3rem;">
-                <input type="checkbox" id="webhook-on-events" checked />
+              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;margin-top:0.3rem;">
+                <input type="checkbox" id="webhook-on-events" checked aria-label="webhook on events"/>
                 Tell it about line crossings and loitering
               </label>
               <div style="margin-top:0.6rem;display:flex;gap:0.4rem;flex-wrap:wrap;">
                 <button class="btn btn-ghost" id="webhook-test-btn" onclick="webhookCfgTest()">Send test</button>
                 <button class="btn btn-primary" id="webhook-save-btn" onclick="webhookCfgSave()">Save</button>
               </div>
-              <div id="webhook-status" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
+              <div id="webhook-status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
             </div>
           </details>
 
@@ -3102,21 +3187,21 @@
               RECENT EVENTS
             </summary>
             <div style="padding:0.5rem 0 0;">
-              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
+              <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
                 Line crossings and loitering from the configured output folder's
                 <code>events.jsonl</code>, newest first. Refreshes every 10 seconds while this
                 panel is open.
               </div>
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.4rem;">
                 <button class="btn btn-ghost" id="events-refresh-btn" onclick="eventsRefresh()">Refresh</button>
-                <span id="events-updated" style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);"></span>
+                <span id="events-updated" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
               </div>
-              <div id="events-empty" style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);padding:0.6rem 0;display:none;">
+              <div id="events-empty" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);padding:0.6rem 0;display:none;">
                 No events yet. Draw a zone or crossing line for a camera, then trigger it, and it
                 will show up here within a few seconds of the next run.
               </div>
               <div style="max-height:260px;overflow-y:auto;">
-                <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:0.6rem;">
+                <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size: 0.75rem;">
                   <thead>
                     <tr style="text-align:left;color:var(--text-dim);border-bottom:1px solid var(--border);">
                       <th style="padding:0.25rem 0.4rem;">Time</th>
@@ -3143,24 +3228,24 @@
               ZONE EDITOR (DRAFT)
             </summary>
             <div style="padding:0.5rem 0 0;">
-              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
+              <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
                 Draw exclude regions, crossing lines, and loiter zones for one camera. A saved
                 change applies to that camera's <b>next</b> run, not one already in progress.
               </div>
 
               <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;margin-bottom:0.5rem;">
                 <input type="text" id="zone-camera-id" placeholder="camera id, e.g. cam_00"
-                       style="width:160px;font-family:var(--mono);font-size:0.65rem;" />
+                       style="width:160px;font-family:var(--mono);font-size: 0.75rem;" aria-label="Camera ID for this zone"/>
                 <button class="btn btn-ghost" onclick="zoneEditorLoad()">Load</button>
                 <span style="flex:1;"></span>
-                <label style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);">Draw:</label>
-                <select id="zone-draw-mode" style="font-family:var(--mono);font-size:0.65rem;">
+                <label style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);" for="zone-draw-mode">Draw:</label>
+                <select id="zone-draw-mode" style="font-family:var(--mono);font-size: 0.75rem;" aria-label="Zone drawing mode">
                   <option value="exclude">Exclude region</option>
                   <option value="line">Crossing line</option>
                   <option value="zone">Loiter zone</option>
                 </select>
                 <input type="text" id="zone-shape-id" placeholder="id (line/zone only)"
-                       style="width:120px;font-family:var(--mono);font-size:0.65rem;" />
+                       style="width:120px;font-family:var(--mono);font-size: 0.75rem;" aria-label="Shape ID (line or zone only)"/>
               </div>
 
               <div style="border:1px solid var(--border);display:inline-block;line-height:0;">
@@ -3171,19 +3256,19 @@
                 <button class="btn btn-ghost" onclick="zoneEditorUndo()">Undo last</button>
                 <button class="btn btn-ghost" onclick="zoneEditorClear()">Clear all</button>
                 <div class="config-field" style="margin:0;">
-                  <label class="config-label" for="zone-loiter-s" style="font-size:0.55rem;">Loiter (s)</label>
+                  <label class="config-label" for="zone-loiter-s" style="font-size: 0.75rem;">Loiter (s)</label>
                   <input type="number" id="zone-loiter-s" value="30" min="1" max="3600"
-                         style="width:70px;font-family:var(--mono);font-size:0.65rem;" />
+                         style="width:70px;font-family:var(--mono);font-size: 0.75rem;" aria-label="zone loiter s"/>
                 </div>
                 <div class="config-field" style="margin:0;flex:1;min-width:180px;">
-                  <label class="config-label" for="zone-class-filter" style="font-size:0.55rem;">Class filter (comma separated, blank = all)</label>
+                  <label class="config-label" for="zone-class-filter" style="font-size: 0.75rem;">Class filter (comma separated, blank = all)</label>
                   <input type="text" id="zone-class-filter" placeholder="person, car"
-                         style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
+                         style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="person, car"/>
                 </div>
                 <button class="btn btn-primary" onclick="zoneEditorSave()">Save</button>
               </div>
-              <div id="zone-editor-status" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:0.5rem;"></div>
-              <div style="font-size:0.55rem;color:var(--text-dim);margin-top:0.4rem;font-family:var(--mono);">
+              <div id="zone-editor-status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.5rem;"></div>
+              <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:0.4rem;font-family:var(--mono);">
                 Red = exclude region. Yellow = crossing line. Cyan = loiter zone. Click-drag to draw.
               </div>
             </div>
@@ -3198,7 +3283,7 @@
               PAIRED DEVICES (MOBILE)
             </summary>
             <div style="padding:0.5rem 0 0;">
-              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
+              <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
                 Every phone paired to Server Mode, by the token it was given. Revoking one here
                 takes effect immediately: that phone drops back to fully local, on-device
                 compression with no further access to this server. Only the SHA-256 of a token is
@@ -3210,15 +3295,15 @@
                   <button class="btn btn-primary" id="devices-mint-btn" onclick="devicesMint()">Pair a new device</button>
                   <button class="btn btn-ghost" id="devices-revoke-all-btn" onclick="devicesRevokeAll()" style="color:var(--red);">Revoke all</button>
                 </div>
-                <span id="devices-updated" style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);"></span>
+                <span id="devices-updated" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
               </div>
-              <div id="devices-mint-result" style="display:none;font-family:var(--mono);font-size:0.62rem;line-height:1.6;background:var(--surface2,rgba(255,255,255,0.04));border:1px solid var(--amber);border-radius:4px;padding:0.6rem;margin-bottom:0.6rem;"></div>
-              <div id="devices-empty" style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);padding:0.6rem 0;display:none;">
+              <div id="devices-mint-result" style="display:none;font-family:var(--mono);font-size: 0.75rem;line-height:1.6;background:var(--surface2,rgba(255,255,255,0.04));border:1px solid var(--amber);border-radius:4px;padding:0.6rem;margin-bottom:0.6rem;"></div>
+              <div id="devices-empty" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);padding:0.6rem 0;display:none;">
                 No devices paired yet. Compressing on the phone never needs this - pairing is only
                 for browsing this server's library, live cameras, and event alerts from the app.
               </div>
               <div style="max-height:300px;overflow-y:auto;">
-                <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:0.6rem;">
+                <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size: 0.75rem;">
                   <thead>
                     <tr style="text-align:left;color:var(--text-dim);border-bottom:1px solid var(--border);">
                       <th style="padding:0.25rem 0.4rem;">Label</th>
@@ -3231,7 +3316,7 @@
                   <tbody id="devices-rows"></tbody>
                 </table>
               </div>
-              <div id="devices-status" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
+              <div id="devices-status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
             </div>
           </details>
         </div>
@@ -3241,13 +3326,13 @@
       <div id="tab-library" class="tab-page">
         <div class="tab-page-header">
           <span class="tab-page-title">Library</span>
-          <span id="library-count" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-left:0.75rem;"></span>
+          <span id="library-count" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-left:0.75rem;"></span>
         </div>
 
         <!-- Folder picker (Browse opens a native folder dialog) + Load -->
         <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap;">
           <input type="text" id="library-folder" placeholder="folder to browse (defaults to your output folder)"
-                 style="flex:1;min-width:180px;" onkeydown="if(event.key==='Enter')loadLibrary()" />
+                 style="flex:1;min-width:180px;" onkeydown="if(event.key==='Enter')loadLibrary()" aria-label="Folder to browse"/>
           <button class="btn btn-ghost" id="library-browse-btn" onclick="browseLibraryFolder()">Browse...</button>
           <button class="btn btn-ghost" onclick="loadLibrary()">Load</button>
         </div>
@@ -3255,13 +3340,13 @@
         <!-- Search + filters + sort + view toggle -->
         <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;">
           <input type="text" id="library-search" placeholder="search by name..."
-                 style="flex:1;min-width:140px;" oninput="filterLibrary()" />
+                 style="flex:1;min-width:140px;" oninput="filterLibrary()" aria-label="Search the library by name"/>
           <select id="library-ext" onchange="filterLibrary()" title="File type"
-                  style="font-family:var(--mono);font-size:0.65rem;">
+                  style="font-family:var(--mono);font-size: 0.75rem;" aria-label="Filter by file type">
             <option value="">All types</option>
           </select>
           <select id="library-sort" onchange="filterLibrary()" title="Sort"
-                  style="font-family:var(--mono);font-size:0.65rem;">
+                  style="font-family:var(--mono);font-size: 0.75rem;" aria-label="Sort order">
             <option value="date-desc">Newest</option>
             <option value="date-asc">Oldest</option>
             <option value="name-asc">Name (A-Z)</option>
@@ -3279,20 +3364,20 @@
           <button class="btn btn-ghost" id="library-kind-original" onclick="setLibraryKind('original')">Originals</button>
           <button class="btn btn-ghost" id="library-kind-compressed" onclick="setLibraryKind('compressed')">Compressed</button>
         </div>
-        <div id="library-status" style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);margin-bottom:0.5rem;"></div>
+        <div id="library-status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-bottom:0.5rem;"></div>
 
         <!-- Aggregate stats for the currently filtered set (2026-09 follow-up).
              Shows real counts/sizes only - no invented compression ratio
              (see docs/research/RESEARCH-DESKTOP-DEEPDIVE-2026-09.md Part B2). -->
         <div id="library-stats-strip" style="display:none;gap:1rem;flex-wrap:wrap;
-             font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);
+             font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);
              margin-bottom:0.5rem;padding:0.4rem 0.6rem;background:var(--surface2);
              border:1px solid var(--border);border-radius:4px;"></div>
 
         <!-- Empty state (shown when a folder has no videos) -->
         <div id="library-empty" style="display:none;text-align:center;color:var(--text-dim);padding:2rem 1rem;">
           <div style="font-size:0.85rem;margin-bottom:0.5rem;">No videos in this folder.</div>
-          <div style="font-size:0.7rem;margin-bottom:0.9rem;">Pick a folder that contains your clips (subfolders are searched too).</div>
+          <div style="font-size: 0.75rem;margin-bottom:0.9rem;">Pick a folder that contains your clips (subfolders are searched too).</div>
           <button class="btn btn-primary" onclick="browseLibraryFolder()">Browse for a folder...</button>
         </div>
 
@@ -3307,7 +3392,7 @@
                    style="flex:2;min-width:280px;max-height:360px;background:#000;border-radius:4px;"></video>
             <div style="flex:1;min-width:200px;">
               <div id="library-detail-name" style="font-family:var(--mono);font-size:0.8rem;margin-bottom:0.5rem;word-break:break-all;"></div>
-              <div id="library-detail-meta" style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);line-height:1.7;"></div>
+              <div id="library-detail-meta" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.7;"></div>
               <button class="btn btn-primary" style="margin-top:0.75rem;width:100%;justify-content:center;"
                       onclick="compressLibrarySelection()">Compress this video</button>
               <button class="btn btn-ghost" style="margin-top:0.5rem;width:100%;justify-content:center;color:var(--yellow);border-color:var(--yellow);"
@@ -3325,31 +3410,31 @@
       <div id="tab-autocompress" class="tab-page">
         <div class="tab-page-header">
           <span class="tab-page-title">Auto-Compress</span>
-          <span id="ac-state-badge" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-left:0.75rem;">OFF</span>
+          <span id="ac-state-badge" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-left:0.75rem;">OFF</span>
         </div>
 
-        <div style="font-size:0.7rem;color:var(--text-dim);margin-bottom:0.7rem;max-width:760px;line-height:1.6;">
+        <div style="font-size: 0.75rem;color:var(--text-dim);margin-bottom:0.7rem;max-width:760px;line-height:1.6;">
           Watch a folder and automatically compress any video saved into it (the live "save then compress" workflow), or compress everything already in a folder in one pass. Compressed clips are written to a <code>compressed/</code> subfolder of your output folder and show up in the Library "Compressed" view. Nothing starts until you turn it on.
         </div>
 
         <!-- Watched folder picker -->
         <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap;">
           <input type="text" id="ac-folder" placeholder="folder to watch for new videos"
-                 style="flex:1;min-width:200px;" />
+                 style="flex:1;min-width:200px;" aria-label="Folder to watch for new videos"/>
           <button class="btn btn-ghost" id="ac-browse-btn" onclick="acBrowseFolder()">Browse...</button>
         </div>
 
         <!-- Default compression + watch-folder layout -->
         <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;">
-          <label style="font-size:0.65rem;color:var(--text-dim);">Compression</label>
-          <select id="ac-mode" title="Default compression" style="font-family:var(--mono);font-size:0.65rem;">
+          <label style="font-size: 0.75rem;color:var(--text-dim);" for="ac-mode">Compression</label>
+          <select id="ac-mode" title="Default compression" style="font-family:var(--mono);font-size: 0.75rem;" aria-label="Default compression mode">
             <option value="mode:mode0">Mode 0 - record every frame (default)</option>
             <option value="mode:mode1">Mode 1 - motion segments</option>
             <option value="mode:mode2">Mode 2 - ROI AV1</option>
             <option value="mode:mode3">Mode 3 - ROI AV1 (max)</option>
           </select>
-          <label style="font-size:0.65rem;color:var(--text-dim);">Layout</label>
-          <select id="ac-profile" title="Watch-folder layout profile" style="font-family:var(--mono);font-size:0.65rem;">
+          <label style="font-size: 0.75rem;color:var(--text-dim);" for="ac-profile">Layout</label>
+          <select id="ac-profile" title="Watch-folder layout profile" style="font-family:var(--mono);font-size: 0.75rem;" aria-label="Watch folder layout profile">
             <option value="">Generic drop folder</option>
             <option value="continuous">Continuous CCTV recordings</option>
             <option value="motion_events">Per-event motion clips</option>
@@ -3361,11 +3446,11 @@
 
         <!-- Delete-original opt-in (default OFF) -->
         <div style="display:flex;gap:0.6rem;align-items:center;margin-bottom:0.8rem;flex-wrap:wrap;">
-          <label style="font-size:0.68rem;display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
-            <input type="checkbox" id="ac-delete-original" onchange="acOnDeleteToggle()" />
+          <label style="font-size: 0.75rem;display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
+            <input type="checkbox" id="ac-delete-original" onchange="acOnDeleteToggle()" aria-label="ac delete original"/>
             Delete original after a verified compress
           </label>
-          <span style="font-size:0.6rem;color:#ff5555;" id="ac-delete-warn"></span>
+          <span style="font-size: 0.75rem;color:#ff5555;" id="ac-delete-warn"></span>
         </div>
 
         <!-- Controls -->
@@ -3376,8 +3461,8 @@
 
         <!-- Status panel -->
         <div style="background:var(--panel,#11161f);border:1px solid var(--border,#1e2733);border-radius:4px;padding:0.7rem;margin-bottom:0.8rem;">
-          <div style="font-family:var(--mono);font-size:0.66rem;color:var(--text-dim);margin-bottom:0.4rem;" id="ac-status-line">Idle. Not watching.</div>
-          <div style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);" id="ac-recent">Nothing compressed yet. Turn ON watching, or use "Compress existing now" to process the clips already in the folder.</div>
+          <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-bottom:0.4rem;" id="ac-status-line">Idle. Not watching.</div>
+          <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);" id="ac-recent">Nothing compressed yet. Turn ON watching, or use "Compress existing now" to process the clips already in the folder.</div>
         </div>
 
         <!-- Retention / disk budget (R4 Phase 3). Bounds the 24/7 compressed
@@ -3387,25 +3472,25 @@
             RETENTION / DISK BUDGET
           </summary>
           <div style="padding:0.5rem 0 0;">
-            <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size:0.64rem;cursor:pointer;margin-bottom:0.5rem;">
-              <input type="checkbox" id="ret-enabled" onchange="retentionSave()" />
+            <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;margin-bottom:0.5rem;">
+              <input type="checkbox" id="ret-enabled" onchange="retentionSave()" aria-label="ret enabled"/>
               Automatically delete old compressed clips
             </label>
             <div class="config-field">
               <label class="config-label" for="ret-max-age">Keep at most (days)</label>
               <input type="number" id="ret-max-age" min="0" max="3650" placeholder="0 = no age limit"
-                     style="width:100%;font-family:var(--mono);font-size:0.65rem;" onchange="retentionSave()" />
+                     style="width:100%;font-family:var(--mono);font-size: 0.75rem;" onchange="retentionSave()" aria-label="0 = no age limit"/>
             </div>
             <div class="config-field" style="margin-top:0.4rem;">
               <label class="config-label" for="ret-max-gb">Cap total size (GB)</label>
               <input type="number" id="ret-max-gb" min="0" step="0.5" placeholder="0 = no size limit"
-                     style="width:100%;font-family:var(--mono);font-size:0.65rem;" onchange="retentionSave()" />
+                     style="width:100%;font-family:var(--mono);font-size: 0.75rem;" onchange="retentionSave()" aria-label="0 = no size limit"/>
             </div>
-            <div id="ret-estimate" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
+            <div id="ret-estimate" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
             <div style="margin-top:0.5rem;">
               <button class="btn btn-ghost" id="ret-purge-btn" onclick="retentionPurgeNow()">Purge now</button>
             </div>
-            <div style="font-size:0.55rem;color:var(--text-dim);margin-top:0.4rem;font-family:var(--mono);">
+            <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:0.4rem;font-family:var(--mono);">
               Deletes oldest clips under &lt;output&gt;/compressed only. Originals and just-written
               clips are never touched. Off by default.
             </div>
@@ -3413,8 +3498,8 @@
         </details>
 
         <!-- Live activity log (reuses the SSE /api/logs stream) -->
-        <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-bottom:0.3rem;">Activity log</div>
-        <div id="ac-log" style="background:#0a0e14;border:1px solid var(--border,#1e2733);border-radius:4px;padding:0.5rem;height:160px;overflow-y:auto;font-family:var(--mono);font-size:0.6rem;line-height:1.5;white-space:pre-wrap;"></div>
+        <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-bottom:0.3rem;">Activity log</div>
+        <div id="ac-log" style="background:var(--bg);border:1px solid var(--border,#1e2733);border-radius:4px;padding:0.5rem;height:160px;overflow-y:auto;font-family:var(--mono);font-size: 0.75rem;line-height:1.5;white-space:pre-wrap;"></div>
       </div>
 
       <!-- ══════════════════ HOME TAB ══════════════════ -->
@@ -3436,7 +3521,7 @@
 
         <!-- Scrollable content body -->
         <div class="home-body" id="content-top">
-          <div id="error-banner"></div>
+          <div id="error-banner" role="alert"></div>
 
           <div class="stats-grid">
             <div class="stat-card">
@@ -3463,7 +3548,7 @@
                  compressed estimate above (see docs/research/RESEARCH-
                  DESKTOP-DEEPDIVE-2026-09.md Part B3 and savings_bp.py). -->
             <div class="savings-measured" id="stat-measured-savings"
-                 style="font-size:0.58rem;color:var(--text-dim);margin-top:2px;"></div>
+                 style="font-size: 0.75rem;color:var(--text-dim);margin-top:2px;"></div>
             </div>
           </div>
 
@@ -3522,7 +3607,7 @@
           <!-- Inline clip player (HOME tab) -->
           <div id="home-preview-wrap" style="display:none;margin-top:0.5rem;">
             <div class="panel-header" style="padding:0.3rem 0.75rem;">
-              <span class="panel-title" id="home-preview-label" style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;"></span>
+              <span class="panel-title" id="home-preview-label" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;"></span>
               <!--
                 "Read Plates" - fires /api/enhance/plates on the loaded clip.
                 Author: Bloodawn (KheivenD), 2026-05-02 (post-process AI plate reader).
@@ -3537,12 +3622,12 @@
           <div id="hls-section" style="display:none;">
             <div class="panel-header">
               <span class="panel-title" id="hls-panel-title">Live Stream</span>
-              <span id="hls-status-msg" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);flex:1;text-align:right;padding-right:0.75rem;"></span>
+              <span id="hls-status-msg" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);flex:1;text-align:right;padding-right:0.75rem;"></span>
               <button class="log-clear-btn" onclick="hlsStop()">■ STOP</button>
             </div>
             <div id="hls-player-wrap">
               <video id="hls-video" controls playsinline muted style="width:100%;max-height:320px;border-radius:4px;background:#000;display:block;"></video>
-              <p style="font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);margin-top:0.3rem;text-align:center;">
+              <p style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.3rem;text-align:center;">
                 Target latency: ~4-6 s &nbsp;·&nbsp; H.264 ultrafast &nbsp;·&nbsp; no audio
               </p>
             </div>
@@ -3567,9 +3652,9 @@
           <div class="panel-header" style="padding:0.4rem 0.75rem;">
             <span class="panel-title">Recent Recordings</span>
             <div style="display:flex;align-items:center;gap:0.5rem;">
-              <span id="home-rec-count" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);"></span>
+              <span id="home-rec-count" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
               <button class="log-clear-btn" onclick="switchTab('metrics')" title="View all in Metrics tab">ALL →</button>
-              <button class="btn btn-ghost" style="font-size:0.6rem;padding:0.15rem 0.5rem;" onclick="loadSegments()" title="Refresh">↻</button>
+              <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.15rem 0.5rem;" onclick="loadSegments()" title="Refresh">↻</button>
             </div>
           </div>
           <!--
@@ -3599,18 +3684,18 @@
             Author: Bloodawn (KheivenD), 2026-05-04 (sticky header fix).
           -->
           <div id="home-rec-scroll" style="overflow-y:auto;overflow-x:hidden;max-height:340px;position:relative;">
-            <table style="width:100%;border-collapse:separate;border-spacing:0;font-size:0.7rem;">
+            <table style="width:100%;border-collapse:separate;border-spacing:0;font-size: 0.75rem;">
               <thead>
-                <tr style="color:var(--text-dim);font-family:var(--mono);font-size:0.6rem;text-transform:uppercase;">
-                  <th style="padding:0.4rem 0.5rem;text-align:left;position:sticky;top:0;background:#162238;z-index:10;border-bottom:1px solid var(--border);box-shadow:0 2px 4px rgba(0,0,0,0.5);">Time</th>
-                  <th style="padding:0.4rem 0.5rem;text-align:left;position:sticky;top:0;background:#162238;z-index:10;border-bottom:1px solid var(--border);box-shadow:0 2px 4px rgba(0,0,0,0.5);">Cam</th>
-                  <th style="padding:0.4rem 0.5rem;text-align:left;position:sticky;top:0;background:#162238;z-index:10;border-bottom:1px solid var(--border);box-shadow:0 2px 4px rgba(0,0,0,0.5);">Object</th>
-                  <th style="padding:0.4rem 0.5rem;text-align:right;position:sticky;top:0;background:#162238;z-index:10;border-bottom:1px solid var(--border);box-shadow:0 2px 4px rgba(0,0,0,0.5);">Size</th>
-                  <th style="padding:0.4rem 0.5rem;text-align:center;position:sticky;top:0;background:#162238;z-index:10;border-bottom:1px solid var(--border);box-shadow:0 2px 4px rgba(0,0,0,0.5);">Play</th>
+                <tr style="color:var(--text-dim);font-family:var(--mono);font-size: 0.75rem;text-transform:uppercase;">
+                  <th style="padding:0.4rem 0.5rem;text-align:left;position:sticky;top:0;background:var(--surface2);z-index:10;border-bottom:1px solid var(--border);box-shadow:0 2px 4px rgba(0,0,0,0.5);">Time</th>
+                  <th style="padding:0.4rem 0.5rem;text-align:left;position:sticky;top:0;background:var(--surface2);z-index:10;border-bottom:1px solid var(--border);box-shadow:0 2px 4px rgba(0,0,0,0.5);">Cam</th>
+                  <th style="padding:0.4rem 0.5rem;text-align:left;position:sticky;top:0;background:var(--surface2);z-index:10;border-bottom:1px solid var(--border);box-shadow:0 2px 4px rgba(0,0,0,0.5);">Object</th>
+                  <th style="padding:0.4rem 0.5rem;text-align:right;position:sticky;top:0;background:var(--surface2);z-index:10;border-bottom:1px solid var(--border);box-shadow:0 2px 4px rgba(0,0,0,0.5);">Size</th>
+                  <th style="padding:0.4rem 0.5rem;text-align:center;position:sticky;top:0;background:var(--surface2);z-index:10;border-bottom:1px solid var(--border);box-shadow:0 2px 4px rgba(0,0,0,0.5);">Play</th>
                 </tr>
               </thead>
               <tbody id="home-rec-tbody">
-                <tr><td colspan="5" style="color:var(--text-dim);text-align:center;padding:0.75rem;font-family:var(--mono);font-size:0.65rem;">No recordings yet</td></tr>
+                <tr><td colspan="5" style="color:var(--text-dim);text-align:center;padding:0.75rem;font-family:var(--mono);font-size: 0.75rem;">No recordings yet</td></tr>
               </tbody>
             </table>
           </div>
@@ -3641,8 +3726,8 @@
             <div class="metrics-mini-search">
               <input type="text" id="met-filter-cam" placeholder="Filter by camera…"
                      title="Filter by camera or filename"
-                     oninput="filterMetricsTable()" />
-              <select id="met-filter-type" title="Filter by object type" onchange="filterMetricsTable()">
+                     oninput="filterMetricsTable()" aria-label="Filter by camera or filename"/>
+              <select id="met-filter-type" title="Filter by object type" onchange="filterMetricsTable()" aria-label="Filter by object type">
                 <option value="">All types</option>
                 <option value="vehicle">Vehicle</option>
                 <option value="person">Person</option>
@@ -3651,7 +3736,7 @@
               </select>
               <label class="enc-toggle" title="Show only encrypted segments">
                 <input type="checkbox" id="met-filter-enc" onchange="filterMetricsTable()"
-                       style="accent-color:var(--yellow);" />
+                       style="accent-color:var(--yellow);" aria-label="met filter enc"/>
                 <span>Encrypted only</span>
               </label>
               <button class="btn btn-ghost clear-btn"
@@ -3666,7 +3751,7 @@
               breathe vertically.
               Author: Bloodawn (KheivenD), 2026-05-03 (UI cleanup pass).
             -->
-            <div class="table-wrap" id="metrics-table-wrap" style="flex:1;">
+            <div class="table-wrap" id="metrics-table-wrap" style="flex:1;" tabindex="0" role="region" aria-label="Recorded files">
               <table id="metrics-table">
                 <thead>
                   <tr>
@@ -3709,7 +3794,7 @@
           <div class="metrics-right" id="metrics-right">
 
             <div class="metrics-detail-empty" id="metrics-no-selection">
-              <span style="font-size:1.6rem;opacity:0.35;letter-spacing:0.4em;">[ ▷ ]</span>
+              <span aria-hidden="true" style="font-size:1.6rem;opacity:0.85;letter-spacing:0.4em;">[ ▷ ]</span>
               <span>Click a row to preview &amp; inspect</span>
             </div>
 
@@ -3721,16 +3806,16 @@
                 <!-- Populated by showMetricsDetail() -->
               </div>
               <div style="display:flex;gap:0.5rem;margin-top:0.1rem;">
-                <button class="btn btn-ghost" style="flex:1;font-size:0.65rem;" id="metrics-enc-btn"
+                <button class="btn btn-ghost" style="flex:1;font-size: 0.75rem;" id="metrics-enc-btn"
                         onclick="_metricsEncryptBtn()">[Lock] Encrypt this segment</button>
-                <button class="btn btn-ghost" style="flex:1;font-size:0.65rem;" id="metrics-timelapse-btn">[FF] Make timelapse</button>
+                <button class="btn btn-ghost" style="flex:1;font-size: 0.75rem;" id="metrics-timelapse-btn">[FF] Make timelapse</button>
               </div>
             </div>
 
             <!-- Live CPU/RAM history (R4 Phase 2 follow-up, 2026-09). -->
             <div class="metrics-library-card">
               <div class="metrics-library-title">System Load (last 10 min)
-                <span style="font-family:var(--body);font-weight:400;font-size:0.58rem;color:var(--text-dim);margin-left:0.5rem;">
+                <span style="font-family:var(--body);font-weight:400;font-size: 0.75rem;color:var(--text-dim);margin-left:0.5rem;">
                   CPU (amber) / RAM (teal)
                 </span>
               </div>
@@ -3759,12 +3844,12 @@
             <div class="metrics-library-card" id="mode-cpu-card">
               <div class="metrics-library-title">CPU during encoding
                 <span id="mode-cpu-clip-label"
-                      style="font-family:var(--body);font-weight:400;font-size:0.62rem;color:var(--text-dim);margin-left:0.5rem;">
+                      style="font-family:var(--body);font-weight:400;font-size: 0.75rem;color:var(--text-dim);margin-left:0.5rem;">
                   · select a recording
                 </span>
               </div>
               <div id="mode-cpu-rows">
-                <div style="color:var(--text-dim);font-size:0.68rem;padding:0.4rem 0;line-height:1.5;">
+                <div style="color:var(--text-dim);font-size: 0.75rem;padding:0.4rem 0;line-height:1.5;">
                   Click a row in the table to see how much CPU was used
                   while that specific clip was being encoded. Each run
                   stores its own stats next to the recording.
@@ -3791,8 +3876,8 @@
         <div class="archive-header" style="position:sticky;top:0;z-index:5;">
           <span class="archive-title">ARCHIVE SEARCH</span>
           <div style="display:flex;gap:0.5rem;align-items:center;">
-            <span id="archive-result-count" style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);"></span>
-            <button class="btn btn-ghost" style="font-size:0.62rem;padding:0.2rem 0.5rem;"
+            <span id="archive-result-count" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
+            <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.2rem 0.5rem;"
                     onclick="clearArchiveFilters()">CLEAR FILTERS</button>
           </div>
         </div>
@@ -3802,19 +3887,19 @@
              so a misread can be corrected instead of silently trusted. -->
         <div class="archive-filters" style="align-items:flex-end;">
           <div class="archive-filter-group" style="flex:1 1 320px;">
-            <label>Smart search (plain English)</label>
+            <label for="nl-search-q">Smart search (plain English)</label>
             <input id="nl-search-q" type="text" placeholder="red car after 9pm on cam2"
-                   onkeydown="if(event.key==='Enter')runNlSearch()" style="width:100%;" />
+                   onkeydown="if(event.key==='Enter')runNlSearch()" style="width:100%;" aria-label="Smart search, in plain English"/>
           </div>
-          <button class="btn btn-ghost" style="font-size:0.62rem;padding:0.35rem 0.7rem;"
+          <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.35rem 0.7rem;"
                   onclick="runNlSearch()">SMART SEARCH</button>
           <span id="nl-search-explain"
-                style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);flex-basis:100%;"></span>
+                style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);flex-basis:100%;"></span>
         </div>
 
         <div class="archive-filters">
           <div class="archive-filter-group">
-            <label>Object Type</label>
+            <label for="arc-object-type">Object Type</label>
             <select id="arc-object-type">
               <option value="">Any type</option>
               <option value="vehicle">Vehicle</option>
@@ -3826,7 +3911,7 @@
             </select>
           </div>
           <div class="archive-filter-group">
-            <label>Color</label>
+            <label for="arc-color">Color</label>
             <select id="arc-color">
               <option value="">Any color</option>
               <option value="red"> Red</option>
@@ -3842,7 +3927,7 @@
             </select>
           </div>
           <div class="archive-filter-group">
-            <label>Scene Type</label>
+            <label for="arc-scene">Scene Type</label>
             <select id="arc-scene">
               <option value="">Any scene</option>
               <option value="highway">Highway</option>
@@ -3854,7 +3939,7 @@
             </select>
           </div>
           <div class="archive-filter-group">
-            <label>Time of Day</label>
+            <label for="arc-tod">Time of Day</label>
             <select id="arc-tod">
               <option value="">Any time</option>
               <option value="day">️ Day</option>
@@ -3863,26 +3948,26 @@
             </select>
           </div>
           <div class="archive-filter-group">
-            <label>Camera ID</label>
-            <input type="text" id="arc-camera-id" placeholder="e.g. cam_00" />
+            <label for="arc-camera-id">Camera ID</label>
+            <input type="text" id="arc-camera-id" placeholder="e.g. cam_00"/>
           </div>
           <div class="archive-filter-group">
-            <label>Date From</label>
-            <input type="date" id="arc-date-from" />
+            <label for="arc-date-from">Date From</label>
+            <input type="date" id="arc-date-from"/>
           </div>
           <div class="archive-filter-group">
-            <label>Date To</label>
-            <input type="date" id="arc-date-to" />
+            <label for="arc-date-to">Date To</label>
+            <input type="date" id="arc-date-to"/>
           </div>
           <div class="archive-filter-group">
-            <label title="Filter to clips with at least this many motion regions">Min Motion</label>
-            <input type="number" id="arc-min-rois" placeholder="0" min="0" style="width:100%;" />
+            <label title="Filter to clips with at least this many motion regions" for="arc-min-rois">Min Motion</label>
+            <input type="number" id="arc-min-rois" placeholder="0" min="0" style="width:100%;"/>
           </div>
           <div class="archive-filter-group" style="justify-content:flex-end;">
             <label>&nbsp;</label>
             <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;margin-top:auto;">
-              <input type="checkbox" id="arc-enc-only" style="accent-color:var(--yellow);width:12px;height:12px;" />
-              <span style="font-size:0.62rem;color:var(--yellow);"> Encrypted only</span>
+              <input type="checkbox" id="arc-enc-only" style="accent-color:var(--yellow);width:12px;height:12px;" aria-label="arc enc only"/>
+              <span style="font-size: 0.75rem;color:var(--yellow);"> Encrypted only</span>
             </label>
           </div>
           <!-- Planner 6.11: restrict "person" results to boxes YOLO pose
@@ -3892,26 +3977,26 @@
             <label>&nbsp;</label>
             <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;margin-top:auto;"
                    title="Only segments with at least one person detection YOLO pose estimation additionally confirmed">
-              <input type="checkbox" id="arc-pose-only" style="accent-color:var(--teal);width:12px;height:12px;" />
-              <span style="font-size:0.62rem;color:var(--teal);"> Pose-verified people only</span>
+              <input type="checkbox" id="arc-pose-only" style="accent-color:var(--teal);width:12px;height:12px;" aria-label="arc pose only"/>
+              <span style="font-size: 0.75rem;color:var(--teal);"> Pose-verified people only</span>
             </label>
           </div>
         </div>
 
         <div class="archive-action-row">
-          <button class="btn btn-primary" style="padding:0.3rem 1.1rem;font-size:0.68rem;"
+          <button class="btn btn-primary" style="padding:0.3rem 1.1rem;font-size: 0.75rem;"
                   onclick="runArchiveSearch()">SEARCH</button>
-          <button class="btn btn-ghost" style="font-size:0.68rem;"
+          <button class="btn btn-ghost" style="font-size: 0.75rem;"
                   onclick="loadArchiveBusiest()"> BUSIEST CLIPS</button>
-          <button class="btn btn-ghost" style="font-size:0.68rem;"
+          <button class="btn btn-ghost" style="font-size: 0.75rem;"
                   onclick="loadArchiveDaily()"> DAILY SUMMARY</button>
-          <span id="arc-searching" style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);display:none;">Searching…</span>
+          <span id="arc-searching" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);display:none;">Searching…</span>
         </div>
 
         <!-- Inline video player for search results -->
         <div id="search-preview-wrap" style="display:none;padding:0.5rem 0.75rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:0.5rem;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.4rem;">
-            <span id="search-preview-label" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80%;"></span>
+            <span id="search-preview-label" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:80%;"></span>
             <button class="log-clear-btn" onclick="closeSearchPreview()"></button>
           </div>
           <video id="search-preview-video" controls playsinline style="width:100%;max-height:280px;background:#000;border-radius:4px;display:block;"></video>
@@ -3942,7 +4027,7 @@
 
         <div class="archive-header" style="position:sticky;top:0;z-index:5;">
           <span class="archive-title" style="color:var(--yellow);">ENCRYPTION MANAGER</span>
-          <span id="enc-panel-status" style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);"></span>
+          <span id="enc-panel-status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
         </div>
 
         <div class="enc-panel-cols">
@@ -3966,17 +4051,17 @@
               <div style="display:flex;gap:0.4rem;">
                 <input type="text" id="enc-src-path" placeholder="…/segment.mp4" style="flex:1;"
                        autocomplete="off" data-lpignore="true"
-                       name="svcs-segment-path-no-save" />
-                <button class="btn btn-ghost" style="font-size:0.62rem;padding:0.2rem 0.6rem;" onclick="browseEncFile()">BROWSE</button>
+                       name="svcs-segment-path-no-save" aria-label="…/segment.mp4"/>
+                <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.2rem 0.6rem;" onclick="browseEncFile()">BROWSE</button>
               </div>
             </div>
             <div class="enc-field-group">
               <label>Method</label>
               <div style="display:flex;gap:1rem;margin-top:0.25rem;">
-                <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.65rem;">
+                <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size: 0.75rem;">
                   <input type="radio" name="enc-method" value="password" checked onchange="encMethodChanged()" style="accent-color:var(--yellow);" /> Password
                 </label>
-                <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.65rem;">
+                <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size: 0.75rem;">
                   <input type="radio" name="enc-method" value="keyfile" onchange="encMethodChanged()" style="accent-color:var(--yellow);" /> Key File
                 </label>
               </div>
@@ -3996,16 +4081,16 @@
               <input type="password" id="enc-password" placeholder="AES-256 passphrase"
                      autocomplete="new-password" data-lpignore="true"
                      name="enc-passphrase-no-save"
-                     style="width:100%;" />
+                     style="width:100%;" aria-label="AES 256 passphrase"/>
             </div>
             <div class="enc-field-group" id="enc-keyfile-group" style="display:none;">
-              <label>Key File Path</label>
-              <input type="text" id="enc-keyfile-path" placeholder="…/camera.key" style="width:100%;" />
+              <label for="enc-keyfile-path">Key File Path</label>
+              <input type="text" id="enc-keyfile-path" placeholder="…/camera.key" style="width:100%;"/>
             </div>
             <div style="display:flex;gap:0.5rem;margin-top:0.6rem;align-items:center;">
-              <button class="btn btn-primary" style="padding:0.3rem 1.1rem;font-size:0.68rem;background:var(--yellow);color:#000;border-color:var(--yellow);"
+              <button class="btn btn-primary" style="padding:0.3rem 1.1rem;font-size: 0.75rem;background:var(--yellow);color:var(--on-yellow,#000);border-color:var(--yellow);"
                       onclick="doEncryptFile()">ENCRYPT FILE</button>
-              <span id="enc-encrypt-status" style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);"></span>
+              <span id="enc-encrypt-status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
             </div>
             </form>
           </div>
@@ -4019,17 +4104,17 @@
               <div style="display:flex;gap:0.4rem;">
                 <input type="text" id="dec-src-path" placeholder="…/segment.mp4.enc" style="flex:1;"
                        autocomplete="off" data-lpignore="true"
-                       name="svcs-enc-segment-path-no-save" />
-                <button class="btn btn-ghost" style="font-size:0.62rem;padding:0.2rem 0.6rem;" onclick="browseDecFile()">BROWSE</button>
+                       name="svcs-enc-segment-path-no-save" aria-label="…/segment.mp4.enc"/>
+                <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.2rem 0.6rem;" onclick="browseDecFile()">BROWSE</button>
               </div>
             </div>
             <div class="enc-field-group">
               <label>Method</label>
               <div style="display:flex;gap:1rem;margin-top:0.25rem;">
-                <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.65rem;">
+                <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size: 0.75rem;">
                   <input type="radio" name="dec-method" value="password" checked onchange="decMethodChanged()" style="accent-color:var(--teal);" /> Password
                 </label>
-                <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size:0.65rem;">
+                <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size: 0.75rem;">
                   <input type="radio" name="dec-method" value="keyfile" onchange="decMethodChanged()" style="accent-color:var(--teal);" /> Key File
                 </label>
               </div>
@@ -4041,16 +4126,16 @@
               <input type="password" id="dec-password" placeholder="AES-256 passphrase"
                      autocomplete="new-password" data-lpignore="true"
                      name="svcs-dec-passphrase-no-save"
-                     style="width:100%;" />
+                     style="width:100%;" aria-label="AES 256 passphrase"/>
             </div>
             <div class="enc-field-group" id="dec-keyfile-group" style="display:none;">
-              <label>Key File Path</label>
-              <input type="text" id="dec-keyfile-path" placeholder="…/camera.key" style="width:100%;" />
+              <label for="dec-keyfile-path">Key File Path</label>
+              <input type="text" id="dec-keyfile-path" placeholder="…/camera.key" style="width:100%;"/>
             </div>
             <div style="display:flex;gap:0.5rem;margin-top:0.6rem;align-items:center;">
-              <button class="btn btn-primary" style="padding:0.3rem 1.1rem;font-size:0.68rem;"
+              <button class="btn btn-primary" style="padding:0.3rem 1.1rem;font-size: 0.75rem;"
                       onclick="doDecryptPanel()">▶ DECRYPT &amp; PLAY</button>
-              <span id="enc-decrypt-status" style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);"></span>
+              <span id="enc-decrypt-status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
             </div>
             </form>
           </div>
@@ -4058,11 +4143,11 @@
         </div><!-- /enc-panel-cols -->
 
         <div class="enc-keygen-strip">
-          <span style="font-size:0.65rem;color:var(--text-dim);">Need a key file?</span>
-          <input type="text" id="enc-keygen-name" placeholder="camera.key" style="width:130px;font-size:0.65rem;padding:0.15rem 0.4rem;" />
-          <button class="btn btn-ghost" style="font-size:0.62rem;padding:0.2rem 0.7rem;color:var(--yellow);border-color:var(--yellow);"
+          <span style="font-size: 0.75rem;color:var(--text-dim);">Need a key file?</span>
+          <input type="text" id="enc-keygen-name" placeholder="camera.key" style="width:130px;font-size: 0.75rem;padding:0.15rem 0.4rem;" aria-label="Key file name"/>
+          <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.2rem 0.7rem;color:var(--yellow);border-color:var(--yellow);"
                   onclick="generateKeyFile()"> GEN KEY</button>
-          <span id="enc-keygen-result" style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);"></span>
+          <span id="enc-keygen-result" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
         </div>
 
       </div><!-- /tab-encrypt -->
@@ -4095,7 +4180,7 @@
 </div>
 
 <!-- ═══════════════════ HELP MODAL ═══════════════════ -->
-<div class="help-overlay" id="help-overlay" onclick="_helpOverlayClick(event)">
+<div class="help-overlay" id="help-overlay" role="dialog" aria-modal="true" aria-label="Help" onclick="_helpOverlayClick(event)">
   <div class="help-modal">
     <div class="help-modal-header">
       <span class="help-modal-title">SVCS Help &amp; Reference</span>
@@ -4143,7 +4228,7 @@
             <span class="help-def">Checks that FFmpeg, the MediaMTX RTSP binary, and the ONNX
               detection model are found (in the bundle, your app-data tools folder, or on PATH).
               <button class="btn btn-ghost" style="margin-left:6px;" onclick="checkDependencies()">Check dependencies</button>
-              <span id="help-deps-result" style="display:block;margin-top:4px;font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);"></span>
+              <span id="help-deps-result" style="display:block;margin-top:4px;font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
             </span>
           </div>
           <div class="help-row">
@@ -4151,11 +4236,11 @@
             <span class="help-def">Checks this install's version against the newest one published
               on GitHub, and can download and install it for you.
               <button class="btn btn-ghost" style="margin-left:6px;" onclick="checkForUpdate()">Check for updates</button>
-              <span id="help-update-result" style="display:block;margin-top:4px;font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);"></span>
+              <span id="help-update-result" style="display:block;margin-top:4px;font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
               <span id="help-update-actions" style="display:none;margin-top:6px;">
                 <button class="btn btn-ghost" id="help-update-download-btn" onclick="downloadUpdate()">Download update</button>
                 <button class="btn btn-ghost" id="help-update-install-btn" style="display:none;" onclick="installUpdate()">Install &amp; restart</button>
-                <span id="help-update-progress" style="display:block;margin-top:4px;font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);"></span>
+                <span id="help-update-progress" style="display:block;margin-top:4px;font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
               </span>
             </span>
           </div>
@@ -4412,7 +4497,7 @@
         <div class="help-note">For a full technical breakdown of the system architecture, pipeline internals, and how to contribute, see the project on GitHub.</div>
         <div style="margin-top:0.5rem;">
           <a href="https://github.com/bloodawn/Video-compression_2026" target="_blank" rel="noopener"
-             style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.35rem 0.75rem;background:var(--surface3);border:1px solid var(--border-bright);border-radius:var(--radius);color:var(--text-bright);font-family:var(--mono);font-size:0.7rem;text-decoration:none;transition:background 0.15s;"
+             style="display:inline-flex;align-items:center;gap:0.4rem;padding:0.35rem 0.75rem;background:var(--surface3);border:1px solid var(--border-bright);border-radius:var(--radius);color:var(--text-bright);font-family:var(--mono);font-size: 0.75rem;text-decoration:none;transition:background 0.15s;"
              onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background='var(--surface3)'">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
             View on GitHub - Technical Breakdown
@@ -4425,42 +4510,42 @@
 </div><!-- /help-overlay -->
 
 <!-- ── Decrypt Modal ──────────────────────────────────────────────────────── -->
-<div class="help-overlay" id="decrypt-overlay" onclick="_decryptOverlayClick(event)">
+<div class="help-overlay" id="decrypt-overlay" role="dialog" aria-modal="true" aria-label="Decrypt a video" onclick="_decryptOverlayClick(event)">
   <div class="help-modal" style="max-width:400px;">
     <div class="help-header">
       <span> DECRYPT SEGMENT</span>
-      <button class="btn btn-ghost" style="padding:0.25rem 0.6rem;font-size:0.7rem;" onclick="closeDecryptModal()"></button>
+      <button class="btn btn-ghost" style="padding:0.25rem 0.6rem;font-size: 0.75rem;" onclick="closeDecryptModal()"></button>
     </div>
     <div style="padding:1.2rem;display:flex;flex-direction:column;gap:0.8rem;">
-      <p style="font-family:var(--mono);font-size:0.7rem;color:var(--text-dim);margin:0;">
+      <p style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin:0;">
         This segment is AES-256-GCM encrypted. Enter the password or path to the
         <code>.key</code> file used when recording.
       </p>
-      <div id="decrypt-file-label" style="font-family:var(--mono);font-size:0.65rem;color:var(--yellow);word-break:break-all;"></div>
+      <div id="decrypt-file-label" style="font-family:var(--mono);font-size: 0.75rem;color:var(--yellow);word-break:break-all;"></div>
 
       <div style="display:flex;flex-direction:column;gap:0.4rem;">
-        <label style="font-family:var(--mono);font-size:0.68rem;color:var(--text-dim);">PASSWORD</label>
+        <label style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);">PASSWORD</label>
         <input type="text" autocomplete="username" name="decrypt-no-username"
                style="display:none;" tabindex="-1" aria-hidden="true" />
         <input id="decrypt-password" type="password" placeholder="leave blank if using key file"
                autocomplete="new-password" data-lpignore="true"
                name="decrypt-passphrase-no-save"
                style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);
-                      font-family:var(--mono);font-size:0.72rem;padding:0.4rem 0.6rem;border-radius:4px;width:100%;box-sizing:border-box;"
-               onkeydown="if(event.key==='Enter')doDecrypt()">
+                      font-family:var(--mono);font-size: 0.75rem;padding:0.4rem 0.6rem;border-radius:4px;width:100%;box-sizing:border-box;"
+               onkeydown="if(event.key==='Enter')doDecrypt()" aria-label="Password (leave blank if using a key file)">
       </div>
       <div style="display:flex;flex-direction:column;gap:0.4rem;">
-        <label style="font-family:var(--mono);font-size:0.68rem;color:var(--text-dim);">KEY FILE PATH (optional)</label>
+        <label style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);" for="decrypt-keyfile">KEY FILE PATH (optional)</label>
         <input id="decrypt-keyfile" type="text" placeholder="e.g. C:\outputs\camera.key"
                style="background:var(--bg-tertiary);border:1px solid var(--border);color:var(--text-primary);
-                      font-family:var(--mono);font-size:0.72rem;padding:0.4rem 0.6rem;border-radius:4px;width:100%;box-sizing:border-box;"
-               onkeydown="if(event.key==='Enter')doDecrypt()">
+                      font-family:var(--mono);font-size: 0.75rem;padding:0.4rem 0.6rem;border-radius:4px;width:100%;box-sizing:border-box;"
+               onkeydown="if(event.key==='Enter')doDecrypt()" aria-label="Key file path (optional)">
       </div>
-      <div id="decrypt-error" style="color:var(--red);font-family:var(--mono);font-size:0.68rem;display:none;"></div>
+      <div id="decrypt-error" style="color:var(--red);font-family:var(--mono);font-size: 0.75rem;display:none;"></div>
       <button id="decrypt-btn" class="btn btn-primary" onclick="doDecrypt()" style="align-self:flex-end;padding:0.4rem 1.2rem;">
         DECRYPT &amp; PLAY
       </button>
-      <p style="font-family:var(--mono);font-size:0.62rem;color:var(--text-dim);margin:0;">
+      <p style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin:0;">
         The decrypted video streams to your browser - nothing is saved to disk.
         The encrypted file stays locked.
       </p>
@@ -4474,25 +4559,25 @@
        files; load order matches the original single-script execution order, so
        behavior is identical. strings.js (i18n catalog) loads first. -->
   <!-- First-run Setup overlay (FIX 1): explicit destination choice, no cloud default -->
-  <div id="setup-overlay" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(8,9,12,0.86);align-items:center;justify-content:center;">
+  <div id="setup-overlay" role="dialog" aria-modal="true" aria-label="Welcome to SVCS" style="display:none;position:fixed;inset:0;z-index:10000;background:rgba(8,9,12,0.86);align-items:center;justify-content:center;">
     <div style="background:var(--panel,#181b22);border:1px solid var(--border,#2a2f3a);border-radius:10px;max-width:560px;width:calc(100% - 40px);padding:22px 24px;box-shadow:0 12px 40px rgba(0,0,0,.5);">
       <h2 style="margin:0 0 6px;font-size:1.2rem;">Welcome to SVCS</h2>
       <p style="margin:0 0 16px;color:var(--text-dim,#9aa3b2);font-size:0.8rem;line-height:1.5;">
         Choose where compressed videos are saved. Nothing is sent to any cloud unless you pick a cloud folder here.
       </p>
       <label class="config-label" for="setup-dest-select">Destination</label>
-      <select id="setup-dest-select" style="width:100%;margin-bottom:10px;font-family:var(--mono);font-size:0.72rem;"></select>
+      <select id="setup-dest-select" style="width:100%;margin-bottom:10px;font-family:var(--mono);font-size: 0.75rem;" aria-label="setup dest select"></select>
       <label class="config-label" for="setup-output-dir">Output folder</label>
       <div style="display:flex;gap:6px;margin-bottom:10px;">
-        <input type="text" id="setup-output-dir" style="flex:1;" placeholder="folder where compressed videos are saved" />
+        <input type="text" id="setup-output-dir" style="flex:1;" placeholder="folder where compressed videos are saved" aria-label="folder where compressed videos are saved"/>
         <button type="button" class="btn btn-ghost" onclick="setupBrowseOutputDir()" title="Browse for a folder">Browse</button>
       </div>
       <label class="config-label" for="setup-encrypted-dir">Encrypted output folder</label>
       <div style="display:flex;gap:6px;margin-bottom:6px;">
-        <input type="text" id="setup-encrypted-dir" style="flex:1;" placeholder="defaults to an Encrypted subfolder of the output" />
+        <input type="text" id="setup-encrypted-dir" style="flex:1;" placeholder="defaults to an Encrypted subfolder of the output" aria-label="defaults to an Encrypted subfolder of the output"/>
         <button type="button" class="btn btn-ghost" onclick="setupBrowseEncryptedDir()" title="Browse for a folder">Browse</button>
       </div>
-      <div id="setup-error" style="color:var(--red,#ff5555);font-size:0.7rem;min-height:1em;margin-bottom:8px;"></div>
+      <div id="setup-error" style="color:var(--red,#ff5555);font-size: 0.75rem;min-height:1em;margin-bottom:8px;"></div>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
         <button class="btn btn-ghost" onclick="saveSetup(true)">Skip (use local folder)</button>
         <button class="btn btn-primary" onclick="saveSetup(false)">Save and continue</button>
@@ -4502,15 +4587,15 @@
 
   <!-- Library folder browser (R2.3 follow-up): server-side navigator that works
        in the frozen app and remotely, unlike a native OS dialog. -->
-  <div id="library-browse-modal" style="display:none;position:fixed;inset:0;z-index:10001;background:rgba(8,9,12,0.86);align-items:center;justify-content:center;">
+  <div id="library-browse-modal" role="dialog" aria-modal="true" aria-label="Browse for a folder" style="display:none;position:fixed;inset:0;z-index:10001;background:rgba(8,9,12,0.86);align-items:center;justify-content:center;">
     <div style="background:var(--panel,#181b22);border:1px solid var(--border,#2a2f3a);border-radius:10px;max-width:600px;width:calc(100% - 40px);padding:18px 20px;box-shadow:0 12px 40px rgba(0,0,0,.5);">
       <h3 style="margin:0 0 10px;font-size:1.05rem;">Choose a folder</h3>
       <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.5rem;">
         <button class="btn btn-ghost" id="lb-up-btn" onclick="lbUp()" title="Up one level">Up</button>
-        <code id="lb-current-path" style="flex:1;font-family:var(--mono);font-size:0.66rem;color:var(--text-dim);word-break:break-all;">This PC</code>
+        <code id="lb-current-path" style="flex:1;font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);word-break:break-all;">This PC</code>
       </div>
-      <div id="lb-dir-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:4px;font-family:var(--mono);font-size:0.7rem;"></div>
-      <div id="lb-hint" style="font-size:0.6rem;color:var(--text-dim);margin-top:6px;min-height:1em;"></div>
+      <div id="lb-dir-list" style="max-height:320px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:4px;font-family:var(--mono);font-size: 0.75rem;"></div>
+      <div id="lb-hint" style="font-size: 0.75rem;color:var(--text-dim);margin-top:6px;min-height:1em;"></div>
       <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px;">
         <button class="btn btn-ghost" onclick="closeBrowseModal()">Cancel</button>
         <button class="btn btn-primary" id="lb-use-btn" onclick="lbUseFolder()">Use this folder</button>
@@ -4550,11 +4635,14 @@
   <script src="{{ url_for('static', filename='js/webhook.js') }}"></script>
   <script src="{{ url_for('static', filename='js/devices.js') }}"></script>
   <script src="{{ url_for('static', filename='js/timelapse.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/dialogs.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/validation.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/widgets.js') }}"></script>
 
 <!-- Global server-activity drawer: visible on every tab (not just Home),
      fed by the same /api/status poll and /api/logs SSE stream that already
      run continuously in the background. Author: Bloodawn (KheivenD), 2026-09-30. -->
-<div id="global-drawer">
+<div id="global-drawer" role="region" aria-label="Server activity log">
   <div class="global-drawer-head">
     <span class="global-drawer-title">Server activity</span>
     <span id="global-status-msg">Idle.</span>
@@ -4571,14 +4659,14 @@
 </div>
 
 <!-- AI Plate Reader modal - Bloodawn (KheivenD), 2026-05-02 -->
-<div id="plate-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center;">
+<div id="plate-modal" role="dialog" aria-modal="true" aria-label="Plate details" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;align-items:center;justify-content:center;">
   <div style="background:var(--surface1);border:1px solid var(--border);border-radius:6px;width:min(640px,90vw);max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.45);">
     <div class="panel-header" style="padding:0.5rem 0.75rem;">
-      <span class="panel-title" style="font-family:var(--mono);font-size:0.7rem;color:var(--teal);">AI PLATE READER</span>
-      <span id="plate-status" style="flex:1;text-align:right;font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);padding-right:0.75rem;"></span>
+      <span class="panel-title" style="font-family:var(--mono);font-size: 0.75rem;color:var(--teal);">AI PLATE READER</span>
+      <span id="plate-status" style="flex:1;text-align:right;font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);padding-right:0.75rem;"></span>
       <button class="log-clear-btn" onclick="closePlateModal()">CLOSE</button>
     </div>
-    <div id="plate-modal-body" style="padding:0.75rem;overflow-y:auto;font-family:var(--mono);font-size:0.7rem;">
+    <div id="plate-modal-body" style="padding:0.75rem;overflow-y:auto;font-family:var(--mono);font-size: 0.75rem;">
       <div class="empty-state">Load a clip and click READ PLATES.</div>
     </div>
   </div>

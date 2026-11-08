@@ -27,14 +27,14 @@ async function loadSegments() {
       const objType = escHtml(s.object_type || 'unknown');
       const isEnc = s.file_path && s.file_path.endsWith('.enc');
       const playBtn = isEnc
-        ? `<button class="btn-play-sm btn-enc" title="Encrypted - click to decrypt &amp; play" onclick="promptDecrypt('${jsAttr(s.file_path)}')">[ENC]</button>`
+        ? `<button class="btn-play-sm btn-enc x-act" title="Encrypted. Click to unlock and play" aria-label="Unlock and play clip from ${escHtml(ts)}" onclick="promptDecrypt('${jsAttr(s.file_path)}')">Unlock</button>`
         : s.playable_url
-          ? `<button class="btn-play-sm" onclick="playSegment('${jsAttr(s.playable_url)}','${jsAttr(s.file_path)}')">▶</button>`
+          ? `<button class="btn-play-sm x-act" aria-label="Play clip from ${escHtml(ts)}" onclick="playSegment('${jsAttr(s.playable_url)}','${jsAttr(s.file_path)}')">Play</button>`
           : `<span style="color:var(--text-dim);font-size:0.75rem;"> - </span>`;
       const encBtn = isEnc
-        ? `<span style="color:var(--yellow);font-size:0.75rem;" title="Already encrypted">[ENC]</span>`
+        ? `<span class="x-badge is-on" title="Already encrypted">Locked</span>`
         : s.file_path
-          ? `<button class="btn-play-sm" style="color:var(--yellow);border-color:var(--yellow);" title="Encrypt this segment" onclick="promptEncryptSegment('${jsAttr(s.file_path)}')">[DEC]</button>`
+          ? `<button class="btn-play-sm x-act" title="Encrypt this clip" aria-label="Encrypt clip from ${escHtml(ts)}" onclick="promptEncryptSegment('${jsAttr(s.file_path)}')">Encrypt</button>`
           : `<span style="color:var(--text-dim);font-size:0.75rem;"> - </span>`;
       const compMb = s.file_size_kb / 1024;
       const sizeStr = compMb >= 1 ? `${compMb.toFixed(1)} MB` : `${s.file_size_kb} KB`;
@@ -76,7 +76,7 @@ async function loadSegments() {
       // [X] button - hides this row from the dashboard. Files on disk
       // are not deleted; this just sets hidden=1 in the metadata DB.
       const hideBtn = s.file_path
-        ? `<button class="btn-row-hide" title="Remove this row from the dashboard (file on disk is kept)" onclick="event.stopPropagation();_hideSegmentRow('${jsAttr(s.file_path)}')">×</button>`
+        ? `<button class="btn-row-hide x-act" title="Hide this row from the dashboard (the file on disk is kept)" aria-label="Hide clip from ${escHtml(ts)} from the list" onclick="event.stopPropagation();_hideSegmentRow('${jsAttr(s.file_path)}')">Hide</button>`
         : `<span style="color:var(--text-dim);font-size:0.75rem;"> - </span>`;
       const mode = _segMode(s);
       const modeColor = _segModeColor(mode);
@@ -85,12 +85,12 @@ async function loadSegments() {
         <td title="${escHtml(s.camera_id)}">${escHtml(camDisplay)}${staleTag}</td>
         <td style="color:${modeColor};font-size:0.75rem;font-weight:bold;letter-spacing:0.04em;">${escHtml(mode)}</td>
         <td style="color:var(--teal)">${objType}</td>
-        <td>${color}</td>
-        <td style="font-size:0.75rem">${scene}</td>
-        <td style="font-size:0.75rem">${tod}</td>
-        <td>${s.roi_count}</td>
-        <td style="font-weight:bold;color:${s.vehicle_count>0?'var(--teal)':'var(--text-dim)'};">${carsStr}</td>
-        <td style="font-weight:bold;color:${s.person_count>0?'var(--yellow)':'var(--text-dim)'};">${peopleStr}</td>
+        <td class="c-color">${color}</td>
+        <td class="c-scene" style="font-size:0.75rem">${scene}</td>
+        <td class="c-light" style="font-size:0.75rem">${tod}</td>
+        <td class="c-motion">${s.roi_count}</td>
+        <td class="c-cars" style="font-weight:bold;color:${s.vehicle_count>0?'var(--teal)':'var(--text-dim)'};">${carsStr}</td>
+        <td class="c-people" style="font-weight:bold;color:${s.person_count>0?'var(--yellow)':'var(--text-dim)'};">${peopleStr}</td>
         <td>${s.duration_s}s</td>
         <td>${sizeStr}</td>
         <td style="color:${qualityColor};font-size:0.75rem">${qualityStr}</td>
@@ -124,7 +124,7 @@ function _updateHomeRecent(segments) {
     const playBtn = isEnc
       ? `<button class="btn-play-sm btn-enc" title="Encrypted" onclick="promptDecrypt('${jsAttr(s.file_path)}')">[ENC]</button>`
       : s.playable_url
-        ? `<button class="btn-play-sm" onclick="playSegment('${jsAttr(s.playable_url)}','${jsAttr(s.file_path)}')">▶</button>`
+        ? `<button class="btn-play-sm x-act" aria-label="Play clip from ${escHtml(ts)}" onclick="playSegment('${jsAttr(s.playable_url)}','${jsAttr(s.file_path)}')">Play</button>`
         : ' - ';
     const sizeMb = (s.file_size_kb / 1024);
     const camDisplay = _segCamLabel(s);
@@ -241,11 +241,11 @@ function showMetricsDetail(s) {
   const encBtn = document.getElementById('metrics-enc-btn');
   if (encBtn) {
     if (s.file_path && s.file_path.endsWith('.enc')) {
-      encBtn.textContent = 'ENCRYPTED';
+      encBtn.textContent = 'Encrypted';
       encBtn.disabled = true;
       encBtn.style.opacity = '0.5';
     } else {
-      encBtn.textContent = 'ENCRYPT THIS FILE';
+      encBtn.textContent = 'Encrypt this clip';
       encBtn.disabled = !s.file_path;
       encBtn.style.opacity = s.file_path ? '1' : '0.4';
       encBtn.onclick = () => promptEncryptSegment(s.file_path);
@@ -279,8 +279,8 @@ function showMetricsDetail(s) {
     ['Target', s.target_detected ? '▲ YES' : '○ no'],
     ['Motion Regions', s.roi_count],
     ['Size', compMb >= 1 ? compMb.toFixed(2) + ' MB' : (s.file_size_kb || 0) + ' KB'],
-    ['Raw (est)', rawMb > 0 ? rawMb.toFixed(1) + ' MB' : ' - '],
-    ['Compression', ratio],
+    ['Raw video (est)', rawMb > 0 ? rawMb.toFixed(1) + ' MB' : ' - '],
+    ['Smaller than raw (est)', ratio],
     ['Quality', s.sharpness_label || ' - '],
     ['Encrypted', isEnc ? 'Yes (AES-256)' : 'No'],
   ];

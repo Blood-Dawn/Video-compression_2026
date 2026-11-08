@@ -180,8 +180,11 @@ function _acRenderStatus(st) {
   const badge = document.getElementById("ac-state-badge");
   if (badge) {
     badge.textContent = _acRunning ? "ON" : "OFF";
-    badge.style.color = _acRunning ? "var(--tab-autocompress)" : "var(--text-dim)";
+    badge.classList.toggle("is-on", _acRunning);
+    badge.classList.toggle("is-off", !_acRunning);
   }
+  const ttl = document.getElementById("ac-status-title");
+  if (ttl) ttl.textContent = _acRunning ? "Auto compress is on" : "Auto compress is off";
   const btn = document.getElementById("ac-toggle-btn");
   if (btn) btn.textContent = _acRunning ? "Turn OFF" : "Turn ON";
 
@@ -284,6 +287,19 @@ function _retRenderEstimate(est) {
     lines.push("Headroom: record more footage to estimate");
   }
   el.innerHTML = lines.map(_esc).join("<br>");
+  window._retLastEstimate = est;
+  // Disk bar: how much of (compressed + free) the compressed clips use. Only
+  // drawn when the API returned both numbers.
+  const bar = document.getElementById("ret-bar");
+  const fill = document.getElementById("ret-bar-fill");
+  if (bar && fill && est.used_gb != null && est.free_gb != null && (est.used_gb + est.free_gb) > 0) {
+    const pct = Math.max(0, Math.min(100, est.used_gb / (est.used_gb + est.free_gb) * 100));
+    fill.style.width = pct.toFixed(1) + "%";
+    bar.hidden = false;
+    bar.setAttribute("aria-label", "Compressed clips use " + est.used_gb + " GB. " + est.free_gb + " GB of disk is free.");
+  } else if (bar) {
+    bar.hidden = true;
+  }
 }
 
 async function retentionRefresh() {
@@ -326,7 +342,16 @@ async function retentionPurgeNow() {
       pushNotif("Retention off", "Enable retention and set a limit before purging.", "info", null, 5000);
     return;
   }
-  if (!window.confirm("Delete old compressed clips now that exceed the retention limits? This cannot be undone.")) return;
+  const _e = window._retLastEstimate || {};
+  const _age = (document.getElementById("ret-max-age")?.value || "0").trim();
+  const _gb = (document.getElementById("ret-max-gb")?.value || "0").trim();
+  const _lim = [];
+  if (_age && _age !== "0") _lim.push("older than " + _age + " days");
+  if (_gb && _gb !== "0") _lim.push("beyond a total of " + _gb + " GB");
+  const _msg = "Delete compressed clips" + (_lim.length ? " " + _lim.join(" or ") : " that exceed the retention limits") +
+    " now?" + (_e.used_gb != null ? "\n\nCompressed clips currently use " + _e.used_gb + " GB." : "") +
+    "\n\nOriginals and clips written today are kept. This cannot be undone.";
+  if (!window.confirm(_msg)) return;
   if (btn) { btn.disabled = true; btn.textContent = "Purging..."; }
   try {
     const data = await (await fetch("/api/retention/purge_now", { method: "POST" })).json();

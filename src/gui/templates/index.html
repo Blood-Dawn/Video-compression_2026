@@ -2349,6 +2349,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
 .theme-toggle{background:none;border:1px solid var(--border-ctl);border-radius:50%;width:44px;height:44px;flex-shrink:0;color:var(--text-dim);font-size:1rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s}
 .theme-toggle:hover{border-color:var(--amber);color:var(--amber)}
 </style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/tabs.css') }}" />
 </head>
 
 <body>
@@ -3051,27 +3052,29 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
       </nav>
 
       <!-- ══════════════════ UPLOAD TAB (TASK 1.7) ══════════════════ -->
-      <div id="tab-upload" class="tab-page">
-        <div class="tab-page-header">
-          <span class="tab-page-title">Upload a video</span>
-        </div>
-        <div style="max-width:520px;">
-          <!-- Primary: drag-and-drop / click-to-upload zone (moved from sidebar) -->
-          <label class="upload-zone" for="upload-input" id="upload-zone">
-            <input type="file" id="upload-input" accept="video/*,.mp4,.avi,.mov,.mkv,.h264,.m4v"
-                   style="display:none" onchange="_uploadVideo(this)" aria-label="upload input"/>
-            <span class="upload-zone-icon">+</span>
-            <span class="upload-zone-text">Click to upload a video<br>
-              <small>MP4, AVI, MOV, MKV supported</small>
-            </span>
-          </label>
-          <div id="upload-status" style="font-size: 0.75rem;color:var(--text-dim);margin-top:0.5rem;min-height:1.1em;"></div>
-          <div id="video-list" style="margin-top:0.5rem;"></div>
-          <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:0.8rem;line-height:1.5;">
-            After uploading, pick a <strong>preset</strong> and press <strong>Start</strong>
-            in the sidebar. For a live camera or a server-side file, use
-            <em>Server file path (advanced)</em> in the sidebar.
+      <div id="tab-upload" class="tab-page x-page">
+        <div class="x-wrap x-narrow">
+        <div class="x-head">
+          <div>
+            <h2 class="x-title">Upload a video</h2>
+            <p class="x-sub">Send a clip from this device to SVCS. Once it is uploaded you can compress it.</p>
           </div>
+        </div>
+        <label class="upload-zone x-drop" for="upload-input" id="upload-zone">
+          <input type="file" id="upload-input" class="x-vh" accept="video/*,.mp4,.avi,.mov,.mkv,.h264,.m4v"
+                 onchange="_uploadVideo(this)" aria-label="Choose a video to upload"/>
+          <span class="upload-zone-icon" aria-hidden="true">+</span>
+          <span class="upload-zone-text">Click to choose a video, or drop one here<br>
+            <small>MP4, AVI, MOV and MKV are supported</small>
+          </span>
+        </label>
+        <div id="upload-status" role="status"></div>
+        <div class="x-card">
+          <h3 class="x-h3">Already on this machine</h3>
+          <p class="x-hint">Clips found in the data folder. Click one to use it as the source.</p>
+          <div id="video-list"></div>
+        </div>
+        <p class="x-hint">After uploading, pick a <strong>preset</strong> and press <strong>Start</strong> on the Home tab. For a live camera or a file on the server, use <em>Server file path (advanced)</em> on the Home tab.</p>
         </div>
       </div>
 
@@ -3079,14 +3082,17 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
       <!-- The RTSP server + HLS live-stream controls and player are RELOCATED
            here from the sidebar at load time by tools.js (their DOM nodes are
            moved, preserving every id and handler). -->
-      <div id="tab-tools" class="tab-page">
-        <div class="tab-page-header">
-          <span class="tab-page-title">Tools</span>
+      <div id="tab-tools" class="tab-page x-page">
+        <div class="x-wrap">
+        <div class="x-head">
+          <div>
+            <h2 class="x-title">Tools</h2>
+            <p class="x-sub">Updates, alerts, streaming and device pairing. Each tool is one card.</p>
+          </div>
         </div>
-        <div id="tab-tools-body" style="overflow-y:auto;padding-right:4px;">
-          <p style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.5;margin-bottom:0.75rem;">
-            Advanced streaming tools: run a local RTSP server (MediaMTX) and view a live HLS stream in the browser.
-          </p>
+        <div class="x-tools">
+        <nav class="x-secnav" id="tools-secnav" aria-label="Tools sections"></nav>
+        <div id="tab-tools-body" class="x-toolsbody">
 
           <!-- App updates (Fall 3.18 UX follow-up, 2026-09-30): surfaced
                here too, not just in the Help glossary panel, since Tools is
@@ -3096,37 +3102,30 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
                entry points. Progress and the install step show up as an
                in-app toast notification (see _showUpdateNotif in setup.js),
                so they are visible no matter which tab is open. -->
-          <details class="source-advanced" id="update-panel" style="margin-bottom:0.8rem;">
-            <summary style="cursor:pointer;font-family:var(--display);font-size:0.95rem;letter-spacing:0.08em;color:var(--text-dim);">
-              APP UPDATES
-            </summary>
+          <details class="source-advanced x-card x-tool" id="update-panel" data-sec="update-panel">
+            <summary class="x-sum"><span class="x-h3">App updates</span><span class="x-hint">Check for a newer version and install it.</span></summary>
             <div style="padding:0.5rem 0 0;">
               <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
                 Checks this install's version against the newest one published on GitHub. If one is
                 found, SVCS downloads it, verifies it, and installs it for you - no GitHub visit needed.
               </div>
               <button class="btn btn-ghost" onclick="checkForUpdate()">Check for updates</button>
-              <span id="tools-update-result" style="display:block;margin-top:4px;font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
+              <span id="tools-update-result" role="status" style="display:block;margin-top:4px;font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
             </div>
           </details>
 
           <!-- Closed-app phone alerts (R6 TRACK C1). Off by default: with no
                topic URL the server never opens a socket. Self-hosted only,
                there is no default server to fall back to. -->
-          <details class="source-advanced" id="push-panel" style="margin-bottom:0.8rem;" ontoggle="if(this.open)pushCfgRefresh()">
-            <summary style="cursor:pointer;font-family:var(--display);font-size:0.95rem;letter-spacing:0.08em;color:var(--text-dim);">
-              PHONE ALERTS WHILE THE APP IS CLOSED
-            </summary>
+          <details class="source-advanced x-card x-tool" id="push-panel" data-sec="push-panel" ontoggle="if(this.open)pushCfgRefresh()">
+            <summary class="x-sum"><span class="x-h3">Phone alerts</span><span class="x-hint">Send alerts to a phone while the app is closed.</span></summary>
             <div style="padding:0.5rem 0 0;">
               <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
                 Posts alerts to an <b>ntfy</b> topic that you host, so your phone hears about a line
                 crossing or a finished compression even with the SVCS app closed. Nothing goes to a
                 third party: you run the ntfy server, you pick the topic. See docs/PUSH-NOTIFICATIONS.md.
               </div>
-              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;margin-bottom:0.5rem;">
-                <input type="checkbox" id="push-enabled" aria-label="push enabled"/>
-                Send alerts to my ntfy topic
-              </label>
+              <label class="x-switch"><input type="checkbox" role="switch" id="push-enabled" aria-label="Send alerts to my ntfy topic"/><span class="x-track" aria-hidden="true"></span><span class="x-onoff" aria-hidden="true"></span><span class="x-swtext">Send alerts to my ntfy topic</span></label>
               <div class="config-field">
                 <label class="config-label" for="push-url">Topic URL</label>
                 <input type="text" id="push-url" placeholder="http://192.168.1.50:8080/svcs-alerts"
@@ -3134,23 +3133,16 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
               </div>
               <div class="config-field" style="margin-top:0.4rem;">
                 <label class="config-label" for="push-token">Access token</label>
-                <input type="password" id="push-token" autocomplete="new-password"
-                       placeholder="optional, for a topic that requires auth"
-                       style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="optional, for a topic that requires auth"/>
+                <div class="x-pw"><input type="password" id="push-token" autocomplete="new-password"
+                       placeholder="optional, for a topic that requires auth" aria-label="optional, for a topic that requires auth"/><button type="button" class="btn btn-ghost x-show" aria-pressed="false" aria-controls="push-token" onclick="xTogglePw('push-token', this)">Show</button></div>
               </div>
-              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;margin-top:0.5rem;">
-                <input type="checkbox" id="push-on-jobs" checked aria-label="push on jobs"/>
-                Tell me when a compression finishes or fails
-              </label>
-              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;margin-top:0.3rem;">
-                <input type="checkbox" id="push-on-events" checked aria-label="push on events"/>
-                Tell me about line crossings and loitering
-              </label>
+              <label class="x-switch"><input type="checkbox" role="switch" id="push-on-jobs" checked aria-label="Tell me when a compression finishes or fails"/><span class="x-track" aria-hidden="true"></span><span class="x-onoff" aria-hidden="true"></span><span class="x-swtext">Tell me when a compression finishes or fails</span></label>
+              <label class="x-switch"><input type="checkbox" role="switch" id="push-on-events" checked aria-label="Tell me about line crossings and loitering"/><span class="x-track" aria-hidden="true"></span><span class="x-onoff" aria-hidden="true"></span><span class="x-swtext">Tell me about line crossings and loitering</span></label>
               <div style="margin-top:0.6rem;display:flex;gap:0.4rem;flex-wrap:wrap;">
                 <button class="btn btn-ghost" id="push-test-btn" onclick="pushCfgTest()">Send test</button>
                 <button class="btn btn-primary" id="push-save-btn" onclick="pushCfgSave()">Save</button>
               </div>
-              <div id="push-status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
+              <div id="push-status" role="status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
               <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:0.4rem;font-family:var(--mono);">
                 Alerts carry the event kind, camera id, and class label only. No plate text, no file
                 paths, no camera credentials. Loopback and LAN addresses are accepted; cloud
@@ -3163,10 +3155,8 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
                shape as the ntfy panel above, over utils/event_webhook.py,
                for a plain JSON POST to any URL (a self-hosted server,
                Discord/Slack incoming webhook, a SIEM ingest endpoint). -->
-          <details class="source-advanced" id="webhook-panel" style="margin-bottom:0.8rem;" ontoggle="if(this.open)webhookCfgRefresh()">
-            <summary style="cursor:pointer;font-family:var(--display);font-size:0.95rem;letter-spacing:0.08em;color:var(--text-dim);">
-              OUTBOUND WEBHOOK
-            </summary>
+          <details class="source-advanced x-card x-tool" id="webhook-panel" data-sec="webhook-panel" ontoggle="if(this.open)webhookCfgRefresh()">
+            <summary class="x-sum"><span class="x-h3">Webhook</span><span class="x-hint">Post job and event messages to a URL you choose.</span></summary>
             <div style="padding:0.5rem 0 0;">
               <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
                 Posts a plain JSON message to any URL you point it at: your own server, a
@@ -3175,10 +3165,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
                 metadata endpoints are refused. Optional signing secret so the receiver can
                 verify the delivery came from this SVCS instance.
               </div>
-              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;margin-bottom:0.5rem;">
-                <input type="checkbox" id="webhook-enabled" aria-label="webhook enabled"/>
-                Send job and event deliveries to my webhook
-              </label>
+              <label class="x-switch"><input type="checkbox" role="switch" id="webhook-enabled" aria-label="Send job and event deliveries to my webhook"/><span class="x-track" aria-hidden="true"></span><span class="x-onoff" aria-hidden="true"></span><span class="x-swtext">Send job and event deliveries to my webhook</span></label>
               <div class="config-field">
                 <label class="config-label" for="webhook-url">Webhook URL</label>
                 <input type="text" id="webhook-url" placeholder="https://your-server/svcs-webhook"
@@ -3186,27 +3173,17 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
               </div>
               <div class="config-field" style="margin-top:0.4rem;">
                 <label class="config-label" for="webhook-secret">Signing secret</label>
-                <input type="password" id="webhook-secret" autocomplete="new-password"
-                       placeholder="optional, adds an X-SVCS-Signature header"
-                       style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="optional, adds an X SVCS Signature header"/>
+                <div class="x-pw"><input type="password" id="webhook-secret" autocomplete="new-password"
+                       placeholder="optional, adds an X-SVCS-Signature header" aria-label="optional, adds an X SVCS Signature header"/><button type="button" class="btn btn-ghost x-show" aria-pressed="false" aria-controls="webhook-secret" onclick="xTogglePw('webhook-secret', this)">Show</button></div>
               </div>
-              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;margin-top:0.4rem;">
-                <input type="checkbox" id="webhook-clear-secret" aria-label="webhook clear secret"/>
-                Clear the stored signing secret on save
-              </label>
-              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;margin-top:0.5rem;">
-                <input type="checkbox" id="webhook-on-jobs" checked aria-label="webhook on jobs"/>
-                Tell it when a compression finishes or fails
-              </label>
-              <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;margin-top:0.3rem;">
-                <input type="checkbox" id="webhook-on-events" checked aria-label="webhook on events"/>
-                Tell it about line crossings and loitering
-              </label>
+              <label class="x-switch"><input type="checkbox" role="switch" id="webhook-clear-secret" aria-label="Clear the stored signing secret on save"/><span class="x-track" aria-hidden="true"></span><span class="x-onoff" aria-hidden="true"></span><span class="x-swtext">Clear the stored signing secret on save</span></label>
+              <label class="x-switch"><input type="checkbox" role="switch" id="webhook-on-jobs" checked aria-label="Tell it when a compression finishes or fails"/><span class="x-track" aria-hidden="true"></span><span class="x-onoff" aria-hidden="true"></span><span class="x-swtext">Tell it when a compression finishes or fails</span></label>
+              <label class="x-switch"><input type="checkbox" role="switch" id="webhook-on-events" checked aria-label="Tell it about line crossings and loitering"/><span class="x-track" aria-hidden="true"></span><span class="x-onoff" aria-hidden="true"></span><span class="x-swtext">Tell it about line crossings and loitering</span></label>
               <div style="margin-top:0.6rem;display:flex;gap:0.4rem;flex-wrap:wrap;">
                 <button class="btn btn-ghost" id="webhook-test-btn" onclick="webhookCfgTest()">Send test</button>
                 <button class="btn btn-primary" id="webhook-save-btn" onclick="webhookCfgSave()">Save</button>
               </div>
-              <div id="webhook-status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
+              <div id="webhook-status" role="status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
             </div>
           </details>
 
@@ -3215,11 +3192,9 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
                this panel is just "what fired". Backed by the existing
                GET /api/events/recent (R5 TASK 5.7). Auto-refreshes only while
                open, so a closed panel never polls in the background. -->
-          <details class="source-advanced" id="events-panel" style="margin-bottom:0.8rem;"
+          <details class="source-advanced x-card x-tool" id="events-panel" data-sec="events-panel"
                     ontoggle="if(this.open){eventsRefresh();eventsAutoStart();}else{eventsAutoStop();}">
-            <summary style="cursor:pointer;font-family:var(--display);font-size:0.95rem;letter-spacing:0.08em;color:var(--text-dim);">
-              RECENT EVENTS
-            </summary>
+            <summary class="x-sum"><span class="x-h3">Recent events</span><span class="x-hint">Line crossings and loitering, newest first.</span></summary>
             <div style="padding:0.5rem 0 0;">
               <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
                 Line crossings and loitering from the configured output folder's
@@ -3228,7 +3203,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
               </div>
               <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.4rem;">
                 <button class="btn btn-ghost" id="events-refresh-btn" onclick="eventsRefresh()">Refresh</button>
-                <span id="events-updated" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
+                <span id="events-updated" role="status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
               </div>
               <div id="events-empty" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);padding:0.6rem 0;display:none;">
                 No events yet. Draw a zone or crossing line for a camera, then trigger it, and it
@@ -3256,11 +3231,9 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
                GET/POST /api/zones contract (R5 TASKS 5.6/5.7). Geometry is
                normalized 0..1 client-side to match zones_config.py exactly,
                so nothing server-side needs to change to accept it. -->
-          <details class="source-advanced" id="zone-editor-panel" style="margin-bottom:0.8rem;"
+          <details class="source-advanced x-card x-tool" id="zone-editor-panel" data-sec="zone-editor-panel"
                     ontoggle="if(this.open)zoneEditorLoad();">
-            <summary style="cursor:pointer;font-family:var(--display);font-size:0.95rem;letter-spacing:0.08em;color:var(--text-dim);">
-              ZONE EDITOR (DRAFT)
-            </summary>
+            <summary class="x-sum"><span class="x-h3">Zone editor</span><span class="x-hint">Draw exclude regions, crossing lines and loiter zones.</span></summary>
             <div style="padding:0.5rem 0 0;">
               <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
                 Draw exclude regions, crossing lines, and loiter zones for one camera. A saved
@@ -3301,7 +3274,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
                 </div>
                 <button class="btn btn-primary" onclick="zoneEditorSave()">Save</button>
               </div>
-              <div id="zone-editor-status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.5rem;"></div>
+              <div id="zone-editor-status" role="status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.5rem;"></div>
               <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:0.4rem;font-family:var(--mono);">
                 Red = exclude region. Yellow = crossing line. Cyan = loiter zone. Click-drag to draw.
               </div>
@@ -3312,10 +3285,8 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
                security review flagged: tokens_bp.py has always had list/mint/
                revoke, but no dashboard page ever called it, so pairing a
                phone or revoking a lost one required raw curl/PowerShell. -->
-          <details class="source-advanced" id="devices-panel" style="margin-bottom:0.8rem;" ontoggle="if(this.open)devicesRefresh()">
-            <summary style="cursor:pointer;font-family:var(--display);font-size:0.95rem;letter-spacing:0.08em;color:var(--text-dim);">
-              PAIRED DEVICES (MOBILE)
-            </summary>
+          <details class="source-advanced x-card x-tool" id="devices-panel" data-sec="devices-panel" ontoggle="if(this.open)devicesRefresh()">
+            <summary class="x-sum"><span class="x-h3">Paired devices</span><span class="x-hint">Phones paired to this server.</span></summary>
             <div style="padding:0.5rem 0 0;">
               <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
                 Every phone paired to Server Mode, by the token it was given. Revoking one here
@@ -3327,9 +3298,8 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
                 <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
                   <button class="btn btn-ghost" id="devices-refresh-btn" onclick="devicesRefresh()">Refresh</button>
                   <button class="btn btn-primary" id="devices-mint-btn" onclick="devicesMint()">Pair a new device</button>
-                  <button class="btn btn-ghost" id="devices-revoke-all-btn" onclick="devicesRevokeAll()" style="color:var(--red);border-color:var(--red);">Revoke all</button>
                 </div>
-                <span id="devices-updated" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
+                <span id="devices-updated" role="status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
               </div>
               <div id="devices-mint-result" style="display:none;font-family:var(--mono);font-size: 0.75rem;line-height:1.6;background:var(--surface2,rgba(255,255,255,0.04));border:1px solid var(--amber);border-radius:4px;padding:0.6rem;margin-bottom:0.6rem;"></div>
               <div id="devices-empty" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);padding:0.6rem 0;display:none;">
@@ -3350,190 +3320,217 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
                   <tbody id="devices-rows"></tbody>
                 </table>
               </div>
-              <div id="devices-status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
+              <div id="devices-status" role="status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
             </div>
           </details>
+          <section class="x-card x-danger" id="danger-zone" aria-labelledby="danger-h">
+            <h3 class="x-h3" id="danger-h">Danger zone</h3>
+            <p class="x-hint">These actions cannot be undone.</p>
+            <div class="x-row x-between">
+              <div><strong>Revoke all paired devices</strong><div class="x-hint">Every paired phone loses access to this server at once and drops back to fully local compression.</div></div>
+              <button class="btn btn-ghost x-btn-danger" id="devices-revoke-all-btn" onclick="devicesRevokeAll()">Revoke all</button>
+            </div>
+          </section>
+        </div>
+        </div>
         </div>
       </div>
 
       <!-- ══════════════════ LIBRARY TAB (FIX 6) ══════════════════ -->
-      <div id="tab-library" class="tab-page">
-        <div class="tab-page-header">
-          <span class="tab-page-title">Library</span>
-          <span id="library-count" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-left:0.75rem;"></span>
+      <div id="tab-library" class="tab-page x-page">
+        <div class="x-wrap">
+        <div class="x-head">
+          <div>
+            <h2 class="x-title">Library</h2>
+            <p class="x-sub">Every video in the folder, with its size and how much compression saved.</p>
+          </div>
+          <span id="library-count" class="x-count" aria-live="polite"></span>
         </div>
 
-        <!-- Folder picker (Browse opens a native folder dialog) + Load -->
-        <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap;">
-          <input type="text" id="library-folder" placeholder="folder to browse (defaults to your output folder)"
-                 style="flex:1;min-width:180px;" onkeydown="if(event.key==='Enter')loadLibrary()" aria-label="Folder to browse"/>
-          <button class="btn btn-ghost" id="library-browse-btn" onclick="browseLibraryFolder()">Browse...</button>
-          <button class="btn btn-ghost" onclick="loadLibrary()">Load</button>
-        </div>
-
-        <!-- Search + filters + sort + view toggle -->
-        <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;">
-          <input type="text" id="library-search" placeholder="search by name..."
-                 style="flex:1;min-width:140px;" oninput="filterLibrary()" aria-label="Search the library by name"/>
-          <select id="library-ext" onchange="filterLibrary()" title="File type"
-                  style="font-family:var(--mono);font-size: 0.75rem;" aria-label="Filter by file type">
-            <option value="">All types</option>
-          </select>
-          <select id="library-sort" onchange="filterLibrary()" title="Sort"
-                  style="font-family:var(--mono);font-size: 0.75rem;" aria-label="Sort order">
-            <option value="date-desc">Newest</option>
-            <option value="date-asc">Oldest</option>
-            <option value="name-asc">Name (A-Z)</option>
-            <option value="name-desc">Name (Z-A)</option>
-            <option value="size-desc">Largest</option>
-            <option value="size-asc">Smallest</option>
-          </select>
-          <button class="btn btn-ghost" id="library-view-grid" onclick="setLibraryView('grid')">Grid</button>
-          <button class="btn btn-ghost" id="library-view-list" onclick="setLibraryView('list')">List</button>
-        </div>
-
-        <!-- R3.1d: originals vs compressed-outputs segmented control -->
-        <div style="display:flex;gap:0.3rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap;">
-          <button class="btn btn-ghost" id="library-kind-all" onclick="setLibraryKind('all')">All</button>
-          <button class="btn btn-ghost" id="library-kind-original" onclick="setLibraryKind('original')">Originals</button>
-          <button class="btn btn-ghost" id="library-kind-compressed" onclick="setLibraryKind('compressed')">Compressed</button>
-        </div>
-        <div id="library-status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-bottom:0.5rem;"></div>
-
-        <!-- Aggregate stats for the currently filtered set (2026-09 follow-up).
-             Shows real counts/sizes only - no invented compression ratio
-             (see docs/research/RESEARCH-DESKTOP-DEEPDIVE-2026-09.md Part B2). -->
-        <div id="library-stats-strip" style="display:none;gap:1rem;flex-wrap:wrap;
-             font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);
-             margin-bottom:0.5rem;padding:0.4rem 0.6rem;background:var(--surface2);
-             border:1px solid var(--border);border-radius:4px;"></div>
-
-        <!-- Empty state (shown when a folder has no videos) -->
-        <div id="library-empty" style="display:none;text-align:center;color:var(--text-dim);padding:2rem 1rem;">
-          <div style="font-size:0.85rem;margin-bottom:0.5rem;">No videos in this folder.</div>
-          <div style="font-size: 0.75rem;margin-bottom:0.9rem;">Pick a folder that contains your clips (subfolders are searched too).</div>
-          <button class="btn btn-primary" onclick="browseLibraryFolder()">Browse for a folder...</button>
-        </div>
-
-        <!-- Grid / list of videos -->
-        <div id="library-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:0.6rem;overflow-y:auto;align-content:start;"></div>
-
-        <!-- Detail view (single video) -->
-        <div id="library-detail" style="display:none;">
-          <button class="btn btn-ghost" onclick="closeLibraryDetail()" style="margin-bottom:0.5rem;">&larr; Back to library</button>
-          <div style="display:flex;gap:1rem;flex-wrap:wrap;">
-            <video id="library-player" controls playsinline
-                   style="flex:2;min-width:280px;max-height:360px;background:#000;border-radius:4px;"></video>
-            <div style="flex:1;min-width:200px;">
-              <div id="library-detail-name" style="font-family:var(--mono);font-size:0.8rem;margin-bottom:0.5rem;word-break:break-all;"></div>
-              <div id="library-detail-meta" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.7;"></div>
-              <button class="btn btn-primary" style="margin-top:0.75rem;width:100%;justify-content:center;"
-                      onclick="compressLibrarySelection()">Compress this video</button>
-              <button class="btn btn-ghost" style="margin-top:0.5rem;width:100%;justify-content:center;color:var(--yellow);border-color:var(--yellow);"
-                      onclick="promptEncryptSegment(window._svcsLibrary.selected)">Encrypt this video</button>
-              <button class="btn btn-ghost" style="margin-top:0.5rem;width:100%;justify-content:center;"
-                      onclick="viewMetricsForFile(window._svcsLibrary.selected)">See metrics</button>
-              <button class="btn btn-ghost" style="margin-top:0.5rem;width:100%;justify-content:center;"
-                      onclick="openFolder(window._svcsLibrary.selected)">Open containing folder</button>
+        <div class="x-card" id="library-controls">
+          <label class="x-lbl" for="library-folder">Folder</label>
+          <div class="x-row">
+            <input type="text" id="library-folder" class="x-grow" placeholder="folder to browse (defaults to your output folder)"
+                   onkeydown="if(event.key==='Enter')loadLibrary()" aria-label="Folder to browse"/>
+            <button class="btn btn-ghost" id="library-browse-btn" onclick="browseLibraryFolder()">Browse...</button>
+            <button class="btn btn-primary" onclick="loadLibrary()">Load</button>
+          </div>
+          <div class="x-row x-between">
+            <div class="x-seg" role="group" aria-label="Show originals or compressed clips">
+              <button id="library-kind-all" aria-pressed="true" onclick="setLibraryKind('all')">All<span class="x-n" id="library-n-all"></span></button>
+              <button id="library-kind-original" aria-pressed="false" onclick="setLibraryKind('original')">Originals<span class="x-n" id="library-n-original"></span></button>
+              <button id="library-kind-compressed" aria-pressed="false" onclick="setLibraryKind('compressed')">Compressed<span class="x-n" id="library-n-compressed"></span></button>
+            </div>
+            <div class="x-row">
+              <select id="library-sort" onchange="filterLibrary()" title="Sort" aria-label="Sort order">
+                <option value="date-desc">Sort: Newest first</option>
+                <option value="date-asc">Sort: Oldest first</option>
+                <option value="name-asc">Sort: Name (A to Z)</option>
+                <option value="name-desc">Sort: Name (Z to A)</option>
+                <option value="size-desc">Sort: Largest first</option>
+                <option value="size-asc">Sort: Smallest first</option>
+              </select>
+              <div class="x-seg" role="group" aria-label="Layout">
+                <button id="library-view-grid" aria-pressed="true" onclick="setLibraryView('grid')">Grid</button>
+                <button id="library-view-list" aria-pressed="false" onclick="setLibraryView('list')">List</button>
+              </div>
             </div>
           </div>
+          <div id="library-filterrow" class="x-row">
+            <input type="text" id="library-search" class="x-grow" placeholder="search by name..."
+                   oninput="filterLibrary()" aria-label="Search the library by name"/>
+            <select id="library-ext" onchange="filterLibrary()" title="File type" aria-label="Filter by file type">
+              <option value="">All types</option>
+            </select>
+            <select id="library-age" onchange="filterLibrary()" title="Age" aria-label="Filter by age">
+              <option value="">Any time</option>
+              <option value="1">Last 24 hours</option>
+              <option value="7">Last 7 days</option>
+              <option value="30">Last 30 days</option>
+            </select>
+          </div>
+          <div id="library-selbar" class="x-selbar" role="region" aria-label="Selected videos" hidden>
+            <span class="x-selcount" id="library-sel-count" aria-live="polite"></span>
+            <span class="x-selhint" id="library-sel-hint"></span>
+            <button class="btn btn-ghost" id="library-sel-compress" onclick="libSelAction('compress')">Compress</button>
+            <button class="btn btn-ghost" id="library-sel-encrypt" onclick="libSelAction('encrypt')">Encrypt</button>
+            <button class="btn btn-ghost" onclick="libClearSelection()">Clear selection</button>
+          </div>
+          <div id="library-chips" class="x-chips" hidden></div>
+        </div>
+
+        <div id="library-status" role="status"></div>
+        <div id="library-stats-strip"></div>
+
+        <div id="library-empty" style="display:none;">
+          <div class="x-empty-title" id="library-empty-title">No videos in this folder</div>
+          <div id="library-empty-text">Pick a folder that contains your clips (subfolders are searched too).</div>
+          <div class="x-empty-actions">
+            <button class="btn btn-primary" id="library-empty-browse" onclick="browseLibraryFolder()">Browse for a folder...</button>
+            <button class="btn btn-ghost" id="library-empty-clear" onclick="libClearFilters()" hidden>Clear filters</button>
+            <button class="btn btn-ghost" id="library-empty-retry" onclick="loadLibrary()" hidden>Try again</button>
+          </div>
+        </div>
+
+        <div id="library-grid"></div>
+
+        <div id="library-detail" style="display:none;">
+          <button class="btn btn-ghost" onclick="closeLibraryDetail()">&larr; Back to library</button>
+          <div class="x-detail-grid">
+            <video id="library-player" class="x-player" controls playsinline></video>
+            <div class="x-card">
+              <h3 id="library-detail-name" class="x-detail-name"></h3>
+              <div id="library-detail-meta"></div>
+              <div class="x-actions">
+                <button class="btn btn-primary" onclick="compressLibrarySelection()">Compress this video</button>
+                <button class="btn btn-ghost" onclick="promptEncryptSegment(window._svcsLibrary.selected)">Encrypt this video</button>
+                <button class="btn btn-ghost" onclick="viewMetricsForFile(window._svcsLibrary.selected)">See metrics</button>
+                <button class="btn btn-ghost" onclick="openFolder(window._svcsLibrary.selected)">Open containing folder</button>
+              </div>
+            </div>
+          </div>
+        </div>
         </div>
       </div>
 
       <!-- ══════════════════ AUTO-COMPRESS TAB ══════════════════ -->
-      <div id="tab-autocompress" class="tab-page">
-        <div class="tab-page-header">
-          <span class="tab-page-title">Auto-Compress</span>
-          <span id="ac-state-badge" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-left:0.75rem;">OFF</span>
+      <div id="tab-autocompress" class="tab-page x-page">
+        <div class="x-wrap">
+        <div class="x-head">
+          <div>
+            <h2 class="x-title">Auto compress</h2>
+            <p class="x-sub">Watch a folder and compress every video saved into it, or compress what is already there in one pass. Results go to a <code>compressed/</code> folder inside your output folder and appear in the Library under Compressed. Nothing starts until you turn it on.</p>
+          </div>
+          <span id="ac-state-badge" class="x-badge is-off" role="status">OFF</span>
         </div>
 
-        <div style="font-size: 0.75rem;color:var(--text-dim);margin-bottom:0.7rem;max-width:760px;line-height:1.6;">
-          Watch a folder and automatically compress any video saved into it (the live "save then compress" workflow), or compress everything already in a folder in one pass. Compressed clips are written to a <code>compressed/</code> subfolder of your output folder and show up in the Library "Compressed" view. Nothing starts until you turn it on.
+        <div class="x-card" id="ac-status-card">
+          <div class="x-row x-between">
+            <div>
+              <h3 class="x-h3" id="ac-status-title">Auto compress is off</h3>
+              <div class="x-hint x-mono" id="ac-status-line" role="status">Idle. Not watching.</div>
+            </div>
+            <div class="x-row">
+              <button class="btn btn-primary" id="ac-toggle-btn" onclick="acToggle()">Turn ON</button>
+              <button class="btn btn-ghost" id="ac-scan-btn" onclick="acScanNow()">Compress existing now</button>
+            </div>
+          </div>
+          <div class="x-hint x-mono x-recent" id="ac-recent">Nothing compressed yet. Turn ON watching, or use "Compress existing now" to process the clips already in the folder.</div>
         </div>
 
-        <!-- Watched folder picker -->
-        <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.5rem;flex-wrap:wrap;">
-          <input type="text" id="ac-folder" placeholder="folder to watch for new videos"
-                 style="flex:1;min-width:200px;" aria-label="Folder to watch for new videos"/>
-          <button class="btn btn-ghost" id="ac-browse-btn" onclick="acBrowseFolder()">Browse...</button>
-        </div>
-
-        <!-- Default compression + watch-folder layout -->
-        <div style="display:flex;gap:0.4rem;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;">
-          <label style="font-size: 0.75rem;color:var(--text-dim);" for="ac-mode">Compression</label>
-          <select id="ac-mode" title="Default compression" style="font-family:var(--mono);font-size: 0.75rem;" aria-label="Default compression mode">
-            <option value="mode:mode0">Mode 0 - record every frame (default)</option>
-            <option value="mode:mode1">Mode 1 - motion segments</option>
-            <option value="mode:mode2">Mode 2 - ROI AV1</option>
-            <option value="mode:mode3">Mode 3 - ROI AV1 (max)</option>
-          </select>
-          <label style="font-size: 0.75rem;color:var(--text-dim);" for="ac-profile">Layout</label>
-          <select id="ac-profile" title="Watch-folder layout profile" style="font-family:var(--mono);font-size: 0.75rem;" aria-label="Watch folder layout profile">
-            <option value="">Generic drop folder</option>
-            <option value="continuous">Continuous CCTV recordings</option>
-            <option value="motion_events">Per-event motion clips</option>
-            <option value="microsd_dump">microSD / SD-card dump</option>
-            <option value="nas_sync">NAS / cloud-sync folder</option>
-            <option value="nvr_export">NVR export tree</option>
-          </select>
-        </div>
-
-        <!-- Delete-original opt-in (default OFF) -->
-        <div style="display:flex;gap:0.6rem;align-items:center;margin-bottom:0.8rem;flex-wrap:wrap;">
-          <label style="font-size: 0.75rem;display:flex;align-items:center;gap:0.4rem;cursor:pointer;">
-            <input type="checkbox" id="ac-delete-original" onchange="acOnDeleteToggle()" aria-label="ac delete original"/>
-            Delete original after a verified compress
-          </label>
-          <span style="font-size: 0.75rem;color:#ff5555;" id="ac-delete-warn"></span>
-        </div>
-
-        <!-- Controls -->
-        <div style="display:flex;gap:0.5rem;align-items:center;margin-bottom:0.8rem;flex-wrap:wrap;">
-          <button class="btn btn-primary" id="ac-toggle-btn" onclick="acToggle()">Turn ON</button>
-          <button class="btn btn-ghost" id="ac-scan-btn" onclick="acScanNow()">Compress existing now</button>
-        </div>
-
-        <!-- Status panel -->
-        <div style="background:var(--panel,#11161f);border:1px solid var(--border,#1e2733);border-radius:4px;padding:0.7rem;margin-bottom:0.8rem;">
-          <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-bottom:0.4rem;" id="ac-status-line">Idle. Not watching.</div>
-          <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);" id="ac-recent">Nothing compressed yet. Turn ON watching, or use "Compress existing now" to process the clips already in the folder.</div>
-        </div>
-
-        <!-- Retention / disk budget (R4 Phase 3). Bounds the 24/7 compressed
-             footage on disk - the ZoneMinder/Frigate "auto-purge" gap. -->
-        <details class="source-advanced" id="retention-panel" style="margin-bottom:0.8rem;" ontoggle="if(this.open)retentionRefresh()">
-          <summary style="cursor:pointer;font-family:var(--display);font-size:0.95rem;letter-spacing:0.08em;color:var(--text-dim);">
-            RETENTION / DISK BUDGET
-          </summary>
-          <div style="padding:0.5rem 0 0;">
-            <label style="display:flex;align-items:center;gap:0.4rem;font-family:var(--mono);font-size: 0.75rem;cursor:pointer;margin-bottom:0.5rem;">
-              <input type="checkbox" id="ret-enabled" onchange="retentionSave()" aria-label="ret enabled"/>
-              Automatically delete old compressed clips
+        <div class="x-card">
+          <h3 class="x-h3">What to watch</h3>
+          <p class="x-hint">Pick the folder and how clips should be compressed.</p>
+          <label class="x-lbl" for="ac-folder">Folder to watch</label>
+          <div class="x-row">
+            <input type="text" id="ac-folder" class="x-grow" placeholder="folder to watch for new videos" aria-label="Folder to watch for new videos"/>
+            <button class="btn btn-ghost" id="ac-browse-btn" onclick="acBrowseFolder()">Browse...</button>
+          </div>
+          <div class="x-fields">
+            <div>
+              <label class="x-lbl" for="ac-mode">Compression</label>
+              <select id="ac-mode" title="Default compression" aria-label="Default compression mode">
+                <option value="mode:mode0">Mode 0 - record every frame (default)</option>
+                <option value="mode:mode1">Mode 1 - motion segments</option>
+                <option value="mode:mode2">Mode 2 - ROI AV1</option>
+                <option value="mode:mode3">Mode 3 - ROI AV1 (max)</option>
+              </select>
+            </div>
+            <div>
+              <label class="x-lbl" for="ac-profile">Folder layout</label>
+              <select id="ac-profile" title="Watch-folder layout profile" aria-label="Watch folder layout profile">
+                <option value="">Generic drop folder</option>
+                <option value="continuous">Continuous CCTV recordings</option>
+                <option value="motion_events">Per-event motion clips</option>
+                <option value="microsd_dump">microSD / SD-card dump</option>
+                <option value="nas_sync">NAS / cloud-sync folder</option>
+                <option value="nvr_export">NVR export tree</option>
+              </select>
+            </div>
+          </div>
+          <div class="x-row">
+            <label class="x-switch">
+              <input type="checkbox" role="switch" id="ac-delete-original" onchange="acOnDeleteToggle()" aria-label="Delete original after a verified compress"/>
+              <span class="x-track" aria-hidden="true"></span><span class="x-onoff" aria-hidden="true"></span>
+              <span class="x-swtext">Delete original after a verified compress</span>
             </label>
-            <div class="config-field">
-              <label class="config-label" for="ret-max-age">Keep at most (days)</label>
-              <input type="number" id="ret-max-age" min="0" max="3650" placeholder="0 = no age limit"
-                     style="width:100%;font-family:var(--mono);font-size: 0.75rem;" onchange="retentionSave()" aria-label="0 = no age limit"/>
+            <span class="x-warn" id="ac-delete-warn"></span>
+          </div>
+        </div>
+
+        <details class="x-card source-advanced" id="retention-panel" open ontoggle="if(this.open&&window.retentionRefresh)retentionRefresh()">
+          <summary class="x-sum"><span class="x-h3">Keep disk space under control</span></summary>
+          <p class="x-hint">Old compressed clips can be removed automatically. Originals and clips written today are never touched.</p>
+          <div class="x-row">
+            <label class="x-switch">
+              <input type="checkbox" role="switch" id="ret-enabled" onchange="retentionSave()" aria-label="Automatically delete old compressed clips"/>
+              <span class="x-track" aria-hidden="true"></span><span class="x-onoff" aria-hidden="true"></span>
+              <span class="x-swtext">Automatically delete old compressed clips</span>
+            </label>
+          </div>
+          <div class="x-fields">
+            <div>
+              <label class="x-lbl" for="ret-max-age">Keep at most (days)</label>
+              <input type="number" id="ret-max-age" min="0" max="3650" placeholder="0 = no age limit" onchange="retentionSave()" aria-label="Keep at most (days). 0 means no age limit"/>
             </div>
-            <div class="config-field" style="margin-top:0.4rem;">
-              <label class="config-label" for="ret-max-gb">Cap total size (GB)</label>
-              <input type="number" id="ret-max-gb" min="0" step="0.5" placeholder="0 = no size limit"
-                     style="width:100%;font-family:var(--mono);font-size: 0.75rem;" onchange="retentionSave()" aria-label="0 = no size limit"/>
+            <div>
+              <label class="x-lbl" for="ret-max-gb">Cap total size (GB)</label>
+              <input type="number" id="ret-max-gb" min="0" step="0.5" placeholder="0 = no size limit" onchange="retentionSave()" aria-label="Cap total size in GB. 0 means no size limit"/>
             </div>
-            <div id="ret-estimate" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
-            <div style="margin-top:0.5rem;">
-              <button class="btn btn-ghost" id="ret-purge-btn" onclick="retentionPurgeNow()">Purge now</button>
-            </div>
-            <div style="font-size: 0.75rem;color:var(--text-dim);margin-top:0.4rem;font-family:var(--mono);">
-              Deletes oldest clips under &lt;output&gt;/compressed only. Originals and just-written
-              clips are never touched. Off by default.
-            </div>
+          </div>
+          <div class="x-bar" id="ret-bar" role="img" aria-label="Disk use not known yet" hidden><span id="ret-bar-fill"></span></div>
+          <div id="ret-estimate" class="x-hint x-mono"></div>
+          <div class="x-row">
+            <button class="btn btn-ghost x-btn-danger" id="ret-purge-btn" onclick="retentionPurgeNow()">Purge now</button>
+            <span class="x-hint">Deletes oldest clips under &lt;output&gt;/compressed only. Off by default.</span>
           </div>
         </details>
 
-        <!-- Live activity log (reuses the SSE /api/logs stream) -->
-        <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);margin-bottom:0.3rem;">Activity log</div>
-        <div id="ac-log" style="background:var(--bg);border:1px solid var(--border,#1e2733);border-radius:4px;padding:0.5rem;height:160px;overflow-y:auto;font-family:var(--mono);font-size: 0.75rem;line-height:1.5;white-space:pre-wrap;"></div>
+        <div class="x-card">
+          <h3 class="x-h3">Activity log</h3>
+          <div id="ac-log" class="x-log" tabindex="0" role="log" aria-label="Auto compress activity log"></div>
+        </div>
+        </div>
       </div>
 
       <!-- ══════════════════ HOME TAB ══════════════════ -->
@@ -3753,131 +3750,44 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
       </div><!-- /tab-home -->
 
       <!-- ══════════════════ METRICS TAB ══════════════════ -->
-      <div id="tab-metrics" class="tab-page">
+      <div id="tab-metrics" class="tab-page x-page">
         <div id="seg-tooltip"></div>
-        <div class="metrics-panes">
+        <div class="x-wrap">
+        <div class="x-head">
+          <div>
+            <h2 class="x-title">Metrics</h2>
+            <p class="x-sub">What SVCS has recorded and compressed, and how much room it takes.</p>
+          </div>
+        </div>
 
-          <!-- LEFT: file list -->
-          <div class="metrics-left" id="metrics-left">
-            <div class="metrics-mini-search">
-              <input type="text" id="met-filter-cam" placeholder="Filter by camera…"
-                     title="Filter by camera or filename"
-                     oninput="filterMetricsTable()" aria-label="Filter by camera or filename"/>
-              <select id="met-filter-type" title="Filter by object type" onchange="filterMetricsTable()" aria-label="Filter by object type">
-                <option value="">All types</option>
-                <option value="vehicle">Vehicle</option>
-                <option value="person">Person</option>
-                <option value="animal">Animal</option>
-                <option value="unknown">Unknown</option>
-              </select>
-              <label class="enc-toggle" title="Show only encrypted segments">
-                <input type="checkbox" id="met-filter-enc" onchange="filterMetricsTable()"
-                       style="accent-color:var(--yellow);" aria-label="met filter enc"/>
-                <span>Encrypted only</span>
-              </label>
-              <button class="btn btn-ghost clear-btn"
-                      onclick="clearSegments()"
-                      title="Hide all segments from the dashboard (files on disk are kept)">Clear list</button>
-            </div>
-            <!--
-              Single source of truth for the segment list. The player has
-              been moved out of this column entirely - the right-side
-              detail card (#metrics-video) is now the only inline player.
-              That removes the duplicate-video bug + lets the table
-              breathe vertically.
-              Author: Bloodawn (KheivenD), 2026-05-03 (UI cleanup pass).
-            -->
-            <div class="table-wrap" id="metrics-table-wrap" style="flex:1;" tabindex="0" role="region" aria-label="Recorded files">
-              <table id="metrics-table">
-                <thead>
-                  <tr>
-                    <th title="Recording date and time (UTC)">Time</th>
-                    <th title="Camera ID">Cam</th>
-                    <th title="SVCS encoding mode: 0=all frames, 1=event-gated, 2=BG+patches, 3=object-only blackout">Mode</th>
-                    <th title="What was detected - vehicle, person, animal, unknown">Object</th>
-                    <th title="Dominant color of the moving object (HSV histogram on ROI)">Color</th>
-                    <th title="Scene type heuristic from motion patterns">Scene</th>
-                    <th title="Lighting condition: day, night, dusk/dawn">Light</th>
-                    <th title="Number of motion regions detected across all frames in this clip">Motion</th>
-                    <th title="How many distinct vehicle types were classified in this clip">Cars</th>
-                    <th title="How many distinct person classes were detected in this clip">People</th>
-                    <th title="Clip length in seconds">Length</th>
-                    <th title="Compressed file size on disk">Size</th>
-                    <th title="Estimated source resolution from ROI sharpness">Quality</th>
-                    <th title="Play this clip in the panel on the right">Play</th>
-                    <th title="Encrypt this clip with AES-256-GCM">Lock</th>
-                    <th title="Remove this row from the dashboard (file on disk is kept)">Del</th>
-                  </tr>
-                </thead>
-                <tbody id="segments-tbody">
-                  <tr><td colspan="16" class="empty-state">No compressed segments yet. Pick a source in the sidebar and press START, or drop a file on the UPLOAD tab - finished segments appear here.</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div><!-- /metrics-left -->
+        <div class="x-tiles" role="group" aria-label="Library summary">
+          <div class="x-tile"><div class="x-k">Clips recorded</div><div class="x-v" id="mlib-segments"> - </div><div class="x-d">Clip length <span id="mlib-avg-dur"> - </span></div></div>
+          <div class="x-tile"><div class="x-k">Space used</div><div class="x-v" id="mlib-size"> - </div><div class="x-d">Compressed files on disk</div></div>
+          <div class="x-tile"><div class="x-k">Space saved</div><div class="x-v" id="mlib-saved"> - </div><div class="x-d" id="mlib-saved-note">Estimate against raw video</div></div>
+          <div class="x-tile"><div class="x-k">Encrypted clips</div><div class="x-v" id="mlib-enc"> - </div><div class="x-d">Locked with AES-256</div></div>
+        </div>
 
-          <!--
-            Drag handle between table and detail panel. JS handler
-            (_initMetricsDivider) writes #metrics-left.style.width on
-            mousemove, persists the chosen width to localStorage so the
-            user's preference survives reloads.
-            Author: Bloodawn (KheivenD), 2026-05-03 (metrics divider fix).
-          -->
-          <div id="metrics-divider" class="metrics-divider"
-               title="Drag to resize · double-click to reset to default width"></div>
+        <div class="x-two x-charts">
+          <div class="x-card">
+            <div class="x-row x-between"><h3 class="x-h3">Footage recorded per day</h3>
+              <button type="button" class="x-link" aria-expanded="false" aria-controls="mchart-day-table" onclick="xChartTable('day', this)">View as table</button></div>
+            <div id="mchart-day" class="x-chart"></div>
+            <div id="mchart-day-table" class="x-chart-table" hidden></div>
+          </div>
+          <div class="x-card">
+            <div class="x-row x-between"><h3 class="x-h3">Average clip size by mode</h3>
+              <button type="button" class="x-link" aria-expanded="false" aria-controls="mchart-mode-table" onclick="xChartTable('mode', this)">View as table</button></div>
+            <div id="mchart-mode" class="x-chart"></div>
+            <div id="mchart-mode-table" class="x-chart-table" hidden></div>
+          </div>
+        </div>
 
-          <!-- RIGHT: detail panel -->
-          <div class="metrics-right" id="metrics-right">
-
-            <div class="metrics-detail-empty" id="metrics-no-selection">
-              <span aria-hidden="true" style="font-size:1.6rem;opacity:0.85;letter-spacing:0.4em;">[ ▷ ]</span>
-              <span>Click a row to preview &amp; inspect</span>
-            </div>
-
-            <div class="metrics-detail-card" id="metrics-detail" style="display:none;">
-              <div class="metrics-player-wrap">
-                <video id="metrics-video" controls playsinline></video>
-              </div>
-              <div class="metrics-meta-grid" id="metrics-meta-grid">
-                <!-- Populated by showMetricsDetail() -->
-              </div>
-              <div style="display:flex;gap:0.5rem;margin-top:0.1rem;">
-                <button class="btn btn-ghost" style="flex:1;font-size: 0.75rem;" id="metrics-enc-btn"
-                        onclick="_metricsEncryptBtn()">[Lock] Encrypt this segment</button>
-                <button class="btn btn-ghost" style="flex:1;font-size: 0.75rem;" id="metrics-timelapse-btn">[FF] Make timelapse</button>
-              </div>
-            </div>
-
-            <!-- Live CPU/RAM history (R4 Phase 2 follow-up, 2026-09). -->
-            <div class="metrics-library-card">
-              <div class="metrics-library-title">System Load (last 10 min)
-                <span style="font-family:var(--body);font-weight:400;font-size: 0.75rem;color:var(--text-dim);margin-left:0.5rem;">
-                  CPU (amber) / RAM (teal)
-                </span>
-              </div>
-              <div id="metrics-history-chart" style="height:100px;"></div>
-            </div>
-
-            <!-- Library summary -->
-            <div class="metrics-library-card">
-              <div class="metrics-library-title">Library Summary</div>
-              <div class="metrics-library-row"><span>Total Segments</span><span id="mlib-segments"> - </span></div>
-              <div class="metrics-library-row"><span>Total Size</span><span id="mlib-size"> - </span></div>
-              <div class="metrics-library-row"><span>Storage Saved</span><span id="mlib-saved" style="color:var(--green);"> - </span></div>
-              <div class="metrics-library-row"><span>Avg Duration</span><span id="mlib-avg-dur"> - </span></div>
-              <div class="metrics-library-row"><span>Encrypted Files</span><span id="mlib-enc" style="color:var(--yellow);"> - </span></div>
-            </div>
-
-            <!--
-              CPU usage for the SELECTED recording. Each pipeline run
-              writes a cpu_stats.json into its own output folder (avg,
-              max, min, sample count, duration). When the user clicks
-              a row in the metrics table, this card shows the stats
-              for THAT run only - no aggregation across other clips.
-              File-backed so it survives restarts.
-              Author: Bloodawn (KheivenD), 2026-05-03 (per-clip CPU stats).
-            -->
-            <div class="metrics-library-card" id="mode-cpu-card">
+        <div class="x-two">
+          <div class="x-card metrics-library-card">
+            <h3 class="x-h3">System load <span class="x-n">last 10 minutes, CPU and RAM</span></h3>
+            <div id="metrics-history-chart"></div>
+          </div>
+          <div class="x-card metrics-library-card" id="mode-cpu-card">
               <div class="metrics-library-title">CPU during encoding
                 <span id="mode-cpu-clip-label"
                       style="font-family:var(--body);font-weight:400;font-size: 0.75rem;color:var(--text-dim);margin-left:0.5rem;">
@@ -3900,42 +3810,123 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
                 <span id="mode-cpu-battery" style="color:var(--green);"> - </span>
               </div>
             </div>
+        </div>
 
-          </div><!-- /metrics-right -->
-
-        </div><!-- /metrics-panes -->
-      </div><!-- /tab-metrics -->
-
-      <!-- ══════════════════ SEARCH TAB ══════════════════ -->
-      <div id="tab-search" class="tab-page">
-
-        <div class="archive-header" style="position:sticky;top:0;z-index:5;">
-          <span class="archive-title">ARCHIVE SEARCH</span>
-          <div style="display:flex;gap:0.5rem;align-items:center;">
-            <span id="archive-result-count" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
-            <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.2rem 0.5rem;"
-                    onclick="clearArchiveFilters()">CLEAR FILTERS</button>
+        <div class="x-card x-tablecard" id="metrics-left">
+          <div class="metrics-mini-search x-toolbar">
+            <input type="text" id="met-filter-cam" placeholder="Filter by camera or file name"
+                   title="Filter by camera or filename" oninput="filterMetricsTable()" aria-label="Filter by camera or filename"/>
+            <select id="met-filter-type" title="Filter by object type" onchange="filterMetricsTable()" aria-label="Filter by object type">
+              <option value="">All types</option>
+              <option value="vehicle">Vehicle</option>
+              <option value="person">Person</option>
+              <option value="animal">Animal</option>
+              <option value="unknown">Unknown</option>
+            </select>
+            <label class="x-switch" title="Show only encrypted segments">
+              <input type="checkbox" role="switch" id="met-filter-enc" onchange="filterMetricsTable()" aria-label="Encrypted only"/>
+              <span class="x-track" aria-hidden="true"></span><span class="x-onoff" aria-hidden="true"></span>
+              <span class="x-swtext">Encrypted only</span>
+            </label>
+            <details class="x-colmenu" id="metrics-colmenu">
+              <summary class="btn btn-ghost">Columns</summary>
+              <div class="x-colpanel" role="group" aria-label="Choose columns">
+                <label><input type="checkbox" data-col="color"/> Color</label>
+                <label><input type="checkbox" data-col="scene"/> Scene</label>
+                <label><input type="checkbox" data-col="light"/> Light</label>
+                <label><input type="checkbox" data-col="motion"/> Motion</label>
+                <label><input type="checkbox" data-col="cars"/> Cars</label>
+                <label><input type="checkbox" data-col="people"/> People</label>
+              </div>
+            </details>
+            <button class="btn btn-ghost clear-btn x-right" onclick="clearSegments()"
+                    title="Hide all segments from the dashboard (files on disk are kept)">Clear list</button>
           </div>
+          <div class="table-wrap x-tablewrap" id="metrics-table-wrap" tabindex="0" role="region" aria-label="Recorded files">
+            <table id="metrics-table" class="hide-c-color hide-c-scene hide-c-light hide-c-motion hide-c-cars hide-c-people">
+              <thead>
+                  <tr>
+                    <th title="Recording date and time (UTC)">Time</th>
+                    <th title="Camera ID">Cam</th>
+                    <th title="SVCS encoding mode: 0=all frames, 1=event-gated, 2=BG+patches, 3=object-only blackout">Mode</th>
+                    <th title="What was detected - vehicle, person, animal, unknown">Object</th>
+                    <th class="c-color" title="Dominant color of the moving object (HSV histogram on ROI)">Color</th>
+                    <th class="c-scene" title="Scene type heuristic from motion patterns">Scene</th>
+                    <th class="c-light" title="Lighting condition: day, night, dusk/dawn">Light</th>
+                    <th class="c-motion" title="Number of motion regions detected across all frames in this clip">Motion</th>
+                    <th class="c-cars" title="How many distinct vehicle types were classified in this clip">Cars</th>
+                    <th class="c-people" title="How many distinct person classes were detected in this clip">People</th>
+                    <th title="Clip length in seconds">Length</th>
+                    <th title="Compressed file size on disk">Size</th>
+                    <th title="Estimated source resolution from ROI sharpness">Quality</th>
+                    <th>Play</th>
+                    <th>Encrypt</th>
+                    <th>Hide</th>
+                  </tr>
+                </thead>
+              <tbody id="segments-tbody">
+                <tr><td colspan="16" class="empty-state">No compressed segments yet. Pick a source in the sidebar and press START, or drop a file on the UPLOAD tab - finished segments appear here.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        </div>
+
+        <div id="metrics-divider" class="metrics-divider" hidden></div>
+        <div class="metrics-right x-slide" id="metrics-right" role="dialog" aria-label="Clip details">
+          <div class="x-slide-head">
+            <h3 class="x-h3">Clip details</h3>
+            <button type="button" class="btn btn-ghost" id="metrics-close-btn" onclick="xMetricsClose()">Close</button>
+          </div>
+          <div class="metrics-detail-empty" id="metrics-no-selection">
+            <span>Click a row to preview and inspect</span>
+          </div>
+          <div class="metrics-detail-card" id="metrics-detail">
+            <div class="metrics-player-wrap">
+              <video id="metrics-video" controls playsinline></video>
+            </div>
+            <div class="metrics-meta-grid" id="metrics-meta-grid"></div>
+            <div class="x-row">
+              <button class="btn btn-ghost" id="metrics-enc-btn" onclick="_metricsEncryptBtn()">Encrypt this clip</button>
+              <button class="btn btn-ghost" id="metrics-timelapse-btn">Make a timelapse</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-search" class="tab-page x-page">
+        <div class="x-wrap">
+        <div class="x-head">
+          <div>
+            <h2 class="x-title">Search</h2>
+            <p class="x-sub">Find clips by describing what you saw, or narrow the archive with filters.</p>
+          </div>
+          <span id="archive-result-count" class="x-count" aria-live="polite"></span>
         </div>
 
         <!-- R5 TASK 5.4: structured natural-language search. One phrase in,
              parsed filters out; the explain line echoes what was understood
              so a misread can be corrected instead of silently trusted. -->
-        <div class="archive-filters" style="align-items:flex-end;">
-          <div class="archive-filter-group" style="flex:1 1 320px;">
-            <label for="nl-search-q">Smart search (plain English)</label>
-            <input id="nl-search-q" type="text" placeholder="red car after 9pm on cam2"
-                   onkeydown="if(event.key==='Enter')runNlSearch()" style="width:100%;" aria-label="Smart search, in plain English"/>
+        <div class="x-card">
+          <label class="x-lbl" for="nl-search-q">Describe what you are looking for</label>
+          <div class="x-row">
+            <input id="nl-search-q" type="text" class="x-grow" placeholder="red car after 9pm on cam2"
+                   onkeydown="if(event.key==='Enter')runNlSearch()" aria-label="Describe what you are looking for, in plain English"/>
+            <button class="btn btn-primary" onclick="runNlSearch()">Search</button>
           </div>
-          <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.35rem 0.7rem;"
-                  onclick="runNlSearch()">SMART SEARCH</button>
-          <span id="nl-search-explain"
-                style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);flex-basis:100%;"></span>
+          <div class="x-chips" aria-label="Examples">
+            <span class="x-chips-lbl">Try</span>
+            <button type="button" class="x-chip" onclick="xSearchExample(this)">red car after 9pm</button>
+            <button type="button" class="x-chip" onclick="xSearchExample(this)">person at night on cam1</button>
+            <button type="button" class="x-chip" onclick="xSearchExample(this)">truck yesterday morning</button>
+          </div>
+          <div id="nl-search-explain" class="x-hint x-mono" role="status"></div>
         </div>
 
-        <div class="archive-filters">
-          <div class="archive-filter-group">
-            <label for="arc-object-type">Object Type</label>
+        <details class="x-card source-advanced" id="arc-filters-panel">
+          <summary class="x-sum"><span class="x-h3">Filters</span> <span class="x-n" id="arc-filter-count">none active</span></summary>
+          <div class="x-fields x-fields3">
+            <div><label class="x-lbl" for="arc-object-type">Object type</label>
             <select id="arc-object-type">
               <option value="">Any type</option>
               <option value="vehicle">Vehicle</option>
@@ -3944,10 +3935,8 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
               <option value="animal">Animal</option>
               <option value="other">Other</option>
               <option value="unknown">Unknown</option>
-            </select>
-          </div>
-          <div class="archive-filter-group">
-            <label for="arc-color">Color</label>
+            </select></div>
+            <div><label class="x-lbl" for="arc-color">Color</label>
             <select id="arc-color">
               <option value="">Any color</option>
               <option value="red"> Red</option>
@@ -3960,10 +3949,8 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
               <option value="white"> White</option>
               <option value="black"> Black</option>
               <option value="gray"> Gray</option>
-            </select>
-          </div>
-          <div class="archive-filter-group">
-            <label for="arc-scene">Scene Type</label>
+            </select></div>
+            <div><label class="x-lbl" for="arc-scene">Scene type</label>
             <select id="arc-scene">
               <option value="">Any scene</option>
               <option value="highway">Highway</option>
@@ -3972,62 +3959,53 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
               <option value="street">Street</option>
               <option value="handheld">Handheld / phone clip</option>
               <option value="unknown">Unknown</option>
-            </select>
-          </div>
-          <div class="archive-filter-group">
-            <label for="arc-tod">Time of Day</label>
+            </select></div>
+            <div><label class="x-lbl" for="arc-tod">Time of day</label>
             <select id="arc-tod">
               <option value="">Any time</option>
               <option value="day">️ Day</option>
               <option value="night"> Night</option>
               <option value="dusk_dawn"> Dusk / Dawn</option>
-            </select>
+            </select></div>
+            <div><label class="x-lbl" for="arc-camera-id">Camera ID</label>
+              <input type="text" id="arc-camera-id" placeholder="e.g. cam_00"/></div>
+            <div><label class="x-lbl" for="arc-min-rois" title="Filter to clips with at least this many motion regions">Minimum motion</label>
+              <input type="number" id="arc-min-rois" placeholder="0" min="0"/></div>
+            <div><label class="x-lbl" for="arc-date-from">Date from</label>
+              <input type="date" id="arc-date-from"/></div>
+            <div><label class="x-lbl" for="arc-date-to">Date to</label>
+              <input type="date" id="arc-date-to"/></div>
           </div>
-          <div class="archive-filter-group">
-            <label for="arc-camera-id">Camera ID</label>
-            <input type="text" id="arc-camera-id" placeholder="e.g. cam_00"/>
-          </div>
-          <div class="archive-filter-group">
-            <label for="arc-date-from">Date From</label>
-            <input type="date" id="arc-date-from"/>
-          </div>
-          <div class="archive-filter-group">
-            <label for="arc-date-to">Date To</label>
-            <input type="date" id="arc-date-to"/>
-          </div>
-          <div class="archive-filter-group">
-            <label title="Filter to clips with at least this many motion regions" for="arc-min-rois">Min Motion</label>
-            <input type="number" id="arc-min-rois" placeholder="0" min="0" style="width:100%;"/>
-          </div>
-          <div class="archive-filter-group" style="justify-content:flex-end;">
-            <label>&nbsp;</label>
-            <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;margin-top:auto;">
-              <input type="checkbox" id="arc-enc-only" style="accent-color:var(--yellow);width:12px;height:12px;" aria-label="arc enc only"/>
-              <span style="font-size: 0.75rem;color:var(--yellow);"> Encrypted only</span>
+          <div class="x-row">
+            <label class="x-switch">
+              <input type="checkbox" role="switch" id="arc-enc-only" aria-label="Encrypted clips only"/>
+              <span class="x-track" aria-hidden="true"></span><span class="x-onoff" aria-hidden="true"></span>
+              <span class="x-swtext">Encrypted clips only</span>
+            </label>
+            <!-- Planner 6.11: restrict "person" results to boxes YOLO pose
+                 (keypoint) estimation additionally confirmed as a real human
+                 skeleton, not just the bbox classifier. -->
+            <label class="x-switch" title="Only segments with at least one person detection YOLO pose estimation additionally confirmed">
+              <input type="checkbox" role="switch" id="arc-pose-only" aria-label="Pose verified people only"/>
+              <span class="x-track" aria-hidden="true"></span><span class="x-onoff" aria-hidden="true"></span>
+              <span class="x-swtext">Pose verified people only</span>
             </label>
           </div>
-          <!-- Planner 6.11: restrict "person" results to boxes YOLO pose
-               (keypoint) estimation additionally confirmed as a real human
-               skeleton, not just the bbox classifier. -->
-          <div class="archive-filter-group" style="justify-content:flex-end;">
-            <label>&nbsp;</label>
-            <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;margin-top:auto;"
-                   title="Only segments with at least one person detection YOLO pose estimation additionally confirmed">
-              <input type="checkbox" id="arc-pose-only" style="accent-color:var(--teal);width:12px;height:12px;" aria-label="arc pose only"/>
-              <span style="font-size: 0.75rem;color:var(--teal);"> Pose-verified people only</span>
-            </label>
-          </div>
-        </div>
+        </details>
 
-        <div class="archive-action-row">
-          <button class="btn btn-primary" style="padding:0.3rem 1.1rem;font-size: 0.75rem;"
-                  onclick="runArchiveSearch()">SEARCH</button>
-          <button class="btn btn-ghost" style="font-size: 0.75rem;"
-                  onclick="loadArchiveBusiest()"> BUSIEST CLIPS</button>
-          <button class="btn btn-ghost" style="font-size: 0.75rem;"
-                  onclick="loadArchiveDaily()"> DAILY SUMMARY</button>
-          <span id="arc-searching" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);display:none;">Searching…</span>
+        <div class="x-row x-between x-actionbar">
+          <div class="x-row">
+            <button class="btn btn-primary" onclick="runArchiveSearch()">Search with filters</button>
+            <button class="btn btn-ghost" onclick="clearArchiveFilters()">Clear filters</button>
+            <span id="arc-searching" class="x-hint x-mono" style="display:none;" role="status">Searching…</span>
+          </div>
+          <div class="x-seg" role="group" aria-label="Result view">
+            <button id="arc-view-results" aria-pressed="true" onclick="xArcView('results')">Results</button>
+            <button id="arc-view-busiest" aria-pressed="false" onclick="xArcView('busiest')">Busiest clips</button>
+            <button id="arc-view-daily" aria-pressed="false" onclick="xArcView('daily')">Daily summary</button>
+          </div>
         </div>
+        <div id="arc-chips" class="x-chips" hidden></div>
 
         <!-- Inline video player for search results -->
         <div id="search-preview-wrap" style="display:none;padding:0.5rem 0.75rem;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:0.5rem;">
@@ -4053,139 +4031,103 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
             <tbody id="archive-tbody"></tbody>
           </table>
         </div>
-
-        <!-- Demo comparison section removed - accessible via sidebar Demo panel -->
-
+        </div>
       </div><!-- /tab-search -->
 
       <!-- ══════════════════ ENCRYPT TAB ══════════════════ -->
-      <div id="tab-encrypt" class="tab-page">
-
-        <div class="archive-header" style="position:sticky;top:0;z-index:5;">
-          <span class="archive-title" style="color:var(--yellow);">ENCRYPTION MANAGER</span>
-          <span id="enc-panel-status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
+      <div id="tab-encrypt" class="tab-page x-page">
+        <div class="x-wrap">
+        <div class="x-head">
+          <div>
+            <h2 class="x-title">Encrypt</h2>
+            <p class="x-sub">Lock a video with a password or a key file, or unlock one to watch it. Encryption uses AES-256.</p>
+          </div>
+          <span id="enc-panel-status" class="x-count" role="status"></span>
         </div>
-
-        <div class="enc-panel-cols">
-
-          <!--
-            autocomplete="off" on the wrapper form + role="presentation"
-            tells Chrome this whole panel isn't a login. Chrome still
-            heuristically attaches its password manager when it sees a
-            text field next to a <input type=password>, so the file
-            path input also gets an explicit autocomplete=off + a
-            non-credential-sounding name. Stops the "Manage passwords"
-            popup that was appearing on path edit.
-            Author: Bloodawn (KheivenD), 2026-05-03 (popup re-suppress).
-          -->
-          <div class="enc-col">
+        <div class="x-two">
+          <!-- autocomplete="off" on the form plus role="presentation" keeps Chrome's
+               password manager from treating this panel as a login. -->
+          <div class="x-card">
             <form autocomplete="off" onsubmit="return false" role="presentation">
-            <div class="enc-col-title"> ENCRYPT A SEGMENT</div>
-            <p class="enc-col-desc">Select an unencrypted segment from your output folder and lock it with a password or key file. The original is replaced by an <code>.enc</code> file.</p>
-            <div class="enc-field-group">
-              <label>File Path</label>
-              <div style="display:flex;gap:0.4rem;">
-                <input type="text" id="enc-src-path" placeholder="…/segment.mp4" style="flex:1;"
-                       autocomplete="off" data-lpignore="true"
-                       name="svcs-segment-path-no-save" aria-label="…/segment.mp4"/>
-                <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.2rem 0.6rem;" onclick="browseEncFile()">BROWSE</button>
+            <h3 class="x-h3">Encrypt a video</h3>
+            <p class="x-hint">Pick a video from your output folder and lock it. The original is replaced by an <code>.enc</code> file.</p>
+            <label class="x-lbl" for="enc-src-path">Video file</label>
+            <div class="x-row">
+              <input type="text" id="enc-src-path" class="x-grow" placeholder="…/segment.mp4"
+                     autocomplete="off" data-lpignore="true" name="svcs-segment-path-no-save" aria-label="Video file to encrypt"/>
+              <button type="button" class="btn btn-ghost" onclick="browseEncFile()">Browse...</button>
+            </div>
+            <fieldset class="x-fieldset">
+              <legend class="x-lbl">Unlock with</legend>
+              <label class="x-radio"><input type="radio" name="enc-method" value="password" checked onchange="encMethodChanged()" /> Password</label>
+              <label class="x-radio"><input type="radio" name="enc-method" value="keyfile" onchange="encMethodChanged()" /> Key file</label>
+            </fieldset>
+            <div id="enc-password-group">
+              <label class="x-lbl" for="enc-password">Password</label>
+              <input type="text" autocomplete="username" name="enc-no-username" style="display:none;" tabindex="-1" aria-hidden="true" />
+              <div class="x-pw">
+                <input type="password" id="enc-password" placeholder="AES-256 passphrase" autocomplete="new-password"
+                       data-lpignore="true" name="enc-passphrase-no-save" aria-describedby="enc-pw-note" aria-label="Password for encryption"/>
+                <button type="button" class="btn btn-ghost x-show" aria-pressed="false" aria-controls="enc-password" onclick="xTogglePw('enc-password', this)">Show</button>
               </div>
+              <p class="x-hint" id="enc-pw-note">Use 12 or more characters. If you lose the password, the video cannot be recovered.</p>
             </div>
-            <div class="enc-field-group">
-              <label>Method</label>
-              <div style="display:flex;gap:1rem;margin-top:0.25rem;">
-                <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size: 0.75rem;">
-                  <input type="radio" name="enc-method" value="password" checked onchange="encMethodChanged()" style="accent-color:var(--yellow);" /> Password
-                </label>
-                <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size: 0.75rem;">
-                  <input type="radio" name="enc-method" value="keyfile" onchange="encMethodChanged()" style="accent-color:var(--yellow);" /> Key File
-                </label>
-              </div>
+            <div id="enc-keyfile-group" style="display:none;">
+              <label class="x-lbl" for="enc-keyfile-path">Key file path</label>
+              <input type="text" id="enc-keyfile-path" placeholder="…/camera.key"/>
             </div>
-            <div class="enc-field-group" id="enc-password-group">
-              <label>Password</label>
-              <!--
-                The dummy hidden username input + autocomplete="new-password"
-                stops Chrome from offering "Save password?" for what isn't a
-                login. Without these, Chrome treats any standalone password
-                field as a credential candidate and pesters the operator
-                every time they type a passphrase.
-                Author: Bloodawn (KheivenD), 2026-05-03 (UI cleanup pass).
-              -->
-              <input type="text" autocomplete="username" name="enc-no-username"
-                     style="display:none;" tabindex="-1" aria-hidden="true" />
-              <input type="password" id="enc-password" placeholder="AES-256 passphrase"
-                     autocomplete="new-password" data-lpignore="true"
-                     name="enc-passphrase-no-save"
-                     style="width:100%;" aria-label="AES 256 passphrase"/>
-            </div>
-            <div class="enc-field-group" id="enc-keyfile-group" style="display:none;">
-              <label for="enc-keyfile-path">Key File Path</label>
-              <input type="text" id="enc-keyfile-path" placeholder="…/camera.key" style="width:100%;"/>
-            </div>
-            <div style="display:flex;gap:0.5rem;margin-top:0.6rem;align-items:center;">
-              <button class="btn btn-primary" style="padding:0.3rem 1.1rem;font-size: 0.75rem;background:var(--yellow);color:var(--on-yellow,#000);border-color:var(--yellow);"
-                      onclick="doEncryptFile()">ENCRYPT FILE</button>
-              <span id="enc-encrypt-status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
+            <div class="x-row">
+              <button type="button" class="btn btn-primary" onclick="doEncryptFile()">Encrypt file</button>
+              <span id="enc-encrypt-status" class="x-hint x-mono" role="status"></span>
             </div>
             </form>
           </div>
-
-          <div class="enc-col">
+          <div class="x-card">
             <form autocomplete="off" onsubmit="return false" role="presentation">
-            <div class="enc-col-title"> DECRYPT &amp; VIEW</div>
-            <p class="enc-col-desc">Select an encrypted <code>.enc</code> segment, enter the password or key file, and the decrypted video will play in the Metrics viewer.</p>
-            <div class="enc-field-group">
-              <label>Encrypted File (.enc)</label>
-              <div style="display:flex;gap:0.4rem;">
-                <input type="text" id="dec-src-path" placeholder="…/segment.mp4.enc" style="flex:1;"
-                       autocomplete="off" data-lpignore="true"
-                       name="svcs-enc-segment-path-no-save" aria-label="…/segment.mp4.enc"/>
-                <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.2rem 0.6rem;" onclick="browseDecFile()">BROWSE</button>
+            <h3 class="x-h3">Unlock and watch</h3>
+            <p class="x-hint">Pick an encrypted <code>.enc</code> video and enter its password or key file. It plays in the Metrics viewer.</p>
+            <label class="x-lbl" for="dec-src-path">Encrypted file (.enc)</label>
+            <div class="x-row">
+              <input type="text" id="dec-src-path" class="x-grow" placeholder="…/segment.mp4.enc"
+                     autocomplete="off" data-lpignore="true" name="svcs-enc-segment-path-no-save" aria-label="Encrypted file to unlock"/>
+              <button type="button" class="btn btn-ghost" onclick="browseDecFile()">Browse...</button>
+            </div>
+            <fieldset class="x-fieldset">
+              <legend class="x-lbl">Unlock with</legend>
+              <label class="x-radio"><input type="radio" name="dec-method" value="password" checked onchange="decMethodChanged()" /> Password</label>
+              <label class="x-radio"><input type="radio" name="dec-method" value="keyfile" onchange="decMethodChanged()" /> Key file</label>
+            </fieldset>
+            <div id="dec-password-group">
+              <label class="x-lbl" for="dec-password">Password</label>
+              <input type="text" autocomplete="username" name="dec-no-username" style="display:none;" tabindex="-1" aria-hidden="true" />
+              <div class="x-pw">
+                <input type="password" id="dec-password" placeholder="AES-256 passphrase" autocomplete="new-password"
+                       data-lpignore="true" name="svcs-dec-passphrase-no-save" aria-label="Password to unlock"/>
+                <button type="button" class="btn btn-ghost x-show" aria-pressed="false" aria-controls="dec-password" onclick="xTogglePw('dec-password', this)">Show</button>
               </div>
             </div>
-            <div class="enc-field-group">
-              <label>Method</label>
-              <div style="display:flex;gap:1rem;margin-top:0.25rem;">
-                <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size: 0.75rem;">
-                  <input type="radio" name="dec-method" value="password" checked onchange="decMethodChanged()" style="accent-color:var(--teal);" /> Password
-                </label>
-                <label style="display:flex;align-items:center;gap:0.35rem;cursor:pointer;font-size: 0.75rem;">
-                  <input type="radio" name="dec-method" value="keyfile" onchange="decMethodChanged()" style="accent-color:var(--teal);" /> Key File
-                </label>
-              </div>
+            <div id="dec-keyfile-group" style="display:none;">
+              <label class="x-lbl" for="dec-keyfile-path">Key file path</label>
+              <input type="text" id="dec-keyfile-path" placeholder="…/camera.key"/>
             </div>
-            <div class="enc-field-group" id="dec-password-group">
-              <label>Password</label>
-              <input type="text" autocomplete="username" name="dec-no-username"
-                     style="display:none;" tabindex="-1" aria-hidden="true" />
-              <input type="password" id="dec-password" placeholder="AES-256 passphrase"
-                     autocomplete="new-password" data-lpignore="true"
-                     name="svcs-dec-passphrase-no-save"
-                     style="width:100%;" aria-label="AES 256 passphrase"/>
-            </div>
-            <div class="enc-field-group" id="dec-keyfile-group" style="display:none;">
-              <label for="dec-keyfile-path">Key File Path</label>
-              <input type="text" id="dec-keyfile-path" placeholder="…/camera.key" style="width:100%;"/>
-            </div>
-            <div style="display:flex;gap:0.5rem;margin-top:0.6rem;align-items:center;">
-              <button class="btn btn-primary" style="padding:0.3rem 1.1rem;font-size: 0.75rem;"
-                      onclick="doDecryptPanel()">▶ DECRYPT &amp; PLAY</button>
-              <span id="enc-decrypt-status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
+            <div class="x-row">
+              <button type="button" class="btn btn-primary" onclick="doDecryptPanel()">Unlock and play</button>
+              <span id="enc-decrypt-status" class="x-hint x-mono" role="status"></span>
             </div>
             </form>
           </div>
-
-        </div><!-- /enc-panel-cols -->
-
-        <div class="enc-keygen-strip">
-          <span style="font-size: 0.75rem;color:var(--text-dim);">Need a key file?</span>
-          <input type="text" id="enc-keygen-name" placeholder="camera.key" style="width:130px;font-size: 0.75rem;padding:0.15rem 0.4rem;" aria-label="Key file name"/>
-          <button class="btn btn-ghost" style="font-size: 0.75rem;padding:0.2rem 0.7rem;color:var(--yellow);border-color:var(--yellow);"
-                  onclick="generateKeyFile()"> GEN KEY</button>
-          <span id="enc-keygen-result" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
         </div>
-
+        <div class="x-card">
+          <h3 class="x-h3">Need a key file?</h3>
+          <p class="x-hint">A key file is an alternative to a password. Keep it somewhere safe and separate from the videos.</p>
+          <div class="x-row">
+            <label class="x-lbl" for="enc-keygen-name" style="margin:0;">File name</label>
+            <input type="text" id="enc-keygen-name" placeholder="camera.key" aria-label="Key file name"/>
+            <button type="button" class="btn btn-ghost" onclick="generateKeyFile()">Generate key</button>
+            <span id="enc-keygen-result" class="x-hint x-mono" role="status"></span>
+          </div>
+        </div>
+        </div>
       </div><!-- /tab-encrypt -->
 
       <!-- notification dock (fixed overlay, not a tab) -->
@@ -4660,6 +4602,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
   <script src="{{ url_for('static', filename='js/vendor/uPlot.iife.min.js') }}"></script>
   <script src="{{ url_for('static', filename='js/library.js') }}"></script>
   <script src="{{ url_for('static', filename='js/autocompress.js') }}"></script>
+<script src="{{ url_for('static', filename='js/tabs.js') }}"></script>
   <script src="{{ url_for('static', filename='js/metrics.js') }}"></script>
   <script src="{{ url_for('static', filename='js/plates.js') }}"></script>
   <script src="{{ url_for('static', filename='js/presets.js') }}"></script>

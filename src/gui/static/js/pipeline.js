@@ -282,21 +282,75 @@ function _onInputSourceChange(val) {
 }
 
 // ── File upload from remote device ────────────────────────────
-async function _uploadVideoFile(file) {
+function _fmtUpBytes(n) {
+  if (n >= 1073741824) return (n / 1073741824).toFixed(2) + ' GB';
+  return (n / 1048576).toFixed(1) + ' MB';
+}
+
+function _upCard(cls, name, line, extra) {
   const status = document.getElementById('upload-status');
-  status.textContent = `Uploading ${file.name}…`;
-  const form = new FormData();
-  form.append('file', file);
-  try {
-    const res = await fetch('/api/upload', { method: 'POST', body: form });
-    const data = await res.json();
-    if (!res.ok) { status.textContent = `Error: ${data.error}`; return; }
-    document.getElementById('input-source').value = data.path;
-    _onInputSourceChange(data.path);
-    status.textContent = ` ${data.filename} ready`;
-  } catch(e) {
-    status.textContent = `Upload failed: ${e}`;
-  }
+  if (!status) return;
+  status.innerHTML = '<div class="x-up ' + cls + '"><div class="x-up-name">' + escHtml(name) + '</div>' +
+    '<div class="x-up-line">' + line + '</div>' + (extra || '') + '</div>';
+}
+
+function uploadCancel() {
+  if (window._uploadXhr) window._uploadXhr.abort();
+}
+window.uploadCancel = uploadCancel;
+
+// Upload with real progress (XMLHttpRequest, because fetch cannot report
+// upload progress) and a Cancel button.
+function _uploadVideoFile(file) {
+  return new Promise((resolve) => {
+    const status = document.getElementById('upload-status');
+    if (!status) { resolve(); return; }
+    const total = file.size || 0;
+    _upCard('', file.name, 'Starting upload...',
+      '<div class="x-bar"><span id="up-fill"></span></div>' +
+      '<button class="btn btn-ghost" onclick="uploadCancel()">Cancel upload</button>');
+    const form = new FormData();
+    form.append('file', file);
+    const xhr = new XMLHttpRequest();
+    window._uploadXhr = xhr;
+    xhr.open('POST', '/api/upload');
+    xhr.upload.onprogress = (e) => {
+      const done = e.loaded;
+      const t = e.lengthComputable ? e.total : total;
+      const pct = t ? Math.min(100, Math.round(done / t * 100)) : 0;
+      const fill = document.getElementById('up-fill');
+      if (fill) fill.style.width = pct + '%';
+      const line = status.querySelector('.x-up-line');
+      if (line) line.textContent = 'Uploading ' + pct + '% (' + _fmtUpBytes(done) + ' of ' + _fmtUpBytes(t) + ')';
+    };
+    xhr.onload = () => {
+      window._uploadXhr = null;
+      let data = {};
+      try { data = JSON.parse(xhr.responseText || '{}'); } catch (e) { /* keep {} */ }
+      if (xhr.status < 200 || xhr.status >= 300) {
+        _upCard('is-err', file.name, 'Upload failed: ' + escHtml(data.error || ('server said ' + xhr.status)) +
+          '. Pick the file again to retry.');
+        resolve(); return;
+      }
+      document.getElementById('input-source').value = data.path;
+      _onInputSourceChange(data.path);
+      _upCard('is-done', data.filename || file.name, 'Uploaded and ready (' + _fmtUpBytes(total) + ').',
+        '<div class="x-row"><button class="btn btn-primary" onclick="switchTab(\'home\')">Compress this video</button>' +
+        '<button class="btn btn-ghost" onclick="switchTab(\'library\')">Open in Library</button></div>');
+      resolve();
+    };
+    xhr.onerror = () => {
+      window._uploadXhr = null;
+      _upCard('is-err', file.name, 'Upload failed: the connection dropped. Pick the file again to retry.');
+      resolve();
+    };
+    xhr.onabort = () => {
+      window._uploadXhr = null;
+      _upCard('', file.name, 'Upload cancelled. Nothing was added.');
+      resolve();
+    };
+    xhr.send(form);
+  });
 }
 
 async function _uploadVideo(input) {

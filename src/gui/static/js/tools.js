@@ -15,7 +15,14 @@
 function _relocateTools() {
   const body = document.getElementById("tab-tools-body");
   if (!body) return;
-  const move = (el) => { if (el) body.appendChild(el); };
+  // Keep the Danger zone card last: the relocated streaming controls go in front of it.
+  const danger = document.getElementById("danger-zone");
+  const move = (el) => {
+    if (!el) return;
+    el.setAttribute("data-sec", "streaming");
+    if (danger && danger.parentNode === body) body.insertBefore(el, danger);
+    else body.appendChild(el);
+  };
 
   // HLS live-stream controls (the .config-section wrapping #hls-input).
   const hlsInput = document.getElementById("hls-input");

@@ -138,17 +138,17 @@ Change: Encrypt and Decrypt side by side, method as a segmented choice (Password
 
 ### 8.10 Implementation order and status
 
-Status key as above. Nothing in this section is implemented yet.
+Status key as above. Items 1 to 9 are implemented on this branch. Item 10 is partly done: axe reported 0 A/AA violations in both themes, the full test suite passed (2138 passed, 45 skipped), and the keyboard pass beyond native controls is not done.
 
-- [ ] 1. Page frame and shared classes (title, card, segmented control, switch, chips, table) added once to the template CSS.
-- [ ] 2. Tools (largest and most self contained).
-- [ ] 3. Library and detail.
-- [ ] 4. Metrics (needs the per day data decision).
-- [ ] 5. Search.
-- [ ] 6. Auto compress.
-- [ ] 7. Encrypt.
-- [ ] 8. Upload.
-- [ ] 9. Phone width pass for all of the above.
+- [x] 1. Page frame and shared classes (title, card, segmented control, switch, chips, table) added once to the template CSS.
+- [x] 2. Tools (largest and most self contained).
+- [x] 3. Library and detail.
+- [x] 4. Metrics (needs the per day data decision).
+- [x] 5. Search.
+- [x] 6. Auto compress.
+- [x] 7. Encrypt.
+- [x] 8. Upload.
+- [x] 9. Phone width pass for all of the above.
 - [ ] 10. Per tab: axe scan in light and dark, keyboard pass, full tests, screenshots.
 
 ### 8.11 Open questions for the team
@@ -157,4 +157,6 @@ Status key as above. Nothing in this section is implemented yet.
 - Upload progress: does the server expose bytes and percent while uploading?
 - Disk bar numbers: confirm `ret-estimate` returns used, cap and count.
 - Searching: confirm "Last 7 days" style chips are wanted or if the date fields are enough.
+- Library bulk delete was left out of the build because there is no backend for it.
+- Measured on the new build (mode0, all 91 videos in data\samples and data\uploads): total 2266.6 MB to 1543.4 MB, 31.9 percent smaller, median ratio 1.457. Ten clips came out larger than their source (ratio below 1, worst 0.272), which needs a backend look.
 - Not verified: none of this has been seen by a screen reader user, and the boards use sample data.

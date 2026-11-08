@@ -252,3 +252,4 @@ details.x-card > summary.x-sum { display: flex; align-items: baseline; gap: 0.6r
 .source-advanced > summary.x-sum .x-h3 { font-size: 1.05rem; font-weight: 600; color: var(--text-bright); }
 .source-advanced > summary.x-sum .x-hint { font-size: 0.85rem; font-weight: 400; color: var(--text-dim); }
 .source-advanced > summary.x-sum .x-n { font-family: var(--mono) !important; }
+@media (max-width: 720px) { .x-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .x-tile .x-v { font-size: 1.6rem; } }

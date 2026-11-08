@@ -2292,6 +2292,32 @@ header{min-height:56px;height:auto}
 .sidebar .btn-row:has(#btn-start){margin-left:0;margin-right:0}
   input,select,textarea{max-width:100%}
 }
+/* ── Home layout, from the redesign boards (desktop only) ─────────────────
+   Left column is "Compress a video" in three plain steps, right column is
+   Activity. Element ids and the markup order are unchanged. */
+.side-title{font-family:var(--display);font-weight:400;font-size:2.4rem;letter-spacing:0.04em;line-height:1.1;color:var(--text-bright);margin:0;padding:1.25rem 1.25rem 0.75rem}
+.side-title.home-title{padding:1rem 1.5rem 0.25rem}
+.codec-more>summary{cursor:pointer;font-family:var(--body);font-size:1rem;color:var(--text);padding:0.6rem 0;min-height:44px;display:flex;align-items:center}
+.codec-more>summary:hover{color:var(--amber-text)}
+.preset-modeno{display:none}
+@media (min-width:721px){
+  main{grid-template-columns:minmax(400px,34%) 1fr}
+  .sidebar{background:var(--bg)}
+  .sidebar .step-header{background:transparent;border-bottom:0;padding:1.25rem 1.25rem 0.5rem;gap:0.75rem}
+  .sidebar .step-num{width:32px;height:32px;background:var(--amber);border-color:var(--amber);color:#0a0e14;font-size:1rem}
+  .sidebar .step-label{font-family:var(--body);font-weight:600;font-size:1.15rem;letter-spacing:0;color:var(--text-bright)}
+  .sidebar .step-sub{display:none}
+  .sidebar>.config-field{padding:0 1.25rem}
+  .sidebar .preset-grid{gap:0.75rem;padding:0.5rem 1.25rem 1rem}
+  .sidebar .preset-card{padding:0.9rem 1rem;border-radius:4px;border-color:var(--border-ctl)}
+  .sidebar .preset-card::before{display:none}
+  .sidebar .preset-icon{display:none}
+  .sidebar .preset-modeno{display:block;font-family:var(--mono);font-size:0.75rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-dim);margin-bottom:0.3rem}
+  .sidebar .preset-name{font-family:var(--body);font-weight:600;font-size:1.05rem;letter-spacing:0}
+  .sidebar .preset-desc{font-family:var(--body);font-size:0.9rem;letter-spacing:0;line-height:1.4;margin-top:0.3rem}
+  .sidebar .preset-card.selected{box-shadow:none;border-width:2px;padding:calc(0.9rem - 1px) calc(1rem - 1px)}
+  .sidebar .btn-row:has(#btn-start){margin-left:0;margin-right:0;padding:0.9rem 1.25rem;border:1px solid var(--border-ctl);border-radius:4px;margin:0 1.25rem 1rem}
+}
 /* ── Light theme ─────────────────────────────────────────────────────────
    Set by theme.js through html[data-theme="light"]. Accent colors are darker here
    because the dark theme's bright amber, green and teal fail contrast on a light page.
@@ -2373,11 +2399,12 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
 
     <!-- ════════ SIDEBAR - Configuration ════════ -->
     <aside class="sidebar" aria-label="Compression setup">
+      <h2 class="side-title">Compress a video</h2>
 
       <!-- ── STEP 1: Source ─────────────────────── -->
       <div class="step-header">
         <span class="step-num">1</span>
-        <span class="step-label">Source</span>
+        <span class="step-label">Choose the video</span>
         <span class="step-sub">Upload your video</span>
       </div>
       <div class="config-section">
@@ -2463,6 +2490,8 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
           (or `| grep av1` on Linux/macOS) to see what's available locally.
           Author: Bloodawn (KheivenD).
         -->
+        <details class="codec-more">
+          <summary>Codec and quality</summary>
         <div class="config-field" style="margin-top:0.4rem;">
           <label class="config-label" for="codec-select">Codec</label>
           <select id="codec-select" style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="codec select">
@@ -2561,12 +2590,13 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
             </div>
           </div>
         </details>
+        </details><!-- /codec-more -->
       </div>
 
       <!-- ── STEP 2: Preset ─────────────────────── -->
       <div class="step-header" style="margin-top:0;">
         <span class="step-num">2</span>
-        <span class="step-label">Preset</span>
+        <span class="step-label">Pick what to keep</span>
         <span class="step-sub">Choose compression style</span>
       </div>
       <!-- M3 TASK 3.1: named surveillance presets. Picking one applies its mode
@@ -2590,27 +2620,31 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
         </select>
 
         <div class="preset-card selected" data-mode="mode0" onclick="selectPreset(this)">
-          <span class="preset-icon">●●●</span>
-          <span class="preset-name">Live Surveillance</span>
-          <span class="preset-desc">Full 24/7 recording. Maximum coverage, no frames dropped.</span>
+          <span class="preset-icon" aria-hidden="true">●●●</span>
+          <span class="preset-modeno">Mode 0</span>
+          <span class="preset-name">Live surveillance</span>
+          <span class="preset-desc">Keeps every frame. Output is about the size of the source.</span>
           <span class="preset-badge"></span>
         </div>
         <div class="preset-card" data-mode="mode1" onclick="selectPreset(this)">
-          <span class="preset-icon">◈</span>
-          <span class="preset-name">Event Recording</span>
-          <span class="preset-desc">Save only when motion is detected. Skip empty footage.</span>
+          <span class="preset-icon" aria-hidden="true">◈</span>
+          <span class="preset-modeno">Mode 1</span>
+          <span class="preset-name">Event recording</span>
+          <span class="preset-desc">Keeps only stretches with motion. Skips empty footage.</span>
           <span class="preset-badge"></span>
         </div>
         <div class="preset-card" data-mode="mode2" onclick="selectPreset(this)">
-          <span class="preset-icon">◧</span>
-          <span class="preset-name">Smart Compress</span>
-          <span class="preset-desc">Full background + high-detail patches on moving objects.</span>
+          <span class="preset-icon" aria-hidden="true">◧</span>
+          <span class="preset-modeno">Mode 2</span>
+          <span class="preset-name">Smart compress</span>
+          <span class="preset-desc">Sharp patches around movement on a saved background.</span>
           <span class="preset-badge"></span>
         </div>
         <div class="preset-card" data-mode="mode3" onclick="selectPreset(this)">
-          <span class="preset-icon">◉</span>
-          <span class="preset-name">Object Only</span>
-          <span class="preset-desc">Record only the detected objects. Smallest file size.</span>
+          <span class="preset-icon" aria-hidden="true">◉</span>
+          <span class="preset-modeno">Mode 3</span>
+          <span class="preset-name">Objects only</span>
+          <span class="preset-desc">Keeps the nearest vehicles and people. Smallest file size.</span>
           <span class="preset-badge"></span>
         </div>
       </div>
@@ -2618,7 +2652,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
       <!-- ── STEP 3: Options + Start ────────────── -->
       <div class="step-header">
         <span class="step-num">3</span>
-        <span class="step-label">Options</span>
+        <span class="step-label">Settings</span>
         <span class="step-sub">Tune &amp; go</span>
       </div>
 
@@ -3504,6 +3538,8 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
 
       <!-- ══════════════════ HOME TAB ══════════════════ -->
       <div id="tab-home" class="tab-page active">
+
+        <h2 class="side-title home-title">Activity</h2>
 
         <!-- Status hero strip -->
         <div class="home-hero">

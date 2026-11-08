@@ -152,6 +152,7 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
         _status["total_frames"] = 0
         _status["error"] = None
         _status["start_time"] = time.time()
+        _status["output_note"] = None
         _status["config"] = config
         # Cleared here for the same reason as enhancer_backend just below: a
         # stale failure count from a previous encrypted run must never leak
@@ -267,7 +268,9 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
         # auto-compress output. Interrupted runs are skipped, and the helper
         # ffprobe-verifies first, so a broken output is never indexed.
         if not stop_event.is_set():
-            _record_compressed_outputs(config)
+            if _record_compressed_outputs(config) == "larger":
+                with _state_lock:
+                    _status["output_note"] = LARGER_NOTE
 
     except Exception as exc:
         log.error(f"Pipeline error: {exc}", exc_info=True)
@@ -289,11 +292,13 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             _run_started = _status.get("start_time")
             _run_frames = _status.get("frame_count", 0)
             _run_segments = _status.get("segment_count", 0)
+            _run_output_note = _status.get("output_note")
         # Record BEFORE flipping running=False: the UI shows the completion
         # summary on the running->stopped transition, so the history entry
         # must already be readable when /api/status first reports stopped.
         _record_job_history(config, stop_event, _run_started, _run_error,
-                            _run_frames, _run_segments)
+                            _run_frames, _run_segments,
+                            output_note=_run_output_note)
         with _state_lock:
             _status["running"] = False
         global _active_encoder
@@ -349,6 +354,19 @@ def _record_compressed_outputs(config: dict) -> None:
                 candidates.append((st.st_mtime, p))
         if not candidates:
             return
+        # Mode 0 skips the encoder's bitrate cap, so a low-bitrate source can be
+        # re-encoded larger. Do not present that as a compressed copy. The file
+        # is left on disk (the user ran this by hand); it is only not indexed.
+        try:
+            src_size = src.stat().st_size
+            out_total = sum(p.stat().st_size for _, p in candidates)
+        except OSError:
+            src_size = out_total = 0
+        if src_size > 0 and out_total >= src_size:
+            log.warning("Output for %s is not smaller than the source (%d >= %d "
+                        "bytes); not indexing it as compressed.",
+                        src.name, out_total, src_size)
+            return "larger"
         output = max(candidates, key=lambda c: c[0])[1]
         probe = subprocess.run(
             [ffprobe_path(), "-v", "error", "-select_streams", "v:0",
@@ -375,6 +393,12 @@ NO_CLIPS_NOTE = (
 )
 
 
+LARGER_NOTE = (
+    "The compressed file came out larger than the original, so it was not "
+    "listed as compressed and your original is untouched. Try a different mode."
+)
+
+
 def no_output_note(status, frames, segments):
     """Plain-language reason a finished run produced nothing, else None."""
     if status != "completed" or segments:
@@ -382,7 +406,8 @@ def no_output_note(status, frames, segments):
     return NO_CLIPS_NOTE if frames else NO_FRAMES_NOTE
 
 
-def _record_job_history(config, stop_event, started, error, frames, segments):
+def _record_job_history(config, stop_event, started, error, frames, segments,
+                        output_note=None):
     """Persist this run to the job history (R4 Phase 1). Never raises."""
     try:
         try:
@@ -412,7 +437,8 @@ def _record_job_history(config, stop_event, started, error, frames, segments):
                     # M4 job registry: lets a client correlate this history
                     # entry with the job_id it got back from /api/start.
                     "job_id": config.get("job_id"),
-                    "note": no_output_note(status, frames, segments)},
+                    "note": no_output_note(status, frames, segments),
+                    **({"larger_note": output_note} if output_note else {})},
             error=error,
         )
     except Exception:  # noqa: BLE001 - history must never affect the pipeline

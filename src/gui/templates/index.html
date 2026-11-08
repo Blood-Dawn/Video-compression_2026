@@ -2791,24 +2791,24 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
               </div>
               <div class="config-field" style="margin-top:0.75rem;">
                 <label class="config-label" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
-                  <input type="checkbox" id="object-filter-toggle" onchange="_onObjectFilterChange(this.checked)" aria-label="object filter toggle"/>
+                  <input type="checkbox" id="object-filter-toggle" onchange="_onObjectFilterChange(this.checked)" aria-describedby="object-filter-hint"/>
                   Smart filter &amp; object detection (recommended)
                 </label>
-                <p class="config-hint">Uses YOLOv8-nano to confirm each moving region is a real target (person, vehicle, animal) before recording, eliminating false triggers from trees, flags, and lighting changes. This is also the only source of the Object Type, Color, and Person/Vehicle Count data shown in Metrics and used by Search - leave it off and every segment will be recorded as type "unknown" regardless of what is actually in the video.</p>
+                <p class="config-hint" id="object-filter-hint">Uses YOLOv8-nano to confirm each moving region is a real target (person, vehicle, animal) before recording, eliminating false triggers from trees, flags, and lighting changes. This is also the only source of the Object Type, Color, and Person/Vehicle Count data shown in Metrics and used by Search - leave it off and every segment will be recorded as type "unknown" regardless of what is actually in the video.</p>
               </div>
               <div class="config-field" style="margin-top:0.75rem;">
                 <label class="config-label" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
-                  <input type="checkbox" id="verbose-toggle" aria-label="verbose toggle"/>
+                  <input type="checkbox" id="verbose-toggle" aria-describedby="verbose-hint"/>
                   Verbose logging
                 </label>
-                <p class="config-hint">Normal shows the key steps. Verbose adds per-frame progress and per-segment detail (detections, size, ratio, percent done) to the live log and console.</p>
+                <p class="config-hint" id="verbose-hint">Normal shows the key steps. Verbose adds per-frame progress and per-segment detail (detections, size, ratio, percent done) to the live log and console.</p>
               </div>
               <div class="config-field" id="filter-confidence-row" style="display:none;">
                 <label class="config-label" for="filter-confidence">Filter Confidence</label>
                 <input type="range" id="filter-confidence" min="0.10" max="0.70" step="0.05" value="0.30"
-                       oninput="document.getElementById('filter-conf-val').textContent=(+this.value).toFixed(2)" aria-label="filter confidence"/>
+                       oninput="document.getElementById('filter-conf-val').textContent=(+this.value).toFixed(2)" aria-describedby="filter-confidence-hint"/>
                 <span id="filter-conf-val" class="slider-value-badge">0.30</span>
-                <p class="config-hint">Minimum YOLO confidence to keep a detection. Lower = more sensitive (may re-introduce false positives); higher = stricter (may miss distant targets).</p>
+                <p class="config-hint" id="filter-confidence-hint">Minimum YOLO confidence to keep a detection. Lower = more sensitive (may re-introduce false positives); higher = stricter (may miss distant targets).</p>
               </div>
             </div>
           </details>
@@ -3293,7 +3293,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
                 <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
                   <button class="btn btn-ghost" id="devices-refresh-btn" onclick="devicesRefresh()">Refresh</button>
                   <button class="btn btn-primary" id="devices-mint-btn" onclick="devicesMint()">Pair a new device</button>
-                  <button class="btn btn-ghost" id="devices-revoke-all-btn" onclick="devicesRevokeAll()" style="color:var(--red);">Revoke all</button>
+                  <button class="btn btn-ghost" id="devices-revoke-all-btn" onclick="devicesRevokeAll()" style="color:var(--red);border-color:var(--red);">Revoke all</button>
                 </div>
                 <span id="devices-updated" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
               </div>

@@ -388,12 +388,12 @@ private fun RowAction(icon: ImageVector, label: String, color: Color, onClick: (
             .border(1.dp, if (color == SvcsRed) SvcsRed.copy(alpha = 0.5f) else SvcsBorderCtl, RoundedCornerShape(4.dp))
             .clip(RoundedCornerShape(4.dp))
             .clickable(role = Role.Button, onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
         Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(label, style = MaterialTheme.typography.labelLarge, color = color)
+        Spacer(Modifier.width(6.dp))
+        Text(label, style = MaterialTheme.typography.labelLarge, color = color, maxLines = 1, softWrap = false)
     }
 }

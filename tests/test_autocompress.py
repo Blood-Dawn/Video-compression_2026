@@ -89,6 +89,24 @@ def test_compresses_into_compressed_subdir_and_records(iso):
     assert done[0]["output"] == str(produced[0].resolve())
 
 
+def test_output_not_smaller_than_source_is_discarded(iso, monkeypatch):
+    # A low-bitrate source re-encoded larger must not be recorded, must not
+    # replace the original even with delete_original ON, and must not linger.
+    def _big_pipeline(input_source, camera_id, output_dir, **kw):
+        out = Path(output_dir) / f"{camera_id}.mp4"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"x" * 900)          # larger than the 500 byte source
+    monkeypatch.setattr(ac, "run_pipeline", _big_pipeline)
+    watch = iso / "watch"
+    out = iso / "out"
+    src = _mkvid(watch / "clip.mp4")
+    done = _scan(watch, out, delete_original=True)
+    assert done == []
+    assert src.exists(), "the original must survive when the output is not smaller"
+    assert not list((out / "compressed").glob("*.mp4")), "oversized output removed"
+    assert cidx.is_compressed(src) is False
+
+
 def test_dedup_second_scan_compresses_nothing(iso):
     watch = iso / "watch"
     out = iso / "out"

@@ -83,3 +83,78 @@ Status key: [x] done and checked, [ ] open, [~] partly done.
 
 - Fixed: Start button now stays locked until Setup is complete and while running (ui.js and setup.js).
 - Not done: real NVDA and TalkBack pass, token parity document, component docs, color-only status audit on error states, 360dp width check on Android, server Library and Events on a device.
+
+## 8. Redesign of the other dashboard tabs
+
+Design boards: the "SVCS App Redesign" artifact, group "Other dashboard tabs" (Upload, Library, Library one video, Auto compress, Metrics, Search, Tools, Encrypt, Other tabs phone width, Other tabs handoff). Home is already implemented (section 6). Everything here follows the same rules as before: keep every element id, keep the script blocks working, do not touch compression code, view models or navigation, run the full tests and screenshot before each commit.
+
+Research behind the boards (checked 2026-11): Primer and accessible-data-interfaces for table rules, Cieden, Shopify and Eleken for settings pages and toggle rows, Tella, Sanity and UI/UX Atlas for video library behavior, plus the design-critique, accessibility-review, design-system and dataviz skills. Rules that came out of it are in 8.9.
+
+### 8.1 Page frame (all tabs)
+
+- Each tab opens with an h2 title in Bebas Neue and one sentence of purpose in dim text, then content at a maximum width of 1280px. The Home tab already uses `.side-title`; reuse it.
+- Cards use `--surface`, 1px `--border`, 4px radius, 20px padding. Do not add gradients, glass or decoration.
+- Primary action is one amber button per card. Secondary actions are outlined, destructive actions are outlined in red.
+
+### 8.2 Upload
+
+Change: three states in one place (waiting, uploading with a real progress bar, finished with "Compress this video" and "Open in Library"). Keep ids: `upload-zone`, `upload-input`, `upload-status`, `video-list`. Needs new code: a visible Cancel upload button and the finished card; the percent and byte counts come from the existing status text, so wire them only if the status already exposes them.
+
+### 8.3 Library (grid and one video)
+
+Change: Folder field with Browse and Load; an All, Originals, Compressed segmented control; a sort menu; a grid and list toggle; active filter chips with Clear filters; cards at one uniform 16:9 size with middle truncated names, a Compressed or Original badge and "Saved n%" in words (never color alone). The detail view becomes a two column page: player on the left, a plain facts table and four actions on the right. Keep ids: `library-folder`, `library-browse-btn`, `library-search`, `library-sort`, `library-view-grid`, `library-view-list`, `library-kind-*`, `library-grid`, `library-empty`, `library-detail`, `library-player`, `library-detail-name`, `library-detail-meta`, `library-count`, `library-status`, `library-stats-strip`.
+Needs new code: multi select with a selection bar (Encrypt, Compress again, Delete), the "Last 7 days" style filter chips, a third sort direction, remembering sort and view in `localStorage`. Empty states per cause: no videos yet, filter matches nothing, load error with retry. Selection bar replaces the filter row instead of pushing content down, Escape clears it.
+
+### 8.4 Auto compress
+
+Change: one status card ("Auto compress is off" with a single Turn on button), a "What to watch" card, a "Keep disk space under control" card with a disk bar and plain numbers, destructive purge in red outline. Keep ids: `ac-state-badge`, `ac-folder`, `ac-browse-btn`, `ac-mode`, `ac-profile`, `ac-delete-original`, `ac-delete-warn`, `ac-toggle-btn`, `ac-scan-btn`, `ac-status-line`, `ac-recent`, `retention-panel`, `ret-enabled`, `ret-max-age`, `ret-max-gb`, `ret-estimate`, `ret-purge-btn`, `ac-log`. Keep the existing `confirm()` before the purge and make its text say how many files and how much space. The disk bar and "6 clips would be removed" line should come from `ret-estimate`; only show numbers that API really returns. The delete original switch keeps its red warning.
+
+### 8.5 Metrics
+
+Change: four stat tiles, two single series charts (space saved per day in amber, average size reduction by mode in teal) each with a View as table link, and a segment table. The table shows Time, Camera, Mode, Object, Length, Size, Smaller, Quality and three named icon actions (Play, Encrypt, Delete); Color, Scene, Light, Motion, Cars and People move behind a Columns menu. Keep ids: `metrics-table`, `segments-tbody`, `met-filter-cam`, `met-filter-type`, `met-filter-enc`, `metrics-detail`, `metrics-video`, `metrics-meta-grid`, `metrics-enc-btn`, `metrics-timelapse-btn`, `metrics-history-chart`, `mlib-segments`, `mlib-size`, `mlib-saved`, `mlib-avg-dur`, `mlib-enc`, `mode-cpu-card` and its children.
+Notes: the existing split view (table plus a detail pane with the video) stays; on desktop open the detail as a slide over panel from the right. The mode CPU card is not drawn on the board, keep it under the charts. The saved per day chart needs a data source: reuse `metrics-history-chart` data if it is per day, otherwise group `segments` by date in `metrics.js`. Chart colors: amber and teal only, one series per chart, labels on the bars, `role="img"` with a text summary, and a table version behind the link. The dataviz validator flags the lightness band for these bright accents on the dark surface; this is accepted because every mark is directly labeled and each chart has only one series.
+
+### 8.6 Search
+
+Change: a plain English box first ("Describe what you are looking for", example chips), filters in a disclosure with an "n active" count, the same table style as Metrics, result chips that remove one filter each, and a Results, Busiest clips, Daily summary segmented control. Keep ids: `nl-search-q`, `nl-search-explain`, `arc-object-type`, `arc-color`, `arc-scene`, `arc-tod`, `arc-camera-id`, `arc-date-from`, `arc-date-to`, `arc-min-rois`, `arc-enc-only`, `arc-pose-only`, `arc-searching`, `archive-result-count`, `archive-results-table`, `archive-tbody`, `archive-status`, `search-preview-*`. The count text keeps `aria-live="polite"`. Needs new code: removable chips built from the active filters, the example chips.
+
+### 8.7 Tools
+
+Change: a sticky section list on the left and one card per tool with a heading and one sentence: App updates, Phone alerts, Webhook, Recent events, Zone editor, Paired devices; a Danger zone card last. Toggles show On or Off as text, secrets are masked with a Show button and the saved value is never printed back, Send test shows its result inline as an icon plus text and is announced with `role="status"`. Keep every id in `update-panel`, `push-panel`, `webhook-panel`, `events-panel`, `zone-editor-panel`, `devices-panel` (see the ids listed in the template). Revoke buttons get a name that includes the device and a red outline (done in the redesign branch for the buttons that exist). Needs new code: the Show button on `push-token` and `webhook-secret`, and moving Revoke all into the Danger zone card. On phone width the sections become collapsible cards (see the phone board).
+
+### 8.8 Encrypt
+
+Change: Encrypt and Decrypt side by side, method as a segmented choice (Password or Key file), a password strength note on the encrypt side, a "Need a key file?" card, and a red "no password recovery" notice. Keep ids: `enc-src-path`, `enc-password-group`, `enc-password`, `enc-keyfile-group`, `enc-keyfile-path`, `enc-encrypt-status`, `dec-src-path`, `dec-password-group`, `dec-password`, `dec-keyfile-group`, `dec-keyfile-path`, `enc-decrypt-status`, `enc-keygen-name`, `enc-keygen-result`. Needs new code: Show button on both password fields and the strength note (length based only, do not claim cryptographic strength).
+
+### 8.9 Rules that apply to every tab
+
+- Tables: header cells use `scope="col"`; sort buttons sit inside the header and set `aria-sort`; each row action says which row it acts on ("Delete gate clip at 08:14", not "Delete"); an action column header exists but is visually hidden; wide tables scroll inside a focusable region with an accessible name; do not collapse rows into cards on phones.
+- Toggles: static action first label, visible On or Off, `role="switch"`, 44px target. Use a checkbox and a Save button when a change needs review.
+- Autosave only for instant toggles. Text fields and secrets use an explicit Save.
+- Destructive actions: red outline, in their own group at the bottom, a confirmation that states the consequence, never color alone.
+- Charts: one series each, a title that names it, a table view link, direct value labels, a text alternative.
+- Empty, loading and error states are written for every list and card, one message per cause.
+- Phone width: the section tabs become a bottom bar (Home, Library, Search, Tools, More); Upload, Auto compress, Metrics and Encrypt sit under More. Targets 44px.
+
+### 8.10 Implementation order and status
+
+Status key as above. Nothing in this section is implemented yet.
+
+- [ ] 1. Page frame and shared classes (title, card, segmented control, switch, chips, table) added once to the template CSS.
+- [ ] 2. Tools (largest and most self contained).
+- [ ] 3. Library and detail.
+- [ ] 4. Metrics (needs the per day data decision).
+- [ ] 5. Search.
+- [ ] 6. Auto compress.
+- [ ] 7. Encrypt.
+- [ ] 8. Upload.
+- [ ] 9. Phone width pass for all of the above.
+- [ ] 10. Per tab: axe scan in light and dark, keyboard pass, full tests, screenshots.
+
+### 8.11 Open questions for the team
+
+- Library multi select and bulk delete: confirm the delete path deletes files on disk or only list entries.
+- Upload progress: does the server expose bytes and percent while uploading?
+- Disk bar numbers: confirm `ret-estimate` returns used, cap and count.
+- Searching: confirm "Last 7 days" style chips are wanted or if the date fields are enough.
+- Not verified: none of this has been seen by a screen reader user, and the boards use sample data.

@@ -170,6 +170,63 @@ def _sanitize_camera_id(camera_id: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_-]", "_", camera_id)
 
 
+def _apply_vmaf_target(input_source, codec, resolved_crf: int, target_vmaf,
+                       encode_preset: str) -> int:
+    """VMAF-targeted rate control (R5 TASK 5.1). Opt-in.
+
+    When target_vmaf is set and the source is a FILE, sample-encode a few short
+    segments to find the largest CRF (smallest file) that still clears the
+    perceptual target, and return that instead of the fixed CRF. The search
+    never raises and never hangs: any failure (no libvmaf, live source, no
+    convergence) returns resolved_crf unchanged and logs the reason.
+    Design: docs/RESEARCH-VMAF-TARGET.md.
+    """
+    if target_vmaf is None or isinstance(input_source, int):
+        return resolved_crf
+    try:
+        from compression.vmaf_target import find_crf_for_target
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.compression.vmaf_target import find_crf_for_target
+    _tv = find_crf_for_target(
+        input_source, codec=codec, fixed_crf=resolved_crf,
+        target_vmaf=target_vmaf, preset=encode_preset,
+    )
+    if _tv.used_target:
+        log.info("VMAF target %.1f: CRF %d -> %d (measured VMAF %.2f, "
+                 "%d probe(s)%s)", _tv.target_vmaf, resolved_crf, _tv.crf,
+                 _tv.measured_vmaf if _tv.measured_vmaf is not None else -1.0,
+                 _tv.probes, ", cached" if _tv.cached else "")
+        return _tv.crf
+    log.info("VMAF target requested but not used (%s); keeping fixed CRF %d.",
+             _tv.fallback_reason, resolved_crf)
+    return resolved_crf
+
+
+def _resolve_max_bitrate_kbps(mode: str, max_bitrate_kbps, input_source,
+                              total_frames: int, fps: float):
+    """Auto safety cap on the output bitrate.
+
+    On hard or noisy footage, or with the ultrafast preset of modes 2 and 3,
+    CRF encoding can land above the source's own bitrate and produce a
+    "compressed" file bigger than the original. Without an explicit
+    --max-bitrate-kbps, cap at the source file's average bitrate. Skipped for
+    mode0 (its Archive preset is "quality over size"), for live sources (no
+    file to measure), and when the caller gave a cap (theirs wins, even above
+    the source rate). Returns the value to hand the encoder.
+    """
+    if max_bitrate_kbps or mode == "mode0":
+        return max_bitrate_kbps
+    auto_cap_kbps = _source_bitrate_kbps(input_source, total_frames, fps)
+    if auto_cap_kbps > 0:
+        log.info(
+            "No max-bitrate-kbps given: capping at the source file's own "
+            "~%d kbps so compression can't make the file bigger.",
+            auto_cap_kbps,
+        )
+        return auto_cap_kbps
+    return max_bitrate_kbps
+
+
 def _resolve_foreground_crf(mode: str, crf) -> int:
     """Foreground CRF: an explicit value wins, otherwise a per-mode default.
 
@@ -460,24 +517,8 @@ def run_pipeline(
     # search never raises and never hangs: any failure (no libvmaf, live source,
     # no convergence) keeps resolved_crf and logs the reason.
     # Design: docs/RESEARCH-VMAF-TARGET.md.
-    if target_vmaf is not None and not isinstance(input_source, int):
-        try:
-            from compression.vmaf_target import find_crf_for_target
-        except ModuleNotFoundError:  # pragma: no cover - import path shim
-            from src.compression.vmaf_target import find_crf_for_target
-        _tv = find_crf_for_target(
-            input_source, codec=codec, fixed_crf=resolved_crf,
-            target_vmaf=target_vmaf, preset=encode_preset,
-        )
-        if _tv.used_target:
-            log.info("VMAF target %.1f: CRF %d -> %d (measured VMAF %.2f, "
-                     "%d probe(s)%s)", _tv.target_vmaf, resolved_crf, _tv.crf,
-                     _tv.measured_vmaf if _tv.measured_vmaf is not None else -1.0,
-                     _tv.probes, ", cached" if _tv.cached else "")
-            resolved_crf = _tv.crf
-        else:
-            log.info("VMAF target requested but not used (%s); keeping fixed CRF %d.",
-                     _tv.fallback_reason, resolved_crf)
+    resolved_crf = _apply_vmaf_target(input_source, codec, resolved_crf,
+                                      target_vmaf, encode_preset)
 
     # Background CRF (dual-CRF background stream). None keeps the encoder's own
     # default; a preset (M3 TASK 3.1) or explicit caller can raise it for more
@@ -491,15 +532,8 @@ def run_pipeline(
     # Skipped for mode0 (its Archive preset is "quality over size"), for live
     # sources (no file to measure), and when the caller gave a cap (theirs
     # wins, even above the source rate).
-    if not max_bitrate_kbps and mode != "mode0":
-        _auto_cap_kbps = _source_bitrate_kbps(input_source, total_frames, fps)
-        if _auto_cap_kbps > 0:
-            log.info(
-                "No max-bitrate-kbps given: capping at the source file's own "
-                "~%d kbps so compression can't make the file bigger.",
-                _auto_cap_kbps,
-            )
-            max_bitrate_kbps = _auto_cap_kbps
+    max_bitrate_kbps = _resolve_max_bitrate_kbps(
+        mode, max_bitrate_kbps, input_source, total_frames, fps)
 
     encoder = ROIEncoder(
         output_dir=output_dir,

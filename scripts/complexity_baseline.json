@@ -31,7 +31,7 @@
   "src/gui/services/retention.py::estimate": 28,
   "src/gui/services/retention.py::purge_once": 29,
   "src/pipeline/content_detect.py::analyze_video": 23,
-  "src/pipeline/pipeline.py::run_pipeline": 117,
+  "src/pipeline/pipeline.py::run_pipeline": 103,
   "src/utils/frame_source.py::FrameSource._init_video_ffmpeg": 16,
   "src/utils/onvif_discovery.py::parse_probe_matches": 16,
   "src/utils/push_notify.py::_check_url": 20,

@@ -91,6 +91,7 @@ SAMPLES = [
     ("GET", "/api/library/thumb"),
     ("GET", "/api/library/file"),
     ("POST", "/api/library/compress"),
+    ("POST", "/api/library/delete"),
     ("POST", "/api/autocompress/start"),
     ("POST", "/api/autocompress/stop"),
     ("GET", "/api/autocompress/status"),
@@ -164,4 +165,4 @@ def test_sample_count_matches_route_count():
     # webhook config and test, setup/update_check), +3 for the Fall 3.18
     # auto-update routes (status, download, install), +1 for the 2026-10-01
     # /api/timelapse route (quiet-period summary generation).
-    assert len(SAMPLES) == len(rules) == 97
+    assert len(SAMPLES) == len(rules) == 98

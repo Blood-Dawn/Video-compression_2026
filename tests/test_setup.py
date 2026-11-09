@@ -176,7 +176,7 @@ def _release(tag, html_url="https://example.invalid/releases/x",
     if exe_asset:
         assets.append({
             "name": f"SVCS-Setup-{tag.lstrip('v')}.exe",
-            "browser_download_url": f"https://example.invalid/dl/{tag}.exe",
+            "browser_download_url": f"https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1.0.0/{tag}.exe",
         })
     return {"tag_name": tag, "html_url": html_url, "draft": draft, "assets": assets}
 
@@ -196,7 +196,7 @@ class TestUpdateCheck:
         assert body["checked"] is True
         assert body["update_available"] is True
         assert body["latest_version"] == "v999.0.0"
-        assert body["download_url"] == "https://example.invalid/dl/v999.0.0.exe"
+        assert body["download_url"] == "https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1.0.0/v999.0.0.exe"
         assert body["current_version"] == setup_bp.APP_VERSION
 
     def test_older_release_reports_no_update(self, client, monkeypatch):

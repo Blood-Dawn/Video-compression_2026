@@ -50,6 +50,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -58,6 +59,7 @@ import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import urlsplit
 
 try:
     from gui.logging_setup import log
@@ -73,6 +75,36 @@ MOBILE_TAG_PREFIX = "mobile-"
 _USER_AGENT = "SVCS-dashboard-update-check"
 _CHECKSUM_ASSET_NAMES = {"sha256sums.txt"}
 _INSTALL_WAIT_TIMEOUT_S = 30
+
+# Release asset links come out of the GitHub API's JSON. Only follow one that is
+# https on github.com under this repo's own release download path, and whose
+# file name is a plain name (it becomes the file name on disk).
+_ASSET_HOST = "github.com"
+_ASSET_PATH_PREFIX = "/blood-dawn/video-compression_2026/releases/download/"
+_ASSET_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+
+
+def _is_trusted_asset_url(url) -> bool:
+    """True only for an https github.com release download link of this repo
+    whose last path segment is a safe plain file name."""
+    if not isinstance(url, str):
+        return False
+    try:
+        parts = urlsplit(url)
+        port = parts.port
+    except ValueError:
+        return False
+    if parts.scheme != "https" or parts.username or parts.password or port not in (None, 443):
+        return False
+    if (parts.hostname or "").lower() != _ASSET_HOST:
+        return False
+    path = parts.path
+    if not path.lower().startswith(_ASSET_PATH_PREFIX) or "%" in path or "\\" in path:
+        return False
+    segments = path[len(_ASSET_PATH_PREFIX):].split("/")
+    if len(segments) != 2 or not all(segments) or ".." in segments:
+        return False
+    return bool(_ASSET_NAME_RE.match(segments[-1]))
 
 
 # ── Fall 3.17: find the newest desktop release (shared with setup_bp) ────────
@@ -156,10 +188,13 @@ def check_for_update(current_version: str | None = None) -> dict:
             if not isinstance(asset, dict):
                 continue
             name = str(asset.get("name") or "").lower()
+            link = asset.get("browser_download_url")
+            if not _is_trusted_asset_url(link):
+                continue
             if name.endswith(".exe") and not result["download_url"]:
-                result["download_url"] = asset.get("browser_download_url")
+                result["download_url"] = link
             elif name in _CHECKSUM_ASSET_NAMES:
-                result["checksum_url"] = asset.get("browser_download_url")
+                result["checksum_url"] = link
 
     result["checked"] = True
     return result
@@ -307,7 +342,13 @@ def start_download() -> dict:
 def _download_and_verify(info: dict) -> None:
     """Runs on the background thread started by start_download()."""
     url = info["download_url"]
-    name = url.rsplit("/", 1)[-1] or "SVCS-Setup.exe"
+    if not _is_trusted_asset_url(url) or (
+            info.get("checksum_url") and not _is_trusted_asset_url(info["checksum_url"])):
+        log.warning("Update download refused: untrusted asset URL %r", url)
+        _set(phase="error", error="The update link is not a GitHub release download "
+                                  "for this project. Refusing to download it.")
+        return
+    name = url.rsplit("/", 1)[-1]
     dest = _staging_dir() / name
     tmp = dest.with_suffix(dest.suffix + ".part")
 

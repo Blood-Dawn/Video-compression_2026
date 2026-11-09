@@ -69,12 +69,12 @@ def _release(tag, exe_name="SVCS-Setup-999.0.0.exe", checksum=True, exe_asset=Tr
     if exe_asset:
         assets.append({
             "name": exe_name,
-            "browser_download_url": f"https://example.invalid/dl/{exe_name}",
+            "browser_download_url": f"https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1.0.0/{exe_name}",
         })
     if checksum:
         assets.append({
             "name": "SHA256SUMS.txt",
-            "browser_download_url": "https://example.invalid/dl/SHA256SUMS.txt",
+            "browser_download_url": "https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1.0.0/SHA256SUMS.txt",
         })
     return {
         "tag_name": tag, "html_url": "https://example.invalid/releases/x",
@@ -185,8 +185,8 @@ class TestDownloadAndVerify:
 
         info = {
             "latest_version": "v999.0.0",
-            "download_url": f"https://example.invalid/dl/{name}",
-            "checksum_url": "https://example.invalid/dl/SHA256SUMS.txt",
+            "download_url": f"https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1.0.0/{name}",
+            "checksum_url": "https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1.0.0/SHA256SUMS.txt",
         }
         um._download_and_verify(info)
         status = um.get_status()
@@ -213,8 +213,8 @@ class TestDownloadAndVerify:
 
         info = {
             "latest_version": "v999.0.0",
-            "download_url": f"https://example.invalid/dl/{name}",
-            "checksum_url": "https://example.invalid/dl/SHA256SUMS.txt",
+            "download_url": f"https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1.0.0/{name}",
+            "checksum_url": "https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1.0.0/SHA256SUMS.txt",
         }
         um._download_and_verify(info)
         status = um.get_status()
@@ -234,7 +234,7 @@ class TestDownloadAndVerify:
         )
         info = {
             "latest_version": "v999.0.0",
-            "download_url": f"https://example.invalid/dl/{name}",
+            "download_url": f"https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1.0.0/{name}",
             "checksum_url": None,
         }
         um._download_and_verify(info)
@@ -253,7 +253,7 @@ class TestDownloadAndVerify:
         monkeypatch.setattr(um.urllib.request, "urlopen", _boom)
         info = {
             "latest_version": "v999.0.0",
-            "download_url": "https://example.invalid/dl/x.exe",
+            "download_url": "https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1.0.0/x.exe",
             "checksum_url": None,
         }
         um._download_and_verify(info)
@@ -278,8 +278,8 @@ class TestStartDownload:
         monkeypatch.setattr(um, "check_for_update", lambda: {
             "update_available": True,
             "latest_version": "v999.0.0",
-            "download_url": f"https://example.invalid/dl/{name}",
-            "checksum_url": "https://example.invalid/dl/SHA256SUMS.txt",
+            "download_url": f"https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1.0.0/{name}",
+            "checksum_url": "https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1.0.0/SHA256SUMS.txt",
         })
 
         def _fake_urlopen(req, timeout=30):
@@ -384,3 +384,61 @@ class TestQuitAppForUpdate:
         monkeypatch.setattr(um.os, "_exit", lambda code: called.set())
         um.quit_app_for_update(delay_seconds=0.01)
         assert called.wait(timeout=2), "os._exit was not called"
+
+
+# -- asset URL trust ---------------------------------------------------------
+
+_GOOD = "https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1.2.3/SVCS-Setup-1.2.3.exe"
+
+
+@pytest.mark.parametrize("url", [
+    _GOOD,
+    "https://GitHub.com/blood-dawn/video-compression_2026/releases/download/v1/SHA256SUMS.txt",
+    "https://github.com:443/Blood-Dawn/Video-compression_2026/releases/download/v1/a.exe",
+])
+def test_trusted_asset_urls_are_accepted(url):
+    assert um._is_trusted_asset_url(url) is True
+
+
+@pytest.mark.parametrize("url", [
+    None, 42, "", "not a url",
+    "http://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1/a.exe",
+    "https://evil.example/Blood-Dawn/Video-compression_2026/releases/download/v1/a.exe",
+    "https://github.com.evil.example/Blood-Dawn/Video-compression_2026/releases/download/v1/a.exe",
+    "https://user:pw@github.com/Blood-Dawn/Video-compression_2026/releases/download/v1/a.exe",
+    "https://github.com:8443/Blood-Dawn/Video-compression_2026/releases/download/v1/a.exe",
+    "https://github.com/someone-else/Video-compression_2026/releases/download/v1/a.exe",
+    "https://github.com/Blood-Dawn/Video-compression_2026/archive/main.zip",
+    "https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1/",
+    "https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1/a/b.exe",
+    "https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1/..%2Fa.exe",
+    "https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1/a%5Cb.exe",
+    "https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1/a\b.exe",
+    "https://github.com/Blood-Dawn/Video-compression_2026/releases/download/../a.exe",
+    "https://github.com/Blood-Dawn/Video-compression_2026/releases/download/v1/.hidden.exe",
+])
+def test_untrusted_asset_urls_are_rejected(url):
+    assert um._is_trusted_asset_url(url) is False
+
+
+def test_check_for_update_skips_assets_with_untrusted_links(monkeypatch):
+    release = _release("v999.0.0")
+    release["assets"][0]["browser_download_url"] = "https://evil.example/SVCS-Setup-999.0.0.exe"
+    payload = _releases_payload(release)
+    monkeypatch.setattr(um.urllib.request, "urlopen",
+                        lambda req, timeout=5: _FakeHTTPResponse(payload))
+    result = um.check_for_update(current_version="1.0.0")
+    assert result["download_url"] is None
+    assert result["checksum_url"].endswith("SHA256SUMS.txt")
+
+
+def test_download_refuses_an_untrusted_url_without_any_network_call(monkeypatch, tmp_path):
+    monkeypatch.setattr(um, "_staging_dir", lambda: tmp_path)
+    calls = []
+    monkeypatch.setattr(um.urllib.request, "urlopen", lambda *a, **k: calls.append(a))
+    um._download_and_verify({"latest_version": "v999.0.0",
+                             "download_url": "https://evil.example/x.exe",
+                             "checksum_url": None})
+    assert calls == []
+    assert um.get_status()["phase"] == "error"
+    assert list(tmp_path.iterdir()) == []

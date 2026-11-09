@@ -70,6 +70,52 @@ def _platform_asset() -> tuple[str, str]:
 # ── Manager ───────────────────────────────────────────────────────────────────
 
 
+class UnsafeArchiveError(ValueError):
+    """An archive member would land outside the extraction folder, or is a
+    link or special file."""
+
+
+def _check_member_name(dest: Path, name: str) -> None:
+    """Raise unless ``name`` extracts to a path strictly inside ``dest``."""
+    if not name or "\x00" in name:
+        raise UnsafeArchiveError(f"bad member name {name!r}")
+    normalized = name.replace("\\", "/")
+    if normalized.startswith("/") or (len(normalized) > 1 and normalized[1] == ":"):
+        raise UnsafeArchiveError(f"absolute member path {name!r}")
+    if ".." in normalized.split("/"):
+        raise UnsafeArchiveError(f"member path climbs out of the folder: {name!r}")
+    root = dest.resolve()
+    target = (root / normalized).resolve()
+    if target != root and root not in target.parents:
+        raise UnsafeArchiveError(f"member resolves outside the folder: {name!r}")
+
+
+def _safe_extract(archive: Path, dest_dir: Path) -> None:
+    """Extract a .zip or .tar.gz into dest_dir, refusing any unsafe member.
+
+    Every member is checked before anything is written, so a bad archive
+    leaves no partial extraction. Tar links, devices and fifos are refused
+    outright (MediaMTX ships none), and the stdlib "data" filter is applied
+    on top where the running Python has it.
+    """
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    if archive.name.endswith(".zip"):
+        with zipfile.ZipFile(archive, "r") as z:
+            for info in z.infolist():
+                _check_member_name(dest_dir, info.filename)
+            z.extractall(dest_dir)
+        return
+    with tarfile.open(archive, "r:gz") as t:
+        for member in t.getmembers():
+            _check_member_name(dest_dir, member.name)
+            if not (member.isfile() or member.isdir()):
+                raise UnsafeArchiveError(f"link or special file in archive: {member.name!r}")
+        if hasattr(tarfile, "data_filter"):
+            t.extractall(dest_dir, filter="data")
+        else:
+            t.extractall(dest_dir)
+
+
 class RtspServerManager:
     """Download, start, stop, and monitor a local MediaMTX RTSP server."""
 
@@ -201,18 +247,7 @@ class RtspServerManager:
         if progress_cb:
             progress_cb("extracting")
 
-        if fname.endswith(".zip"):
-            with zipfile.ZipFile(archive, "r") as z:
-                z.extractall(dest_dir)
-        else:
-            with tarfile.open(archive, "r:gz") as t:
-                # The "data" filter refuses absolute paths, "../" members and
-                # links that escape dest_dir (CVE-2007-4559). Pythons older
-                # than 3.11.4 lack it and keep the old behavior.
-                if hasattr(tarfile, "data_filter"):
-                    t.extractall(dest_dir, filter="data")
-                else:
-                    t.extractall(dest_dir)
+        _safe_extract(archive, dest_dir)
 
         archive.unlink(missing_ok=True)
 

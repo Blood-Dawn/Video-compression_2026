@@ -1,0 +1,19 @@
+# Keeps the pinned GitHub Actions and the Python lockfile current.
+# Actions are pinned to commit SHAs (the version stays in a trailing comment),
+# so this is what moves them forward. Pull requests only; nothing merges itself.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+  - package-ecosystem: uv
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5

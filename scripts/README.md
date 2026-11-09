@@ -23,6 +23,7 @@ own tooling under `mobile/android/` (Gradle, `verify-toolchain.ps1`).
 | `export_requirements.py` | Regenerate `requirements.txt` from `uv.lock` (`--check` to verify). |
 | `check_doc_links.py` | List Markdown links and repo paths that no longer resolve. |
 | `complexity_ratchet.py` | Fail when a function above complexity 15 is new or got worse than `complexity_baseline.json` (needs radon). |
+| `pipeline_characterize.py` | Run run_pipeline on a real clip in every mode and compare sizes, hashes and detection counts before and after a refactor (`run`, then `compare`). |
 | `update_planner.py` | Keep the Fall 2026 planner CSV and Markdown in `docs/project-records/` in sync. |
 | `winget_validate.ps1` | Validate the winget manifests; `-Recompute` rehashes a built installer. |
 

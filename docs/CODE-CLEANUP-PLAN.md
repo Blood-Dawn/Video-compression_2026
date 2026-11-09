@@ -41,7 +41,7 @@ Needs owner decision (not deleted, reason given):
 - `encode_frame_sequence` in roi_encoder.py: no callers anywhere, but its docstring says it is kept for backward compatibility. This is compression code, so it needs a decision.
 - `active_scale` (enhancer.py): public property, referenced in a docstring and documents the scale in effect. Kept.
 - `_assert_within_output` (path_safety.py): re-exported by src/gui/app.py and named in docs/SECURITY.md. Kept.
-- Functions that only tests call (about 35, for example `compute_psnr`, `compute_ssim`, `MultiFrameSource`, `is_video_ext`, `list_profiles`, `bind_exposure_warning`, `push_targets`): deleting them means deleting their tests, so each needs a call on whether it is public API or leftover.
+- Functions that only tests call (about 35, for example `compute_psnr`, `compute_ssim`, `MultiFrameSource`, `is_video_ext`, `list_profiles`, `bind_exposure_warning`, `push_targets`): DECIDED by the owner to keep them and their tests. Nothing to delete.
 
 Candidates, each needing the check above before deleting (the items above are already triaged):
 
@@ -52,13 +52,13 @@ Candidates, each needing the check above before deleting (the items above are al
 - src/compression/roi_encoder.py (1256 lines): `build_kwargs_at`, `scene_is_static`, `background_motion_score`, `encode_frame_sequence`, `get_file_size`. `encode_segment` appears 73 times across src and tests, so confirm which class each hit belongs to first.
 - src/gui: `any_tokens_configured` and `push_targets` in device_tokens.py, `is_server` in edition.py, `_require_basic_auth` and `_csrf_guard` (check whether they are registered through a decorator before calling them dead).
 - src/enhancement/plate_reader.py: unused result fields and the `ocr_available` property. src/enhancement/enhancer.py: `active_scale`.
-- 32 places that swallow an exception with `pass`. These are not dead code, but each should at least log at debug level so failures leave a trace.
+- 32 places that swallow an exception with `pass`. Reviewed 2026-11-09 and deferred: all but one are in GUI services and utilities, each is a deliberate best effort guard (history, telemetry, persistence, cleanup) and most already carry a comment saying so. The one in compression is a cache read in vmaf_target.py. A blanket debug log would add noise at 32 sites for little gain; if wanted, start with the ones with no comment (cpu_sampler.py:75, cloud_detection.py:309, gui_state_persist.py:78 and 106, path_safety.py:138 to 179, hls_runner.py:438, retention.py:108 and 135).
 
 ## Phase 3: cut unnecessary complexity
 
 Order by risk and payoff, one function per commit, tests green before and after:
 
-1. `run_pipeline` (123). Split along its stages, keeping the same call order and the same outputs. This function is the core path, so first add or confirm characterization tests that pin its outputs for a short clip in every mode, then extract.
+1. `run_pipeline` (123, now 117 after the first extraction; progress below). Split along its stages, keeping the same call order and the same outputs. This function is the core path, so first add or confirm characterization tests that pin its outputs for a short clip in every mode, then extract.
 2. The route handlers over 25: `api_start`, `api_library_videos`, `api_encrypt`, `api_decrypt`. Move validation into small helpers and return early on bad input.
 3. `purge_once`, `estimate`, `scan_once`, `_hls_annotator_thread`.
 4. Replace long if/elif chains on a string with a dictionary of handlers.
@@ -112,3 +112,13 @@ Not verified: these are summaries of what each page said, read through a fetch h
 4. Characterization tests for `run_pipeline`, then Phase 3.
 5. Phase 5 open items, since a few could be real bugs.
 6. Phase 4 end to end suite last, once the code under it stops moving.
+
+## Findings during the cleanup (not fixed, need owner approval)
+
+- Segment files overwrite each other. The output name is `<camera>_<UTC timestamp to the second>.mp4` (roi_encoder.py, three places). When a file is processed faster than real time and several segments finish inside one second, the later ones silently replace the earlier ones, while the index database still lists every segment. Reproduced on 2026-11-09 with parking_input.mp4 (100 s), segment_seconds 5: 20 segments logged and indexed, 7 files on disk. With the default 60 s segments on that clip the two segments land seconds apart, so normal use is mostly safe, but any short segment length on a file import can lose footage. Suggested fix: add a counter or a fractional second to the name when the file exists. This is compression output code, so it needs your go-ahead and the before and after clip check.
+- Spurious 500 on a device endpoint write. `os.replace` in device_tokens.py `_write_all` raised `PermissionError` (WinError 5) once in a full suite run (tests/test_push_endpoint_isolation.py::test_concurrent_writes_from_two_devices_never_cross, 2026-11-09), which is the unexplained intermittent failure noted under race conditions. All writers share one lock, so the target was held by something outside the process lock, most likely antivirus or an indexer scanning the freshly written file. The result is one failed PUT (500), not a corrupted store. It did not reproduce in 40 isolated runs. Suggested fix: retry `os.replace` a few times with a short sleep on PermissionError. This is token store code, so it needs your approval.
+- SECRET_KEY file creation (see Weak secret above) is also waiting for approval.
+
+## Phase 3 progress
+
+- `run_pipeline` extraction 1: `_resolve_foreground_crf`, `_resolve_codec` and `_resolve_background_crf` pulled out as pure functions with the same rules (tests/test_pipeline_resolvers.py pins every mode and override). Complexity 123 to 117. Real clip check with scripts/pipeline_characterize.py on parking_input.mp4 (100 s, 320x240): modes 0, 1 and 3 byte identical to the unmodified code with identical detection counts (mode0 2 files 1,157,739 bytes, mode1 126,690, mode3 35,337, 182 detections in each); mode2 is not deterministic run to run (91,306 to 91,357 bytes across runs of the same code) and stayed inside that range with the same detection count.

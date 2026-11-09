@@ -170,6 +170,37 @@ def _sanitize_camera_id(camera_id: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_-]", "_", camera_id)
 
 
+def _resolve_foreground_crf(mode: str, crf) -> int:
+    """Foreground CRF: an explicit value wins, otherwise a per-mode default.
+
+    Modes get progressively more aggressive foreground CRF from mode0 to mode3
+    so each mode compresses harder than the last: mode0 and mode1 use 18,
+    mode2 uses 23, mode3 uses 38 (its blacked-out background takes near-zero
+    bits, so the ROI pixels get compressed hardest).
+    """
+    if crf is not None:
+        return int(crf)
+    if mode == "mode3":
+        return 38
+    if mode == "mode2":
+        return 23
+    return 18
+
+
+def _resolve_codec(mode: str, codec):
+    """Codec: an explicit value wins, None or "auto" or "" picks the per-mode
+    default (H.264 for mode0 and mode1, AV1 for mode2 and mode3). ROIEncoder
+    still falls back if the running FFmpeg lacks the chosen encoder."""
+    if codec is None or str(codec).strip().lower() in ("", "auto"):
+        return default_codec_for_mode(mode)
+    return codec
+
+
+def _resolve_background_crf(background_crf) -> int:
+    """Background CRF for the dual-CRF stream; 40 unless the caller set one."""
+    return int(background_crf) if background_crf is not None else 40
+
+
 def run_pipeline(
     input_source,
     camera_id: str = "cam_00",
@@ -398,14 +429,7 @@ def run_pipeline(
     # User-supplied `crf` overrides the mode default.
     # Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.3 - mode2 was wrongly
     # left at CRF 18; restored progressive mode0<mode1<mode2<mode3 compression).
-    if crf is not None:
-        resolved_crf = int(crf)
-    elif mode == "mode3":
-        resolved_crf = 38
-    elif mode == "mode2":
-        resolved_crf = 23
-    else:
-        resolved_crf = 18
+    resolved_crf = _resolve_foreground_crf(mode, crf)
 
     # Codec resolution (TASK 1.6, codec gate RESOLVED 2026-06-01). When the
     # caller passes no explicit codec (codec is None / "auto"), pick the
@@ -413,8 +437,7 @@ def run_pipeline(
     # (libsvtav1). An explicit codec always wins. ROIEncoder still auto-falls
     # back to FALLBACK_CODEC if the running FFmpeg lacks the chosen encoder.
     # Author: Bloodawn (KheivenD), 2026-06-02 (per-mode codec).
-    if codec is None or str(codec).strip().lower() in ("", "auto"):
-        codec = default_codec_for_mode(mode)
+    codec = _resolve_codec(mode, codec)
 
     # ── VMAF-targeted rate control (R5 TASK 5.1) ─────────────────────────────
     # Opt-in: when target_vmaf is set and the source is a FILE, sample-encode a
@@ -445,7 +468,7 @@ def run_pipeline(
     # Background CRF (dual-CRF background stream). None keeps the encoder's own
     # default; a preset (M3 TASK 3.1) or explicit caller can raise it for more
     # background compression. Author: Bloodawn (KheivenD), 2026-06-03.
-    _bg_crf = int(background_crf) if background_crf is not None else 40
+    _bg_crf = _resolve_background_crf(background_crf)
 
     # Auto safety cap: on hard or noisy footage, or with the ultrafast preset
     # of modes 2 and 3, CRF encoding can land above the source's own bitrate

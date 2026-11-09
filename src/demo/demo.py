@@ -233,7 +233,6 @@ def build_roi_focus_frame(
     *,
     background_dim_alpha: float = 0.45,
     background_tint_strength: float = 0.08,
-    roi_green_tint_strength: float = 0.12,
     draw_boxes: bool = True,
     draw_tint: bool = True,
 ) -> np.ndarray:

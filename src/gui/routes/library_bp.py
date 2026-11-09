@@ -511,7 +511,9 @@ def api_library_meta():
 
 def _thumb_path(video: Path) -> Path:
     st = video.stat()
-    key = hashlib.sha1(f"{video}|{int(st.st_mtime)}|{st.st_size}".encode("utf-8")).hexdigest()
+    key = hashlib.sha1(
+        f"{video}|{int(st.st_mtime)}|{st.st_size}".encode("utf-8"), usedforsecurity=False
+    ).hexdigest()
     return _paths.thumbs_dir() / (key + ".jpg")
 
 

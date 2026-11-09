@@ -20,7 +20,7 @@ Vulture at its default 60 percent confidence prints 183 lines. Most are Flask ro
 
 The test video's first point is that the pipeline comes before everything else. CI already runs the full suite on Linux and Windows. Add the following, each as its own small change so a failure points at one cause:
 
-1. A vulture step at 80 percent confidence. It exits 3 when it finds dead code. Config is already in pyproject.toml.
+1. A vulture step at 80 percent confidence. It exits 3 when it finds dead code. Config is already in pyproject.toml. Status: done (Linux job of ci.yml, vulture pinned to 2.16 in the step, not a project dependency). Verified locally only: `vulture` with no arguments exits 0. Not verified: a real GitHub Actions run.
 2. A pip audit step against the lockfile export. It reads the OSV database. Run it on every push.
 3. A complexity ratchet: fail only when a new or changed function goes above 15 (radon grade C). Existing hotspots are listed in Phase 3 and are not blocked.
 4. Pin GitHub Actions to commit SHAs and add a dependabot file for pip and github actions. Audit the workflows once with zizmor.

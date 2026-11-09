@@ -90,6 +90,17 @@ jobs:
           uv run python -c "import sys, cv2; print('python', sys.version); print('cv2', cv2.__version__); cv2.createBackgroundSubtractorMOG2(); import cv2.bgsegm; print('cv2 contrib OK')"
           uv run python -c "import torch; print('torch', torch.__version__, 'cuda', torch.cuda.is_available())"
 
+      # Dead code gate. Config (paths, 80 percent confidence, ignored Flask
+      # decorators and required-signature names) lives in [tool.vulture] in
+      # pyproject.toml. Exits 3 on any finding. Linux only: the result does not
+      # depend on the OS. vulture is a CI-only tool, pinned here and not a
+      # project dependency.
+      - name: Dead code check (vulture)
+        if: runner.os == 'Linux'
+        run: |
+          uv pip install vulture==2.16
+          uv run vulture
+
       # Project pytest config (basetemp=.pytest_tmp, --tb=short -ra) comes
       # from pyproject.toml. Coverage is reported; once the first run prints
       # a number, set --cov-fail-under in pyproject to that floor (ratchet up,

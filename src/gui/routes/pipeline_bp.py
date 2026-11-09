@@ -136,59 +136,50 @@ def api_jobs_recent():
     return jsonify({"jobs": _job_history.recent_jobs(limit=limit)})
 
 
-@pipeline_bp.route("/api/start", methods=["POST"])
-def api_start():
-    # _pipeline_thread / _stop_event live in pipeline_runner; assign through
-    # that module so the forwarder and /api/stop see them.
-    with _state_lock:
-        if _status["running"]:
-            return jsonify({"error": "Pipeline already running"}), 409
+def _parse_input_source(data: dict):
+    """Resolve the request's input_source. Returns (value, error_message).
 
-    data = request.get_json(force=True) or {}
-
-    camera_id = str(data.get("camera_id", "cam_00")).strip()
-    if not _CAMERA_ID_RE.match(camera_id):
-        return jsonify({"error": "camera_id must be 1-64 alphanumeric/dash/underscore chars"}), 400
-
-    # A digit string is a camera index, anything else a path or URL.
+    A digit string is a camera index (int); anything else is a path or URL,
+    which must pass the SSRF guard (SEC-013: blocks file:// and
+    cloud-metadata or link-local targets that cv2.VideoCapture would open).
+    """
     raw_input = str(data.get("input_source", "0")).strip()
     try:
-        resolved_input = int(raw_input)
+        return int(raw_input), None
     except ValueError:
-        resolved_input = raw_input
-        # SEC-013: block file:// and cloud-metadata/link-local SSRF targets
-        # (cv2.VideoCapture would otherwise open them).
-        _ok, _why = is_safe_input_source(resolved_input)
-        if not _ok:
-            return jsonify({"error": f"input_source not allowed: {_why}"}), 400
+        pass
+    ok, why = is_safe_input_source(raw_input)
+    if not ok:
+        return None, f"input_source not allowed: {why}"
+    return raw_input, None
 
-    # Default output dir: the folder chosen in Setup, else a local default;
-    # never an implicit cloud folder (see _default_output_dir).
-    # Author: Bloodawn (KheivenD), 2026-05-02.
-    raw_out = data.get("output_dir", "").strip() or _default_output_dir()
-    try:
-        output_dir = str(_safe_output_dir(raw_out))
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
 
+def _validate_encrypt_inputs(data: dict):
+    """Check the encryption key file and credentials.
+
+    Returns (encrypt_key_file, error_message); the key file comes back as a
+    resolved path string or None. Rejects encrypt=True with no credential:
+    otherwise the encoder writes plaintext while the dashboard's ENCRYPT chip
+    claims it is encrypted.
+    """
     encrypt_key_file = (data.get("encrypt_key_file") or "").strip() or None
     if encrypt_key_file:
         kf = Path(encrypt_key_file).resolve()
         if not kf.exists():
-            return jsonify({"error": f"encrypt_key_file not found: {kf}"}), 400
+            return None, f"encrypt_key_file not found: {kf}"
         if not kf.is_file():
-            return jsonify({"error": "encrypt_key_file must be a regular file"}), 400
+            return None, "encrypt_key_file must be a regular file"
         encrypt_key_file = str(kf)
-
-    # Reject encrypt=True with no credential: otherwise the encoder writes
-    # plaintext while the dashboard's ENCRYPT chip claims it is encrypted.
     encrypt_password = (data.get("encrypt_password") or "").strip()
     if bool(data.get("encrypt", False)) and not encrypt_password and not encrypt_key_file:
-        return jsonify({
-            "error": "encrypt requires encrypt_password or encrypt_key_file "
-                     "(a run would otherwise silently write unencrypted output)"
-        }), 400
+        return None, ("encrypt requires encrypt_password or encrypt_key_file "
+                      "(a run would otherwise silently write unencrypted output)")
+    return encrypt_key_file, None
 
+
+def _build_start_config(data: dict, camera_id: str, resolved_input, output_dir: str,
+                        encrypt_key_file):
+    """The pipeline config dict for a validated start request."""
     # A live camera/stream defaults to 10 min segments, a file to 60 s. Only
     # when the caller omits segment_seconds; an explicit value always wins.
     _is_live_input = isinstance(resolved_input, int) or (
@@ -250,6 +241,41 @@ def api_start():
         "target_vmaf": _clamp_float_or_none(
             data.get("target_vmaf"), _TARGET_VMAF_MIN, _TARGET_VMAF_MAX),
     }
+    return config
+
+
+@pipeline_bp.route("/api/start", methods=["POST"])
+def api_start():
+    # _pipeline_thread / _stop_event live in pipeline_runner; assign through
+    # that module so the forwarder and /api/stop see them.
+    with _state_lock:
+        if _status["running"]:
+            return jsonify({"error": "Pipeline already running"}), 409
+
+    data = request.get_json(force=True) or {}
+
+    camera_id = str(data.get("camera_id", "cam_00")).strip()
+    if not _CAMERA_ID_RE.match(camera_id):
+        return jsonify({"error": "camera_id must be 1-64 alphanumeric/dash/underscore chars"}), 400
+
+    resolved_input, input_error = _parse_input_source(data)
+    if input_error:
+        return jsonify({"error": input_error}), 400
+
+    # Default output dir: the folder chosen in Setup, else a local default;
+    # never an implicit cloud folder (see _default_output_dir).
+    # Author: Bloodawn (KheivenD), 2026-05-02.
+    raw_out = data.get("output_dir", "").strip() or _default_output_dir()
+    try:
+        output_dir = str(_safe_output_dir(raw_out))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    encrypt_key_file, encrypt_error = _validate_encrypt_inputs(data)
+    if encrypt_error:
+        return jsonify({"error": encrypt_error}), 400
+
+    config = _build_start_config(data, camera_id, resolved_input, output_dir, encrypt_key_file)
 
     # A job id clients can correlate across /api/status and /api/jobs/recent.
     config["job_id"] = _uuid.uuid4().hex[:12]

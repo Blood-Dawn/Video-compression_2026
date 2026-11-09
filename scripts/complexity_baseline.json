@@ -15,7 +15,6 @@
   "src/gui/routes/files_bp.py::api_segments": 22,
   "src/gui/routes/library_bp.py::_walk_and_classify": 17,
   "src/gui/routes/library_bp.py::api_library_list_dirs": 17,
-  "src/gui/routes/library_bp.py::api_library_videos": 27,
   "src/gui/routes/savings_bp.py::measured_savings": 18,
   "src/gui/services/autocompress_runner.py::_process_one": 20,
   "src/gui/services/autocompress_runner.py::scan_once": 25,

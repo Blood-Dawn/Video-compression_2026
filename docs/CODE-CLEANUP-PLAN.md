@@ -122,3 +122,18 @@ Not verified: these are summaries of what each page said, read through a fetch h
 ## Phase 3 progress
 
 - `run_pipeline` extraction 1: `_resolve_foreground_crf`, `_resolve_codec` and `_resolve_background_crf` pulled out as pure functions with the same rules (tests/test_pipeline_resolvers.py pins every mode and override). Complexity 123 to 117. Real clip check with scripts/pipeline_characterize.py on parking_input.mp4 (100 s, 320x240): modes 0, 1 and 3 byte identical to the unmodified code with identical detection counts (mode0 2 files 1,157,739 bytes, mode1 126,690, mode3 35,337, 182 detections in each); mode2 is not deterministic run to run (91,306 to 91,357 bytes across runs of the same code) and stayed inside that range with the same detection count.
+
+- `run_pipeline` extractions 2 and 3: `_load_zone_event_setup` (117 to 112), then `_apply_vmaf_target` and `_resolve_max_bitrate_kbps` (112 to 103). Each checked with scripts/pipeline_characterize.py on parking_input.mp4 against the recorded run of the original code: modes 0, 1 and 3 byte identical with 182 detections, mode2 inside its normal 91,306 to 91,357 byte range. Not covered by that clip: a saved zone or line config, `target_vmaf` set (needs libvmaf), encryption, enhancement and live sources. The rest of run_pipeline is the main loop, which closes over a lot of shared state; splitting it is the risky part and needs its own characterization first, so it stops here for now.
+- `api_start` (29 to 11): `_parse_input_source`, `_validate_encrypt_inputs`, `_build_start_config`. Verified by loading the previous file from git and posting 31 payloads to both versions: identical status, error text and config for all 31.
+- `api_library_videos` (27, now under 15): `_parse_ext_filter`, `_filter_library_items`, `_sort_library_items`. Same method with 401 random query combinations: identical. One pre-existing quirk is pinned by a test: spaces around a comma separated extension stay inside the extension.
+- Skipped on purpose: `api_encrypt` and `api_decrypt` (encryption code, needs owner approval before touching).
+- Observation, not changed: `/api/start` returns a 500 for a non numeric `crf`, `background_crf` or `enhance_every_n` (the handler calls int() on them). A 400 with a message would be kinder; it changes a response, so it is left for you to decide.
+- Still open from the Phase 3 list: `purge_once` (deletes files, so it needs care), `estimate`, `scan_once`, `_hls_annotator_thread`, `benchmark_enhancement`, `main` in tuning_experiment, `LayerSegmentEncoder.add_frame`, `render_demo`, and the long if/elif chains.
+
+## Numbers, 2026-11-09 (baseline at the start of the cleanup in brackets)
+
+- Tests: 2343 passed, 47 skipped, 0 failed [2140 passed, 46 skipped, 0 failed]. The 203 new tests cover the new features and the pinned helpers.
+- run_pipeline complexity 103 [123]. Grade D or worse functions: 17 [19]. Functions above 15 in the ratchet baseline: 37 [39].
+- vulture at 80 percent: 0 findings [0]. At 60 percent: 80 lines [80]; two of those are `request.max_content_length = ...` assignments, which are false positives.
+- pip-audit: 0 of 131 packages with advisories [15 packages, 168 advisories]. zizmor offline: 0 findings [17].
+- Not verified anywhere in this cleanup: a real GitHub Actions run, the new Settings panel in a browser, large real uploads, and super-resolution on real images with pillow 13.

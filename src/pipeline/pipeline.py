@@ -201,6 +201,50 @@ def _resolve_background_crf(background_crf) -> int:
     return int(background_crf) if background_crf is not None else 40
 
 
+def _load_zone_event_setup(camera_id: str):
+    """Read the per-camera zone and event config once at run start.
+
+    Returns (zone_cfg, event_engine, zone_filter, append_events). A saved
+    change applies to the next run. Every failure path only disables the
+    feature (all four come back None); it can never take down an encode.
+    event_engine is None unless the camera has lines or loiter zones.
+    Author: Bloodawn (KheivenD), 2026-08-17 (R5 TASKS 5.6/5.7).
+    """
+    zone_cfg = None
+    event_engine = None
+    zone_filter = None
+    append_events = None
+    try:
+        try:
+            from utils.zones_config import (load_camera_config as _load_zcfg,
+                                            filter_regions as _zone_filter)
+            from utils.track_events import EventEngine as _EventEngine
+            from utils.event_log import append_events as _append_events
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.utils.zones_config import (load_camera_config as _load_zcfg,
+                                                filter_regions as _zone_filter)
+            from src.utils.track_events import EventEngine as _EventEngine
+            from src.utils.event_log import append_events as _append_events
+        zone_filter = _zone_filter
+        append_events = _append_events
+        zone_cfg = _load_zcfg(camera_id)
+        if zone_cfg["lines"] or zone_cfg["zones"]:
+            event_engine = _EventEngine(
+                lines=zone_cfg["lines"], zones=zone_cfg["zones"],
+                loiter_s=zone_cfg["loiter_s"],
+                class_filter=zone_cfg["class_filter"])
+            log.info("Behavior events armed: %d line(s), %d loiter zone(s).",
+                     len(zone_cfg["lines"]), len(zone_cfg["zones"]))
+        if zone_cfg["exclude"]:
+            log.info("Zone masks active: %d exclude region(s).",
+                     len(zone_cfg["exclude"]))
+    except Exception as _zexc:  # noqa: BLE001 - feature must never kill a run
+        log.warning("Zones/events config unavailable: %s", _zexc)
+        zone_cfg = None
+        event_engine = None
+    return zone_cfg, event_engine, zone_filter, append_events
+
+
 def run_pipeline(
     input_source,
     camera_id: str = "cam_00",
@@ -349,37 +393,7 @@ def run_pipeline(
     log.info(f"Source: {input_source} | {frame_w}x{frame_h} @ {fps:.1f}fps")
 
     # ── R5 TASKS 5.6/5.7: zone masks + behavior events ───────────────────────
-    # Per-camera config is read ONCE at run start (a saved change applies to
-    # the next run). Every failure path only disables the feature; it can
-    # never take down an encode. Author: Bloodawn (KheivenD), 2026-08-17.
-    _zone_cfg = None
-    _event_engine = None
-    try:
-        try:
-            from utils.zones_config import (load_camera_config as _load_zcfg,
-                                            filter_regions as _zone_filter)
-            from utils.track_events import EventEngine as _EventEngine
-            from utils.event_log import append_events as _append_events
-        except ModuleNotFoundError:  # pragma: no cover - import path shim
-            from src.utils.zones_config import (load_camera_config as _load_zcfg,
-                                                filter_regions as _zone_filter)
-            from src.utils.track_events import EventEngine as _EventEngine
-            from src.utils.event_log import append_events as _append_events
-        _zone_cfg = _load_zcfg(camera_id)
-        if _zone_cfg["lines"] or _zone_cfg["zones"]:
-            _event_engine = _EventEngine(
-                lines=_zone_cfg["lines"], zones=_zone_cfg["zones"],
-                loiter_s=_zone_cfg["loiter_s"],
-                class_filter=_zone_cfg["class_filter"])
-            log.info("Behavior events armed: %d line(s), %d loiter zone(s).",
-                     len(_zone_cfg["lines"]), len(_zone_cfg["zones"]))
-        if _zone_cfg["exclude"]:
-            log.info("Zone masks active: %d exclude region(s).",
-                     len(_zone_cfg["exclude"]))
-    except Exception as _zexc:  # noqa: BLE001 - feature must never kill a run
-        log.warning("Zones/events config unavailable: %s", _zexc)
-        _zone_cfg = None
-        _event_engine = None
+    _zone_cfg, _event_engine, _zone_filter, _append_events = _load_zone_event_setup(camera_id)
 
     # Week 3 TASK 3.7: throttled "last seen" still for the zone editor's
     # background image. Best effort like the event engine above; a camera

@@ -338,17 +338,6 @@ def make_skip_card(
     ]
 
 
-def make_hold_frames(previous_frame: np.ndarray, frame_count: int) -> list[np.ndarray]:
-    """
-    Duplicate the previous rendered frame for a measured number of missing frames.
-    This preserves timeline alignment without flashing to black.
-    """
-    if frame_count <= 0:
-        return []
-
-    return [previous_frame.copy() for _ in range(frame_count)]
-
-
 def format_metric_value(value: object, suffix: str = "") -> str:
     if value is None:
         return "N/A"

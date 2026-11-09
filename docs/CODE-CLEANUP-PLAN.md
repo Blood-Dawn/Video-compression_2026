@@ -22,7 +22,7 @@ The test video's first point is that the pipeline comes before everything else. 
 
 1. A vulture step at 80 percent confidence. It exits 3 when it finds dead code. Config is already in pyproject.toml. Status: done (Linux job of ci.yml, vulture pinned to 2.16 in the step, not a project dependency). Verified locally only: `vulture` with no arguments exits 0. Not verified: a real GitHub Actions run.
 2. A pip audit step against the lockfile export. It reads the OSV database. Run it on every push.
-3. A complexity ratchet: fail only when a new or changed function goes above 15 (radon grade C). Existing hotspots are listed in Phase 3 and are not blocked.
+3. A complexity ratchet: fail only when a new or changed function goes above 15 (radon grade C). Existing hotspots are listed in Phase 3 and are not blocked. Status: done as scripts/complexity_ratchet.py plus scripts/complexity_baseline.json (39 functions above 15 recorded; radon 6.0.1 pinned in the CI step). The ratchet compares against the baseline, not against git changes, so a function that is not in the baseline fails even if untouched. Not verified: a real CI run.
 4. Pin GitHub Actions to commit SHAs and add a dependabot file for pip and github actions. Audit the workflows once with zizmor.
 5. Optional later: widen ruff to the S family with the current findings recorded as a baseline, so only new ones fail.
 

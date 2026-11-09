@@ -101,6 +101,15 @@ jobs:
           uv pip install vulture==2.16
           uv run vulture
 
+      # Complexity ratchet. Fails when a function above radon complexity 15 is
+      # new or scores higher than scripts/complexity_baseline.json. Existing
+      # hotspots are recorded there and are not blocked. radon is CI-only.
+      - name: Complexity ratchet (radon)
+        if: runner.os == 'Linux'
+        run: |
+          uv pip install radon==6.0.1
+          uv run python scripts/complexity_ratchet.py
+
       # Project pytest config (basetemp=.pytest_tmp, --tb=short -ra) comes
       # from pyproject.toml. Coverage is reported; once the first run prints
       # a number, set --cov-fail-under in pyproject to that floor (ratchet up,

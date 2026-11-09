@@ -115,6 +115,18 @@ jobs:
           uv pip install radon==6.0.1
           uv run python scripts/complexity_ratchet.py
 
+      # Dependency audit against the committed requirements.txt (exported from
+      # uv.lock). REPORT ONLY for now (continue-on-error): on 2026-11-09 it
+      # listed 168 advisories across 15 locked packages, so a hard gate would
+      # fail every run until the lockfile is upgraded. Remove continue-on-error
+      # once the list is clean. pip-audit is a CI-only tool, not a dependency.
+      - name: Dependency audit (pip-audit, report only)
+        if: runner.os == 'Linux'
+        continue-on-error: true
+        run: |
+          uv pip install pip-audit==2.10.1
+          uv run pip-audit -r requirements.txt --no-deps --disable-pip
+
       # Project pytest config (basetemp=.pytest_tmp, --tb=short -ra) comes
       # from pyproject.toml. Coverage is reported; once the first run prints
       # a number, set --cov-fail-under in pyproject to that floor (ratchet up,

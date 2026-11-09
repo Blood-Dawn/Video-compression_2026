@@ -96,6 +96,8 @@ function _libUpdateSelection() {
   if (cnt) cnt.textContent = n + " selected";
   const hint = document.getElementById("library-sel-hint");
   if (hint) hint.textContent = n > 1 ? "Compress and Encrypt work on one video at a time." : "";
+  const del = document.getElementById("library-sel-delete");
+  if (del) del.disabled = n === 0;
   ["compress", "encrypt"].forEach((k) => {
     const b = document.getElementById("library-sel-" + k);
     if (b) b.disabled = n !== 1;
@@ -121,6 +123,47 @@ function libSelAction(kind) {
   else if (kind === "encrypt" && typeof promptEncryptSegment === "function") promptEncryptSegment(sel[0]);
 }
 window.libSelAction = libSelAction;
+
+// Delete moves the files into a .svcs_trash folder beside each video. Nothing is
+// erased, so the confirm text says how to get a file back.
+async function libDeleteSelected() {
+  const paths = Array.from(window._svcsLibrary.sel);
+  if (!paths.length) return;
+  const n = paths.length;
+  const what = n === 1 ? "this video" : n + " videos";
+  const msg = "Move " + what + " to the trash?\n\n" +
+    "Each file goes into a .svcs_trash folder next to it. Nothing is erased; " +
+    "move a file back out of that folder to restore it.";
+  if (!window.confirm(msg)) return;
+  const btn = document.getElementById("library-sel-delete");
+  if (btn) btn.disabled = true;
+  _libStatus("Moving to trash...");
+  try {
+    const resp = await fetch("/api/library/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paths: paths, folder: window._svcsLibrary.folder || "" }),
+    });
+    if (resp.status === 404) {
+      _libStatus("This version of the app cannot delete videos yet.");
+      return;
+    }
+    let data = {};
+    try { data = await resp.json(); } catch (_) { /* non JSON error body */ }
+    const moved = (data.moved || []).length;
+    const failed = (data.failed || []).length;
+    window._svcsLibrary.sel.clear();
+    await loadLibrary();
+    if (moved && !failed) _libStatus(moved + (moved === 1 ? " video" : " videos") + " moved to the trash.");
+    else if (moved) _libStatus(moved + " moved to the trash, " + failed + " could not be moved.");
+    else _libStatus(data.error || "Could not move the selected videos.");
+  } catch (e) {
+    _libStatus("Could not reach the app to delete.");
+  } finally {
+    _libUpdateSelection();
+  }
+}
+window.libDeleteSelected = libDeleteSelected;
 
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape" || !window._svcsLibrary.sel.size) return;

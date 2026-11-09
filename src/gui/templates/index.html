@@ -3394,7 +3394,8 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
             <span class="x-selhint" id="library-sel-hint"></span>
             <button class="btn btn-ghost" id="library-sel-compress" onclick="libSelAction('compress')">Compress</button>
             <button class="btn btn-ghost" id="library-sel-encrypt" onclick="libSelAction('encrypt')">Encrypt</button>
-            <button class="btn btn-ghost" onclick="libClearSelection()">Clear selection</button>
+            <button class="btn btn-ghost x-btn-danger" id="library-sel-delete" onclick="libDeleteSelected()">Delete</button>
+    <button class="btn btn-ghost" onclick="libClearSelection()">Clear selection</button>
           </div>
           <div id="library-chips" class="x-chips" hidden></div>
         </div>

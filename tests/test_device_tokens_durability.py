@@ -179,3 +179,48 @@ class TestRoutesReportRatherThanCorrupt:
         resp = client.post("/api/auth/tokens", json={"label": "phone-c"})
         assert resp.status_code == 503
         assert "unpaired" in resp.get_json()["error"].lower()
+
+
+class TestReplaceRetry:
+    """A transient Windows sharing violation must not fail a token write."""
+
+    def test_transient_permission_error_is_retried(self, store, monkeypatch):
+        real = dt.os.replace
+        calls = {"n": 0}
+
+        def flaky(src, dst):
+            calls["n"] += 1
+            if calls["n"] <= 2:
+                raise PermissionError(5, "Access is denied")
+            return real(src, dst)
+
+        monkeypatch.setattr(dt.os, "replace", flaky)
+        monkeypatch.setattr(dt.time, "sleep", lambda s: None)
+        secret, rec = dt.mint_token("phone")
+        assert calls["n"] == 3
+        assert dt.verify_token(secret) is not None
+
+    def test_persistent_permission_error_still_raises(self, store, monkeypatch):
+        calls = {"n": 0}
+
+        def always(src, dst):
+            calls["n"] += 1
+            raise PermissionError(5, "Access is denied")
+
+        monkeypatch.setattr(dt.os, "replace", always)
+        monkeypatch.setattr(dt.time, "sleep", lambda s: None)
+        with pytest.raises(PermissionError):
+            dt.mint_token("phone")
+        assert calls["n"] == dt._REPLACE_ATTEMPTS
+
+    def test_other_errors_are_not_retried(self, store, monkeypatch):
+        calls = {"n": 0}
+
+        def boom(src, dst):
+            calls["n"] += 1
+            raise OSError("disk full")
+
+        monkeypatch.setattr(dt.os, "replace", boom)
+        with pytest.raises(OSError):
+            dt.mint_token("phone")
+        assert calls["n"] == 1

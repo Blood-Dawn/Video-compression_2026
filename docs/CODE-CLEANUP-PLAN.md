@@ -32,7 +32,18 @@ Rule for every item: grep the name in src and tests, read the one caller if ther
 
 Done in wave 1 (branch chore/code-quality-wave1): removed the unused `roi_green_tint_strength` parameter from the demo overlay function (nothing passed it). The three other vulture hits at 80 percent were required signatures (`__exit__` arguments, `redirect_request` arguments) and are now whitelisted by name in pyproject.toml instead of changed.
 
-Candidates, each needing the check above before deleting:
+Wave 2 status (2026-11-09, same branch): removed `make_hold_frames` (demo.py) and `describe_mode` (pipeline/modes.py), each with zero references in src, tests, scripts, web and docs (commits 04f8ef8 and e8d4877). Vulture at 60 percent went from 80 to 78 lines. Radon grade D or worse is 19 functions, not 18 (`find_crf_for_target` at 22 was missed). Baseline suite on this tree: 2140 passed, 46 skipped, 0 failed.
+
+Needs owner decision (not deleted, reason given):
+
+- src/compression/layer_encoder.py (364 lines, only tests use it): a whole module over 200 lines, so removal needs approval. Its tests in tests/test_layer_encoder.py would go with it.
+- src/background_subtraction/tuning_experiment.py (176 lines): documented as a standalone script (`python src/background_subtraction/tuning_experiment.py`). Not dead if anyone still runs it; candidate to move to scripts/ or delete. The `train_subtractor` hit is a separate helper of the same name in tests/test_background_subtraction.py.
+- `encode_frame_sequence` in roi_encoder.py: no callers anywhere, but its docstring says it is kept for backward compatibility. This is compression code, so it needs a decision.
+- `active_scale` (enhancer.py): public property, referenced in a docstring and documents the scale in effect. Kept.
+- `_assert_within_output` (path_safety.py): re-exported by src/gui/app.py and named in docs/SECURITY.md. Kept.
+- Functions that only tests call (about 35, for example `compute_psnr`, `compute_ssim`, `MultiFrameSource`, `is_video_ext`, `list_profiles`, `bind_exposure_warning`, `push_targets`): deleting them means deleting their tests, so each needs a call on whether it is public API or leftover.
+
+Candidates, each needing the check above before deleting (the items above are already triaged):
 
 - src/compression/layer_encoder.py: `LayerSegmentEncoder` is defined once in src and referenced only by tests. Its `add_frame` is complexity 30. Likely the whole file.
 - src/background_subtraction/tuning_experiment.py: `train_subtractor` and a `main` of complexity 23, only referenced inside the file. Looks like a one off experiment script.
@@ -74,14 +85,14 @@ Status key: "checked" means I looked at the code or ran a search in this session
 - Exposed .git folder and source maps: checked. No .map, .env or key files are tracked (only a test temp file turned up on disk). Still to confirm: the packaged app and the static route never serve repo files.
 - Open redirect: checked. No redirect calls exist in src.
 - Clickjacking: checked. X-Frame-Options DENY and a frame-ancestors CSP are set in src/gui/security_headers.py.
-- SSRF: partly checked. Block lists for metadata addresses exist in path_safety.py and push_notify.py. Not checked: whether event_webhook.py, update_manager.py and usage_stats.py use the same guard, and the urlopen scheme audits ruff raised.
+- SSRF: mostly checked. event_webhook.py calls the same `validate_push_url` as push_notify.py, pins the connection to the validated addresses and refuses redirects. update_manager.py (GitHub releases URL), usage_stats.py and rtsp_server.py (mediamtx release URL) use hardcoded https URLs, not user input. The asset download URL at update_manager.py line 315 comes from the GitHub release JSON and is not checked for scheme or host, and the saved file name is the last part of that URL. The installer is only run after a SHA256 check, which limits the damage, but the checksum URL also comes from the same release data. Small hardening, not yet done: require https and the github.com host family, and take the file name from the asset record. Not checked: the ruff scheme audits on the other urlopen calls.
 - Path traversal: partly checked. Library routes confine paths. rtsp_server.py extracts tar files with the data filter on current Python but falls back to unfiltered extraction on older Python, and extracts zip files with no filter. Plan: require Python 3.11.4 or newer, or validate member names before extraction.
 - SQL injection: partly checked. Four f-string built queries (files_bp.py twice, nl_query.py, db/queries.py). The pieces I read use fixed fragments and question mark parameters. Not checked: every fragment source.
 - Weak secret: partly checked. SECRET_KEY is persisted from a file or generated. Not checked: key length and file permissions.
 - Credential stuffing and user enumeration: not checked. A login throttle exists in auth.py. Confirm it is per client address and that failure messages are identical.
 - Race conditions: not checked. One concurrency test (two devices writing tokens) failed intermittently earlier and is still unexplained. Treat it as a real signal until proven otherwise.
-- Request size limits: not checked. No MAX_CONTENT_LENGTH setting turned up in a search of src. Chunked upload routes may enforce their own cap. Confirm.
-- Third party scripts (the polyfill.io case): not checked. Search templates for external script tags.
+- Request size limits: checked, REAL FINDING, not fixed. No MAX_CONTENT_LENGTH exists in src. The chunked route in ingest_bp.py has its own 8 GB cap and returns 413. The plain `/api/upload` route in files_bp.py (extension allow list, server made filename) has no size cap, so one request can fill the disk. It also does not touch the 8 GB cap. Fix would be a route level or app level limit. Waiting for owner go-ahead, including what number to pick.
+- Third party scripts (the polyfill.io case): checked, REAL FINDING, not fixed. src/gui/templates/index.html line 11 loads `https://cdn.jsdelivr.net/npm/hls.js@latest` with no version pin and no integrity hash, so a compromised or changed upstream release runs in the dashboard. Fonts from Google are also loaded (CSS only). Fix options: vendor hls.js into the static folder, or pin an exact version with an SRI hash (needs a network fetch to compute the hash). Waiting for owner go-ahead.
 - Debug mode: checked. app.run uses debug=False.
 - Hardcoded secrets: checked by tool. The three ruff hits are constant names, not secret values.
 - Not applicable to this app: Next.js headers, Supabase storage, price from the browser, SMS pumping, prompt injection (the natural language search is a rule parser, not a model), subdomain takeover, account pre-hijacking, reset poisoning.

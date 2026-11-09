@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 from urllib.parse import quote, unquote
 from flask import Blueprint, jsonify, request, Response, send_from_directory, abort
+from werkzeug.exceptions import RequestEntityTooLarge
 
 try:
     from gui.state import _state_lock, _status, _demo_lock, _demo_state, _ALLOWED_EXTENSIONS
@@ -21,6 +22,7 @@ try:
     from gui.services.db_helpers import _is_empty_db_error
     from gui.services.cloud_detection import _detect_cloud_root  # noqa: F401 (test seam, see below)
     from utils.db import (get_connection)
+    from utils import upload_limits as _limits
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.state import (_state_lock, _status, _demo_lock, _demo_state, _ALLOWED_EXTENSIONS)
     from src.gui.logging_setup import log
@@ -28,6 +30,7 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.services.db_helpers import _is_empty_db_error
     from src.gui.services.cloud_detection import _detect_cloud_root  # noqa: F401 (test seam, see below)
     from src.utils.db import (get_connection)
+    from src.utils import upload_limits as _limits
 
 # _detect_cloud_root is deliberately in scope but never called here: M0.7 says
 # uploads must not fall into a detected OneDrive/Drive root on the app's own
@@ -55,6 +58,7 @@ _STREAM_CHUNK = 64 * 1024
 # A client filename past the filesystem's per-component limit (255 bytes)
 # makes save() raise OSError; trim well under it, extension kept.
 _MAX_STEM_LEN = 150
+_MULTIPART_OVERHEAD = 1024 * 1024  # form framing allowed on top of the size cap
 
 # Repo root (.../src/gui/routes/<bp>_bp.py -> parents[3]).
 _ROOT = Path(__file__).resolve().parents[3]
@@ -596,10 +600,24 @@ def api_upload():
     data/uploads/) and returns the server-side path so the pipeline can use
     it as input_source.
     """
-    if "file" not in request.files:
+    cap = _limits.max_upload_bytes()
+    # A multipart body carries a little framing on top of the file itself.
+    body_cap = cap + _MULTIPART_OVERHEAD
+    too_large = (jsonify({"error": f"File is larger than the "
+                          f"{_limits.describe(_limits.max_upload_gb())} upload limit. "
+                          "Raise it under Settings, Upload size limit."}), 413)
+    if request.content_length is not None and request.content_length > body_cap:
+        return too_large
+    # Also bounds a body sent without a Content-Length (chunked transfer).
+    request.max_content_length = body_cap
+    try:
+        uploaded = request.files
+    except RequestEntityTooLarge:
+        return too_large
+    if "file" not in uploaded:
         return jsonify({"error": "No file in request"}), 400
 
-    f = request.files["file"]
+    f = uploaded["file"]
     if not f.filename:
         return jsonify({"error": "Empty filename"}), 400
 

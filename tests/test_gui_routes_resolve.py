@@ -116,6 +116,7 @@ SAMPLES = [
     ("GET", "/api/upload/status"),
     ("POST", "/api/upload/chunk"),
     ("POST", "/api/upload/finish"),
+    ("GET", "/api/upload/limit"),
     # R6 Track C: closed-app push settings.
     ("GET", "/api/push/config"),
     ("POST", "/api/push/test"),
@@ -163,5 +164,6 @@ def test_sample_count_matches_route_count():
     # Track C push routes, +4 for the Fall Week 3 routes (zones/frame,
     # webhook config and test, setup/update_check), +3 for the Fall 3.18
     # auto-update routes (status, download, install), +1 for the 2026-10-01
-    # /api/timelapse route (quiet-period summary generation).
-    assert len(SAMPLES) == len(rules) == 97
+    # /api/timelapse route (quiet-period summary generation), +1 for
+    # /api/upload/limit (upload size cap, GET+POST on one rule).
+    assert len(SAMPLES) == len(rules) == 98

@@ -38,6 +38,24 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
 log = logging.getLogger(__name__)
 
 
+def _unique_segment_path(output_dir, camera_id: str, timestamp: str) -> Path:
+    """Output path for a segment, never one that already exists.
+
+    The timestamp has one second resolution, and a file processed faster than
+    real time can finish several segments inside one second. Without this the
+    later ones silently replaced the earlier ones (ffmpeg runs with
+    overwrite_output) while the index still listed every segment. The first
+    segment of a second keeps the plain name; later ones get _1, _2, ...
+    The timestamp stored in the database is unchanged.
+    """
+    base = Path(output_dir) / f"{camera_id}_{timestamp}.mp4"
+    candidate, n = base, 0
+    while candidate.exists():
+        n += 1
+        candidate = base.with_name(f"{camera_id}_{timestamp}_{n}.mp4")
+    return candidate
+
+
 def _ffmpeg_pipe_process(args: list) -> subprocess.Popen:
     """Spawn FFmpeg with stdin as a pipe and stdout/stderr discarded.
 
@@ -784,7 +802,7 @@ class ROIEncoder:
         roi_count = sum(len(b) for b in bboxes_per_frame)
 
         timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-        output_path = self.output_dir / f"{camera_id}_{timestamp}.mp4"
+        output_path = _unique_segment_path(self.output_dir, camera_id, timestamp)
 
         h, w = shape[:2]
         _ffmpeg_args = (
@@ -929,7 +947,7 @@ class ROIEncoder:
         h, w = frame_shape[:2]
         crf = self.foreground_crf if has_targets else self.background_crf
         timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
-        output_path = self.output_dir / f"{camera_id}_{timestamp}.mp4"
+        output_path = _unique_segment_path(self.output_dir, camera_id, timestamp)
 
         # Build codec-specific output kwargs (extracted to a helper in R4
         # Phase 2 so the long-GOP / capped-CRF / NVENC handling is shared and
@@ -1265,7 +1283,7 @@ class ROIEncoder:
         """
         timestamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         has_targets = any(len(r) > 0 for r in regions_per_frame)
-        output_path = self.output_dir / f"{camera_id}_{timestamp}.mp4"
+        output_path = _unique_segment_path(self.output_dir, camera_id, timestamp)
 
         crf = self.foreground_crf if has_targets else self.background_crf
 

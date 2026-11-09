@@ -7,8 +7,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
-  <!-- hls.js - MIT licensed, browser-based HLS playback (task 4.1) -->
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <!-- hls.js 1.7.4 - Apache-2.0, vendored (not CDN, not @latest) so a changed
+       or compromised upstream release can never run in the dashboard. See
+       static/js/vendor/README.md. -->
+  <script src="{{ url_for('static', filename='js/vendor/hls.min.js') }}"></script>
   <!-- uPlot - MIT licensed, vendored (not CDN) so METRICS history charts
        still work in the offline Field build. v1.6.31. -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/uPlot.min.css') }}" />

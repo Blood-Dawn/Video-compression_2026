@@ -21,7 +21,6 @@
   "src/gui/services/gui_state_persist.py::_load_gui_state": 16,
   "src/gui/services/hls_runner.py::_hls_annotator_thread": 18,
   "src/gui/services/job_history.py::record_job": 16,
-  "src/gui/services/nl_query.py::parse": 22,
   "src/gui/services/path_safety.py::allowed_media_roots": 17,
   "src/gui/services/path_safety.py::is_safe_input_source": 20,
   "src/gui/services/pipeline_runner.py::_record_compressed_outputs": 19,

@@ -289,6 +289,150 @@ def _verdict(deltas: dict[str, Any]) -> str:
     return "ROI-only SR competitive; full-frame SR adds context but at higher cost."
 
 
+def _empty_result(path, roi_box, verdict: str, warning: str) -> BenchmarkResult:
+    """The result for a clip that could not be read at all."""
+    return BenchmarkResult(
+        video_path=str(path), frames_examined=0, frames_total=0,
+        roi_box=tuple(roi_box), sr_backend="unknown", ocr_backend=None,
+        variants={}, deltas={}, verdict=verdict,
+        warnings=[warning],
+    )
+
+
+def _resolve_enhancer(enhancer, sr_scale: int, device, warnings: list):
+    """The given enhancer, else a default one; None (bicubic only) if it cannot be built."""
+    if enhancer is not None:
+        return enhancer
+    try:
+        try:
+            from enhancement.enhancer import Enhancer  # type: ignore
+        except ImportError:
+            from src.enhancement.enhancer import Enhancer  # type: ignore
+        return Enhancer(scale=sr_scale, device=device)
+    except Exception as exc:  # noqa: BLE001
+        warnings.append(f"Enhancer construction failed: {exc}; using bicubic only")
+        return None
+
+
+def _setup_ocr(run_ocr: bool, ocr_backend: str, device, warnings: list):
+    """(ocr backend or None, its name or None). Adds a warning when OCR is unusable."""
+    ocr = None
+    ocr_backend_name: str | None = None
+    if run_ocr:
+        try:
+            try:
+                from enhancement.plate_reader import _select_backend  # type: ignore
+            except ImportError:
+                from src.enhancement.plate_reader import _select_backend  # type: ignore
+            ocr = _select_backend(ocr_backend, use_gpu=(device or "").lower() in ("cuda", "mps"))
+            ocr_backend_name = getattr(ocr, "name", "none")
+            if not getattr(ocr, "available", False):
+                warnings.append(
+                    "OCR requested but no backend installed; "
+                    "install via `uv sync --extra plates` or `--extra plates-fallback`"
+                )
+                ocr = None
+        except Exception as exc:  # noqa: BLE001
+            warnings.append(f"OCR setup failed: {exc}")
+            ocr = None
+    return ocr, ocr_backend_name
+
+
+def _new_accumulators():
+    """Fresh per-variant metrics objects and their running sums."""
+    variants = {
+        "no_enhancement": VariantMetrics(label="no_enhancement"),
+        "full_frame_sr":  VariantMetrics(label="full_frame_sr"),
+        "roi_only_sr":    VariantMetrics(label="roi_only_sr"),
+    }
+    sums = {k: {"sharp_roi": 0.0, "sharp_full": 0.0,
+                "psnr": 0.0, "ssim": 0.0, "ocr_conf": 0.0,
+                "psnr_n": 0, "ssim_n": 0, "ocr_n": 0}
+            for k in variants}
+    return variants, sums
+
+
+def _accumulate_frame(frame, roi_box, enhancer, sr_scale: int, ocr, variants: dict, sums: dict) -> None:
+    """Measure the three variants on one sampled frame and add to the running sums."""
+    # Build the three variants for this frame. Full-frame SR is by far
+    # the most expensive step, so it runs once and feeds both the cropped
+    # variant and the whole-frame sharpness figure.
+    baseline_roi = _bicubic_upscale(_safe_crop(frame, roi_box), sr_scale)
+    full_up = _try_full_frame_sr(frame, enhancer, sr_scale)
+    full_sr_roi = _crop_scaled_roi(full_up, roi_box, sr_scale) if full_up is not None else None
+    if full_sr_roi is None:
+        full_sr_roi = baseline_roi
+    roi_sr_roi = _roi_only_sr(frame, roi_box, enhancer, sr_scale)
+
+    sums["no_enhancement"]["sharp_roi"] += measure_sharpness(baseline_roi)
+    sums["full_frame_sr"]["sharp_roi"]  += measure_sharpness(full_sr_roi)
+    sums["roi_only_sr"]["sharp_roi"]    += measure_sharpness(roi_sr_roi)
+    if full_up is not None:
+        sums["full_frame_sr"]["sharp_full"] += measure_sharpness(full_up)
+
+    # PSNR / SSIM of the SR variants against the bicubic baseline; all
+    # three are the same ROI at the same scaled size.
+    for key, candidate in (("full_frame_sr", full_sr_roi),
+                           ("roi_only_sr", roi_sr_roi)):
+        psnr = measure_psnr(baseline_roi, candidate)
+        ssim = measure_ssim(baseline_roi, candidate)
+        if psnr is not None:
+            sums[key]["psnr"] += psnr
+            sums[key]["psnr_n"] += 1
+        if ssim is not None:
+            sums[key]["ssim"] += ssim
+            sums[key]["ssim_n"] += 1
+
+    # Optional OCR pass on each variant.
+    if ocr is not None:
+        for key, image in (("no_enhancement", baseline_roi),
+                           ("full_frame_sr", full_sr_roi),
+                           ("roi_only_sr",   roi_sr_roi)):
+            conf, text = _safe_ocr(ocr, image)
+            if conf is not None:
+                sums[key]["ocr_conf"] += conf
+                sums[key]["ocr_n"]    += 1
+                if text and len(variants[key].sample_texts) < 5:
+                    variants[key].sample_texts.append(text)
+
+
+def _summarize_variants(variants: dict, sums: dict, examined: int) -> None:
+    """Turn the running sums into averages on the VariantMetrics objects."""
+    for key, v in variants.items():
+        if examined > 0:
+            v.avg_sharpness_roi = round(sums[key]["sharp_roi"] / examined, 2)
+            if key == "full_frame_sr":
+                v.avg_sharpness_full = round(sums[key]["sharp_full"] / examined, 2)
+        if sums[key]["psnr_n"]:
+            v.avg_psnr_vs_baseline = round(sums[key]["psnr"] / sums[key]["psnr_n"], 2)
+        if sums[key]["ssim_n"]:
+            v.avg_ssim_vs_baseline = round(sums[key]["ssim"] / sums[key]["ssim_n"], 4)
+        if sums[key]["ocr_n"]:
+            v.avg_ocr_confidence = round(sums[key]["ocr_conf"] / sums[key]["ocr_n"], 3)
+            v.ocr_reads = sums[key]["ocr_n"]
+
+
+def _compute_deltas(variants: dict) -> dict:
+    """The actionable gains of each SR variant over the bicubic baseline."""
+    # Deltas - the actually-actionable numbers.
+    base = variants["no_enhancement"].avg_sharpness_roi or 1e-6
+    deltas: dict[str, Any] = {
+        "roi_sharpness_gain_full_sr_pct": round(
+            100.0 * (variants["full_frame_sr"].avg_sharpness_roi - base) / base, 1),
+        "roi_sharpness_gain_roi_sr_pct": round(
+            100.0 * (variants["roi_only_sr"].avg_sharpness_roi - base) / base, 1),
+    }
+    if variants["no_enhancement"].avg_ocr_confidence is not None:
+        ocr_base = variants["no_enhancement"].avg_ocr_confidence
+        if variants["full_frame_sr"].avg_ocr_confidence is not None:
+            deltas["ocr_confidence_gain_full_sr"] = round(
+                variants["full_frame_sr"].avg_ocr_confidence - ocr_base, 3)
+        if variants["roi_only_sr"].avg_ocr_confidence is not None:
+            deltas["ocr_confidence_gain_roi_sr"] = round(
+                variants["roi_only_sr"].avg_ocr_confidence - ocr_base, 3)
+    return deltas
+
+
 def benchmark_enhancement(
     video_path,
     roi_box: tuple[int, int, int, int],
@@ -329,65 +473,20 @@ def benchmark_enhancement(
     warnings: list[str] = []
 
     if not path.exists():
-        return BenchmarkResult(
-            video_path=str(path), frames_examined=0, frames_total=0,
-            roi_box=tuple(roi_box), sr_backend="unknown", ocr_backend=None,
-            variants={}, deltas={}, verdict="Video file not found.",
-            warnings=[f"Not found: {path}"],
-        )
+        return _empty_result(path, roi_box, "Video file not found.", f"Not found: {path}")
 
     cap = cv2.VideoCapture(str(path))
     if not cap.isOpened():
-        return BenchmarkResult(
-            video_path=str(path), frames_examined=0, frames_total=0,
-            roi_box=tuple(roi_box), sr_backend="unknown", ocr_backend=None,
-            variants={}, deltas={}, verdict="OpenCV could not open the file.",
-            warnings=[f"OpenCV open failed: {path}"],
-        )
+        return _empty_result(path, roi_box, "OpenCV could not open the file.",
+                             f"OpenCV open failed: {path}")
     frames_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
 
-    if enhancer is None:
-        try:
-            try:
-                from enhancement.enhancer import Enhancer  # type: ignore
-            except ImportError:
-                from src.enhancement.enhancer import Enhancer  # type: ignore
-            enhancer = Enhancer(scale=sr_scale, device=device)
-        except Exception as exc:  # noqa: BLE001
-            warnings.append(f"Enhancer construction failed: {exc}; using bicubic only")
-            enhancer = None
-
+    enhancer = _resolve_enhancer(enhancer, sr_scale, device, warnings)
     sr_backend = getattr(enhancer, "backend", "bicubic") if enhancer is not None else "bicubic"
 
-    ocr = None
-    ocr_backend_name: str | None = None
-    if run_ocr:
-        try:
-            try:
-                from enhancement.plate_reader import _select_backend  # type: ignore
-            except ImportError:
-                from src.enhancement.plate_reader import _select_backend  # type: ignore
-            ocr = _select_backend(ocr_backend, use_gpu=(device or "").lower() in ("cuda", "mps"))
-            ocr_backend_name = getattr(ocr, "name", "none")
-            if not getattr(ocr, "available", False):
-                warnings.append(
-                    "OCR requested but no backend installed; "
-                    "install via `uv sync --extra plates` or `--extra plates-fallback`"
-                )
-                ocr = None
-        except Exception as exc:  # noqa: BLE001
-            warnings.append(f"OCR setup failed: {exc}")
-            ocr = None
+    ocr, ocr_backend_name = _setup_ocr(run_ocr, ocr_backend, device, warnings)
 
-    variants = {
-        "no_enhancement": VariantMetrics(label="no_enhancement"),
-        "full_frame_sr":  VariantMetrics(label="full_frame_sr"),
-        "roi_only_sr":    VariantMetrics(label="roi_only_sr"),
-    }
-    sums = {k: {"sharp_roi": 0.0, "sharp_full": 0.0,
-                "psnr": 0.0, "ssim": 0.0, "ocr_conf": 0.0,
-                "psnr_n": 0, "ssim_n": 0, "ocr_n": 0}
-            for k in variants}
+    variants, sums = _new_accumulators()
 
     frame_idx = 0
     examined = 0
@@ -405,81 +504,15 @@ def benchmark_enhancement(
         if not ok or frame is None:
             break
 
-        # Build the three variants for this frame. Full-frame SR is by far
-        # the most expensive step, so it runs once and feeds both the cropped
-        # variant and the whole-frame sharpness figure.
-        baseline_roi = _bicubic_upscale(_safe_crop(frame, roi_box), sr_scale)
-        full_up = _try_full_frame_sr(frame, enhancer, sr_scale)
-        full_sr_roi = _crop_scaled_roi(full_up, roi_box, sr_scale) if full_up is not None else None
-        if full_sr_roi is None:
-            full_sr_roi = baseline_roi
-        roi_sr_roi = _roi_only_sr(frame, roi_box, enhancer, sr_scale)
-
-        sums["no_enhancement"]["sharp_roi"] += measure_sharpness(baseline_roi)
-        sums["full_frame_sr"]["sharp_roi"]  += measure_sharpness(full_sr_roi)
-        sums["roi_only_sr"]["sharp_roi"]    += measure_sharpness(roi_sr_roi)
-        if full_up is not None:
-            sums["full_frame_sr"]["sharp_full"] += measure_sharpness(full_up)
-
-        # PSNR / SSIM of the SR variants against the bicubic baseline; all
-        # three are the same ROI at the same scaled size.
-        for key, candidate in (("full_frame_sr", full_sr_roi),
-                               ("roi_only_sr", roi_sr_roi)):
-            psnr = measure_psnr(baseline_roi, candidate)
-            ssim = measure_ssim(baseline_roi, candidate)
-            if psnr is not None:
-                sums[key]["psnr"] += psnr
-                sums[key]["psnr_n"] += 1
-            if ssim is not None:
-                sums[key]["ssim"] += ssim
-                sums[key]["ssim_n"] += 1
-
-        # Optional OCR pass on each variant.
-        if ocr is not None:
-            for key, image in (("no_enhancement", baseline_roi),
-                               ("full_frame_sr", full_sr_roi),
-                               ("roi_only_sr",   roi_sr_roi)):
-                conf, text = _safe_ocr(ocr, image)
-                if conf is not None:
-                    sums[key]["ocr_conf"] += conf
-                    sums[key]["ocr_n"]    += 1
-                    if text and len(variants[key].sample_texts) < 5:
-                        variants[key].sample_texts.append(text)
+        _accumulate_frame(frame, roi_box, enhancer, sr_scale, ocr, variants, sums)
 
         examined += 1
         frame_idx += 1
 
     cap.release()
 
-    for key, v in variants.items():
-        if examined > 0:
-            v.avg_sharpness_roi = round(sums[key]["sharp_roi"] / examined, 2)
-            if key == "full_frame_sr":
-                v.avg_sharpness_full = round(sums[key]["sharp_full"] / examined, 2)
-        if sums[key]["psnr_n"]:
-            v.avg_psnr_vs_baseline = round(sums[key]["psnr"] / sums[key]["psnr_n"], 2)
-        if sums[key]["ssim_n"]:
-            v.avg_ssim_vs_baseline = round(sums[key]["ssim"] / sums[key]["ssim_n"], 4)
-        if sums[key]["ocr_n"]:
-            v.avg_ocr_confidence = round(sums[key]["ocr_conf"] / sums[key]["ocr_n"], 3)
-            v.ocr_reads = sums[key]["ocr_n"]
-
-    # Deltas - the actually-actionable numbers.
-    base = variants["no_enhancement"].avg_sharpness_roi or 1e-6
-    deltas: dict[str, Any] = {
-        "roi_sharpness_gain_full_sr_pct": round(
-            100.0 * (variants["full_frame_sr"].avg_sharpness_roi - base) / base, 1),
-        "roi_sharpness_gain_roi_sr_pct": round(
-            100.0 * (variants["roi_only_sr"].avg_sharpness_roi - base) / base, 1),
-    }
-    if variants["no_enhancement"].avg_ocr_confidence is not None:
-        ocr_base = variants["no_enhancement"].avg_ocr_confidence
-        if variants["full_frame_sr"].avg_ocr_confidence is not None:
-            deltas["ocr_confidence_gain_full_sr"] = round(
-                variants["full_frame_sr"].avg_ocr_confidence - ocr_base, 3)
-        if variants["roi_only_sr"].avg_ocr_confidence is not None:
-            deltas["ocr_confidence_gain_roi_sr"] = round(
-                variants["roi_only_sr"].avg_ocr_confidence - ocr_base, 3)
+    _summarize_variants(variants, sums, examined)
+    deltas = _compute_deltas(variants)
 
     if examined == 0:
         warnings.append("No frames could be sampled from the segment.")

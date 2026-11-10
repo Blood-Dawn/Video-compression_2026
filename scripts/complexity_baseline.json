@@ -7,7 +7,6 @@
   "src/demo/demo.py::render_demo": 30,
   "src/detection/object_filter.py::detect_scene_type": 17,
   "src/detection/pose_onnx_backend.py::YoloPoseOnnxDetector.infer": 18,
-  "src/enhancement/enhancement_benchmark.py::benchmark_enhancement": 43,
   "src/enhancement/plate_reader.py::PlateReader.read_plates_from_video": 21,
   "src/gui/routes/demo_bp.py::api_demo_history": 17,
   "src/gui/routes/encryption_bp.py::api_decrypt": 25,

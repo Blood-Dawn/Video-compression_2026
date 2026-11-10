@@ -2,10 +2,13 @@ package org.svcs.mobile.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
@@ -20,10 +23,8 @@ import org.svcs.mobile.R
 /**
  * SVCS theme.
  *
- * Dark only, on purpose. The design system is explicit that this is a
- * "dark-first surveillance terminal", and every token is authored for it;
- * there is no light palette to fall back to. isSystemInDarkTheme() is
- * deliberately ignored rather than silently producing an unstyled light screen.
+ * Dark and light. The design system's home is a "dark-first surveillance terminal"; a light
+ * palette was added in the 2026-11 redesign and the app follows the system setting.
  *
  * 2026-09-23 UI pass: the three design families are now bundled (res/font,
  * OFL-1.1, license texts in assets/licenses) instead of the platform-default
@@ -55,46 +56,86 @@ val SvcsBody = FontFamily(
 
 // Container fills (SvcsAmberContainer and friends) are in DerivedColors.kt.
 
-private val SvcsColorScheme = darkColorScheme(
-    primary = SvcsAmber,
-    onPrimary = SvcsOnAmber,
-    primaryContainer = SvcsAmberContainer,
-    onPrimaryContainer = SvcsAmber,
-    inversePrimary = SvcsAmberDim,
-    secondary = SvcsTeal,
-    onSecondary = SvcsBg,
+private fun svcsColorScheme(p: SvcsPalette, dark: Boolean): ColorScheme =
+    if (dark) darkColorScheme(
+    primary = p.amber,
+    onPrimary = p.onAmber,
+    primaryContainer = p.amberContainer,
+    onPrimaryContainer = p.amber,
+    inversePrimary = p.amberDim,
+    secondary = p.teal,
+    onSecondary = p.bg,
     // Selected chips and the nav indicator use secondaryContainer: keep them
     // on the amber accent, which is what the design marks "active" with.
-    secondaryContainer = SvcsAmberContainer,
-    onSecondaryContainer = SvcsAmber,
-    tertiary = SvcsPurple,
-    onTertiary = SvcsBg,
-    tertiaryContainer = SvcsPurpleContainer,
-    onTertiaryContainer = SvcsPurple,
-    background = SvcsBg,
-    onBackground = SvcsText,
-    surface = SvcsBg,
-    onSurface = SvcsText,
-    surfaceVariant = SvcsSurface2,
-    onSurfaceVariant = SvcsTextDim,
+    secondaryContainer = p.amberContainer,
+    onSecondaryContainer = p.amber,
+    tertiary = p.purple,
+    onTertiary = p.bg,
+    tertiaryContainer = p.purpleContainer,
+    onTertiaryContainer = p.purple,
+    background = p.bg,
+    onBackground = p.text,
+    surface = p.bg,
+    onSurface = p.text,
+    surfaceVariant = p.surface2,
+    onSurfaceVariant = p.textDim,
     surfaceTint = Color.Transparent,
-    inverseSurface = SvcsText,
-    inverseOnSurface = SvcsBg,
-    error = SvcsRed,
-    onError = SvcsBg,
-    errorContainer = SvcsRedContainer,
-    onErrorContainer = SvcsRed,
-    outline = SvcsBorder,
-    outlineVariant = SvcsBorder,
+    inverseSurface = p.text,
+    inverseOnSurface = p.bg,
+    error = p.red,
+    onError = p.bg,
+    errorContainer = p.redContainer,
+    onErrorContainer = p.red,
+    outline = p.border,
+    outlineVariant = p.border,
     scrim = Color.Black,
-    surfaceBright = SvcsSurface3,
-    surfaceDim = SvcsBg,
-    surfaceContainerLowest = SvcsBg,
-    surfaceContainerLow = SvcsSurface,
-    surfaceContainer = SvcsSurface,
-    surfaceContainerHigh = SvcsSurface2,
-    surfaceContainerHighest = SvcsSurface2,
-)
+    surfaceBright = p.surface3,
+    surfaceDim = p.bg,
+    surfaceContainerLowest = p.bg,
+    surfaceContainerLow = p.surface,
+    surfaceContainer = p.surface,
+    surfaceContainerHigh = p.surface2,
+    surfaceContainerHighest = p.surface2,
+    ) else lightColorScheme(
+    primary = p.amber,
+    onPrimary = p.onAmber,
+    primaryContainer = p.amberContainer,
+    onPrimaryContainer = p.amber,
+    inversePrimary = p.amberDim,
+    secondary = p.teal,
+    onSecondary = p.bg,
+    // Selected chips and the nav indicator use secondaryContainer: keep them
+    // on the amber accent, which is what the design marks "active" with.
+    secondaryContainer = p.amberContainer,
+    onSecondaryContainer = p.amber,
+    tertiary = p.purple,
+    onTertiary = p.bg,
+    tertiaryContainer = p.purpleContainer,
+    onTertiaryContainer = p.purple,
+    background = p.bg,
+    onBackground = p.text,
+    surface = p.bg,
+    onSurface = p.text,
+    surfaceVariant = p.surface2,
+    onSurfaceVariant = p.textDim,
+    surfaceTint = Color.Transparent,
+    inverseSurface = p.text,
+    inverseOnSurface = p.bg,
+    error = p.red,
+    onError = p.bg,
+    errorContainer = p.redContainer,
+    onErrorContainer = p.red,
+    outline = p.border,
+    outlineVariant = p.border,
+    scrim = Color.Black,
+    surfaceBright = p.surface3,
+    surfaceDim = p.bg,
+    surfaceContainerLowest = p.bg,
+    surfaceContainerLow = p.surface,
+    surfaceContainer = p.surface,
+    surfaceContainerHigh = p.surface2,
+    surfaceContainerHighest = p.surface2,
+    )
 
 /**
  * Sizes and tracking from tokens/typography.css (1rem = 16sp), families now
@@ -144,13 +185,16 @@ private val SvcsShapes = Shapes(
 
 @Composable
 fun SvcsTheme(content: @Composable () -> Unit) {
-    // isSystemInDarkTheme() is read but not branched on: see the note above.
-    @Suppress("UNUSED_VARIABLE")
-    val systemDark = isSystemInDarkTheme()
-    MaterialTheme(
-        colorScheme = SvcsColorScheme,
-        typography = SvcsTypography,
-        shapes = SvcsShapes,
-        content = content,
-    )
+    // Follows the system light or dark setting. Dark is the design's home; light was added in
+    // the 2026-11 redesign (see Color.kt for the two palettes).
+    val dark = isSystemInDarkTheme()
+    val palette = if (dark) SvcsDarkPalette else SvcsLightPalette
+    CompositionLocalProvider(LocalSvcsPalette provides palette) {
+        MaterialTheme(
+            colorScheme = svcsColorScheme(palette, dark),
+            typography = SvcsTypography,
+            shapes = SvcsShapes,
+            content = content,
+        )
+    }
 }

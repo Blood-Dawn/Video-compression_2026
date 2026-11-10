@@ -71,6 +71,8 @@ function _devicesRow(tok) {
     btn.style.fontSize = "0.55rem";
     btn.style.color = "var(--red)";
     btn.textContent = "Revoke";
+    btn.setAttribute("aria-label", "Revoke " + (tok.label || "this device"));
+    btn.style.borderColor = "var(--red)";
     btn.onclick = () => devicesRevoke(tok.id, tok.label);
     tdAction.appendChild(btn);
   }

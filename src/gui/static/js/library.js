@@ -34,13 +34,19 @@ function _fmtSize(bytes) {
   return mb >= 1024 ? (mb / 1024).toFixed(2) + " GB" : mb.toFixed(1) + " MB";
 }
 
+// Remembered per browser: sort order and grid or list layout.
+function _lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function _lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private mode */ } }
+
 function setLibraryView(mode) {
   window._svcsLibrary.view = mode === "list" ? "list" : "grid";
+  _lsSet("svcs.lib.view", window._svcsLibrary.view);
   const grid = document.getElementById("library-grid");
-  if (grid) {
-    grid.style.gridTemplateColumns = window._svcsLibrary.view === "list"
-      ? "1fr" : "repeat(auto-fill,minmax(180px,1fr))";
-  }
+  if (grid) grid.classList.toggle("is-list", window._svcsLibrary.view === "list");
+  ["grid", "list"].forEach((k) => {
+    const b = document.getElementById("library-view-" + k);
+    if (b) b.setAttribute("aria-pressed", String(k === window._svcsLibrary.view));
+  });
   filterLibrary();
 }
 window.setLibraryView = setLibraryView;
@@ -50,33 +56,202 @@ function setLibraryKind(kind) {
   window._svcsLibrary.kind = (["all", "original", "compressed"].includes(kind)) ? kind : "all";
   ["all", "original", "compressed"].forEach((k) => {
     const btn = document.getElementById("library-kind-" + k);
-    if (!btn) return;
-    const on = k === window._svcsLibrary.kind;
-    btn.style.color = on ? "#ff9e5e" : "";
-    btn.style.borderColor = on ? "#ff9e5e" : "";
+    if (btn) btn.setAttribute("aria-pressed", String(k === window._svcsLibrary.kind));
   });
   filterLibrary();
 }
 window.setLibraryKind = setLibraryKind;
 
 function _placeholderThumb(img, ext) {
-  // Replace a broken/failed thumbnail with a labelled placeholder box.
+  // Replace a broken or failed thumbnail with a labelled placeholder box.
   img.onerror = null;
-  img.removeAttribute("src");
-  img.style.display = "flex";
-  img.style.alignItems = "center";
-  img.style.justifyContent = "center";
-  img.style.color = "var(--text-dim)";
-  img.style.fontFamily = "var(--mono)";
-  img.style.fontSize = "0.6rem";
-  img.style.background = "#11151c";
-  // <img> cannot hold text, so swap to a div in place.
   const box = document.createElement("div");
-  box.style.cssText = img.style.cssText;
-  box.style.width = img.style.width || "100%";
-  box.style.height = img.style.height;
+  box.className = "x-noprev";
   box.textContent = (ext || "video").toUpperCase() + " (no preview)";
   if (img.parentNode) img.parentNode.replaceChild(box, img);
+}
+
+// Long names keep their start and their ending (the extension and the time
+// stamp are the useful parts); the full name stays in the title tooltip.
+function _midTrunc(name, max) {
+  max = max || 30;
+  if (name.length <= max) return name;
+  const tail = 11;
+  return name.slice(0, max - tail - 1) + "…" + name.slice(-tail);
+}
+
+// ── Selection ──────────────────────────────────────────────────────────────
+window._svcsLibrary.sel = new Set();
+
+function _libUpdateSelection() {
+  const sel = window._svcsLibrary.sel;
+  const bar = document.getElementById("library-selbar");
+  const filt = document.getElementById("library-filterrow");
+  const chips = document.getElementById("library-chips");
+  const n = sel.size;
+  if (bar) bar.hidden = n === 0;
+  if (filt) filt.hidden = n > 0;
+  if (chips && n > 0) chips.hidden = true;
+  const cnt = document.getElementById("library-sel-count");
+  if (cnt) cnt.textContent = n + " selected";
+  const hint = document.getElementById("library-sel-hint");
+  if (hint) hint.textContent = n > 1 ? "Compress and Encrypt work on one video at a time." : "";
+  const del = document.getElementById("library-sel-delete");
+  if (del) del.disabled = n === 0;
+  ["compress", "encrypt"].forEach((k) => {
+    const b = document.getElementById("library-sel-" + k);
+    if (b) b.disabled = n !== 1;
+  });
+  document.querySelectorAll("#library-grid .x-vcard").forEach((c) => {
+    c.classList.toggle("is-sel", sel.has(c.dataset.path));
+  });
+}
+
+function libClearSelection() {
+  window._svcsLibrary.sel.clear();
+  document.querySelectorAll("#library-grid .x-check input").forEach((i) => { i.checked = false; });
+  _libUpdateSelection();
+  _libRenderChips();
+}
+window.libClearSelection = libClearSelection;
+
+function libSelAction(kind) {
+  const sel = Array.from(window._svcsLibrary.sel);
+  if (sel.length !== 1) return;
+  window._svcsLibrary.selected = sel[0];
+  if (kind === "compress") compressLibrarySelection();
+  else if (kind === "encrypt" && typeof promptEncryptSegment === "function") promptEncryptSegment(sel[0]);
+}
+window.libSelAction = libSelAction;
+
+// Delete moves the files into a .svcs_trash folder beside each video. Nothing is
+// erased, so the confirm text says how to get a file back.
+async function libDeleteSelected() {
+  const paths = Array.from(window._svcsLibrary.sel);
+  if (!paths.length) return;
+  const n = paths.length;
+  const what = n === 1 ? "this video" : n + " videos";
+  const msg = "Move " + what + " to the trash?\n\n" +
+    "Each file goes into a .svcs_trash folder next to it. Nothing is erased; " +
+    "move a file back out of that folder to restore it.";
+  if (!window.confirm(msg)) return;
+  const btn = document.getElementById("library-sel-delete");
+  if (btn) btn.disabled = true;
+  _libStatus("Moving to trash...");
+  try {
+    const resp = await fetch("/api/library/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paths: paths, folder: window._svcsLibrary.folder || "" }),
+    });
+    if (resp.status === 404) {
+      _libStatus("This version of the app cannot delete videos yet.");
+      return;
+    }
+    let data = {};
+    try { data = await resp.json(); } catch (_) { /* non JSON error body */ }
+    const moved = (data.moved || []).length;
+    const failed = (data.failed || []).length;
+    window._svcsLibrary.sel.clear();
+    await loadLibrary();
+    if (moved && !failed) _libStatus(moved + (moved === 1 ? " video" : " videos") + " moved to the trash.");
+    else if (moved) _libStatus(moved + " moved to the trash, " + failed + " could not be moved.");
+    else _libStatus(data.error || "Could not move the selected videos.");
+  } catch (e) {
+    _libStatus("Could not reach the app to delete.");
+  } finally {
+    _libUpdateSelection();
+  }
+}
+window.libDeleteSelected = libDeleteSelected;
+
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape" || !window._svcsLibrary.sel.size) return;
+  const tab = document.getElementById("tab-library");
+  if (tab && tab.classList.contains("active")) libClearSelection();
+});
+
+// ── Filter chips ───────────────────────────────────────────────────────────
+const _LIB_AGE_LABEL = { "1": "Last 24 hours", "7": "Last 7 days", "30": "Last 30 days" };
+
+function _libActiveFilters() {
+  const out = [];
+  const kind = window._svcsLibrary.kind;
+  if (kind === "original") out.push({ id: "kind", label: "Originals" });
+  if (kind === "compressed") out.push({ id: "kind", label: "Compressed" });
+  const ext = ((document.getElementById("library-ext") || {}).value || "");
+  if (ext) out.push({ id: "ext", label: ext.toUpperCase() });
+  const age = ((document.getElementById("library-age") || {}).value || "");
+  if (age) out.push({ id: "age", label: _LIB_AGE_LABEL[age] || ("Last " + age + " days") });
+  const q = ((document.getElementById("library-search") || {}).value || "").trim();
+  if (q) out.push({ id: "q", label: "Name has “" + q + "”" });
+  return out;
+}
+
+function _libRemoveFilter(id) {
+  if (id === "kind") { window._svcsLibrary.kind = "all"; setLibraryKind("all"); return; }
+  const map = { ext: "library-ext", age: "library-age", q: "library-search" };
+  const el = document.getElementById(map[id]);
+  if (el) el.value = "";
+  filterLibrary();
+}
+
+function libClearFilters() {
+  ["library-ext", "library-age", "library-search"].forEach((i) => {
+    const el = document.getElementById(i);
+    if (el) el.value = "";
+  });
+  window._svcsLibrary.kind = "all";
+  setLibraryKind("all");
+}
+window.libClearFilters = libClearFilters;
+
+function _libRenderChips() {
+  const box = document.getElementById("library-chips");
+  if (!box) return;
+  const f = _libActiveFilters();
+  if (!f.length || window._svcsLibrary.sel.size) { box.hidden = true; box.innerHTML = ""; return; }
+  box.hidden = false;
+  box.innerHTML = '<span class="x-chips-lbl">Active filters</span>';
+  f.forEach((x) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "x-chip";
+    b.setAttribute("aria-label", "Remove filter " + x.label);
+    b.innerHTML = _esc(x.label) + ' <span class="x-x" aria-hidden="true">×</span>';
+    b.onclick = () => _libRemoveFilter(x.id);
+    box.appendChild(b);
+  });
+  const clr = document.createElement("button");
+  clr.type = "button";
+  clr.className = "x-link";
+  clr.textContent = "Clear filters";
+  clr.onclick = libClearFilters;
+  box.appendChild(clr);
+}
+
+function _libShowEmpty(kind) {
+  // kind: "none" (nothing in the folder), "filtered" (filters match nothing)
+  const empty = document.getElementById("library-empty");
+  if (!empty) return;
+  const t = document.getElementById("library-empty-title");
+  const x = document.getElementById("library-empty-text");
+  const clr = document.getElementById("library-empty-clear");
+  const br = document.getElementById("library-empty-browse");
+  const rt = document.getElementById("library-empty-retry");
+  if (rt) rt.hidden = true;
+  if (kind === "filtered") {
+    if (t) t.textContent = "No videos match these filters";
+    if (x) x.textContent = "Try a different search, or clear the filters to see everything in the folder.";
+    if (clr) clr.hidden = false;
+    if (br) br.hidden = true;
+  } else {
+    if (t) t.textContent = "No videos in this folder yet";
+    if (x) x.textContent = "Pick a folder that contains your clips (subfolders are searched too).";
+    if (clr) clr.hidden = true;
+    if (br) br.hidden = false;
+  }
+  empty.style.display = "block";
 }
 
 function _renderLibrary(list) {
@@ -85,49 +260,91 @@ function _renderLibrary(list) {
   const count = document.getElementById("library-count");
   if (!grid) return;
   grid.innerHTML = "";
+  const total = window._svcsLibrary.all.length;
   if (count) {
-    const total = window._svcsLibrary.all.length;
     count.textContent = list.length === total
-      ? total + " video(s)" : list.length + " of " + total;
+      ? total + (total === 1 ? " video" : " videos") : list.length + " of " + total + " videos";
   }
   if (!list.length) {
-    if (empty) empty.style.display = window._svcsLibrary.all.length ? "none" : "block";
-    if (!window._svcsLibrary.all.length) _libStatus("");
-    else _libStatus("No videos match the current search/filter.");
+    if (!total) { _libStatus(""); _libShowEmpty("none"); }
+    else { _libStatus(""); _libShowEmpty("filtered"); }
+    _libUpdateSelection();
     return;
   }
   if (empty) empty.style.display = "none";
   _libStatus("");
-  const isList = window._svcsLibrary.view === "list";
+  // Source sizes for "Saved n%": only claimed when the original is in the
+  // same listing, so the number is measured and never guessed.
+  const sizeByPath = {};
+  window._svcsLibrary.all.forEach((v) => { sizeByPath[v.path] = v.size; });
+  const sel = window._svcsLibrary.sel;
   list.forEach((v) => {
     const ext = (v.name.split(".").pop() || "").toLowerCase();
     const cell = document.createElement("div");
-    cell.style.cssText = isList
-      ? "display:flex;gap:0.6rem;align-items:center;padding:0.3rem;border:1px solid var(--border);border-radius:4px;cursor:pointer;"
-      : "border:1px solid var(--border);border-radius:6px;overflow:hidden;cursor:pointer;background:var(--surface2);";
+    cell.className = "x-vcard" + (sel.has(v.path) ? " is-sel" : "");
+    cell.dataset.path = v.path;
+
+    const thumb = document.createElement("div");
+    thumb.className = "x-thumb";
     const img = document.createElement("img");
     img.loading = "lazy";
     img.src = "/api/library/thumb?path=" + _enc(v.path);
-    img.alt = v.name;
-    img.style.cssText = isList
-      ? "width:96px;height:54px;object-fit:cover;background:#000;border-radius:3px;flex-shrink:0;"
-      : "width:100%;height:108px;object-fit:cover;background:#000;display:block;";
+    img.alt = "";
     img.onerror = () => _placeholderThumb(img, ext);
-    const label = document.createElement("div");
-    label.style.cssText = "font-family:var(--mono);font-size:0.6rem;padding:0.3rem;color:var(--text);word-break:break-all;";
-    // R3.1d: tag compressed outputs, and mark originals that already have one.
-    let tag = "";
-    if (v.kind === "compressed") {
-      tag = '<span style="display:inline-block;font-size:0.5rem;font-weight:700;color:#ff5fa2;border:1px solid #ff5fa2;border-radius:3px;padding:0 0.25rem;margin-right:0.3rem;">COMPRESSED</span>';
-    } else if (v.compressed) {
-      tag = '<span title="A compressed version exists" style="color:var(--green,#39d353);margin-right:0.3rem;">&#10003;</span>';
+    thumb.appendChild(img);
+    thumb.onclick = () => openLibraryDetail(v.path, v.name);
+
+    const chk = document.createElement("label");
+    chk.className = "x-check";
+    chk.innerHTML = '<input type="checkbox" aria-label="Select ' + _esc(v.name) + '"/><span aria-hidden="true"></span>';
+    const cb = chk.querySelector("input");
+    cb.checked = sel.has(v.path);
+    cb.addEventListener("click", (e) => e.stopPropagation());
+    cb.addEventListener("change", () => {
+      if (cb.checked) sel.add(v.path); else sel.delete(v.path);
+      _libUpdateSelection();
+      _libRenderChips();
+    });
+    thumb.appendChild(chk);
+
+    const body = document.createElement("div");
+    body.className = "x-vbody";
+    const nm = document.createElement("button");
+    nm.type = "button";
+    nm.className = "x-vname";
+    nm.title = v.name;
+    nm.textContent = _midTrunc(v.name);
+    nm.onclick = () => openLibraryDetail(v.path, v.name);
+    body.appendChild(nm);
+
+    const meta = document.createElement("div");
+    meta.className = "x-vmeta";
+    const isComp = v.kind === "compressed";
+    meta.innerHTML = '<span class="x-badge ' + (isComp ? "is-comp" : "is-orig") + '">' +
+      (isComp ? "Compressed" : "Original") + '</span><span class="x-size">' + _esc(_fmtSize(v.size)) + '</span>';
+    body.appendChild(meta);
+
+    const note = document.createElement("div");
+    note.className = "x-saved";
+    if (isComp) {
+      const src = v.source && sizeByPath[v.source];
+      if (src && v.size && src > v.size) {
+        const pct = Math.round((1 - v.size / src) * 100);
+        note.textContent = pct >= 2 ? "Saved " + pct + "%" : "Almost no savings";
+        if (pct >= 2) note.classList.add("is-good");
+      } else {
+        note.textContent = "Compressed copy";
+      }
+    } else {
+      note.textContent = v.compressed ? "Has a compressed copy" : "Not compressed yet";
     }
-    label.innerHTML = tag + _esc(v.name) + (isList ? "   " + _fmtSize(v.size) : "");
-    cell.appendChild(img);
-    cell.appendChild(label);
-    cell.onclick = () => openLibraryDetail(v.path, v.name);
+    body.appendChild(note);
+
+    cell.appendChild(thumb);
+    cell.appendChild(body);
     grid.appendChild(cell);
   });
+  _libUpdateSelection();
 }
 
 // Aggregate stats for the filtered set: real counts and sizes only, with
@@ -154,10 +371,20 @@ function _renderLibraryStats(list) {
   strip.innerHTML =
     '<span>' + list.length + ' clip' + (list.length === 1 ? '' : 's') +
     ' &middot; ' + _fmtBytes(totalBytes) + ' total</span>' +
-    '<span style="color:var(--text-primary);">Originals: ' + origCount +
-    ' (' + _fmtBytes(origBytes) + ')</span>' +
-    '<span style="color:var(--green);">Compressed: ' + compCount +
-    ' (' + _fmtBytes(compBytes) + ')</span>';
+    '<span>Originals: ' + origCount + ' (' + _fmtBytes(origBytes) + ')</span>' +
+    '<span>Compressed: ' + compCount + ' (' + _fmtBytes(compBytes) + ')</span>';
+}
+
+function _libKindCounts() {
+  const c = { all: 0, original: 0, compressed: 0 };
+  (window._svcsLibrary.all || []).forEach((v) => {
+    c.all++;
+    if (v.kind === "compressed") c.compressed++; else c.original++;
+  });
+  ["all", "original", "compressed"].forEach((k) => {
+    const el = document.getElementById("library-n-" + k);
+    if (el) el.textContent = c[k];
+  });
 }
 
 // Client-side search + type filter + sort over the loaded page.
@@ -166,10 +393,14 @@ function filterLibrary() {
   const q = ((document.getElementById("library-search") || {}).value || "").trim().toLowerCase();
   const ext = ((document.getElementById("library-ext") || {}).value || "").toLowerCase();
   const sortVal = (document.getElementById("library-sort") || {}).value || "date-desc";
+  const ageDays = parseInt((document.getElementById("library-age") || {}).value || "0", 10) || 0;
+  const cutoff = ageDays ? (Date.now() / 1000) - ageDays * 86400 : 0;
   const kind = window._svcsLibrary.kind || "all";
+  _lsSet("svcs.lib.sort", sortVal);
   let list = all.filter((v) => {
     if (q && !v.name.toLowerCase().includes(q)) return false;
     if (ext && !v.name.toLowerCase().endsWith("." + ext)) return false;
+    if (cutoff && !(v.mtime >= cutoff)) return false;
     if (kind === "compressed" && v.kind !== "compressed") return false;
     if (kind === "original" && v.kind === "compressed") return false;
     return true;
@@ -185,6 +416,8 @@ function filterLibrary() {
     list.sort(field === "size" ? (a, b) => a.size - b.size : (a, b) => a.mtime - b.mtime);
   }
   if (dir === "desc") list.reverse();
+  _libKindCounts();
+  _libRenderChips();
   _renderLibraryStats(list);
   _renderLibrary(list);
 }
@@ -222,8 +455,9 @@ async function loadLibrary() {
     window._svcsLibrary.all = data.videos || [];
     _populateExtFilter(data.extensions);
     if (data.exists === false) {
-      const empty = document.getElementById("library-empty");
-      if (empty) empty.style.display = "block";
+      _libShowEmpty("none");
+      const tt = document.getElementById("library-empty-title");
+      if (tt) tt.textContent = "That folder was not found";
       _libStatus("Folder not found. Click Browse to pick one.");
       const grid = document.getElementById("library-grid");
       if (grid) grid.innerHTML = "";
@@ -232,6 +466,13 @@ async function loadLibrary() {
     filterLibrary();
   } catch (e) {
     _libStatus("Could not load the library.");
+    _libShowEmpty("none");
+    const tt = document.getElementById("library-empty-title");
+    const tx = document.getElementById("library-empty-text");
+    const rt = document.getElementById("library-empty-retry");
+    if (tt) tt.textContent = "Could not load the library";
+    if (tx) tx.textContent = "The app could not read this folder just now. Check the path, then try again.";
+    if (rt) rt.hidden = false;
   }
 }
 window.loadLibrary = loadLibrary;
@@ -374,12 +615,12 @@ async function openLibraryDetail(path, name) {
     const m = await (await fetch("/api/library/meta?path=" + _enc(path))).json();
     if (metaEl) {
       const dur = m.duration ? parseFloat(m.duration).toFixed(1) + " s" : "n/a";
-      metaEl.innerHTML =
-        "Size: " + _fmtSize(m.size) + "<br>"
-        + "Resolution: " + (m.width || "?") + " x " + (m.height || "?") + "<br>"
-        + "Codec: " + (m.codec_name || "n/a") + "<br>"
-        + "Frame rate: " + (m.r_frame_rate || "n/a") + "<br>"
-        + "Duration: " + dur;
+      metaEl.innerHTML = '<dl class="x-facts">'
+        + "<dt>Size</dt><dd>" + _esc(_fmtSize(m.size)) + "</dd>"
+        + "<dt>Resolution</dt><dd>" + _esc((m.width || "?") + " x " + (m.height || "?")) + "</dd>"
+        + "<dt>Codec</dt><dd>" + _esc(m.codec_name || "n/a") + "</dd>"
+        + "<dt>Frame rate</dt><dd>" + _esc(m.r_frame_rate || "n/a") + "</dd>"
+        + "<dt>Duration</dt><dd>" + _esc(dur) + "</dd></dl>";
     }
   } catch (e) {
     if (metaEl) metaEl.textContent = "Metadata unavailable.";
@@ -424,6 +665,10 @@ window.compressLibrarySelection = compressLibrarySelection;
 
 // Prefill the last-used folder, then lazy-load on first LIBRARY tab open.
 window.addEventListener("DOMContentLoaded", async () => {
+  const savedSort = _lsGet("svcs.lib.sort");
+  const sortEl = document.getElementById("library-sort");
+  if (sortEl && savedSort && Array.from(sortEl.options).some((o) => o.value === savedSort)) sortEl.value = savedSort;
+  if (_lsGet("svcs.lib.view") === "list") setLibraryView("list");
   try {
     const st = await (await fetch("/api/setup/state")).json();
     const folderEl = document.getElementById("library-folder");

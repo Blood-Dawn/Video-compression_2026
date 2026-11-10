@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -68,6 +69,7 @@ import org.svcs.mobile.ui.theme.SvcsDisplay
 import org.svcs.mobile.ui.theme.SvcsGreen
 import org.svcs.mobile.ui.theme.SvcsMono
 import org.svcs.mobile.ui.theme.SvcsOrange
+import org.svcs.mobile.ui.theme.SvcsBorderCtl
 import org.svcs.mobile.ui.theme.SvcsRed
 import org.svcs.mobile.ui.theme.SvcsTeal
 import org.svcs.mobile.ui.theme.SvcsText
@@ -150,7 +152,7 @@ fun CompressLibraryScreen(vm: CompressLibraryViewModel) {
                 shape = RoundedCornerShape(2.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = SvcsAmber,
-                    unfocusedBorderColor = SvcsBorder,
+                    unfocusedBorderColor = SvcsBorderCtl,
                     cursorColor = SvcsAmber,
                 ),
                 modifier = Modifier.fillMaxWidth(),
@@ -283,7 +285,7 @@ private fun LibraryRow(
 
     SvcsPanel(modifier = Modifier.fillMaxWidth(), contentPadding = 10.dp) {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(Modifier.clickable(onClick = onPlay)) {
+            Box(Modifier.clickable(role = Role.Button, onClickLabel = "Play video", onClick = onPlay)) {
                 VideoThumbnail(Uri.parse(record.outputUri), Modifier.size(84.dp))
                 Box(
                     Modifier.align(Alignment.Center).size(30.dp).clip(RoundedCornerShape(50)).background(Color(0x99000000)),
@@ -305,11 +307,15 @@ private fun LibraryRow(
                     if (savedPct != null) {
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            if (savedPct >= 0) "-$savedPct%" else "+${-savedPct}%",
+                            if (savedPct > 0) "-$savedPct%" else if (savedPct == 0) "0%" else "+${-savedPct}%",
                             fontFamily = SvcsDisplay,
                             fontSize = 22.sp,
                             lineHeight = 22.sp,
-                            color = if (savedPct >= 0) SvcsGreen else SvcsOrange,
+                            color = when {
+                                savedPct >= 5 -> SvcsGreen
+                                savedPct >= 0 -> SvcsTextDim
+                                else -> SvcsOrange
+                            },
                         )
                     }
                 }
@@ -348,10 +354,26 @@ private fun LibraryRow(
                         SvcsTag("Encoder fallback", SvcsOrange)
                     }
                 }
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    RowAction(SvcsIcons.Share, "Share", SvcsText, onShare)
-                    RowAction(SvcsIcons.Delete, "Delete", SvcsRed, onDelete)
+                if (record.usedFallback || record.encoderNote != null) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Your phone used its backup encoder, so this file may be larger or smaller than usual.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SvcsTextDim,
+                    )
+                }
+                if (savedPct != null && savedPct in 0..4) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Almost no savings. This clip was already tightly compressed.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SvcsTextDim,
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    RowAction(SvcsIcons.Share, "Share", SvcsText, onShare, Modifier.weight(1f))
+                    RowAction(SvcsIcons.Delete, "Delete", SvcsRed, onDelete, Modifier.weight(1f))
                 }
             }
         }
@@ -359,16 +381,19 @@ private fun LibraryRow(
 }
 
 @Composable
-private fun RowAction(icon: ImageVector, label: String, color: Color, onClick: () -> Unit) {
+private fun RowAction(icon: ImageVector, label: String, color: Color, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Row(
-        Modifier
-            .clip(RoundedCornerShape(2.dp))
+        modifier
+            .heightIn(min = 48.dp)
+            .border(1.dp, if (color == SvcsRed) SvcsRed.copy(alpha = 0.5f) else SvcsBorderCtl, RoundedCornerShape(4.dp))
+            .clip(RoundedCornerShape(4.dp))
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
     ) {
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(16.dp))
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(6.dp))
-        Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = color)
+        Text(label, style = MaterialTheme.typography.labelLarge, color = color, maxLines = 1, softWrap = false)
     }
 }

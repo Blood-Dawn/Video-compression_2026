@@ -14,6 +14,15 @@ let _mHistT = [];
 let _mHistCpu = [];
 let _mHistRam = [];
 let _mHistChart = null;
+
+// Chart colors follow the theme. They are read when the chart is built, so a theme change
+// shows on the next rebuild (the chart is rebuilt whenever the METRICS tab opens).
+function _chartInk() {
+  const light = document.documentElement.getAttribute('data-theme') === 'light';
+  return light
+    ? { axis: 'rgba(71,90,115,0.9)', cpu: '#8f5400', ram: '#08706a' }
+    : { axis: 'rgba(200,200,210,0.5)', cpu: '#ffb84d', ram: '#4ecdc4' };
+}
 const _M_HIST_MAX = 300; // ~10 minutes at one sample per 2s
 
 function _pushHistoryPoint(cpuPct, ramPct) {
@@ -44,14 +53,14 @@ function _renderHistoryChart() {
     legend: { show: false },
     axes: [
       { show: false },
-      { stroke: 'rgba(200,200,210,0.5)', font: '10px monospace', size: 28,
+      { stroke: _chartInk().axis, font: '10px monospace', size: 28,
         values: (u, vals) => vals.map((v) => v + '%') },
     ],
     scales: { y: { range: [0, 100] } },
     series: [
       {},
-      { label: 'CPU', stroke: '#ffb84d', width: 1.5, points: { show: false } },
-      { label: 'RAM', stroke: '#4ecdc4', width: 1.5, points: { show: false } },
+      { label: 'CPU', stroke: _chartInk().cpu, width: 1.5, points: { show: false } },
+      { label: 'RAM', stroke: _chartInk().ram, width: 1.5, points: { show: false } },
     ],
   };
   el.innerHTML = '';
@@ -197,7 +206,7 @@ function _applyHardwareMetrics(d) {
       const maxAvg = Math.max(1, ...keys.map(k => avgs[k]?.avg || 0));
       rows.innerHTML = keys.map(k => {
         const a = avgs[k];
-        if (!a) return `<div class="metrics-library-row" style="opacity:0.4"><span>${modeLabels[k]}</span><span style="font-size:0.65rem;color:var(--text-dim);">no data yet</span></div>`;
+        if (!a) return `<div class="metrics-library-row" style="opacity:0.4"><span>${modeLabels[k]}</span><span style="font-size:0.75rem;color:var(--text-dim);">no data yet</span></div>`;
         const pct = (a.avg / Math.max(maxAvg, 100)) * 100;
         const color = a.avg > 70 ? 'var(--red)' : a.avg > 40 ? 'var(--amber)' : 'var(--green)';
         // FIX 2: samples loaded from a prior install are flagged historical so
@@ -205,7 +214,7 @@ function _applyHardwareMetrics(d) {
         const histTag = a.historical
           ? ` <span style="color:var(--text-dim);font-style:italic;">(previous runs)</span>` : '';
         return `<div style="margin:0.25rem 0;">
-          <div style="display:flex;justify-content:space-between;font-size:0.68rem;margin-bottom:2px;">
+          <div style="display:flex;justify-content:space-between;font-size:0.75rem;margin-bottom:2px;">
             <span style="color:var(--text-dim);">${modeLabels[k]}</span>
             <span style="font-family:var(--mono);color:${color};">${a.avg}% avg · ${a.n} samples${histTag}</span>
           </div>

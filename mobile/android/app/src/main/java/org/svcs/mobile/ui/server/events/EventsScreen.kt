@@ -38,6 +38,8 @@ import org.svcs.mobile.ui.theme.SvcsGreen
 import org.svcs.mobile.ui.theme.SvcsRed
 import org.svcs.mobile.ui.theme.SvcsSurface2
 import org.svcs.mobile.ui.theme.SvcsTextDim
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.minimumInteractiveComponentSize
 
 /**
  * EVENTS tab (R6 Track A): behavior events + the zone/line editor.
@@ -215,8 +217,9 @@ private fun EditorChip(label: String, selected: Boolean, onClick: () -> Unit) {
         style = MaterialTheme.typography.labelSmall,
         color = if (selected) SvcsAmber else SvcsTextDim,
         modifier = Modifier
-            .border(1.dp, if (selected) SvcsAmber else SvcsBorder, RoundedCornerShape(2.dp))
-            .clickable(onClick = onClick)
+            .selectable(selected = selected, role = androidx.compose.ui.semantics.Role.RadioButton, onClick = onClick)
+            .minimumInteractiveComponentSize()
+            .border(1.dp, if (selected) SvcsAmber else org.svcs.mobile.ui.theme.SvcsBorderCtl, RoundedCornerShape(2.dp))
             .padding(horizontal = 10.dp, vertical = 6.dp),
     )
 }

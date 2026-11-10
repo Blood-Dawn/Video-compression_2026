@@ -206,6 +206,14 @@ extend-exclude = ["mobile", "data", "reports", "models"]
 [tool.ruff.lint]
 select = ["F", "B008"]
 
+# Dead code finder (python -m vulture). Flask route handlers are reached
+# through decorators, so without these settings vulture reports every route
+# as unused. Raise min_confidence to 100 to list only certain findings.
+[tool.vulture]
+paths = ["src"]
+ignore_decorators = ["@*_bp.route", "@app.route", "@app.errorhandler", "@app.after_request", "@app.before_request"]
+ignore_names = ["exc_type", "tb", "newurl", "setUp*", "tearDown*"]
+min_confidence = 80
 # ── PyTorch CUDA index ────────────────────────────────────────────────────────
 # Tell uv to always fetch torch and torchvision from the CUDA 12.8 wheel index
 # instead of PyPI. Without this, uv/pip installs the CPU-only build because

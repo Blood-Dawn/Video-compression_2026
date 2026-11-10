@@ -289,6 +289,51 @@ def _cached_listing(folder: Path, recursive: bool, force: bool = False) -> dict:
         return built
 
 
+def _parse_ext_filter(ext_raw: str):
+    """"mp4, .MKV" (already lowercased) becomes {".mp4", ".mkv"}; empty means no filter."""
+    if not ext_raw:
+        return None
+    return {("." + e.lstrip(".")) for e in ext_raw.split(",") if e.strip()}
+
+
+def _filter_library_items(all_items, allowed_exts, q, min_size, max_size, kind):
+    """Apply the search and filter query params to a cached listing.
+
+    Returns new public item dicts (the cache's private keys such as _ext are
+    not copied). Compressed items carry their source, originals their
+    "compressed" flag.
+    """
+    items = []
+    for i in all_items:
+        if allowed_exts is not None and i["_ext"] not in allowed_exts:
+            continue
+        if q and q not in i["name"].lower():
+            continue
+        if min_size is not None and i["size"] < min_size:
+            continue
+        if max_size is not None and i["size"] > max_size:
+            continue
+        ikind = i["kind"]
+        if kind != "all" and ikind != kind:
+            continue
+        item = {"name": i["name"], "path": i["path"],
+                "size": i["size"], "mtime": i["mtime"], "kind": ikind}
+        if ikind == "compressed":
+            item["source"] = i.get("source")
+        else:
+            item["compressed"] = i.get("compressed", False)
+        items.append(item)
+    return items
+
+
+def _sort_library_items(items, sort: str, order: str) -> None:
+    """Sort in place by name, size or date (anything else sorts by date)."""
+    key = {"name": lambda x: x["name"].lower(),
+           "size": lambda x: x["size"],
+           "date": lambda x: x["mtime"]}.get(sort, lambda x: x["mtime"])
+    items.sort(key=key, reverse=(order != "asc"))
+
+
 @library_bp.route("/api/library/videos", methods=["GET"])
 def api_library_videos():
     """List videos in a folder, with search / filters / sort, paginated.
@@ -309,9 +354,7 @@ def api_library_videos():
     folder = _resolve_folder(request.args.get("folder", ""))
     q = (request.args.get("q", "") or "").strip().lower()
     ext_raw = (request.args.get("ext", "") or "").strip().lower()
-    allowed_exts = None
-    if ext_raw:
-        allowed_exts = {("." + e.lstrip(".")) for e in ext_raw.split(",") if e.strip()}
+    allowed_exts = _parse_ext_filter(ext_raw)
     min_size = _int_arg("min_size")
     max_size = _int_arg("max_size")
     sort = (request.args.get("sort", "date") or "date").strip().lower()
@@ -347,31 +390,8 @@ def api_library_videos():
         return jsonify({"folder": str(folder), "exists": True,
                         "error": listing["error"], "total": 0, "videos": []}), 200
 
-    items = []
-    for i in all_items:
-        if allowed_exts is not None and i["_ext"] not in allowed_exts:
-            continue
-        if q and q not in i["name"].lower():
-            continue
-        if min_size is not None and i["size"] < min_size:
-            continue
-        if max_size is not None and i["size"] > max_size:
-            continue
-        ikind = i["kind"]
-        if kind != "all" and ikind != kind:
-            continue
-        item = {"name": i["name"], "path": i["path"],
-                "size": i["size"], "mtime": i["mtime"], "kind": ikind}
-        if ikind == "compressed":
-            item["source"] = i.get("source")
-        else:
-            item["compressed"] = i.get("compressed", False)
-        items.append(item)
-
-    key = {"name": lambda x: x["name"].lower(),
-           "size": lambda x: x["size"],
-           "date": lambda x: x["mtime"]}.get(sort, lambda x: x["mtime"])
-    items.sort(key=key, reverse=(order != "asc"))
+    items = _filter_library_items(all_items, allowed_exts, q, min_size, max_size, kind)
+    _sort_library_items(items, sort, order)
 
     total = len(items)
     start = (page - 1) * page_size
@@ -511,7 +531,9 @@ def api_library_meta():
 
 def _thumb_path(video: Path) -> Path:
     st = video.stat()
-    key = hashlib.sha1(f"{video}|{int(st.st_mtime)}|{st.st_size}".encode("utf-8")).hexdigest()
+    key = hashlib.sha1(
+        f"{video}|{int(st.st_mtime)}|{st.st_size}".encode("utf-8"), usedforsecurity=False
+    ).hexdigest()
     return _paths.thumbs_dir() / (key + ".jpg")
 
 

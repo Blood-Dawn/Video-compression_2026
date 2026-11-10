@@ -233,7 +233,6 @@ def build_roi_focus_frame(
     *,
     background_dim_alpha: float = 0.45,
     background_tint_strength: float = 0.08,
-    roi_green_tint_strength: float = 0.12,
     draw_boxes: bool = True,
     draw_tint: bool = True,
 ) -> np.ndarray:
@@ -337,17 +336,6 @@ def make_skip_card(
         )
         for _ in range(frame_count)
     ]
-
-
-def make_hold_frames(previous_frame: np.ndarray, frame_count: int) -> list[np.ndarray]:
-    """
-    Duplicate the previous rendered frame for a measured number of missing frames.
-    This preserves timeline alignment without flashing to black.
-    """
-    if frame_count <= 0:
-        return []
-
-    return [previous_frame.copy() for _ in range(frame_count)]
 
 
 def format_metric_value(value: object, suffix: str = "") -> str:

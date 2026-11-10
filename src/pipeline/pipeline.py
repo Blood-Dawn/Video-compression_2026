@@ -170,6 +170,138 @@ def _sanitize_camera_id(camera_id: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_-]", "_", camera_id)
 
 
+def _apply_vmaf_target(input_source, codec, resolved_crf: int, target_vmaf,
+                       encode_preset: str) -> int:
+    """VMAF-targeted rate control (R5 TASK 5.1). Opt-in.
+
+    When target_vmaf is set and the source is a FILE, sample-encode a few short
+    segments to find the largest CRF (smallest file) that still clears the
+    perceptual target, and return that instead of the fixed CRF. The search
+    never raises and never hangs: any failure (no libvmaf, live source, no
+    convergence) returns resolved_crf unchanged and logs the reason.
+    Design: docs/RESEARCH-VMAF-TARGET.md.
+    """
+    if target_vmaf is None or isinstance(input_source, int):
+        return resolved_crf
+    try:
+        from compression.vmaf_target import find_crf_for_target
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.compression.vmaf_target import find_crf_for_target
+    _tv = find_crf_for_target(
+        input_source, codec=codec, fixed_crf=resolved_crf,
+        target_vmaf=target_vmaf, preset=encode_preset,
+    )
+    if _tv.used_target:
+        log.info("VMAF target %.1f: CRF %d -> %d (measured VMAF %.2f, "
+                 "%d probe(s)%s)", _tv.target_vmaf, resolved_crf, _tv.crf,
+                 _tv.measured_vmaf if _tv.measured_vmaf is not None else -1.0,
+                 _tv.probes, ", cached" if _tv.cached else "")
+        return _tv.crf
+    log.info("VMAF target requested but not used (%s); keeping fixed CRF %d.",
+             _tv.fallback_reason, resolved_crf)
+    return resolved_crf
+
+
+def _resolve_max_bitrate_kbps(mode: str, max_bitrate_kbps, input_source,
+                              total_frames: int, fps: float):
+    """Auto safety cap on the output bitrate.
+
+    On hard or noisy footage, or with the ultrafast preset of modes 2 and 3,
+    CRF encoding can land above the source's own bitrate and produce a
+    "compressed" file bigger than the original. Without an explicit
+    --max-bitrate-kbps, cap at the source file's average bitrate. Skipped for
+    mode0 (its Archive preset is "quality over size"), for live sources (no
+    file to measure), and when the caller gave a cap (theirs wins, even above
+    the source rate). Returns the value to hand the encoder.
+    """
+    if max_bitrate_kbps or mode == "mode0":
+        return max_bitrate_kbps
+    auto_cap_kbps = _source_bitrate_kbps(input_source, total_frames, fps)
+    if auto_cap_kbps > 0:
+        log.info(
+            "No max-bitrate-kbps given: capping at the source file's own "
+            "~%d kbps so compression can't make the file bigger.",
+            auto_cap_kbps,
+        )
+        return auto_cap_kbps
+    return max_bitrate_kbps
+
+
+def _resolve_foreground_crf(mode: str, crf) -> int:
+    """Foreground CRF: an explicit value wins, otherwise a per-mode default.
+
+    Modes get progressively more aggressive foreground CRF from mode0 to mode3
+    so each mode compresses harder than the last: mode0 and mode1 use 18,
+    mode2 uses 23, mode3 uses 38 (its blacked-out background takes near-zero
+    bits, so the ROI pixels get compressed hardest).
+    """
+    if crf is not None:
+        return int(crf)
+    if mode == "mode3":
+        return 38
+    if mode == "mode2":
+        return 23
+    return 18
+
+
+def _resolve_codec(mode: str, codec):
+    """Codec: an explicit value wins, None or "auto" or "" picks the per-mode
+    default (H.264 for mode0 and mode1, AV1 for mode2 and mode3). ROIEncoder
+    still falls back if the running FFmpeg lacks the chosen encoder."""
+    if codec is None or str(codec).strip().lower() in ("", "auto"):
+        return default_codec_for_mode(mode)
+    return codec
+
+
+def _resolve_background_crf(background_crf) -> int:
+    """Background CRF for the dual-CRF stream; 40 unless the caller set one."""
+    return int(background_crf) if background_crf is not None else 40
+
+
+def _load_zone_event_setup(camera_id: str):
+    """Read the per-camera zone and event config once at run start.
+
+    Returns (zone_cfg, event_engine, zone_filter, append_events). A saved
+    change applies to the next run. Every failure path only disables the
+    feature (all four come back None); it can never take down an encode.
+    event_engine is None unless the camera has lines or loiter zones.
+    Author: Bloodawn (KheivenD), 2026-08-17 (R5 TASKS 5.6/5.7).
+    """
+    zone_cfg = None
+    event_engine = None
+    zone_filter = None
+    append_events = None
+    try:
+        try:
+            from utils.zones_config import (load_camera_config as _load_zcfg,
+                                            filter_regions as _zone_filter)
+            from utils.track_events import EventEngine as _EventEngine
+            from utils.event_log import append_events as _append_events
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.utils.zones_config import (load_camera_config as _load_zcfg,
+                                                filter_regions as _zone_filter)
+            from src.utils.track_events import EventEngine as _EventEngine
+            from src.utils.event_log import append_events as _append_events
+        zone_filter = _zone_filter
+        append_events = _append_events
+        zone_cfg = _load_zcfg(camera_id)
+        if zone_cfg["lines"] or zone_cfg["zones"]:
+            event_engine = _EventEngine(
+                lines=zone_cfg["lines"], zones=zone_cfg["zones"],
+                loiter_s=zone_cfg["loiter_s"],
+                class_filter=zone_cfg["class_filter"])
+            log.info("Behavior events armed: %d line(s), %d loiter zone(s).",
+                     len(zone_cfg["lines"]), len(zone_cfg["zones"]))
+        if zone_cfg["exclude"]:
+            log.info("Zone masks active: %d exclude region(s).",
+                     len(zone_cfg["exclude"]))
+    except Exception as _zexc:  # noqa: BLE001 - feature must never kill a run
+        log.warning("Zones/events config unavailable: %s", _zexc)
+        zone_cfg = None
+        event_engine = None
+    return zone_cfg, event_engine, zone_filter, append_events
+
+
 def run_pipeline(
     input_source,
     camera_id: str = "cam_00",
@@ -318,37 +450,7 @@ def run_pipeline(
     log.info(f"Source: {input_source} | {frame_w}x{frame_h} @ {fps:.1f}fps")
 
     # ── R5 TASKS 5.6/5.7: zone masks + behavior events ───────────────────────
-    # Per-camera config is read ONCE at run start (a saved change applies to
-    # the next run). Every failure path only disables the feature; it can
-    # never take down an encode. Author: Bloodawn (KheivenD), 2026-08-17.
-    _zone_cfg = None
-    _event_engine = None
-    try:
-        try:
-            from utils.zones_config import (load_camera_config as _load_zcfg,
-                                            filter_regions as _zone_filter)
-            from utils.track_events import EventEngine as _EventEngine
-            from utils.event_log import append_events as _append_events
-        except ModuleNotFoundError:  # pragma: no cover - import path shim
-            from src.utils.zones_config import (load_camera_config as _load_zcfg,
-                                                filter_regions as _zone_filter)
-            from src.utils.track_events import EventEngine as _EventEngine
-            from src.utils.event_log import append_events as _append_events
-        _zone_cfg = _load_zcfg(camera_id)
-        if _zone_cfg["lines"] or _zone_cfg["zones"]:
-            _event_engine = _EventEngine(
-                lines=_zone_cfg["lines"], zones=_zone_cfg["zones"],
-                loiter_s=_zone_cfg["loiter_s"],
-                class_filter=_zone_cfg["class_filter"])
-            log.info("Behavior events armed: %d line(s), %d loiter zone(s).",
-                     len(_zone_cfg["lines"]), len(_zone_cfg["zones"]))
-        if _zone_cfg["exclude"]:
-            log.info("Zone masks active: %d exclude region(s).",
-                     len(_zone_cfg["exclude"]))
-    except Exception as _zexc:  # noqa: BLE001 - feature must never kill a run
-        log.warning("Zones/events config unavailable: %s", _zexc)
-        _zone_cfg = None
-        _event_engine = None
+    _zone_cfg, _event_engine, _zone_filter, _append_events = _load_zone_event_setup(camera_id)
 
     # Week 3 TASK 3.7: throttled "last seen" still for the zone editor's
     # background image. Best effort like the event engine above; a camera
@@ -398,14 +500,7 @@ def run_pipeline(
     # User-supplied `crf` overrides the mode default.
     # Author: Bloodawn (KheivenD), 2026-05-31 (M0 TASK 0.3 - mode2 was wrongly
     # left at CRF 18; restored progressive mode0<mode1<mode2<mode3 compression).
-    if crf is not None:
-        resolved_crf = int(crf)
-    elif mode == "mode3":
-        resolved_crf = 38
-    elif mode == "mode2":
-        resolved_crf = 23
-    else:
-        resolved_crf = 18
+    resolved_crf = _resolve_foreground_crf(mode, crf)
 
     # Codec resolution (TASK 1.6, codec gate RESOLVED 2026-06-01). When the
     # caller passes no explicit codec (codec is None / "auto"), pick the
@@ -413,8 +508,7 @@ def run_pipeline(
     # (libsvtav1). An explicit codec always wins. ROIEncoder still auto-falls
     # back to FALLBACK_CODEC if the running FFmpeg lacks the chosen encoder.
     # Author: Bloodawn (KheivenD), 2026-06-02 (per-mode codec).
-    if codec is None or str(codec).strip().lower() in ("", "auto"):
-        codec = default_codec_for_mode(mode)
+    codec = _resolve_codec(mode, codec)
 
     # ── VMAF-targeted rate control (R5 TASK 5.1) ─────────────────────────────
     # Opt-in: when target_vmaf is set and the source is a FILE, sample-encode a
@@ -423,29 +517,13 @@ def run_pipeline(
     # search never raises and never hangs: any failure (no libvmaf, live source,
     # no convergence) keeps resolved_crf and logs the reason.
     # Design: docs/RESEARCH-VMAF-TARGET.md.
-    if target_vmaf is not None and not isinstance(input_source, int):
-        try:
-            from compression.vmaf_target import find_crf_for_target
-        except ModuleNotFoundError:  # pragma: no cover - import path shim
-            from src.compression.vmaf_target import find_crf_for_target
-        _tv = find_crf_for_target(
-            input_source, codec=codec, fixed_crf=resolved_crf,
-            target_vmaf=target_vmaf, preset=encode_preset,
-        )
-        if _tv.used_target:
-            log.info("VMAF target %.1f: CRF %d -> %d (measured VMAF %.2f, "
-                     "%d probe(s)%s)", _tv.target_vmaf, resolved_crf, _tv.crf,
-                     _tv.measured_vmaf if _tv.measured_vmaf is not None else -1.0,
-                     _tv.probes, ", cached" if _tv.cached else "")
-            resolved_crf = _tv.crf
-        else:
-            log.info("VMAF target requested but not used (%s); keeping fixed CRF %d.",
-                     _tv.fallback_reason, resolved_crf)
+    resolved_crf = _apply_vmaf_target(input_source, codec, resolved_crf,
+                                      target_vmaf, encode_preset)
 
     # Background CRF (dual-CRF background stream). None keeps the encoder's own
     # default; a preset (M3 TASK 3.1) or explicit caller can raise it for more
     # background compression. Author: Bloodawn (KheivenD), 2026-06-03.
-    _bg_crf = int(background_crf) if background_crf is not None else 40
+    _bg_crf = _resolve_background_crf(background_crf)
 
     # Auto safety cap: on hard or noisy footage, or with the ultrafast preset
     # of modes 2 and 3, CRF encoding can land above the source's own bitrate
@@ -454,15 +532,8 @@ def run_pipeline(
     # Skipped for mode0 (its Archive preset is "quality over size"), for live
     # sources (no file to measure), and when the caller gave a cap (theirs
     # wins, even above the source rate).
-    if not max_bitrate_kbps and mode != "mode0":
-        _auto_cap_kbps = _source_bitrate_kbps(input_source, total_frames, fps)
-        if _auto_cap_kbps > 0:
-            log.info(
-                "No max-bitrate-kbps given: capping at the source file's own "
-                "~%d kbps so compression can't make the file bigger.",
-                _auto_cap_kbps,
-            )
-            max_bitrate_kbps = _auto_cap_kbps
+    max_bitrate_kbps = _resolve_max_bitrate_kbps(
+        mode, max_bitrate_kbps, input_source, total_frames, fps)
 
     encoder = ROIEncoder(
         output_dir=output_dir,

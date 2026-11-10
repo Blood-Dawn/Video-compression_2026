@@ -31,23 +31,29 @@ import time
 import uuid
 from pathlib import Path
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
+from werkzeug.exceptions import RequestEntityTooLarge
 
 try:
+    from gui.auth import SCHEME_BEARER, current_auth_scheme
     from gui.logging_setup import log
     from gui.routes.files_bp import _ALLOWED_EXTENSIONS, _upload_dir
     from utils.ffmpeg import ffprobe_path
     from utils.paths import data_dir
+    from utils import upload_limits as _limits
 except ModuleNotFoundError:  # pragma: no cover - import path shim
+    from src.gui.auth import SCHEME_BEARER, current_auth_scheme
     from src.gui.logging_setup import log
     from src.gui.routes.files_bp import _ALLOWED_EXTENSIONS, _upload_dir
     from src.utils.ffmpeg import ffprobe_path
     from src.utils.paths import data_dir
+    from src.utils import upload_limits as _limits
 
 ingest_bp = Blueprint("ingest", __name__)
 
 _ID_RE = _re.compile(r"^[a-f0-9]{16,32}$")
-_MAX_SIZE = 8 * 1024 * 1024 * 1024  # 8 GB cap per upload
+# The per-upload size cap is configurable (utils/upload_limits.py, default 8 GB).
+_MAX_CHUNK_BYTES = 16 * 1024 * 1024  # one chunk body is read into memory
 CHUNK_HINT = 1024 * 1024
 
 # Two guards:
@@ -172,8 +178,9 @@ def api_upload_begin():
     suffix = Path(name).suffix.lower()
     if not name or suffix not in _ALLOWED_EXTENSIONS:
         return jsonify({"error": f"File type {suffix or '?'} not allowed"}), 400
-    if size <= 0 or size > _MAX_SIZE:
-        return jsonify({"error": "size must be positive and under 8 GB"}), 400
+    cap_gb = _limits.max_upload_gb()
+    if size <= 0 or size > _limits.max_upload_bytes():
+        return jsonify({"error": f"size must be positive and under {_limits.describe(cap_gb)}"}), 400
     upload_id = uuid.uuid4().hex[:24]
     part, meta = _paths(upload_id)
     part.write_bytes(b"")
@@ -191,6 +198,29 @@ def api_upload_status():
     return jsonify({"offset": part.stat().st_size if part.exists() else 0})
 
 
+@ingest_bp.route("/api/upload/limit", methods=["GET", "POST"])
+def api_upload_limit():
+    """Read or change the per-file upload size cap (GB, default 8).
+
+    Changing it needs the dashboard password, not a device token: a stolen
+    phone token must not be able to lift the guard that protects the disk.
+    """
+    if request.method == "GET":
+        return jsonify({"config": _limits.public_config()})
+    if current_auth_scheme() == SCHEME_BEARER:
+        return Response(
+            '{"error": "Changing the upload limit requires the dashboard '
+            'password, not a device token."}',
+            403, {"Content-Type": "application/json"})
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or "max_upload_gb" not in data:
+        return jsonify({"error": "Request body must be a JSON object with max_upload_gb"}), 400
+    ok, error, cfg = _limits.save_max_upload_gb(data["max_upload_gb"])
+    if not ok:
+        return jsonify({"error": error, "config": cfg}), 400
+    return jsonify({"ok": True, "config": cfg})
+
+
 @ingest_bp.route("/api/upload/chunk", methods=["POST"])
 def api_upload_chunk():
     upload_id = request.args.get("upload_id", "")
@@ -202,7 +232,14 @@ def api_upload_chunk():
         offset = int(request.args.get("offset", "-1"))
     except (TypeError, ValueError):
         offset = -1
-    blob = request.get_data(cache=False)
+    if request.content_length is not None and request.content_length > _MAX_CHUNK_BYTES:
+        return jsonify({"error": "chunk too large"}), 413
+    # Also bounds a body sent without a Content-Length (chunked transfer).
+    request.max_content_length = _MAX_CHUNK_BYTES
+    try:
+        blob = request.get_data(cache=False)
+    except RequestEntityTooLarge:
+        return jsonify({"error": "chunk too large"}), 413
     if not blob:
         return jsonify({"error": "empty chunk"}), 400
     # The read-check-write sequence is the critical section.

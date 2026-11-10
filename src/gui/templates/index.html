@@ -7,8 +7,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet" />
-  <!-- hls.js - MIT licensed, browser-based HLS playback (task 4.1) -->
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <!-- hls.js 1.7.4 - Apache-2.0, vendored (not CDN, not @latest) so a changed
+       or compromised upstream release can never run in the dashboard. See
+       static/js/vendor/README.md. -->
+  <script src="{{ url_for('static', filename='js/vendor/hls.min.js') }}"></script>
   <!-- uPlot - MIT licensed, vendored (not CDN) so METRICS history charts
        still work in the offline Field build. v1.6.31. -->
   <link rel="stylesheet" href="{{ url_for('static', filename='css/uPlot.min.css') }}" />
@@ -3091,6 +3093,29 @@
             </div>
           </details>
 
+          <!-- Upload size limit. One cap for both upload routes so a single
+               request cannot fill the disk. Default 8 GB, raise it here. -->
+          <details class="source-advanced" id="upload-limit-panel" style="margin-bottom:0.8rem;" ontoggle="if(this.open)uploadLimitRefresh()">
+            <summary style="cursor:pointer;font-family:var(--display);font-size:0.95rem;letter-spacing:0.08em;color:var(--text-dim);">
+              UPLOAD SIZE LIMIT
+            </summary>
+            <div style="padding:0.5rem 0 0;">
+              <div style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
+                The largest single video file the dashboard will accept from a browser or the
+                phone app. Bigger files are refused before they are written to disk.
+              </div>
+              <div class="config-field">
+                <label class="config-label" for="upload-limit-gb">Maximum file size (GB)</label>
+                <input type="number" id="upload-limit-gb" value="8" min="0.1" step="any"
+                       style="width:100%;font-family:var(--mono);font-size:0.65rem;" />
+              </div>
+              <div style="margin-top:0.6rem;display:flex;gap:0.4rem;flex-wrap:wrap;">
+                <button class="btn btn-primary" id="upload-limit-save-btn" onclick="uploadLimitSave()">Save</button>
+              </div>
+              <div id="upload-limit-status" style="font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);margin-top:0.5rem;line-height:1.6;"></div>
+            </div>
+          </details>
+
           <!-- Recent behavior events (Week 3 TASKS 3.5/3.6). Read-only: the
                zone editor (above, once built) is where events get configured,
                this panel is just "what fired". Backed by the existing
@@ -4548,6 +4573,7 @@
   <script src="{{ url_for('static', filename='js/events.js') }}"></script>
   <script src="{{ url_for('static', filename='js/zone_editor.js') }}"></script>
   <script src="{{ url_for('static', filename='js/webhook.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/upload_limit.js') }}"></script>
   <script src="{{ url_for('static', filename='js/devices.js') }}"></script>
   <script src="{{ url_for('static', filename='js/timelapse.js') }}"></script>
 

@@ -39,21 +39,14 @@ app = Flask(__name__, template_folder="templates")
 # Author: Bloodawn (KheivenD), 2026-05-14 (installer prep).
 try:
     from utils import paths as _paths
+    from gui.secret_key import load_or_create_secret_key as _load_or_create_secret_key
 except ModuleNotFoundError:
     from src.utils import paths as _paths
+    from src.gui.secret_key import load_or_create_secret_key as _load_or_create_secret_key
 
 # Persist SECRET_KEY so signed cookies/sessions survive restarts.
 _SK_FILE = _paths.state_file("flask_secret")
-try:
-    app.config["SECRET_KEY"] = _SK_FILE.read_bytes()
-except FileNotFoundError:
-    _sk = os.urandom(32)
-    _SK_FILE.write_bytes(_sk)
-    try:
-        _SK_FILE.chmod(0o600)   # owner-only; a no-op on Windows
-    except OSError:
-        pass
-    app.config["SECRET_KEY"] = _sk
+app.config["SECRET_KEY"] = _load_or_create_secret_key(_SK_FILE)
 
 # State globals live in gui.state and logging in gui.logging_setup. They are
 # re-exported here because the gui.app.* test contract reaches into them.

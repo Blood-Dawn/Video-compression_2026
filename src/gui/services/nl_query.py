@@ -68,18 +68,8 @@ def _to_24h(hour: int, ampm: str | None) -> int:
     return min(max(hour, 0), 23)
 
 
-def parse(q: str) -> dict[str, Any]:
-    """Parse a phrase into SQL filter clauses + bound params.
-
-    Returns {"clauses": [sql...], "params": [...], "explain": {...}}.
-    ``explain`` echoes what was understood so the UI can show it and the
-    user can correct a misread instead of silently getting wrong results.
-    """
-    text = (q or "").strip().lower()
-    clauses: list[str] = []
-    params: list[Any] = []
-    explain: dict[str, Any] = {}
-
+def _parse_time_windows(text: str, clauses: list, params: list, explain: dict) -> str:
+    """Hour windows ("between 9am and 5pm", "after 6pm", "before 8"). Returns the leftover text."""
     # Time windows first (their words must not fall through to free text).
     m = re.search(r"between\s+(\d{1,2})\s*(am|pm)?\s+and\s+(\d{1,2})\s*(am|pm)?", text)
     if m:
@@ -104,7 +94,11 @@ def parse(q: str) -> dict[str, Any]:
         params.append(h)
         explain["before_hour"] = h
         text = text.replace(m.group(0), " ")
+    return text
 
+
+def _parse_dates(text: str, clauses: list, params: list, explain: dict) -> str:
+    """An ISO date, "today" or "yesterday". Returns the leftover text."""
     # Absolute date (ISO) and relative days. timestamp is TEXT, ISO-ordered,
     # so a date is a simple prefix match on the bound value.
     m = re.search(r"\b(20\d{2}-\d{2}-\d{2})\b", text)
@@ -120,7 +114,11 @@ def parse(q: str) -> dict[str, Any]:
             params.append(day)
             explain["date"] = day
             text = re.sub(rf"\b{word}\b", " ", text)
+    return text
 
+
+def _parse_camera(text: str, clauses: list, params: list, explain: dict) -> str:
+    """"cam2", "camera 2", "camera_north". Returns the leftover text."""
     # Camera: "cam2", "camera 2", "camera_north".
     m = re.search(r"\bcam(?:era)?[\s_]*([a-z0-9_-]+)\b", text)
     if m:
@@ -129,7 +127,11 @@ def parse(q: str) -> dict[str, Any]:
         params.append(cam)
         explain["camera"] = cam
         text = text.replace(m.group(0), " ")
+    return text
 
+
+def _parse_counts(text: str, clauses: list, params: list, explain: dict) -> str:
+    """"more than 2 people", "at least 3 cars". Returns the leftover text."""
     # Count comparisons: "more than 2 people", "at least 3 cars".
     m = re.search(r"(?:more than|over|at least)\s+(\d+)\s+(people|persons|person|cars|vehicles)", text)
     if m:
@@ -140,7 +142,11 @@ def parse(q: str) -> dict[str, Any]:
         params.append(n)
         explain["count"] = {col: f"{op} {n}"}
         text = text.replace(m.group(0), " ")
+    return text
 
+
+def _parse_word_filters(text: str, clauses: list, params: list, explain: dict) -> list[str]:
+    """Map colors, classes, scenes and times of day; returns the unknown words."""
     # Word-mapped filters over the remaining tokens.
     free_text: list[str] = []
     for token in re.findall(r"[a-z0-9_-]+", text):
@@ -172,6 +178,28 @@ def parse(q: str) -> dict[str, Any]:
             explain["hours"] = [lo, hi]
         else:
             free_text.append(token)
+    return free_text
+
+
+def parse(q: str) -> dict[str, Any]:
+    """Parse a phrase into SQL filter clauses + bound params.
+
+    Returns {"clauses": [sql...], "params": [...], "explain": {...}}.
+    ``explain`` echoes what was understood so the UI can show it and the
+    user can correct a misread instead of silently getting wrong results.
+    """
+    text = (q or "").strip().lower()
+    clauses: list[str] = []
+    params: list[Any] = []
+    explain: dict[str, Any] = {}
+
+    # Stage order matters: each stage removes the words it understood, so
+    # later stages (and the free text fallback) never see them.
+    text = _parse_time_windows(text, clauses, params, explain)
+    text = _parse_dates(text, clauses, params, explain)
+    text = _parse_camera(text, clauses, params, explain)
+    text = _parse_counts(text, clauses, params, explain)
+    free_text = _parse_word_filters(text, clauses, params, explain)
 
     # Unknown words degrade to a broad LIKE, never an error (R5 acceptance).
     for token in free_text:

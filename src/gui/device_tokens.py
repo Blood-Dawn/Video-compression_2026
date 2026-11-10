@@ -254,6 +254,29 @@ def _read_all_strict() -> list[DeviceToken]:
     return tokens
 
 
+_REPLACE_ATTEMPTS = 6
+_REPLACE_BACKOFF_S = 0.05
+
+
+def _replace_with_retry(tmp, dest) -> None:
+    """os.replace that survives a brief Windows sharing violation.
+
+    On Windows the destination can be held open for a moment by antivirus or an
+    indexer scanning the file that was just written, and os.replace then raises
+    PermissionError (WinError 5). That turned one device-endpoint write into a
+    500. All writers already serialize on _LOCK, so retrying a few times with a
+    short growing pause is safe; a persistent failure still raises.
+    """
+    for attempt in range(_REPLACE_ATTEMPTS):
+        try:
+            os.replace(tmp, dest)
+            return
+        except PermissionError:
+            if attempt == _REPLACE_ATTEMPTS - 1:
+                raise
+            time.sleep(_REPLACE_BACKOFF_S * (attempt + 1))
+
+
 def _write_all(tokens: list[DeviceToken]) -> None:
     """Persist the token list atomically, owner-readable only where supported."""
     global _parsed_cache
@@ -271,7 +294,7 @@ def _write_all(tokens: list[DeviceToken]) -> None:
         os.chmod(tmp, 0o600)
     except OSError:  # pragma: no cover - platform dependent
         pass
-    os.replace(tmp, p)
+    _replace_with_retry(tmp, p)
 
 
 def list_tokens() -> list[DeviceToken]:

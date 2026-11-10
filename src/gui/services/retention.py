@@ -202,6 +202,67 @@ def _delete(path: Path, comp_dir: Path) -> int:
 
 # ── purge ──────────────────────────────────────────────────────────────────────
 
+def _purge_candidates(comp_dir: Path, now: float) -> list:
+    """(path, size, mtime) of every file the purge may delete, oldest first.
+
+    Skips files an encoder is currently writing (the reliable in-flight guard)
+    and, as a backstop, files newer than _FRESH_SECONDS. Reads only.
+    """
+    files = _purgeable_files(comp_dir)
+    active = _active_outputs.snapshot() if _active_outputs is not None else set()
+    stats = []
+    for p in files:
+        if str(p) in active:
+            continue
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        if now - st.st_mtime < _FRESH_SECONDS:
+            continue
+        stats.append((p, st.st_size, st.st_mtime))
+    stats.sort(key=lambda t: t[2])  # oldest first
+    return stats
+
+
+def _purge_by_age(stats: list, comp_dir: Path, cutoff: float, summary: dict) -> set:
+    """Delete every candidate older than ``cutoff``. Returns the paths removed.
+
+    Updates the summary counters in place. Each delete goes through _delete,
+    which re-checks confinement and the in-flight guard.
+    """
+    deleted_paths = set()
+    for p, size, mtime in stats:
+        if mtime < cutoff:
+            freed = _delete(p, comp_dir)
+            if freed or not p.exists():
+                deleted_paths.add(p)
+                summary["deleted"] += 1
+                summary["by_age"] += 1
+                summary["freed_bytes"] += freed
+    return deleted_paths
+
+
+def _purge_by_size(stats: list, deleted_paths: set, comp_dir: Path, budget: float,
+                   summary: dict) -> None:
+    """Delete oldest-first among the survivors until the total fits ``budget`` bytes.
+
+    Adds what it removes to ``deleted_paths`` and updates the summary in place.
+    """
+    remaining = [(p, s, m) for (p, s, m) in stats if p not in deleted_paths]
+    total = sum(s for _, s, _ in remaining)
+    for p, size, mtime in remaining:
+        if total <= budget:
+            break
+        freed = _delete(p, comp_dir)
+        if freed or not p.exists():
+            deleted_paths.add(p)
+            summary["deleted"] += 1
+            summary["by_size"] += 1
+            summary["freed_bytes"] += freed
+            total -= size
+
+
 def purge_once(output_dir: str, policy: dict | None = None,
                now: float | None = None) -> dict:
     """Enforce the retention policy over ``<output_dir>/compressed`` once.
@@ -227,52 +288,17 @@ def purge_once(output_dir: str, policy: dict | None = None,
         summary["ran"] = True
 
         now = time.time() if now is None else now
-        files = _purgeable_files(comp_dir)
-        active = _active_outputs.snapshot() if _active_outputs is not None else set()
-        # (path, size, mtime), skipping files an encoder is currently writing
-        # (the reliable in-flight guard) and, as a backstop, too-fresh files.
-        stats = []
-        for p in files:
-            if str(p) in active:
-                continue
-            try:
-                st = p.stat()
-            except OSError:
-                continue
-            if now - st.st_mtime < _FRESH_SECONDS:
-                continue
-            stats.append((p, st.st_size, st.st_mtime))
-        stats.sort(key=lambda t: t[2])  # oldest first
+        stats = _purge_candidates(comp_dir, now)
 
         deleted_paths = set()
 
         # 1) Age purge.
         if max_age_days > 0:
-            cutoff = now - max_age_days * 86400
-            for p, size, mtime in stats:
-                if mtime < cutoff:
-                    freed = _delete(p, comp_dir)
-                    if freed or not p.exists():
-                        deleted_paths.add(p)
-                        summary["deleted"] += 1
-                        summary["by_age"] += 1
-                        summary["freed_bytes"] += freed
+            deleted_paths |= _purge_by_age(stats, comp_dir, now - max_age_days * 86400, summary)
 
         # 2) Size purge (oldest-first) on what remains.
         if max_total_gb > 0:
-            budget = max_total_gb * _GB
-            remaining = [(p, s, m) for (p, s, m) in stats if p not in deleted_paths]
-            total = sum(s for _, s, _ in remaining)
-            for p, size, mtime in remaining:
-                if total <= budget:
-                    break
-                freed = _delete(p, comp_dir)
-                if freed or not p.exists():
-                    deleted_paths.add(p)
-                    summary["deleted"] += 1
-                    summary["by_size"] += 1
-                    summary["freed_bytes"] += freed
-                    total -= size
+            _purge_by_size(stats, deleted_paths, comp_dir, max_total_gb * _GB, summary)
 
         if deleted_paths:
             cidx.prune_missing()
@@ -303,6 +329,55 @@ def _notify_purge(summary: dict, output_dir: str) -> None:
 
 # ── estimate (days = disk / bitrate) ────────────────────────────────────────────
 
+def _folder_usage(comp_dir: Path):
+    """(total bytes, oldest mtime, newest mtime) of the purgeable files in a folder.
+
+    The times are None when there are no files; files that vanish mid-scan are
+    skipped.
+    """
+    used = 0
+    oldest = None
+    newest = None
+    if comp_dir.is_dir():
+        for p in _purgeable_files(comp_dir.resolve()):
+            try:
+                st = p.stat()
+            except OSError:
+                continue
+            used += st.st_size
+            oldest = st.st_mtime if oldest is None else min(oldest, st.st_mtime)
+            newest = st.st_mtime if newest is None else max(newest, st.st_mtime)
+    return used, oldest, newest
+
+
+def _estimate_bytes_per_day(used: int, oldest, newest):
+    """Daily growth: from recent job history, else the folder size over its age."""
+    bpd = _bytes_per_day_from_history()
+    if bpd is None and used > 0 and oldest and newest and newest > oldest:
+        span_days = max((newest - oldest) / 86400, 1.0 / 24)  # >= 1 hour
+        bpd = used / span_days
+    return bpd
+
+
+def _headroom_days(bpd, used: int, usage, pol: dict):
+    """Days until full: the tighter of the size budget and the free disk.
+
+    None when growth is unknown or neither limit applies.
+    """
+    if not (bpd and bpd > 0):
+        return None
+    headroom_bytes = None
+    max_total_gb = float(pol.get("max_total_gb") or 0.0) if pol.get("enabled") else 0.0
+    if max_total_gb > 0:
+        headroom_bytes = max(0.0, max_total_gb * _GB - used)
+    if usage is not None:
+        disk_headroom = float(usage.free)
+        headroom_bytes = disk_headroom if headroom_bytes is None else min(headroom_bytes, disk_headroom)
+    if headroom_bytes is None:
+        return None
+    return round(headroom_bytes / bpd, 1)
+
+
 def estimate(output_dir: str, policy: dict | None = None) -> dict:
     """Estimate retention headroom: free disk, current footage size, and days.
 
@@ -323,41 +398,17 @@ def estimate(output_dir: str, policy: dict | None = None) -> dict:
             usage = None
 
         comp_dir = cidx.compressed_subdir(base, create=False)
-        used = 0
-        oldest = None
-        newest = None
-        if comp_dir.is_dir():
-            for p in _purgeable_files(comp_dir.resolve()):
-                try:
-                    st = p.stat()
-                except OSError:
-                    continue
-                used += st.st_size
-                oldest = st.st_mtime if oldest is None else min(oldest, st.st_mtime)
-                newest = st.st_mtime if newest is None else max(newest, st.st_mtime)
+        used, oldest, newest = _folder_usage(comp_dir)
         out["used_gb"] = round(used / _GB, 2)
 
-        bpd = _bytes_per_day_from_history()
-        if bpd is None and used > 0 and oldest and newest and newest > oldest:
-            span_days = max((newest - oldest) / 86400, 1.0 / 24)  # >= 1 hour
-            bpd = used / span_days
+        bpd = _estimate_bytes_per_day(used, oldest, newest)
         out["bytes_per_day"] = int(bpd) if bpd else None
 
         pol = policy if policy is not None else get_policy()
         if pol.get("enabled") and int(pol.get("max_age_days") or 0) > 0:
             out["policy_days"] = int(pol["max_age_days"])
 
-        # Days of headroom: prefer the tighter of (size budget) and (free disk).
-        if bpd and bpd > 0:
-            headroom_bytes = None
-            max_total_gb = float(pol.get("max_total_gb") or 0.0) if pol.get("enabled") else 0.0
-            if max_total_gb > 0:
-                headroom_bytes = max(0.0, max_total_gb * _GB - used)
-            if usage is not None:
-                disk_headroom = float(usage.free)
-                headroom_bytes = disk_headroom if headroom_bytes is None else min(headroom_bytes, disk_headroom)
-            if headroom_bytes is not None:
-                out["est_days_headroom"] = round(headroom_bytes / bpd, 1)
+        out["est_days_headroom"] = _headroom_days(bpd, used, usage, pol)
 
         out["available"] = True
     except Exception as exc:  # noqa: BLE001

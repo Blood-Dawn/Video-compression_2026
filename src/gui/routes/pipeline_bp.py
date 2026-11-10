@@ -136,59 +136,63 @@ def api_jobs_recent():
     return jsonify({"jobs": _job_history.recent_jobs(limit=limit)})
 
 
-@pipeline_bp.route("/api/start", methods=["POST"])
-def api_start():
-    # _pipeline_thread / _stop_event live in pipeline_runner; assign through
-    # that module so the forwarder and /api/stop see them.
-    with _state_lock:
-        if _status["running"]:
-            return jsonify({"error": "Pipeline already running"}), 409
+def _parse_input_source(data: dict):
+    """Resolve the request's input_source. Returns (value, error_message).
 
-    data = request.get_json(force=True) or {}
-
-    camera_id = str(data.get("camera_id", "cam_00")).strip()
-    if not _CAMERA_ID_RE.match(camera_id):
-        return jsonify({"error": "camera_id must be 1-64 alphanumeric/dash/underscore chars"}), 400
-
-    # A digit string is a camera index, anything else a path or URL.
+    A digit string is a camera index (int); anything else is a path or URL,
+    which must pass the SSRF guard (SEC-013: blocks file:// and
+    cloud-metadata or link-local targets that cv2.VideoCapture would open).
+    """
     raw_input = str(data.get("input_source", "0")).strip()
     try:
-        resolved_input = int(raw_input)
+        return int(raw_input), None
     except ValueError:
-        resolved_input = raw_input
-        # SEC-013: block file:// and cloud-metadata/link-local SSRF targets
-        # (cv2.VideoCapture would otherwise open them).
-        _ok, _why = is_safe_input_source(resolved_input)
-        if not _ok:
-            return jsonify({"error": f"input_source not allowed: {_why}"}), 400
+        pass
+    ok, why = is_safe_input_source(raw_input)
+    if not ok:
+        return None, f"input_source not allowed: {why}"
+    return raw_input, None
 
-    # Default output dir: the folder chosen in Setup, else a local default;
-    # never an implicit cloud folder (see _default_output_dir).
-    # Author: Bloodawn (KheivenD), 2026-05-02.
-    raw_out = data.get("output_dir", "").strip() or _default_output_dir()
-    try:
-        output_dir = str(_safe_output_dir(raw_out))
-    except ValueError as e:
-        return jsonify({"error": str(e)}), 400
 
+def _validate_encrypt_inputs(data: dict):
+    """Check the encryption key file and credentials.
+
+    Returns (encrypt_key_file, error_message); the key file comes back as a
+    resolved path string or None. Rejects encrypt=True with no credential:
+    otherwise the encoder writes plaintext while the dashboard's ENCRYPT chip
+    claims it is encrypted.
+    """
     encrypt_key_file = (data.get("encrypt_key_file") or "").strip() or None
     if encrypt_key_file:
         kf = Path(encrypt_key_file).resolve()
         if not kf.exists():
-            return jsonify({"error": f"encrypt_key_file not found: {kf}"}), 400
+            return None, f"encrypt_key_file not found: {kf}"
         if not kf.is_file():
-            return jsonify({"error": "encrypt_key_file must be a regular file"}), 400
+            return None, "encrypt_key_file must be a regular file"
         encrypt_key_file = str(kf)
-
-    # Reject encrypt=True with no credential: otherwise the encoder writes
-    # plaintext while the dashboard's ENCRYPT chip claims it is encrypted.
     encrypt_password = (data.get("encrypt_password") or "").strip()
     if bool(data.get("encrypt", False)) and not encrypt_password and not encrypt_key_file:
-        return jsonify({
-            "error": "encrypt requires encrypt_password or encrypt_key_file "
-                     "(a run would otherwise silently write unencrypted output)"
-        }), 400
+        return None, ("encrypt requires encrypt_password or encrypt_key_file "
+                      "(a run would otherwise silently write unencrypted output)")
+    return encrypt_key_file, None
 
+
+def _number(data: dict, key: str, cast, default=None):
+    """data[key] converted with int or float, or ValueError naming the field.
+
+    A value the client sent that is not a number is the client's mistake, so
+    api_start answers it with a 400 (RFC 9110: 400 for a client error, 500 for
+    a server fault) instead of letting the conversion crash into a 500.
+    """
+    try:
+        return cast(data.get(key, default))
+    except (TypeError, ValueError):
+        raise ValueError(f"{key} must be a number") from None
+
+
+def _build_start_config(data: dict, camera_id: str, resolved_input, output_dir: str,
+                        encrypt_key_file):
+    """The pipeline config dict for a validated start request."""
     # A live camera/stream defaults to 10 min segments, a file to 60 s. Only
     # when the caller omits segment_seconds; an explicit value always wins.
     _is_live_input = isinstance(resolved_input, int) or (
@@ -207,15 +211,15 @@ def api_start():
         "enhance": bool(data.get("enhance", False)),
         "enhance_model": data.get("enhance_model", "bicubic"),
         "enhance_scale": data.get("enhance_scale", 4),
-        "enhance_every_n": int(data.get("enhance_every_n", 5)),
-        "enhance_max_roi_px": int(data.get("enhance_max_roi_px", 200)),
+        "enhance_every_n": _number(data, "enhance_every_n", int, 5),
+        "enhance_max_roi_px": _number(data, "enhance_max_roi_px", int, 200),
         "enhance_device": data.get("enhance_device", "auto"),
         "upscale_output": bool(data.get("upscale_output", False)),
         "encrypt": bool(data.get("encrypt", False)),
         "encrypt_password": data.get("encrypt_password", ""),
         "encrypt_key_file": encrypt_key_file,
         "object_filter": bool(data.get("object_filter", False)),
-        "filter_confidence": float(data.get("filter_confidence", 0.30)),
+        "filter_confidence": _number(data, "filter_confidence", float, 0.30),
         # Codec: "auto" (default; libx264 for mode0/mode1, libsvtav1 for
         # mode2/mode3 via config.default_codec_for_mode), "libsvtav1",
         # "libaom-av1" (slower reference AV1) or "libx264". H.265/HEVC is not
@@ -226,11 +230,11 @@ def api_start():
         # Foreground CRF. None means the mode default (18 for Mode 0/1/2, 38
         # for Mode 3). Lower = better quality, larger file.
         # Author: Bloodawn (KheivenD), 2026-05-02 (Mode 3 redo).
-        "crf": (int(data.get("crf")) if str(data.get("crf", "")).strip() else None),
+        "crf": (_number(data, "crf", int) if str(data.get("crf", "")).strip() else None),
         # background_crf drives the dual-CRF background stream (None keeps the
         # encoder default); preset names the surveillance preset the config
         # came from (informational).
-        "background_crf": (int(data.get("background_crf"))
+        "background_crf": (_number(data, "background_crf", int)
                            if str(data.get("background_crf", "")).strip() else None),
         "preset": (str(data.get("preset")).strip() or None) if data.get("preset") else None,
         "verbose": bool(data.get("verbose", False)),
@@ -250,6 +254,44 @@ def api_start():
         "target_vmaf": _clamp_float_or_none(
             data.get("target_vmaf"), _TARGET_VMAF_MIN, _TARGET_VMAF_MAX),
     }
+    return config
+
+
+@pipeline_bp.route("/api/start", methods=["POST"])
+def api_start():
+    # _pipeline_thread / _stop_event live in pipeline_runner; assign through
+    # that module so the forwarder and /api/stop see them.
+    with _state_lock:
+        if _status["running"]:
+            return jsonify({"error": "Pipeline already running"}), 409
+
+    data = request.get_json(force=True) or {}
+
+    camera_id = str(data.get("camera_id", "cam_00")).strip()
+    if not _CAMERA_ID_RE.match(camera_id):
+        return jsonify({"error": "camera_id must be 1-64 alphanumeric/dash/underscore chars"}), 400
+
+    resolved_input, input_error = _parse_input_source(data)
+    if input_error:
+        return jsonify({"error": input_error}), 400
+
+    # Default output dir: the folder chosen in Setup, else a local default;
+    # never an implicit cloud folder (see _default_output_dir).
+    # Author: Bloodawn (KheivenD), 2026-05-02.
+    raw_out = data.get("output_dir", "").strip() or _default_output_dir()
+    try:
+        output_dir = str(_safe_output_dir(raw_out))
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    encrypt_key_file, encrypt_error = _validate_encrypt_inputs(data)
+    if encrypt_error:
+        return jsonify({"error": encrypt_error}), 400
+
+    try:
+        config = _build_start_config(data, camera_id, resolved_input, output_dir, encrypt_key_file)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
     # A job id clients can correlate across /api/status and /api/jobs/recent.
     config["job_id"] = _uuid.uuid4().hex[:12]

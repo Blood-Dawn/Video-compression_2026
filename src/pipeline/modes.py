@@ -90,30 +90,3 @@ def get_mode_decision(mode: str, regions: Iterable[object]) -> ModeDecision:
     # mode3 (object-only) all keep event frames only; they differ in how the
     # encoder renders those frames, not in which frames are kept.
     return ModeDecision(buffer_frame=has_targets, target_detected=has_targets)
-
-
-def describe_mode(mode: str) -> str:
-    """
-    Human-readable description for logs / CLI help / future UI use.
-    """
-    validate_mode(mode)
-
-    descriptions = {
-        "mode0": (
-            "Current full-segment pipeline: store all post-warmup frames, "
-            "whether targets are present or not."
-        ),
-        "mode1": (
-            "Standard event recording: store only post-warmup frames with "
-            "detected foreground objects."
-        ),
-        "mode2": (
-            "Background keyframe plus object patches: store detected "
-            "bounding-box pixels composited over a clean scene background."
-        ),
-        "mode3": (
-            "Object-only segment: store detected bounding-box pixels on a "
-            "black canvas using the normal MP4 encoder."
-        ),
-    }
-    return descriptions[mode]

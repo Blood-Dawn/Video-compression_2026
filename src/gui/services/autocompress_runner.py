@@ -338,6 +338,45 @@ def _safe_delete_original(src: Path, output: Path, comp_dir: Path, watch_root: P
 
 # ── one scan pass ─────────────────────────────────────────────────────────────
 
+def _scan_settings(profile, settle_seconds, stable_checks):
+    """(recursive, settle_seconds, stable_checks) for a scan pass.
+
+    A named watch-folder profile supplies the layout and stability tuning;
+    explicit settle_seconds or stable_checks arguments win over the profile.
+    """
+    prof = wf.WATCHFOLDER_PROFILES.get(profile) if profile else None
+    recursive = prof.recursive if prof else False
+    if settle_seconds is None:
+        settle_seconds = prof.settle_seconds if prof else 1.0
+    if stable_checks is None:
+        stable_checks = prof.stable_checks if prof else 2
+    return recursive, settle_seconds, stable_checks
+
+
+def _find_candidates(watch_root: Path, recursive: bool, comp_resolved: Path) -> list:
+    """Supported video files under watch_root that still need compressing.
+
+    Skips anything already ingested, anything inside the compressed folder,
+    and anything that is itself a compressed output.
+    """
+    walker = watch_root.rglob("*") if recursive else watch_root.iterdir()
+    candidates = []
+    for f in walker:
+        try:
+            if not (f.is_file() and f.suffix.lower() in wf.SUPPORTED_EXTENSIONS):
+                continue
+        except OSError:
+            continue
+        if wf._already_ingested(f):
+            continue
+        if _is_within(f, comp_resolved, parent_resolved=True) or cidx.classify(f) == "compressed":
+            continue
+        if cidx.is_compressed(f):
+            continue
+        candidates.append(f)
+    return candidates
+
+
 def scan_once(
     folder: str,
     output_dir: str,
@@ -359,30 +398,11 @@ def scan_once(
     if not watch_root.is_dir():
         return []
 
-    prof = wf.WATCHFOLDER_PROFILES.get(profile) if profile else None
-    recursive = prof.recursive if prof else False
-    if settle_seconds is None:
-        settle_seconds = prof.settle_seconds if prof else 1.0
-    if stable_checks is None:
-        stable_checks = prof.stable_checks if prof else 2
+    recursive, settle_seconds, stable_checks = _scan_settings(profile, settle_seconds, stable_checks)
 
     comp_dir = cidx.compressed_subdir(output_dir)
     comp_resolved = comp_dir.resolve()
-    walker = watch_root.rglob("*") if recursive else watch_root.iterdir()
-    candidates = []
-    for f in walker:
-        try:
-            if not (f.is_file() and f.suffix.lower() in wf.SUPPORTED_EXTENSIONS):
-                continue
-        except OSError:
-            continue
-        if wf._already_ingested(f):
-            continue
-        if _is_within(f, comp_resolved, parent_resolved=True) or cidx.classify(f) == "compressed":
-            continue
-        if cidx.is_compressed(f):
-            continue
-        candidates.append(f)
+    candidates = _find_candidates(watch_root, recursive, comp_resolved)
 
     # The most recent pass OWNS the shared batch display. The daemon loop and
     # POST /api/autocompress/scan_now (a Flask request thread) can both run

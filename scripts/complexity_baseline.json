@@ -25,7 +25,6 @@
   "src/gui/services/path_safety.py::allowed_media_roots": 17,
   "src/gui/services/path_safety.py::is_safe_input_source": 20,
   "src/gui/services/pipeline_runner.py::_record_compressed_outputs": 19,
-  "src/gui/services/retention.py::purge_once": 29,
   "src/pipeline/content_detect.py::analyze_video": 23,
   "src/pipeline/pipeline.py::run_pipeline": 103,
   "src/utils/frame_source.py::FrameSource._init_video_ffmpeg": 16,

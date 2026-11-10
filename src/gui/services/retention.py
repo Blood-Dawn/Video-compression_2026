@@ -202,6 +202,67 @@ def _delete(path: Path, comp_dir: Path) -> int:
 
 # ── purge ──────────────────────────────────────────────────────────────────────
 
+def _purge_candidates(comp_dir: Path, now: float) -> list:
+    """(path, size, mtime) of every file the purge may delete, oldest first.
+
+    Skips files an encoder is currently writing (the reliable in-flight guard)
+    and, as a backstop, files newer than _FRESH_SECONDS. Reads only.
+    """
+    files = _purgeable_files(comp_dir)
+    active = _active_outputs.snapshot() if _active_outputs is not None else set()
+    stats = []
+    for p in files:
+        if str(p) in active:
+            continue
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        if now - st.st_mtime < _FRESH_SECONDS:
+            continue
+        stats.append((p, st.st_size, st.st_mtime))
+    stats.sort(key=lambda t: t[2])  # oldest first
+    return stats
+
+
+def _purge_by_age(stats: list, comp_dir: Path, cutoff: float, summary: dict) -> set:
+    """Delete every candidate older than ``cutoff``. Returns the paths removed.
+
+    Updates the summary counters in place. Each delete goes through _delete,
+    which re-checks confinement and the in-flight guard.
+    """
+    deleted_paths = set()
+    for p, size, mtime in stats:
+        if mtime < cutoff:
+            freed = _delete(p, comp_dir)
+            if freed or not p.exists():
+                deleted_paths.add(p)
+                summary["deleted"] += 1
+                summary["by_age"] += 1
+                summary["freed_bytes"] += freed
+    return deleted_paths
+
+
+def _purge_by_size(stats: list, deleted_paths: set, comp_dir: Path, budget: float,
+                   summary: dict) -> None:
+    """Delete oldest-first among the survivors until the total fits ``budget`` bytes.
+
+    Adds what it removes to ``deleted_paths`` and updates the summary in place.
+    """
+    remaining = [(p, s, m) for (p, s, m) in stats if p not in deleted_paths]
+    total = sum(s for _, s, _ in remaining)
+    for p, size, mtime in remaining:
+        if total <= budget:
+            break
+        freed = _delete(p, comp_dir)
+        if freed or not p.exists():
+            deleted_paths.add(p)
+            summary["deleted"] += 1
+            summary["by_size"] += 1
+            summary["freed_bytes"] += freed
+            total -= size
+
+
 def purge_once(output_dir: str, policy: dict | None = None,
                now: float | None = None) -> dict:
     """Enforce the retention policy over ``<output_dir>/compressed`` once.
@@ -227,52 +288,17 @@ def purge_once(output_dir: str, policy: dict | None = None,
         summary["ran"] = True
 
         now = time.time() if now is None else now
-        files = _purgeable_files(comp_dir)
-        active = _active_outputs.snapshot() if _active_outputs is not None else set()
-        # (path, size, mtime), skipping files an encoder is currently writing
-        # (the reliable in-flight guard) and, as a backstop, too-fresh files.
-        stats = []
-        for p in files:
-            if str(p) in active:
-                continue
-            try:
-                st = p.stat()
-            except OSError:
-                continue
-            if now - st.st_mtime < _FRESH_SECONDS:
-                continue
-            stats.append((p, st.st_size, st.st_mtime))
-        stats.sort(key=lambda t: t[2])  # oldest first
+        stats = _purge_candidates(comp_dir, now)
 
         deleted_paths = set()
 
         # 1) Age purge.
         if max_age_days > 0:
-            cutoff = now - max_age_days * 86400
-            for p, size, mtime in stats:
-                if mtime < cutoff:
-                    freed = _delete(p, comp_dir)
-                    if freed or not p.exists():
-                        deleted_paths.add(p)
-                        summary["deleted"] += 1
-                        summary["by_age"] += 1
-                        summary["freed_bytes"] += freed
+            deleted_paths |= _purge_by_age(stats, comp_dir, now - max_age_days * 86400, summary)
 
         # 2) Size purge (oldest-first) on what remains.
         if max_total_gb > 0:
-            budget = max_total_gb * _GB
-            remaining = [(p, s, m) for (p, s, m) in stats if p not in deleted_paths]
-            total = sum(s for _, s, _ in remaining)
-            for p, size, mtime in remaining:
-                if total <= budget:
-                    break
-                freed = _delete(p, comp_dir)
-                if freed or not p.exists():
-                    deleted_paths.add(p)
-                    summary["deleted"] += 1
-                    summary["by_size"] += 1
-                    summary["freed_bytes"] += freed
-                    total -= size
+            _purge_by_size(stats, deleted_paths, comp_dir, max_total_gb * _GB, summary)
 
         if deleted_paths:
             cidx.prune_missing()

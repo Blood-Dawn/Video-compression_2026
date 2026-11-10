@@ -41,7 +41,7 @@ def _setup_run(tmp_path, cam="mobile"):
     out_dir = tmp_path / "outdir"
     out_dir.mkdir()
     output = out_dir / f"{cam}_20260816T000000Z.mp4"
-    output.write_bytes(b"out" * 500)
+    output.write_bytes(b"out" * 50)       # smaller than the 300 byte source
     config = {"input_source": str(src), "output_dir": str(out_dir),
               "camera_id": cam, "mode": "mode1"}
     with pr._state_lock:
@@ -86,6 +86,24 @@ def test_unverified_output_is_not_recorded(tmp_path, monkeypatch):
     monkeypatch.setattr(cidx, "record", lambda *a, **k: called.append(a))
     pr._record_compressed_outputs(config)
     assert called == []
+
+
+def test_output_not_smaller_than_source_is_not_indexed(tmp_path, monkeypatch, fake_probe_ok):
+    src, output, config = _setup_run(tmp_path)
+    output.write_bytes(b"out" * 500)          # 1500 bytes > 300 byte source
+    called = []
+    monkeypatch.setattr(cidx, "record", lambda *a, **k: called.append(a))
+    assert pr._record_compressed_outputs(config) == "larger"
+    assert called == []
+    assert output.exists(), "the user's output file is left alone"
+
+
+def test_smaller_output_returns_none_and_is_indexed(tmp_path, monkeypatch, fake_probe_ok):
+    _, _, config = _setup_run(tmp_path)
+    called = []
+    monkeypatch.setattr(cidx, "record", lambda *a, **k: called.append(a))
+    assert pr._record_compressed_outputs(config) is None
+    assert len(called) == 1
 
 
 def test_never_raises_on_garbage_config():

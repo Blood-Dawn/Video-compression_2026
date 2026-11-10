@@ -312,6 +312,7 @@ function showJobSummaryModal(job) {
     rows.push(_jobSumRow('Segments written', String(c.segments ?? 0)));
     if (c.mode) rows.push(_jobSumRow('Mode', String(c.mode)));
     if (c.note) rows.push(_jobSumRow('Why no output', String(c.note)));
+    if (c.larger_note) rows.push(_jobSumRow('Heads up', String(c.larger_note)));
   }
   if (job.error) rows.push(_jobSumRow('Error', String(job.error)));
   const title = job.status === 'error' ? 'JOB FAILED'

@@ -96,7 +96,7 @@ function _renderPlateResults(data, busy) {
   const list = (data && data.candidate_plates) || [];
 
   const parts = [];
-  parts.push('<div style="font-family:var(--mono);font-size:0.65rem;color:var(--text-dim);margin-bottom:0.4rem;">' +
+  parts.push('<div style="font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);margin-bottom:0.4rem;">' +
              'OCR backend: <strong style="color:var(--teal);">' + (data.backend || 'unknown') + '</strong>' +
              '  ·  SR: <strong style="color:var(--teal);">' + (data.sr_backend || 'unknown') + '</strong>' +
              '  ·  frames: ' + (data.frames_examined || 0) + (data.frames_total ? (' / ' + data.frames_total) : '') +
@@ -107,7 +107,7 @@ function _renderPlateResults(data, busy) {
   } else if (!list.length) {
     parts.push('<div class="empty-state" style="padding:1rem 0;">No plate candidates above the confidence threshold.</div>');
   } else {
-    parts.push('<table class="demo-history-table" style="width:100%;font-family:var(--mono);font-size:0.65rem;">' +
+    parts.push('<table class="demo-history-table" style="width:100%;font-family:var(--mono);font-size:0.75rem;">' +
             '<thead><tr><th style="text-align:left;">Plate</th><th>Verdict</th><th>Confidence</th><th>Votes</th><th>Frames</th></tr></thead><tbody>');
     list.forEach(p => {
       const vc = _verdictColor(p.verdict);
@@ -124,12 +124,12 @@ function _renderPlateResults(data, busy) {
   }
 
   if (data.warnings && data.warnings.length) {
-    parts.push('<div style="margin-top:0.5rem;padding:0.4rem 0.6rem;background:var(--yellow-dim);border-left:2px solid var(--yellow);font-family:var(--mono);font-size:0.6rem;color:var(--text-dim);">' +
+    parts.push('<div style="margin-top:0.5rem;padding:0.4rem 0.6rem;background:var(--yellow-dim);border-left:2px solid var(--yellow);font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);">' +
                data.warnings.map(w => '⚠ ' + w).join('<br>') + '</div>');
   }
 
   // Super-resolution can hallucinate plate characters, so say how far to trust a read.
-  parts.push('<div style="margin-top:0.5rem;font-family:var(--mono);font-size:0.55rem;color:var(--text-dim);font-style:italic;">' +
+  parts.push('<div style="margin-top:0.5rem;font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);font-style:italic;">' +
           'Verdict cap: HIGH ≥ 3 frames + OCR ≥ 0.60 · MEDIUM ≥ 2 frames + OCR ≥ 0.50 · ' +
           'low/uncertain reads should be operator-verified, not actioned.' +
           '</div>');

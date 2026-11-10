@@ -33,11 +33,13 @@ function _dismissUsageBanner() {
 function _buildUsageBanner() {
   const b = document.createElement("div");
   b.id = "usage-consent-banner";
+  b.setAttribute("role", "region");
+  b.setAttribute("aria-label", "Usage statistics consent");
   b.style.cssText =
     "position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9999;"
     + "max-width:560px;width:calc(100% - 32px);background:var(--panel,#1c1c22);"
     + "border:1px solid var(--border,#333);border-radius:8px;padding:12px 14px;"
-    + "box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:0.72rem;line-height:1.45;";
+    + "box-shadow:0 8px 24px rgba(0,0,0,.4);font-size:0.75rem;line-height:1.45;";
   b.innerHTML =
     "<div style='margin-bottom:8px;'>Help improve SVCS? Share <b>anonymous</b> "
     + "usage stats (which presets/codecs you use and whether encodes succeed). "
@@ -80,7 +82,17 @@ async function initUsageConsent() {
   if (t) t.addEventListener("change", () => _setUsageConsent(t.checked));
 
   // First run (no decision yet): show the consent banner.
-  if (!data.known) _buildUsageBanner();
+  if (!data.known) {
+    // Redesign 2026-11: do not stack the consent banner on the first-run setup overlay.
+    const ov = document.getElementById("setup-overlay");
+    const overlayOpen = () => ov && getComputedStyle(ov).display !== "none";
+    if (overlayOpen()) {
+      const mo = new MutationObserver(() => { if (!overlayOpen()) { mo.disconnect(); _buildUsageBanner(); } });
+      mo.observe(ov, { attributes: true, attributeFilter: ["style", "class"] });
+    } else {
+      _buildUsageBanner();
+    }
+  }
 }
 window.initUsageConsent = initUsageConsent;
 window.addEventListener("DOMContentLoaded", initUsageConsent);

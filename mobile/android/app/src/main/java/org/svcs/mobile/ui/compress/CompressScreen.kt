@@ -49,6 +49,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -73,6 +77,7 @@ import org.svcs.mobile.ui.theme.SvcsAmber
 import org.svcs.mobile.ui.theme.SvcsAmberContainer
 import org.svcs.mobile.ui.theme.SvcsBg
 import org.svcs.mobile.ui.theme.SvcsBorder
+import org.svcs.mobile.ui.theme.SvcsBorderCtl
 import org.svcs.mobile.ui.theme.SvcsBorderBright
 import org.svcs.mobile.ui.theme.SvcsDisplay
 import org.svcs.mobile.ui.theme.SvcsGreen
@@ -87,6 +92,8 @@ import org.svcs.mobile.ui.VideoIntents
 import org.svcs.mobile.ui.clock
 import org.svcs.mobile.ui.decimalMb
 import org.svcs.mobile.ui.humanBytes
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 
 /**
  * COMPRESS tab (Fall roadmap Phase 1): the standalone, server-free compressor.
@@ -147,7 +154,7 @@ fun CompressScreen(vm: CompressViewModel) {
 @Composable
 private fun ScreenHeader(title: String, subtitle: String) {
     Column(Modifier.fillMaxWidth()) {
-        Text(title, style = MaterialTheme.typography.titleLarge, color = SvcsTextBright)
+        Text(title, style = MaterialTheme.typography.titleLarge, color = SvcsTextBright, modifier = Modifier.semantics { heading() })
         Text(subtitle.uppercase(), style = MaterialTheme.typography.labelSmall, color = SvcsTextDim)
     }
 }
@@ -186,10 +193,22 @@ private fun EmptyView(lifetime: CompressViewModel.Lifetime, onPick: () -> Unit) 
                     color = SvcsText,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 )
+                Spacer(Modifier.height(16.dp))
+                androidx.compose.material3.Button(
+                    onClick = onPick,
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
+                    shape = RoundedCornerShape(3.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = SvcsAmber,
+                        contentColor = org.svcs.mobile.ui.theme.SvcsBg,
+                    ),
+                ) {
+                    Text("Pick a video", style = MaterialTheme.typography.titleMedium)
+                }
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "OR SHARE ONE TO SVCS FROM ANY APP",
-                    style = MaterialTheme.typography.labelSmall,
+                    "You can also share a video to SVCS from any app.",
+                    style = MaterialTheme.typography.bodySmall,
                     color = SvcsTextDim,
                 )
             }
@@ -213,10 +232,10 @@ private fun EmptyView(lifetime: CompressViewModel.Lifetime, onPick: () -> Unit) 
                 )
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Step("1", "Pick", Modifier.weight(1f))
-            Step("2", "Choose", Modifier.weight(1f))
-            Step("3", "Share", Modifier.weight(1f))
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Step("1", "Pick a video", Modifier.fillMaxWidth())
+            Step("2", "Choose quality or a size limit", Modifier.fillMaxWidth())
+            Step("3", "Share or save the result", Modifier.fillMaxWidth())
         }
     }
 }
@@ -224,12 +243,17 @@ private fun EmptyView(lifetime: CompressViewModel.Lifetime, onPick: () -> Unit) 
 @Composable
 private fun Step(n: String, label: String, modifier: Modifier) {
     Row(
-        modifier.border(1.dp, SvcsBorder, RoundedCornerShape(2.dp)).padding(10.dp),
+        modifier.padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(n, fontFamily = SvcsDisplay, fontSize = 22.sp, color = SvcsAmber)
-        Spacer(Modifier.width(8.dp))
-        Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = SvcsText)
+        Box(
+            Modifier.size(24.dp).border(1.dp, org.svcs.mobile.ui.theme.SvcsBorderCtl, RoundedCornerShape(50)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(n, style = MaterialTheme.typography.labelSmall, color = SvcsText)
+        }
+        Spacer(Modifier.width(12.dp))
+        Text(label, style = MaterialTheme.typography.bodyMedium, color = SvcsTextDim)
     }
 }
 
@@ -304,7 +328,7 @@ private fun ConfigureView(s: CompressState, vm: CompressViewModel, onPick: () ->
                     shape = RoundedCornerShape(2.dp),
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedBorderColor = SvcsAmber,
-                        unfocusedBorderColor = SvcsBorder,
+                        unfocusedBorderColor = SvcsBorderCtl,
                         focusedLabelColor = SvcsAmber,
                         cursorColor = SvcsAmber,
                     ),
@@ -388,8 +412,8 @@ private fun SourceCard(s: CompressState, onChange: () -> Unit) {
                 color = SvcsAmber,
                 modifier = Modifier
                     .clip(RoundedCornerShape(2.dp))
-                    .clickable(onClick = onChange)
-                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                    .clickable(role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "Change video", onClick = onChange)
+                    .padding(horizontal = 12.dp, vertical = 16.dp),
             )
         }
     }
@@ -473,7 +497,13 @@ private fun RunningView(s: CompressState, vm: CompressViewModel) {
         SvcsPanel(modifier = Modifier.fillMaxWidth(), accent = SvcsAmber) {
             SvcsStatusPill(if (s.analyzing) "Checking for activity" else "Encoding", SvcsAmber, live = true)
             Spacer(Modifier.height(14.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                modifier = Modifier.clearAndSetSemantics {
+                    contentDescription = if (s.analyzing) "Checking the video for activity" else "Compression progress, $p percent"
+                    if (!s.analyzing) progressBarRangeInfo = ProgressBarRangeInfo(p / 100f, 0f..1f)
+                },
+            ) {
                 Text(
                     if (s.analyzing) "--" else "$p",
                     fontFamily = SvcsDisplay,
@@ -525,13 +555,18 @@ private fun DoneView(s: CompressState, vm: CompressViewModel) {
             SvcsStatusPill("Done", SvcsGreen)
             Spacer(Modifier.height(12.dp))
             if (known) {
-                Row(verticalAlignment = Alignment.Bottom) {
+                Row(
+                    verticalAlignment = Alignment.Bottom,
+                    modifier = Modifier.clearAndSetSemantics {
+                        contentDescription = if (savedPct >= 5) "$savedPct percent smaller" else if (savedPct >= 0) "Barely smaller, $savedPct percent" else "${-savedPct} percent larger"
+                    },
+                ) {
                     Text(
-                        if (savedPct >= 0) "-$savedPct%" else "+${-savedPct}%",
+                        if (savedPct >= 5) "-$savedPct%" else if (savedPct >= 0) "$savedPct%" else "+${-savedPct}%",
                         fontFamily = SvcsDisplay,
                         fontSize = 80.sp,
                         lineHeight = 76.sp,
-                        color = if (savedPct >= 0) SvcsGreen else SvcsOrange,
+                        color = if (savedPct >= 5) SvcsGreen else if (savedPct >= 0) SvcsTextDim else SvcsOrange,
                     )
                     Spacer(Modifier.width(10.dp))
                     Text(
@@ -539,6 +574,14 @@ private fun DoneView(s: CompressState, vm: CompressViewModel) {
                         style = MaterialTheme.typography.labelMedium,
                         color = SvcsTextDim,
                         modifier = Modifier.padding(bottom = 12.dp),
+                    )
+                }
+                if (savedPct in 0..4) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "This video was already compact, so there was little to save. Try Low quality or a size limit.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = SvcsOrange,
                     )
                 }
                 Spacer(Modifier.height(12.dp))
@@ -599,7 +642,7 @@ private fun DoneView(s: CompressState, vm: CompressViewModel) {
 
 @Composable
 private fun SizeBar(label: String, bytes: Long, fraction: Float, color: Color) {
-    Column {
+    Column(Modifier.clearAndSetSemantics { contentDescription = "$label, ${humanBytes(bytes)}" }) {
         Row {
             Text(label.uppercase(), style = MaterialTheme.typography.labelSmall, color = SvcsTextDim, modifier = Modifier.weight(1f))
             Text(humanBytes(bytes), fontFamily = SvcsMono, fontSize = 12.sp, color = SvcsTextBright)

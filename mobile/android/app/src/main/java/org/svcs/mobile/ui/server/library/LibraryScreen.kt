@@ -44,6 +44,8 @@ import org.svcs.mobile.ui.theme.SvcsRed
 import org.svcs.mobile.ui.theme.SvcsSurface2
 import org.svcs.mobile.ui.theme.SvcsTextDim
 import org.svcs.mobile.ui.theme.SvcsYellow
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.minimumInteractiveComponentSize
 
 /**
  * LIBRARY tab: a paginated grid of recorded clips (M2.1).
@@ -320,8 +322,9 @@ private fun KindChip(label: String, selected: Boolean, onClick: () -> Unit) {
         style = MaterialTheme.typography.labelSmall,
         color = if (selected) SvcsAmber else SvcsTextDim,
         modifier = Modifier
-            .border(1.dp, if (selected) SvcsAmber else SvcsBorder, RoundedCornerShape(2.dp))
-            .clickable(onClick = onClick)
+            .selectable(selected = selected, role = androidx.compose.ui.semantics.Role.RadioButton, onClick = onClick)
+            .minimumInteractiveComponentSize()
+            .border(1.dp, if (selected) SvcsAmber else org.svcs.mobile.ui.theme.SvcsBorderCtl, RoundedCornerShape(2.dp))
             .padding(horizontal = 10.dp, vertical = 6.dp),
     )
 }
@@ -344,7 +347,7 @@ private fun ClipTile(
             .fillMaxWidth()
             .border(1.dp, SvcsBorder, RoundedCornerShape(2.dp))
             .background(SvcsSurface2)
-            .clickable(enabled = playable, onClick = onPlay),
+            .clickable(enabled = playable, role = androidx.compose.ui.semantics.Role.Button, onClickLabel = "Play video", onClick = onPlay),
     ) {
         Box(
             Modifier
@@ -395,7 +398,8 @@ private fun ClipTile(
                 if (playable) {
                     Text("PLAY", style = MaterialTheme.typography.labelSmall,
                         color = SvcsAmber,
-                        modifier = Modifier.clickable(onClick = onPlay)
+                        modifier = Modifier.clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onPlay)
+                            .minimumInteractiveComponentSize()
                             .padding(top = 6.dp))
                 }
                 // Compress an original that has no verified compressed copy
@@ -406,12 +410,14 @@ private fun ClipTile(
                     Text("COMPRESS", style = MaterialTheme.typography.labelSmall,
                         color = if (compressEnabled) SvcsGreen else SvcsTextDim,
                         modifier = Modifier.clickable(enabled = compressEnabled,
-                            onClick = onCompress).padding(top = 6.dp))
+                            role = androidx.compose.ui.semantics.Role.Button,
+                            onClick = onCompress).minimumInteractiveComponentSize().padding(top = 6.dp))
                 }
                 // 0.8.0: per-video metrics (codec, resolution, fps, duration).
                 Text("INFO", style = MaterialTheme.typography.labelSmall,
                     color = SvcsTextDim,
-                    modifier = Modifier.clickable(onClick = onInfo)
+                    modifier = Modifier.clickable(role = androidx.compose.ui.semantics.Role.Button, onClick = onInfo)
+                        .minimumInteractiveComponentSize()
                         .padding(top = 6.dp))
             }
         }

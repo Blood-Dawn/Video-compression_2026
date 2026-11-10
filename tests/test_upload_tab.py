@@ -54,7 +54,7 @@ def test_full_nav_order(html):
 
 def test_upload_tab_page_exists(html):
     assert 'id="tab-upload"' in html
-    assert 'class="tab-page"' in html  # the upload page is a tab-page
+    assert re.search(r'id="tab-upload" class="tab-page[ "]', html)  # the upload page is a tab-page
 
 
 def test_dropzone_moved_not_duplicated(html):

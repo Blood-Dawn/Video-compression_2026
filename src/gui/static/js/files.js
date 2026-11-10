@@ -27,15 +27,15 @@ async function loadSegments() {
       const objType = escHtml(s.object_type || 'unknown');
       const isEnc = s.file_path && s.file_path.endsWith('.enc');
       const playBtn = isEnc
-        ? `<button class="btn-play-sm btn-enc" title="Encrypted - click to decrypt &amp; play" onclick="promptDecrypt('${jsAttr(s.file_path)}')">[ENC]</button>`
+        ? `<button class="btn-play-sm btn-enc x-act" title="Encrypted. Click to unlock and play" aria-label="Unlock and play clip from ${escHtml(ts)}" onclick="promptDecrypt('${jsAttr(s.file_path)}')">Unlock</button>`
         : s.playable_url
-          ? `<button class="btn-play-sm" onclick="playSegment('${jsAttr(s.playable_url)}','${jsAttr(s.file_path)}')">▶</button>`
-          : `<span style="color:var(--text-dim);font-size:0.6rem;"> - </span>`;
+          ? `<button class="btn-play-sm x-act" aria-label="Play clip from ${escHtml(ts)}" onclick="playSegment('${jsAttr(s.playable_url)}','${jsAttr(s.file_path)}')">Play</button>`
+          : `<span style="color:var(--text-dim);font-size:0.75rem;"> - </span>`;
       const encBtn = isEnc
-        ? `<span style="color:var(--yellow);font-size:0.6rem;" title="Already encrypted">[ENC]</span>`
+        ? `<span class="x-badge is-on" title="Already encrypted">Locked</span>`
         : s.file_path
-          ? `<button class="btn-play-sm" style="color:var(--yellow);border-color:var(--yellow);" title="Encrypt this segment" onclick="promptEncryptSegment('${jsAttr(s.file_path)}')">[DEC]</button>`
-          : `<span style="color:var(--text-dim);font-size:0.6rem;"> - </span>`;
+          ? `<button class="btn-play-sm x-act" title="Encrypt this clip" aria-label="Encrypt clip from ${escHtml(ts)}" onclick="promptEncryptSegment('${jsAttr(s.file_path)}')">Encrypt</button>`
+          : `<span style="color:var(--text-dim);font-size:0.75rem;"> - </span>`;
       const compMb = s.file_size_kb / 1024;
       const sizeStr = compMb >= 1 ? `${compMb.toFixed(1)} MB` : `${s.file_size_kb} KB`;
       const qualityStr = s.sharpness_label
@@ -53,7 +53,7 @@ async function loadSegments() {
         ? `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${_colorSwatch(s.dominant_color)};margin-right:4px;vertical-align:middle;"></span>${escHtml(s.dominant_color)}`
         : dash;
       const scene = s.scene_type && s.scene_type !== 'unknown'
-        ? `<span style="font-size:0.62rem;color:var(--teal);text-transform:uppercase;">${escHtml(s.scene_type.slice(0,3))}</span> ${escHtml(s.scene_type)}`
+        ? `<span style="font-size:0.75rem;color:var(--teal);text-transform:uppercase;">${escHtml(s.scene_type.slice(0,3))}</span> ${escHtml(s.scene_type)}`
         : dash;
       const tod = s.time_of_day
         ? (s.time_of_day === 'night' ? '🌙 night' : s.time_of_day === 'day' ? '☀️ day' : '🌅 ' + escHtml(s.time_of_day))
@@ -71,29 +71,29 @@ async function loadSegments() {
         ? 'opacity:0.55;'
         : '';
       const staleTag = isStale
-        ? '<span style="color:var(--red);font-size:0.55rem;margin-left:0.3rem;" title="Source file is missing on disk">[missing]</span>'
+        ? '<span style="color:var(--red);font-size:0.75rem;margin-left:0.3rem;" title="Source file is missing on disk">[missing]</span>'
         : '';
       // [X] button - hides this row from the dashboard. Files on disk
       // are not deleted; this just sets hidden=1 in the metadata DB.
       const hideBtn = s.file_path
-        ? `<button class="btn-row-hide" title="Remove this row from the dashboard (file on disk is kept)" onclick="event.stopPropagation();_hideSegmentRow('${jsAttr(s.file_path)}')">×</button>`
-        : `<span style="color:var(--text-dim);font-size:0.6rem;"> - </span>`;
+        ? `<button class="btn-row-hide x-act" title="Hide this row from the dashboard (the file on disk is kept)" aria-label="Hide clip from ${escHtml(ts)} from the list" onclick="event.stopPropagation();_hideSegmentRow('${jsAttr(s.file_path)}')">Hide</button>`
+        : `<span style="color:var(--text-dim);font-size:0.75rem;"> - </span>`;
       const mode = _segMode(s);
       const modeColor = _segModeColor(mode);
       return `<tr data-seg-idx="${idx}" class="seg-row" style="${rowStyle}" onmouseenter="_onSegRowEnter(event,${idx})" onmousemove="_moveTooltip(event)" onmouseleave="_hideTooltip()" onclick="_metricsRowClick(${idx})">
         <td>${ts}</td>
         <td title="${escHtml(s.camera_id)}">${escHtml(camDisplay)}${staleTag}</td>
-        <td style="color:${modeColor};font-size:0.7rem;font-weight:bold;letter-spacing:0.04em;">${escHtml(mode)}</td>
+        <td style="color:${modeColor};font-size:0.75rem;font-weight:bold;letter-spacing:0.04em;">${escHtml(mode)}</td>
         <td style="color:var(--teal)">${objType}</td>
-        <td>${color}</td>
-        <td style="font-size:0.7rem">${scene}</td>
-        <td style="font-size:0.7rem">${tod}</td>
-        <td>${s.roi_count}</td>
-        <td style="font-weight:bold;color:${s.vehicle_count>0?'var(--teal)':'var(--text-dim)'};">${carsStr}</td>
-        <td style="font-weight:bold;color:${s.person_count>0?'var(--yellow)':'var(--text-dim)'};">${peopleStr}</td>
+        <td class="c-color">${color}</td>
+        <td class="c-scene" style="font-size:0.75rem">${scene}</td>
+        <td class="c-light" style="font-size:0.75rem">${tod}</td>
+        <td class="c-motion">${s.roi_count}</td>
+        <td class="c-cars" style="font-weight:bold;color:${s.vehicle_count>0?'var(--teal)':'var(--text-dim)'};">${carsStr}</td>
+        <td class="c-people" style="font-weight:bold;color:${s.person_count>0?'var(--yellow)':'var(--text-dim)'};">${peopleStr}</td>
         <td>${s.duration_s}s</td>
         <td>${sizeStr}</td>
-        <td style="color:${qualityColor};font-size:0.72rem">${qualityStr}</td>
+        <td style="color:${qualityColor};font-size:0.75rem">${qualityStr}</td>
         <td>${playBtn}</td>
         <td>${encBtn}</td>
         <td>${hideBtn}</td>
@@ -114,7 +114,7 @@ function _updateHomeRecent(segments) {
   // Author: Bloodawn (KheivenD), 2026-05-03 (home-recent scroll fix).
   if (count) count.textContent = segments.length + ' total';
   if (!segments.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text-dim);text-align:center;padding:0.75rem;font-family:var(--mono);font-size:0.65rem;">No recordings yet</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" style="color:var(--text-dim);text-align:center;padding:0.75rem;font-family:var(--mono);font-size:0.75rem;">No recordings yet</td></tr>';
     return;
   }
   // Same hover tooltip as the Metrics tab: idx indexes `_segmentData`,
@@ -124,7 +124,7 @@ function _updateHomeRecent(segments) {
     const playBtn = isEnc
       ? `<button class="btn-play-sm btn-enc" title="Encrypted" onclick="promptDecrypt('${jsAttr(s.file_path)}')">[ENC]</button>`
       : s.playable_url
-        ? `<button class="btn-play-sm" onclick="playSegment('${jsAttr(s.playable_url)}','${jsAttr(s.file_path)}')">▶</button>`
+        ? `<button class="btn-play-sm x-act" aria-label="Play clip from ${escHtml(ts)}" onclick="playSegment('${jsAttr(s.playable_url)}','${jsAttr(s.file_path)}')">Play</button>`
         : ' - ';
     const sizeMb = (s.file_size_kb / 1024);
     const camDisplay = _segCamLabel(s);
@@ -134,9 +134,9 @@ function _updateHomeRecent(segments) {
       onmouseleave="_hideTooltip()"
       style="border-bottom:1px solid rgba(42,68,102,0.4);cursor:pointer;">
       <td style="padding:0.25rem 0.5rem;color:var(--text-dim);white-space:nowrap;">${formatTimestamp(s.timestamp)}</td>
-      <td style="padding:0.25rem 0.5rem;font-family:var(--mono);font-size:0.65rem;" title="${escHtml(s.camera_id)}">${escHtml(camDisplay)}</td>
+      <td style="padding:0.25rem 0.5rem;font-family:var(--mono);font-size:0.75rem;" title="${escHtml(s.camera_id)}">${escHtml(camDisplay)}</td>
       <td style="padding:0.25rem 0.5rem;"> ${escHtml(s.object_type || ' - ')}</td>
-      <td style="padding:0.25rem 0.5rem;text-align:right;font-family:var(--mono);font-size:0.65rem;">${sizeMb >= 1 ? sizeMb.toFixed(1) + ' MB' : s.file_size_kb + ' KB'}</td>
+      <td style="padding:0.25rem 0.5rem;text-align:right;font-family:var(--mono);font-size:0.75rem;">${sizeMb >= 1 ? sizeMb.toFixed(1) + ' MB' : s.file_size_kb + ' KB'}</td>
       <td style="padding:0.25rem 0.5rem;text-align:center;">${playBtn}</td>
     </tr>`;
   }).join('');
@@ -241,11 +241,11 @@ function showMetricsDetail(s) {
   const encBtn = document.getElementById('metrics-enc-btn');
   if (encBtn) {
     if (s.file_path && s.file_path.endsWith('.enc')) {
-      encBtn.textContent = 'ENCRYPTED';
+      encBtn.textContent = 'Encrypted';
       encBtn.disabled = true;
       encBtn.style.opacity = '0.5';
     } else {
-      encBtn.textContent = 'ENCRYPT THIS FILE';
+      encBtn.textContent = 'Encrypt this clip';
       encBtn.disabled = !s.file_path;
       encBtn.style.opacity = s.file_path ? '1' : '0.4';
       encBtn.onclick = () => promptEncryptSegment(s.file_path);
@@ -279,8 +279,8 @@ function showMetricsDetail(s) {
     ['Target', s.target_detected ? '▲ YES' : '○ no'],
     ['Motion Regions', s.roi_count],
     ['Size', compMb >= 1 ? compMb.toFixed(2) + ' MB' : (s.file_size_kb || 0) + ' KB'],
-    ['Raw (est)', rawMb > 0 ? rawMb.toFixed(1) + ' MB' : ' - '],
-    ['Compression', ratio],
+    ['Raw video (est)', rawMb > 0 ? rawMb.toFixed(1) + ' MB' : ' - '],
+    ['Smaller than raw (est)', ratio],
     ['Quality', s.sharpness_label || ' - '],
     ['Encrypted', isEnc ? 'Yes (AES-256)' : 'No'],
   ];
@@ -308,7 +308,7 @@ function _renderClipCpuStats(s) {
   if (!hasStats) {
     if (labelEl) labelEl.textContent = '· no stats for this clip';
     rowsEl.innerHTML = `
-      <div style="color:var(--text-dim);font-size:0.68rem;padding:0.4rem 0;line-height:1.5;">
+      <div style="color:var(--text-dim);font-size:0.75rem;padding:0.4rem 0;line-height:1.5;">
         No CPU sample for this recording. Stats are captured only for
         runs started after the per-clip tracking change (2026-05-03).
         Re-run a demo with this clip's source to populate it.
@@ -330,7 +330,7 @@ function _renderClipCpuStats(s) {
 
   rowsEl.innerHTML = `
     <div style="margin:0.25rem 0;">
-      <div style="display:flex;justify-content:space-between;font-size:0.7rem;margin-bottom:4px;">
+      <div style="display:flex;justify-content:space-between;font-size:0.75rem;margin-bottom:4px;">
         <span style="color:var(--text-dim);">Average CPU</span>
         <span style="font-family:var(--mono);color:${color};font-weight:bold;">${avg.toFixed(1)}%</span>
       </div>
@@ -338,7 +338,7 @@ function _renderClipCpuStats(s) {
         <div style="height:100%;width:${pct.toFixed(1)}%;background:${color};border-radius:2px;transition:width 0.6s;"></div>
       </div>
     </div>
-    <div class="metrics-library-row" style="font-size:0.65rem;padding-top:0.35rem;">
+    <div class="metrics-library-row" style="font-size:0.75rem;padding-top:0.35rem;">
       <span>Peak / Low</span>
       <span style="font-family:var(--mono);">
         <span style="color:var(--red);">${max.toFixed(1)}%</span>
@@ -346,7 +346,7 @@ function _renderClipCpuStats(s) {
         <span style="color:var(--green);">${mn.toFixed(1)}%</span>
       </span>
     </div>
-    <div class="metrics-library-row" style="font-size:0.65rem;">
+    <div class="metrics-library-row" style="font-size:0.75rem;">
       <span>Samples · Duration</span>
       <span style="font-family:var(--mono);color:var(--text-dim);">${n} @ 1s · ${dur.toFixed(1)}s</span>
     </div>

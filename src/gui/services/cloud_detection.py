@@ -275,10 +275,8 @@ def _detect_onedrive_root(prefer_business: bool = True) -> tuple[Path, str] | tu
     return None, None
 
 
-def _detect_gdrive_root() -> Path | None:
-    """Return the local Google Drive for Desktop 'My Drive' root, or None."""
-    home = Path.home()
-
+def _gdrive_from_registry() -> Path | None:
+    """Google Drive for Desktop mount point from the Windows registry, or None."""
     try:
         import winreg
         for key_path in (
@@ -308,7 +306,11 @@ def _detect_gdrive_root() -> Path | None:
                 pass
     except Exception:
         pass
+    return None
 
+
+def _gdrive_from_drive_letters() -> Path | None:
+    """A mapped drive letter that looks like Google Drive for Desktop, or None."""
     for letter in string.ascii_uppercase:
         for sub in ("My Drive", ""):
             p = Path(f"{letter}:\\{sub}") if sub else Path(f"{letter}:\\")
@@ -322,19 +324,39 @@ def _detect_gdrive_root() -> Path | None:
                         return p
             except OSError:
                 pass
+    return None
 
+
+def _gdrive_from_home_folders(home: Path) -> Path | None:
+    """An older-style Google Drive folder in the home directory, or None."""
     for p in (home / "Google Drive" / "My Drive", home / "Google Drive", home / "My Drive"):
         try:
             if p.exists():
                 return p
         except OSError:
             pass
+    return None
 
+
+def _gdrive_from_macos_cloud_storage(home: Path) -> Path | None:
+    """macOS CloudStorage mount of Google Drive, or None."""
     matches = glob.glob(str(home / "Library/CloudStorage/GoogleDrive-*/My Drive"))
     if matches:
         return Path(matches[0])
-
     return None
+
+
+def _detect_gdrive_root() -> Path | None:
+    """Return the local Google Drive for Desktop 'My Drive' root, or None.
+
+    Tries the Windows registry, then mapped drive letters, then home folders,
+    then the macOS CloudStorage folder, and returns the first hit.
+    """
+    home = Path.home()
+    return (_gdrive_from_registry()
+            or _gdrive_from_drive_letters()
+            or _gdrive_from_home_folders(home)
+            or _gdrive_from_macos_cloud_storage(home))
 
 
 def _detect_cloud_root() -> tuple[Path, str, str] | tuple[None, None, None]:

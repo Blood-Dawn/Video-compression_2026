@@ -583,6 +583,109 @@ def _write_repeated(writer, frame: np.ndarray, count: int) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _group_records_by_segment(records: list[dict]) -> dict[int, list[dict]]:
+    """Records grouped by segment index, each group in frame order."""
+    records_by_segment: dict[int, list[dict]] = defaultdict(list)
+    for record in records:
+        records_by_segment[record["segment_index"]].append(record)
+
+    for seg_records in records_by_segment.values():
+        seg_records.sort(key=lambda r: r["frame_index_within_segment"])
+    return records_by_segment
+
+
+def _probe_output_geometry(first_path: str, fps_override: float | None):
+    """(first_sparse, width, height, fps) of the stitched output.
+
+    Taken from the first segment: its mode 3 sparse metadata when it has any
+    (returned as first_sparse so it is not parsed twice), else the video itself.
+    """
+    first_sparse = load_sparse_mode3_metadata(first_path)
+    if first_sparse is not None:
+        _, first_sparse_metadata = first_sparse
+        width = int(first_sparse_metadata["frame_width"])
+        height = int(first_sparse_metadata["frame_height"])
+        fps = fps_override or float(first_sparse_metadata.get("fps") or 30.0)
+    else:
+        probe = cv2.VideoCapture(first_path)
+        if not probe.isOpened():
+            raise RuntimeError(f"Could not open segment video: {first_path}")
+
+        width = int(probe.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(probe.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = fps_override or probe.get(cv2.CAP_PROP_FPS) or 30.0
+        probe.release()
+    return first_sparse, width, height, fps
+
+
+def _open_segment_source(segment_path: str, sparse):
+    """(cap, artifact_dir, metadata, frame_lookup, image_cache) for one segment.
+
+    A mode 3 sparse segment has no video: cap is None and the other four are
+    set. Any other segment is read with cv2 and the other four are None.
+    """
+    cap = None
+    sparse_artifact_dir = None
+    sparse_metadata = None
+    sparse_frames = None
+    sparse_image_cache = None
+    if sparse is not None:
+        sparse_artifact_dir, sparse_metadata = sparse
+        sparse_frames = build_sparse_frame_lookup(sparse_metadata)
+        sparse_image_cache = {}
+    else:
+        cap = cv2.VideoCapture(segment_path)
+        if not cap.isOpened():
+            raise RuntimeError(f"Could not open segment video: {segment_path}")
+    return cap, sparse_artifact_dir, sparse_metadata, sparse_frames, sparse_image_cache
+
+
+def _fill_gap(writer, previous_time, current_time, fps, min_black_skip_seconds,
+              previous_rendered_frame, width, height, mode) -> None:
+    """Write the frames missing between two kept frames.
+
+    A short gap holds the previous frame; a longer one (or no previous frame)
+    shows a skip card, so the timeline stays aligned with the source.
+    """
+    missing_frames, skip_seconds = compute_missing_frame_count(
+        previous_time=previous_time,
+        current_time=current_time,
+        fps=fps,
+    )
+
+    if missing_frames > 0:
+        if skip_seconds < min_black_skip_seconds and previous_rendered_frame is not None:
+            _write_repeated(writer, previous_rendered_frame, missing_frames)
+        else:
+            card = _render_skip_card(
+                width,
+                height,
+                mode=mode,
+                skip_seconds=skip_seconds,
+                next_time_seconds=current_time,
+            )
+            _write_repeated(writer, card, missing_frames)
+
+
+def _next_source_frame(record, cap, sparse_artifact_dir, sparse_metadata, sparse_frames,
+                       sparse_image_cache, segment_path, segment_index):
+    """The source frame for one record: rebuilt from sparse data, else read from the video."""
+    if sparse_metadata is not None:
+        return render_sparse_mode3_frame(
+            sparse_artifact_dir,
+            sparse_metadata,
+            sparse_frames.get(int(record["source_frame_index"])) if sparse_frames else None,
+            sparse_image_cache,
+        )
+    ok, frame = cap.read()
+    if not ok:
+        raise RuntimeError(
+            f"Segment video ended early while reading {segment_path} "
+            f"for segment_index={segment_index}"
+        )
+    return frame
+
+
 def render_demo(
     *,
     db_path: str,
@@ -603,33 +706,13 @@ def render_demo(
     if not records:
         raise ValueError(f"No records found in metadata sidecar: {metadata_path}")
 
-    records_by_segment: dict[int, list[dict]] = defaultdict(list)
-    for record in records:
-        records_by_segment[record["segment_index"]].append(record)
-
-    for seg_records in records_by_segment.values():
-        seg_records.sort(key=lambda r: r["frame_index_within_segment"])
+    records_by_segment = _group_records_by_segment(records)
 
     segment_rows = load_segment_rows(db_path, records)
     if not segment_rows:
         raise ValueError(f"No usable segment rows found in DB: {db_path}")
 
-    first_path = segment_rows[0][1]
-    first_sparse = load_sparse_mode3_metadata(first_path)
-    if first_sparse is not None:
-        _, first_sparse_metadata = first_sparse
-        width = int(first_sparse_metadata["frame_width"])
-        height = int(first_sparse_metadata["frame_height"])
-        fps = fps_override or float(first_sparse_metadata.get("fps") or 30.0)
-    else:
-        probe = cv2.VideoCapture(first_path)
-        if not probe.isOpened():
-            raise RuntimeError(f"Could not open segment video: {first_path}")
-
-        width = int(probe.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(probe.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = fps_override or probe.get(cv2.CAP_PROP_FPS) or 30.0
-        probe.release()
+    first_sparse, width, height, fps = _probe_output_geometry(segment_rows[0][1], fps_override)
 
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     writer = H264Writer(output_path, fps, width, height)
@@ -647,58 +730,20 @@ def render_demo(
 
             # The first row's metadata.json was already parsed for the probe.
             sparse = first_sparse if row_number == 0 else load_sparse_mode3_metadata(segment_path)
-            cap = None
-            sparse_artifact_dir = None
-            sparse_metadata = None
-            sparse_frames = None
-            sparse_image_cache = None
-            if sparse is not None:
-                sparse_artifact_dir, sparse_metadata = sparse
-                sparse_frames = build_sparse_frame_lookup(sparse_metadata)
-                sparse_image_cache = {}
-            else:
-                cap = cv2.VideoCapture(segment_path)
-                if not cap.isOpened():
-                    raise RuntimeError(f"Could not open segment video: {segment_path}")
+            (cap, sparse_artifact_dir, sparse_metadata,
+             sparse_frames, sparse_image_cache) = _open_segment_source(segment_path, sparse)
 
             try:
                 for record in segment_records:
-                    if sparse_metadata is not None:
-                        frame = render_sparse_mode3_frame(
-                            sparse_artifact_dir,
-                            sparse_metadata,
-                            sparse_frames.get(int(record["source_frame_index"])) if sparse_frames else None,
-                            sparse_image_cache,
-                        )
-                    else:
-                        ok, frame = cap.read()
-                        if not ok:
-                            raise RuntimeError(
-                                f"Segment video ended early while reading {segment_path} "
-                                f"for segment_index={segment_index}"
-                            )
+                    frame = _next_source_frame(
+                        record, cap, sparse_artifact_dir, sparse_metadata, sparse_frames,
+                        sparse_image_cache, segment_path, segment_index)
 
                     current_time = record["source_time_seconds"]
 
                     if previous_time is not None:
-                        missing_frames, skip_seconds = compute_missing_frame_count(
-                            previous_time=previous_time,
-                            current_time=current_time,
-                            fps=fps,
-                        )
-
-                        if missing_frames > 0:
-                            if skip_seconds < min_black_skip_seconds and previous_rendered_frame is not None:
-                                _write_repeated(writer, previous_rendered_frame, missing_frames)
-                            else:
-                                card = _render_skip_card(
-                                    width,
-                                    height,
-                                    mode=record["mode"],
-                                    skip_seconds=skip_seconds,
-                                    next_time_seconds=current_time,
-                                )
-                                _write_repeated(writer, card, missing_frames)
+                        _fill_gap(writer, previous_time, current_time, fps, min_black_skip_seconds,
+                                  previous_rendered_frame, width, height, record["mode"])
 
                     # render_view always returns a fresh array, so the labels
                     # can be stamped into it without another full-frame copy.

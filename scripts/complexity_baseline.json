@@ -14,7 +14,6 @@
   "src/gui/routes/library_bp.py::api_library_list_dirs": 17,
   "src/gui/routes/savings_bp.py::measured_savings": 18,
   "src/gui/services/autocompress_runner.py::_process_one": 20,
-  "src/gui/services/cloud_detection.py::_detect_gdrive_root": 23,
   "src/gui/services/gui_state_persist.py::_load_gui_state": 16,
   "src/gui/services/hls_runner.py::_hls_annotator_thread": 18,
   "src/gui/services/job_history.py::record_job": 16,

@@ -12,6 +12,7 @@ compress flow. Endpoints:
   * GET  /api/library/file     - stream the video file (range-enabled) for the
                                  inline detail player
   * POST /api/library/compress - validate a path and hand it to the start flow
+  * POST /api/library/delete   - move videos to a recoverable .svcs_trash folder
 
 Thumbnails are generated with one ffmpeg frame and cached under the OS cache dir
 so listing stays fast and the request thread is never blocked twice for the same
@@ -54,6 +55,11 @@ try:
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.utils.video_formats import ALL_INGEST_EXTS as _ALL_INGEST_EXTS
 VIDEO_EXTS = set(_ALL_INGEST_EXTS)
+
+# Videos removed from the Library are moved here (beside the file), never
+# erased, so a wrong click can be undone by moving the file back.
+TRASH_DIRNAME = ".svcs_trash"
+_MAX_DELETE_BATCH = 200
 
 _MIME = {
     ".mp4": "video/mp4", ".m4v": "video/mp4", ".mov": "video/quicktime",
@@ -193,7 +199,7 @@ def _iter_video_entries(folder: Path, recursive: bool):
         for entry in entries:
             try:
                 if recursive and entry.is_dir() and not entry.is_symlink():
-                    if entry.name.lower() != "hls":
+                    if entry.name.lower() not in ("hls", TRASH_DIRNAME):
                         subdirs.append((entry.path, rel_prefix + entry.name + "/"))
                     continue
                 if not entry.is_file():
@@ -588,3 +594,70 @@ def api_library_compress():
         return jsonify({"error": "not a video file"}), 400
     log.info("Library: selected %s for compression", p.name)
     return jsonify({"ok": True, "path": str(p), "name": p.name})
+
+
+def _unique_trash_target(trash: Path, name: str) -> Path:
+    """A name inside ``trash`` that does not exist yet (adds a timestamp)."""
+    target = trash / name
+    if not target.exists():
+        return target
+    stem, suffix = Path(name).stem, Path(name).suffix
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    n = 0
+    while True:
+        tag = stamp if n == 0 else f"{stamp}-{n}"
+        cand = trash / f"{stem}.{tag}{suffix}"
+        if not cand.exists():
+            return cand
+        n += 1
+
+
+@library_bp.route("/api/library/delete", methods=["POST"])
+def api_library_delete():
+    """Move library videos into a ``.svcs_trash`` folder beside each file.
+
+    Body: ``{"paths": [...], "folder": "<library folder, optional>"}``. Every
+    path goes through the same confinement check as the file and compress
+    routes. Nothing is erased: the file is renamed into the trash folder, and
+    the Library listing skips that folder. The compressed index entry for a
+    moved output is dropped so a source can be compressed again.
+    """
+    data = request.get_json(silent=True)
+    if not data or not isinstance(data, dict):
+        return jsonify({"error": "Request body must be a JSON object"}), 400
+    paths = data.get("paths")
+    if not isinstance(paths, list) or not paths:
+        return jsonify({"error": "paths must be a non-empty list"}), 400
+    if len(paths) > _MAX_DELETE_BATCH:
+        return jsonify({"error": f"at most {_MAX_DELETE_BATCH} videos per request"}), 400
+    folder = str(data.get("folder", "") or "")
+
+    moved, failed = [], []
+    for raw in paths:
+        p = _safe_video(raw if isinstance(raw, str) else "", folder)
+        if p is None:
+            failed.append({"path": raw if isinstance(raw, str) else "",
+                           "error": "not a video file"})
+            continue
+        trash = p.parent / TRASH_DIRNAME
+        try:
+            trash.mkdir(exist_ok=True)
+            target = _unique_trash_target(trash, p.name)
+            p.replace(target)
+        except OSError as exc:
+            log.warning("Library: could not move %s to trash: %s", p.name, exc)
+            failed.append({"path": str(p), "error": "could not move the file"})
+            continue
+        log.info("Library: moved %s to %s", p.name, trash)
+        moved.append({"path": str(p), "trash": str(target)})
+
+    if moved:
+        _reset_library_cache()
+        try:
+            _cidx.prune_missing()
+        except Exception as exc:  # noqa: BLE001 - index upkeep must not fail the request
+            log.debug("Library: index prune after delete failed: %s", exc)
+    status = 200 if moved or not failed else 400
+    return jsonify({"ok": bool(moved) and not failed, "moved": moved,
+                    "failed": failed}), status
+

@@ -96,6 +96,7 @@ EXPECTED = {
     "/api/library/thumb": "library",
     "/api/library/file": "library",
     "/api/library/compress": "library",
+    "/api/library/delete": "library",
     "/api/autocompress/start": "autocompress",
     "/api/autocompress/stop": "autocompress",
     "/api/autocompress/status": "autocompress",
@@ -175,7 +176,7 @@ def test_route_count():
     # competitive-gap pass's /api/timelapse (quiet-period summary generation),
     # then +1 for /api/upload/limit (GET+POST on one rule, upload size cap).
     rules = _rules()
-    assert len(rules) == 97, f"expected 97 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 98, f"expected 98 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_blueprints_registered():

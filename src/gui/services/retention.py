@@ -303,6 +303,55 @@ def _notify_purge(summary: dict, output_dir: str) -> None:
 
 # ── estimate (days = disk / bitrate) ────────────────────────────────────────────
 
+def _folder_usage(comp_dir: Path):
+    """(total bytes, oldest mtime, newest mtime) of the purgeable files in a folder.
+
+    The times are None when there are no files; files that vanish mid-scan are
+    skipped.
+    """
+    used = 0
+    oldest = None
+    newest = None
+    if comp_dir.is_dir():
+        for p in _purgeable_files(comp_dir.resolve()):
+            try:
+                st = p.stat()
+            except OSError:
+                continue
+            used += st.st_size
+            oldest = st.st_mtime if oldest is None else min(oldest, st.st_mtime)
+            newest = st.st_mtime if newest is None else max(newest, st.st_mtime)
+    return used, oldest, newest
+
+
+def _estimate_bytes_per_day(used: int, oldest, newest):
+    """Daily growth: from recent job history, else the folder size over its age."""
+    bpd = _bytes_per_day_from_history()
+    if bpd is None and used > 0 and oldest and newest and newest > oldest:
+        span_days = max((newest - oldest) / 86400, 1.0 / 24)  # >= 1 hour
+        bpd = used / span_days
+    return bpd
+
+
+def _headroom_days(bpd, used: int, usage, pol: dict):
+    """Days until full: the tighter of the size budget and the free disk.
+
+    None when growth is unknown or neither limit applies.
+    """
+    if not (bpd and bpd > 0):
+        return None
+    headroom_bytes = None
+    max_total_gb = float(pol.get("max_total_gb") or 0.0) if pol.get("enabled") else 0.0
+    if max_total_gb > 0:
+        headroom_bytes = max(0.0, max_total_gb * _GB - used)
+    if usage is not None:
+        disk_headroom = float(usage.free)
+        headroom_bytes = disk_headroom if headroom_bytes is None else min(headroom_bytes, disk_headroom)
+    if headroom_bytes is None:
+        return None
+    return round(headroom_bytes / bpd, 1)
+
+
 def estimate(output_dir: str, policy: dict | None = None) -> dict:
     """Estimate retention headroom: free disk, current footage size, and days.
 
@@ -323,41 +372,17 @@ def estimate(output_dir: str, policy: dict | None = None) -> dict:
             usage = None
 
         comp_dir = cidx.compressed_subdir(base, create=False)
-        used = 0
-        oldest = None
-        newest = None
-        if comp_dir.is_dir():
-            for p in _purgeable_files(comp_dir.resolve()):
-                try:
-                    st = p.stat()
-                except OSError:
-                    continue
-                used += st.st_size
-                oldest = st.st_mtime if oldest is None else min(oldest, st.st_mtime)
-                newest = st.st_mtime if newest is None else max(newest, st.st_mtime)
+        used, oldest, newest = _folder_usage(comp_dir)
         out["used_gb"] = round(used / _GB, 2)
 
-        bpd = _bytes_per_day_from_history()
-        if bpd is None and used > 0 and oldest and newest and newest > oldest:
-            span_days = max((newest - oldest) / 86400, 1.0 / 24)  # >= 1 hour
-            bpd = used / span_days
+        bpd = _estimate_bytes_per_day(used, oldest, newest)
         out["bytes_per_day"] = int(bpd) if bpd else None
 
         pol = policy if policy is not None else get_policy()
         if pol.get("enabled") and int(pol.get("max_age_days") or 0) > 0:
             out["policy_days"] = int(pol["max_age_days"])
 
-        # Days of headroom: prefer the tighter of (size budget) and (free disk).
-        if bpd and bpd > 0:
-            headroom_bytes = None
-            max_total_gb = float(pol.get("max_total_gb") or 0.0) if pol.get("enabled") else 0.0
-            if max_total_gb > 0:
-                headroom_bytes = max(0.0, max_total_gb * _GB - used)
-            if usage is not None:
-                disk_headroom = float(usage.free)
-                headroom_bytes = disk_headroom if headroom_bytes is None else min(headroom_bytes, disk_headroom)
-            if headroom_bytes is not None:
-                out["est_days_headroom"] = round(headroom_bytes / bpd, 1)
+        out["est_days_headroom"] = _headroom_days(bpd, used, usage, pol)
 
         out["available"] = True
     except Exception as exc:  # noqa: BLE001

@@ -276,6 +276,27 @@ def _process_one(
             errors.append(f"unverified output for {src.name}")
         return None
 
+    # Never keep a "compressed" copy that is not smaller than its source. Mode 0
+    # skips the encoder's bitrate cap (its Archive preset favours quality), so a
+    # low-bitrate source can be re-encoded LARGER. Recording that would waste
+    # disk and, with delete_original on, would swap the original for a bigger
+    # file. Drop this run's own outputs and leave the source untouched. The
+    # file stays marked ingested, so it is not retried in a loop.
+    try:
+        out_total = sum(p.stat().st_size for p in new_files if p.exists())
+    except OSError:
+        out_total = 0
+    if src_bytes > 0 and out_total >= src_bytes:
+        log.warning("Auto-compress output for %s is not smaller than the source "
+                    "(%d >= %d bytes); keeping the original and discarding the "
+                    "output.", src.name, out_total, src_bytes)
+        for p in new_files:
+            try:
+                p.unlink()
+            except OSError as exc:
+                log.warning("Could not remove oversized output %s: %s", p.name, exc)
+        return None
+
     entry = cidx.record(src, output, preset=preset, mode=encode_kwargs.get("mode", mode))
     log.info("Auto-compressed %s -> %s", src.name, output.name)
 

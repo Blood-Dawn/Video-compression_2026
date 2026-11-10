@@ -177,6 +177,19 @@ def _validate_encrypt_inputs(data: dict):
     return encrypt_key_file, None
 
 
+def _number(data: dict, key: str, cast, default=None):
+    """data[key] converted with int or float, or ValueError naming the field.
+
+    A value the client sent that is not a number is the client's mistake, so
+    api_start answers it with a 400 (RFC 9110: 400 for a client error, 500 for
+    a server fault) instead of letting the conversion crash into a 500.
+    """
+    try:
+        return cast(data.get(key, default))
+    except (TypeError, ValueError):
+        raise ValueError(f"{key} must be a number") from None
+
+
 def _build_start_config(data: dict, camera_id: str, resolved_input, output_dir: str,
                         encrypt_key_file):
     """The pipeline config dict for a validated start request."""
@@ -198,15 +211,15 @@ def _build_start_config(data: dict, camera_id: str, resolved_input, output_dir: 
         "enhance": bool(data.get("enhance", False)),
         "enhance_model": data.get("enhance_model", "bicubic"),
         "enhance_scale": data.get("enhance_scale", 4),
-        "enhance_every_n": int(data.get("enhance_every_n", 5)),
-        "enhance_max_roi_px": int(data.get("enhance_max_roi_px", 200)),
+        "enhance_every_n": _number(data, "enhance_every_n", int, 5),
+        "enhance_max_roi_px": _number(data, "enhance_max_roi_px", int, 200),
         "enhance_device": data.get("enhance_device", "auto"),
         "upscale_output": bool(data.get("upscale_output", False)),
         "encrypt": bool(data.get("encrypt", False)),
         "encrypt_password": data.get("encrypt_password", ""),
         "encrypt_key_file": encrypt_key_file,
         "object_filter": bool(data.get("object_filter", False)),
-        "filter_confidence": float(data.get("filter_confidence", 0.30)),
+        "filter_confidence": _number(data, "filter_confidence", float, 0.30),
         # Codec: "auto" (default; libx264 for mode0/mode1, libsvtav1 for
         # mode2/mode3 via config.default_codec_for_mode), "libsvtav1",
         # "libaom-av1" (slower reference AV1) or "libx264". H.265/HEVC is not
@@ -217,11 +230,11 @@ def _build_start_config(data: dict, camera_id: str, resolved_input, output_dir: 
         # Foreground CRF. None means the mode default (18 for Mode 0/1/2, 38
         # for Mode 3). Lower = better quality, larger file.
         # Author: Bloodawn (KheivenD), 2026-05-02 (Mode 3 redo).
-        "crf": (int(data.get("crf")) if str(data.get("crf", "")).strip() else None),
+        "crf": (_number(data, "crf", int) if str(data.get("crf", "")).strip() else None),
         # background_crf drives the dual-CRF background stream (None keeps the
         # encoder default); preset names the surveillance preset the config
         # came from (informational).
-        "background_crf": (int(data.get("background_crf"))
+        "background_crf": (_number(data, "background_crf", int)
                            if str(data.get("background_crf", "")).strip() else None),
         "preset": (str(data.get("preset")).strip() or None) if data.get("preset") else None,
         "verbose": bool(data.get("verbose", False)),
@@ -275,7 +288,10 @@ def api_start():
     if encrypt_error:
         return jsonify({"error": encrypt_error}), 400
 
-    config = _build_start_config(data, camera_id, resolved_input, output_dir, encrypt_key_file)
+    try:
+        config = _build_start_config(data, camera_id, resolved_input, output_dir, encrypt_key_file)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
 
     # A job id clients can correlate across /api/status and /api/jobs/recent.
     config["job_id"] = _uuid.uuid4().hex[:12]

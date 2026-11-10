@@ -78,8 +78,35 @@ def test_config_clamps_and_normalizes():
     assert cfg["target_vmaf"] is not None and cfg["target_vmaf"] >= bp._TARGET_VMAF_MIN
 
 
-def test_bad_integers_still_raise_as_before():
-    with pytest.raises(ValueError):
-        bp._build_start_config({"crf": "abc"}, "c", "clip.mp4", "out", None)
-    with pytest.raises(ValueError):
-        bp._build_start_config({"enhance_every_n": "x"}, "c", "clip.mp4", "out", None)
+@pytest.mark.parametrize("field", ["crf", "background_crf", "enhance_every_n",
+                                   "enhance_max_roi_px", "filter_confidence"])
+@pytest.mark.parametrize("bad", ["abc", "1.5x", [], {}])
+def test_non_numeric_values_raise_a_field_named_value_error(field, bad):
+    with pytest.raises(ValueError, match=f"^{field} must be a number$"):
+        bp._build_start_config({field: bad}, "c", "clip.mp4", "out", None)
+
+
+def test_numeric_strings_and_numbers_still_convert():
+    cfg = bp._build_start_config(
+        {"enhance_every_n": "3", "enhance_max_roi_px": 150.0, "filter_confidence": "0.5"},
+        "c", "clip.mp4", "out", None)
+    assert (cfg["enhance_every_n"], cfg["enhance_max_roi_px"], cfg["filter_confidence"]) == (3, 150, 0.5)
+
+
+@pytest.mark.parametrize("payload", [{"crf": "abc"}, {"background_crf": "x"},
+                                     {"enhance_every_n": "x"}, {"filter_confidence": "high"}])
+def test_start_answers_a_bad_number_with_400_not_500(payload, monkeypatch):
+    from flask import Flask
+
+    from gui import state
+    from gui.services import pipeline_runner
+
+    monkeypatch.setattr(bp, "_run_pipeline_thread", lambda *a, **k: None)
+    monkeypatch.setitem(state._status, "running", False)
+    monkeypatch.setattr(pipeline_runner, "_pipeline_thread", None)
+    app = Flask(__name__)
+    app.register_blueprint(bp.pipeline_bp)
+    r = app.test_client().post("/api/start", json=payload)
+    assert r.status_code == 400
+    assert r.get_json()["error"].endswith("must be a number")
+    assert state._status["running"] is False

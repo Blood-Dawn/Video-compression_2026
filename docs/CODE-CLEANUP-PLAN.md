@@ -127,13 +127,17 @@ Not verified: these are summaries of what each page said, read through a fetch h
 - `api_start` (29 to 11): `_parse_input_source`, `_validate_encrypt_inputs`, `_build_start_config`. Verified by loading the previous file from git and posting 31 payloads to both versions: identical status, error text and config for all 31.
 - `api_library_videos` (27, now under 15): `_parse_ext_filter`, `_filter_library_items`, `_sort_library_items`. Same method with 401 random query combinations: identical. One pre-existing quirk is pinned by a test: spaces around a comma separated extension stay inside the extension.
 - Skipped on purpose: `api_encrypt` and `api_decrypt` (encryption code). Handed to Victor with a full plan in docs/ENCRYPTION-CLEANUP-PLAN.md.
-- Observation, not changed: `/api/start` returns a 500 for a non numeric `crf`, `background_crf` or `enhance_every_n` (the handler calls int() on them). A 400 with a message would be kinder; it changes a response, so it is left for you to decide.
-- Still open from the Phase 3 list: `purge_once` (deletes files, so it needs care), `estimate`, `scan_once`, `_hls_annotator_thread`, `benchmark_enhancement`, `main` in tuning_experiment, `LayerSegmentEncoder.add_frame`, `render_demo`, and the long if/elif chains.
+- `/api/start` bad numbers: DONE with owner approval. A non numeric `crf`, `background_crf`, `enhance_every_n`, `enhance_max_roi_px` or `filter_confidence` now returns 400 with `{"error": "<field> must be a number"}` instead of a 500. Reason: RFC 9110 uses 400 for a client error and 500 for a server fault, and every other bad field in this handler already returned 400. Checked against the old file: only those cases changed.
+- `retention.estimate` (28, now under 15): `_folder_usage`, `_estimate_bytes_per_day`, `_headroom_days`. Checked against the old file on 225 scenarios (file layouts, policies, history values, disk states): identical.
+- `autocompress_runner.scan_once` (25, now under 15): `_scan_settings`, `_find_candidates`. The batch ownership and locking code was not touched. Checked on 216 scenarios (all six profiles, overrides, stability outcomes): identical.
+- `hls_runner._hls_annotator_thread` (31 to 18): `_open_capture`, `_probe_frame_size`, `_build_hls_ffmpeg_cmd`, and the three nested watchers lifted to module level. Checked by running old and new on a real 3 s clip with a fake ffmpeg: identical command, 77 identical frames, identical state in all five cases. Not covered: a real RTSP stream and its 10 s timeout.
+- Encryption routes handed to Victor: docs/ENCRYPTION-CLEANUP-PLAN.md and GitHub issue 53.
+- Still open from the Phase 3 list: `purge_once` (deletes files, so it needs care), `benchmark_enhancement`, `main` in tuning_experiment, `LayerSegmentEncoder.add_frame`, `render_demo`, `api_segments`, `_detect_gdrive_root`, `parse`, `analyze_video`, `find_crf_for_target`, `read_plates_from_video`, and the main loop of `run_pipeline`.
 
 ## Numbers, 2026-11-09 (baseline at the start of the cleanup in brackets)
 
-- Tests: 2343 passed, 47 skipped, 0 failed [2140 passed, 46 skipped, 0 failed]. The 203 new tests cover the new features and the pinned helpers.
-- run_pipeline complexity 103 [123]. Grade D or worse functions: 17 [19]. Functions above 15 in the ratchet baseline: 37 [39].
+- Tests: 2415 passed, 47 skipped, 0 failed [2140 passed, 46 skipped, 0 failed]. The 275 more passing tests cover the new features and the pinned helpers.
+- run_pipeline complexity 103 [123]. Grade D or worse functions: 14 [19]. Functions above 15 in the ratchet baseline: 35 [39].
 - vulture at 80 percent: 0 findings [0]. At 60 percent: 80 lines [80]; two of those are `request.max_content_length = ...` assignments, which are false positives.
 - pip-audit: 0 of 131 packages with advisories [15 packages, 168 advisories]. zizmor offline: 0 findings [17].
 - Not verified anywhere in this cleanup: a real GitHub Actions run, the new Settings panel in a browser, large real uploads, and super-resolution on real images with pillow 13.

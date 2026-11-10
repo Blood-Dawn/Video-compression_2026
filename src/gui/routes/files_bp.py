@@ -124,43 +124,29 @@ def _ensure_hidden_column(conn) -> None:
         conn.execute("ALTER TABLE segments ADD COLUMN hidden INTEGER DEFAULT 0")
 
 
-@files_bp.route("/api/segments")
-def api_segments():
-    """Return the 50 most recent segments from the metadata DB.
+def _segment_filters(args):
+    """WHERE fragments, bound params and row limit for /api/segments.
 
-    Query params (all optional):
-      object_type   - vehicle | person | person+vehicle | animal | unknown
-      color         - red | orange | yellow | green | blue | white | black | gray | ...
-      scene_type    - highway | intersection | parking | street | unknown
-      time_of_day   - day | night | dusk_dawn
-      camera_id     - filter by camera
+    ``args`` is the request's query mapping. Every fragment is a literal; user
+    values only ever reach the database as bound parameters. The limit is 500
+    when any filter is set, else 200.
     """
-    candidate_roots = _candidate_roots()
-    all_dbs = _metadata_dbs(candidate_roots)
-
-    output_root = candidate_roots[0] if candidate_roots else (_ROOT / "outputs")
-
-    if not all_dbs:
-        return jsonify({"segments": [], "db_path": str(output_root / "metadata.db"),
-                        "note": "No metadata.db found - run the pipeline or a demo first.",
-                        "roots_searched": [str(r) for r in candidate_roots]})
-
     # Same WHERE clause and params for every db.
     filters: list[str] = ["COALESCE(hidden, 0) = 0"]
     params:  list      = []
 
-    f_type      = request.args.get("object_type", "").strip()
-    f_color     = request.args.get("color", "").strip()
-    f_scene     = request.args.get("scene_type", "").strip()
-    f_tod       = request.args.get("time_of_day", "").strip()
-    f_cam       = request.args.get("camera_id", "").strip()
-    f_start     = request.args.get("start_time", "").strip()
-    f_end       = request.args.get("end_time", "").strip()
-    f_min_rois  = request.args.get("min_roi_count", "").strip()
-    f_enc_only  = request.args.get("encrypted_only", "").strip() == "1"
+    f_type      = args.get("object_type", "").strip()
+    f_color     = args.get("color", "").strip()
+    f_scene     = args.get("scene_type", "").strip()
+    f_tod       = args.get("time_of_day", "").strip()
+    f_cam       = args.get("camera_id", "").strip()
+    f_start     = args.get("start_time", "").strip()
+    f_end       = args.get("end_time", "").strip()
+    f_min_rois  = args.get("min_roi_count", "").strip()
+    f_enc_only  = args.get("encrypted_only", "").strip() == "1"
     # Persons whose bbox was also confirmed by YOLO pose keypoints
     # (detection/pose_onnx_backend.py), not just the bbox classifier.
-    f_pose_only = request.args.get("pose_verified_only", "").strip() == "1"
+    f_pose_only = args.get("pose_verified_only", "").strip() == "1"
 
     if f_type:
         if f_type in ("person", "vehicle", "animal"):
@@ -201,7 +187,15 @@ def api_segments():
 
     has_filters = any([f_type, f_color, f_scene, f_tod, f_cam, f_start, f_end, f_min_rois, f_enc_only, f_pose_only])
     row_limit   = 500 if has_filters else 200
+    return filters, params, row_limit
 
+
+def _query_segment_rows(all_dbs, filters, params, row_limit):
+    """Run the segment query on every metadata db and merge newest first.
+
+    Returns a list of (row, db_folder) capped at ``row_limit``. A corrupt or
+    schema-mismatched db is skipped.
+    """
     where = " AND ".join(filters)
     query = f"""
         SELECT timestamp, camera_id, target_detected, roi_count,
@@ -235,60 +229,92 @@ def api_segments():
 
     all_rows.sort(key=lambda x: x[0][0], reverse=True)
     all_rows = all_rows[:row_limit]
+    return all_rows
+
+
+def _cpu_stats_for_dir(d: str, cpu_cache: dict):
+    """cpu_stats.json of one db folder, read once per folder (None when absent).
+
+    Author: Bloodawn (KheivenD), 2026-05-03 (per-clip CPU stats).
+    """
+    if d not in cpu_cache:
+        stats_file = Path(d) / "cpu_stats.json"
+        try:
+            cpu_cache[d] = json.loads(stats_file.read_text()) if stats_file.exists() else None
+        except (OSError, ValueError):
+            cpu_cache[d] = None
+    return cpu_cache[d]
+
+
+def _segment_to_json(r, db_dir: str, cpu_cache: dict) -> dict:
+    """One /api/segments row as the JSON object the dashboard expects."""
+    abs_path = _segment_absolute_path(r[6], db_dir)
+    playable_url = None
+    if abs_path.exists() and abs_path.suffix.lower() in _PLAYABLE_EXTS:
+        playable_url = f"/api/media?path={quote(str(abs_path))}"
+
+    try:
+        obj_classes = json.loads(r[10]) if r[10] else []
+    except (TypeError, ValueError):
+        obj_classes = []
+
+    # None for every cpu_* field when no sampler ran for this folder.
+    cpu_stats = _cpu_stats_for_dir(db_dir, cpu_cache) or {}
+
+    return {
+        "timestamp":       r[0],
+        "camera_id":       r[1],
+        "target_detected": bool(r[2]),
+        "roi_count":       r[3],
+        "file_size_kb":    round(r[4] / 1024, 1),
+        "duration_s":      round(r[5], 1),
+        "file_path":       r[6],
+        "object_type":     r[7],
+        "playable_url":    playable_url,
+        "avg_sharpness":   r[8],
+        "sharpness_label": r[9],
+        "object_classes":  obj_classes,
+        "dominant_color":  r[11],
+        "scene_type":      r[12],
+        "time_of_day":     r[13],
+        "vehicle_count":   r[14],
+        "person_count":    r[15],
+        "pose_verified_person_count": r[16],
+        "cpu_avg":         cpu_stats.get("avg"),
+        "cpu_max":         cpu_stats.get("max"),
+        "cpu_min":         cpu_stats.get("min"),
+        "cpu_samples":     cpu_stats.get("samples"),
+        "cpu_duration_s":  cpu_stats.get("duration_s"),
+    }
+
+
+@files_bp.route("/api/segments")
+def api_segments():
+    """Return the 50 most recent segments from the metadata DB.
+
+    Query params (all optional):
+      object_type   - vehicle | person | person+vehicle | animal | unknown
+      color         - red | orange | yellow | green | blue | white | black | gray | ...
+      scene_type    - highway | intersection | parking | street | unknown
+      time_of_day   - day | night | dusk_dawn
+      camera_id     - filter by camera
+    """
+    candidate_roots = _candidate_roots()
+    all_dbs = _metadata_dbs(candidate_roots)
+
+    output_root = candidate_roots[0] if candidate_roots else (_ROOT / "outputs")
+
+    if not all_dbs:
+        return jsonify({"segments": [], "db_path": str(output_root / "metadata.db"),
+                        "note": "No metadata.db found - run the pipeline or a demo first.",
+                        "roots_searched": [str(r) for r in candidate_roots]})
+
+    filters, params, row_limit = _segment_filters(request.args)
+    all_rows = _query_segment_rows(all_dbs, filters, params, row_limit)
 
     # cpu_stats.json is read once per db folder; many segments share one.
-    # Author: Bloodawn (KheivenD), 2026-05-03 (per-clip CPU stats).
     cpu_cache: dict[str, dict | None] = {}
-
-    def _cpu_for_dir(d: str) -> dict | None:
-        if d not in cpu_cache:
-            stats_file = Path(d) / "cpu_stats.json"
-            try:
-                cpu_cache[d] = json.loads(stats_file.read_text()) if stats_file.exists() else None
-            except (OSError, ValueError):
-                cpu_cache[d] = None
-        return cpu_cache[d]
-
-    segs = []
-    for r, db_dir in all_rows:
-        abs_path = _segment_absolute_path(r[6], db_dir)
-        playable_url = None
-        if abs_path.exists() and abs_path.suffix.lower() in _PLAYABLE_EXTS:
-            playable_url = f"/api/media?path={quote(str(abs_path))}"
-
-        try:
-            obj_classes = json.loads(r[10]) if r[10] else []
-        except (TypeError, ValueError):
-            obj_classes = []
-
-        # None for every cpu_* field when no sampler ran for this folder.
-        cpu_stats = _cpu_for_dir(db_dir) or {}
-
-        segs.append({
-            "timestamp":       r[0],
-            "camera_id":       r[1],
-            "target_detected": bool(r[2]),
-            "roi_count":       r[3],
-            "file_size_kb":    round(r[4] / 1024, 1),
-            "duration_s":      round(r[5], 1),
-            "file_path":       r[6],
-            "object_type":     r[7],
-            "playable_url":    playable_url,
-            "avg_sharpness":   r[8],
-            "sharpness_label": r[9],
-            "object_classes":  obj_classes,
-            "dominant_color":  r[11],
-            "scene_type":      r[12],
-            "time_of_day":     r[13],
-            "vehicle_count":   r[14],
-            "person_count":    r[15],
-            "pose_verified_person_count": r[16],
-            "cpu_avg":         cpu_stats.get("avg"),
-            "cpu_max":         cpu_stats.get("max"),
-            "cpu_min":         cpu_stats.get("min"),
-            "cpu_samples":     cpu_stats.get("samples"),
-            "cpu_duration_s":  cpu_stats.get("duration_s"),
-        })
+    segs = [_segment_to_json(r, db_dir, cpu_cache) for r, db_dir in all_rows]
 
     return jsonify({"segments": segs, "db_count": len(all_dbs)})
 

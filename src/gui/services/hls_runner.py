@@ -60,23 +60,168 @@ def _hls_dir_for(camera_id: str, output_dir: str) -> Path:
     return Path(output_dir) / "hls" / camera_id
 
 
-def _hls_annotator_thread(
-    input_source: str,
+def _watch_first_segment(hls_dir: Path, launch_time: float) -> None:
+    deadline = launch_time + 30.0
+    while time.time() < deadline:
+        if any(hls_dir.glob("*.ts")):
+            latency = round(time.time() - launch_time, 2)
+            with _hls_lock:
+                _hls_state["ingest_latency_s"] = latency
+            log.info(f"HLS: first segment appeared in {latency}s")
+            return
+        time.sleep(0.25)
+    log.warning("HLS: first segment not seen within 30 s; latency unknown")
+
+
+def _watch_segment_latency(
     hls_dir: Path,
-    mode_label: str,
-    stop_event: threading.Event,
+    seg_fps: float,
+    seg_duration_s: float,
+    stop: threading.Event,
 ) -> None:
-    """Background thread: annotate frames with ROI boxes then pipe to FFmpeg.
-
-    Pipeline:
-        cv2.VideoCapture  →  BackgroundSubtractor  →  green ROI rectangles
-        + corner overlay  →  proc.stdin (rawvideo bgr24)  →  FFmpeg HLS muxer
-    """
+    seen: set[str] = set()
+    # Initial snapshot of any pre-existing .ts files (defensive - start()
+    # already deletes stale chunks, but skip if any survive).
     try:
-        from background_subtraction.background_subtraction import BackgroundSubtractor
-    except ModuleNotFoundError:
-        from src.background_subtraction.background_subtraction import BackgroundSubtractor
+        for p in hls_dir.glob("*.ts"):
+            seen.add(p.name)
+    except OSError:
+        pass
 
+    # Estimate frames per segment from the negotiated FPS. Clamp so weird
+    # camera streams that report fps=120 don't drain the queue too fast.
+    frames_per_seg = max(1, int(round(seg_duration_s * max(1.0, min(seg_fps, 60.0)))))
+    log.info(
+        f"HLS: latency watcher armed (~{frames_per_seg} frames/segment, "
+        f"window={_hls_state.get('latency_window', 20)})"
+    )
+
+    while not stop.is_set():
+        try:
+            # mtime-sorted so we process segments in the order FFmpeg wrote them
+            ts_files = sorted(
+                (p for p in hls_dir.glob("*.ts") if p.name not in seen and p.is_file()),
+                key=lambda p: p.stat().st_mtime,
+            )
+        except OSError:
+            ts_files = []
+
+        for p in ts_files:
+            seen.add(p.name)
+            try:
+                seg_written_time = p.stat().st_mtime
+            except OSError:
+                seg_written_time = time.time()
+
+            # Pop ~frames_per_seg oldest frame-read timestamps, or whatever
+            # is there: FFmpeg can flush the first segment early. The
+            # IndexError guard keeps the watcher alive if a writer ever
+            # touches the deque without holding _hls_lock.
+            popped: list[float] = []
+            with _hls_lock:
+                n = min(frames_per_seg, len(_hls_frame_ts_dq))
+                for _ in range(n):
+                    try:
+                        popped.append(_hls_frame_ts_dq.popleft())
+                    except IndexError:
+                        break
+
+            if not popped:
+                # No frame timestamps queued for this segment - happens
+                # if we missed the .ts notification window. Skip silently
+                # rather than poison the average with bogus data.
+                continue
+
+            # Median age = the typical frame's time-to-playable. Using the
+            # median (not the mean) is robust against the first/last frame
+            # outliers that bracket each segment's flush window.
+            popped.sort()
+            median_ts = popped[len(popped) // 2]
+            latency = max(0.0, seg_written_time - median_ts)
+
+            with _hls_lock:
+                _hls_segment_latencies.append(latency)
+                avg = sum(_hls_segment_latencies) / len(_hls_segment_latencies)
+                _hls_state["latency_last_s"]  = round(latency, 3)
+                _hls_state["latency_avg_s"]   = round(avg, 3)
+                _hls_state["latency_samples"] = len(_hls_segment_latencies)
+
+        # Cap the seen-set so a long-running stream with delete_segments
+        # doesn't grow it unbounded. 256 entries × ~12 chars ≈ trivial.
+        if len(seen) > 256:
+            seen = set(sorted(seen)[-128:])
+
+        # Poll twice per chunk; FFmpeg writes a new .ts every seg_duration_s.
+        stop.wait(timeout=max(0.25, seg_duration_s / 2.0))
+
+
+def _hls_idle_watchdog(stop: threading.Event, started: float) -> None:
+    while not stop.wait(timeout=5.0):
+        with _hls_lock:
+            if not _hls_state.get("running"):
+                return
+            last = _hls_state.get("last_segment_fetch")
+        now = time.monotonic()
+        if last is None:
+            # Nobody has fetched a segment yet. Allow a generous grace for
+            # RTSP connect + warmup + the client's own playlist polling.
+            if now - started > HLS_STARTUP_GRACE_S:
+                log.info(
+                    f"HLS: no client fetched a segment within "
+                    f"{HLS_STARTUP_GRACE_S}s of start; stopping the stream "
+                    "so the slot is not held.")
+                stop.set()
+                return
+        elif now - last > HLS_IDLE_TIMEOUT_S:
+            log.info(
+                f"HLS: no segment fetched for {HLS_IDLE_TIMEOUT_S}s; "
+                "stopping the abandoned stream.")
+            stop.set()
+            return
+
+
+def _build_hls_ffmpeg_cmd(w: int, h: int, fps: float, gop: int, playlist: Path) -> list:
+    """The FFmpeg command that reads raw bgr24 frames on stdin and writes the HLS playlist.
+
+    Keyframe cadence (-g, keyint_min) must match the segment length and the output
+    chroma must be yuv420p so Android decoders can play it; see the comments below.
+    """
+    return [
+        ffmpeg_path(), "-y",
+        "-f", "rawvideo",
+        "-pix_fmt", "bgr24",
+        "-s", f"{w}x{h}",
+        "-r", str(fps),
+        "-i", "pipe:0",
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-tune", "zerolatency",
+        # Output chroma MUST be forced. The input is bgr24 (full chroma), so
+        # FFmpeg auto-selects yuv444p for libx264 and emits High 4:4:4
+        # Predictive. No Android MediaCodec decoder handles 4:4:4 and ExoPlayer
+        # ships no software H.264 fallback, so the mobile LIVE tab cannot decode
+        # it at all. yuv420p yields a baseline-compatible stream that plays
+        # everywhere, and it is what the rest of the codebase already emits
+        # (roi_encoder, demo/video_writer).
+        "-pix_fmt", "yuv420p",
+        "-g", str(gop),
+        "-keyint_min", str(gop),
+        "-sc_threshold", "0",     # no scene-cut IDRs: keep segments even
+        "-an",
+        "-f", "hls",
+        "-hls_time", str(HLS_SEGMENT_SECONDS),
+        "-hls_list_size", str(HLS_LIST_SIZE),
+        "-hls_flags", "delete_segments",
+        str(playlist),
+    ]
+
+
+def _open_capture(input_source: str):
+    """Open the stream or file. Returns (cap, None) or (None, error_message).
+
+    A digit string is a camera index. RTSP URLs get their own connect timeout
+    because cv2 ignores CAP_PROP_OPEN_TIMEOUT_MSEC on the pip build.
+    """
     try:
         cap_src = int(input_source)
     except ValueError:
@@ -114,29 +259,29 @@ def _hls_annotator_thread(
             # self-terminate when the 30s OS timeout fires in the background.
             err = (f"RTSP connection timed out after {CONNECT_TIMEOUT}s "
                    f"server unreachable or stream not found: {input_source}")
-            with _hls_lock:
-                _hls_state["error"] = err
-                _hls_state["running"] = False
             log.error(f"HLS: {err}")
-            return
+            return None, err
     else:
         _do_open()
 
     cap = _cap_holder[0]
     if cap is None or not _cap_opened[0] or not cap.isOpened():
         err = f"Could not open input: {input_source}"
-        with _hls_lock:
-            _hls_state["error"] = err
-            _hls_state["running"] = False
         log.error(f"HLS: {err}")
-        return
+        return None, err
+    return cap, None
 
-    log.info(f"HLS: connected to {input_source}")
 
-    # ── resolve frame dimensions ──────────────────────────────────────────────
-    # VideoCapture.get() returns 0x0 for RTSP streams until the first frame
-    # arrives (the codec info isn't decoded yet). Read one frame to get real
-    # dimensions, then seek back for files or just continue for live sources.
+def _probe_frame_size(cap, stop_event: threading.Event):
+    """Frame width, height and fps of an open capture.
+
+    Returns (w, h, fps, first_frame, outcome). outcome is "ok", "stopped" (the
+    stop event fired while probing) or "failed" (no frame in 30 reads); the cap
+    is released for the last two. VideoCapture.get() reports 0x0 for RTSP until
+    the first frame arrives, so in that case one frame is read to learn the real
+    size and handed back as first_frame so it is not lost. An fps outside
+    (0, 120] becomes 25.
+    """
     w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -147,23 +292,61 @@ def _hls_annotator_thread(
         for _ in range(30):        # try up to 30 frames (handles buffered RTSP)
             if stop_event.is_set():
                 cap.release()
-                with _hls_lock:
-                    _hls_state["running"] = False
-                return
+                return w, h, fps, first_frame, "stopped"
             ret, first_frame = cap.read()
             if ret and first_frame is not None:
                 h, w = first_frame.shape[:2]
                 break
         else:
             cap.release()
-            with _hls_lock:
-                _hls_state["error"] = f"Could not determine frame size from: {input_source}"
-                _hls_state["running"] = False
-            log.error("HLS: failed to read first frame for dimension detection")
-            return
+            return w, h, fps, first_frame, "failed"
 
     if fps <= 0 or fps > 120:
         fps = 25.0
+    return w, h, fps, first_frame, "ok"
+
+
+def _hls_annotator_thread(
+    input_source: str,
+    hls_dir: Path,
+    mode_label: str,
+    stop_event: threading.Event,
+) -> None:
+    """Background thread: annotate frames with ROI boxes then pipe to FFmpeg.
+
+    Pipeline:
+        cv2.VideoCapture  →  BackgroundSubtractor  →  green ROI rectangles
+        + corner overlay  →  proc.stdin (rawvideo bgr24)  →  FFmpeg HLS muxer
+    """
+    try:
+        from background_subtraction.background_subtraction import BackgroundSubtractor
+    except ModuleNotFoundError:
+        from src.background_subtraction.background_subtraction import BackgroundSubtractor
+
+    cap, open_error = _open_capture(input_source)
+    if open_error:
+        with _hls_lock:
+            _hls_state["error"] = open_error
+            _hls_state["running"] = False
+        return
+
+    log.info(f"HLS: connected to {input_source}")
+
+    # ── resolve frame dimensions ──────────────────────────────────────────────
+    # VideoCapture.get() returns 0x0 for RTSP streams until the first frame
+    # arrives (the codec info isn't decoded yet). Read one frame to get real
+    # dimensions, then seek back for files or just continue for live sources.
+    w, h, fps, first_frame, outcome = _probe_frame_size(cap, stop_event)
+    if outcome == "stopped":
+        with _hls_lock:
+            _hls_state["running"] = False
+        return
+    if outcome == "failed":
+        with _hls_lock:
+            _hls_state["error"] = f"Could not determine frame size from: {input_source}"
+            _hls_state["running"] = False
+        log.error("HLS: failed to read first frame for dimension detection")
+        return
 
     log.info(f"HLS: stream dimensions {w}x{h} @ {fps:.1f} fps")
 
@@ -174,34 +357,7 @@ def _hls_annotator_thread(
     # pushing live latency toward 30s and making /api/hls/latency meaningless.
     gop = max(1, int(round(HLS_SEGMENT_SECONDS * fps)))
     playlist = hls_dir / "playlist.m3u8"
-    cmd = [
-        ffmpeg_path(), "-y",
-        "-f", "rawvideo",
-        "-pix_fmt", "bgr24",
-        "-s", f"{w}x{h}",
-        "-r", str(fps),
-        "-i", "pipe:0",
-        "-c:v", "libx264",
-        "-preset", "ultrafast",
-        "-tune", "zerolatency",
-        # Output chroma MUST be forced. The input is bgr24 (full chroma), so
-        # FFmpeg auto-selects yuv444p for libx264 and emits High 4:4:4
-        # Predictive. No Android MediaCodec decoder handles 4:4:4 and ExoPlayer
-        # ships no software H.264 fallback, so the mobile LIVE tab cannot decode
-        # it at all. yuv420p yields a baseline-compatible stream that plays
-        # everywhere, and it is what the rest of the codebase already emits
-        # (roi_encoder, demo/video_writer).
-        "-pix_fmt", "yuv420p",
-        "-g", str(gop),
-        "-keyint_min", str(gop),
-        "-sc_threshold", "0",     # no scene-cut IDRs: keep segments even
-        "-an",
-        "-f", "hls",
-        "-hls_time", str(HLS_SEGMENT_SECONDS),
-        "-hls_list_size", str(HLS_LIST_SIZE),
-        "-hls_flags", "delete_segments",
-        str(playlist),
-    ]
+    cmd = _build_hls_ffmpeg_cmd(w, h, fps, gop, playlist)
 
     try:
         proc = subprocess.Popen(
@@ -225,18 +381,6 @@ def _hls_annotator_thread(
         _hls_state["ingest_latency_s"] = None
 
     # Ingest latency: how long FFmpeg takes to produce its first .ts segment.
-    def _watch_first_segment(hls_dir: Path, launch_time: float) -> None:
-        deadline = launch_time + 30.0
-        while time.time() < deadline:
-            if any(hls_dir.glob("*.ts")):
-                latency = round(time.time() - launch_time, 2)
-                with _hls_lock:
-                    _hls_state["ingest_latency_s"] = latency
-                log.info(f"HLS: first segment appeared in {latency}s")
-                return
-            time.sleep(0.25)
-        log.warning("HLS: first segment not seen within 30 s; latency unknown")
-
     threading.Thread(
         target=_watch_first_segment,
         args=(hls_dir, ffmpeg_launch_time),
@@ -253,87 +397,6 @@ def _hls_annotator_thread(
     # to flush. Each newly observed .ts is matched to a slice of frame-read
     # timestamps from `_hls_frame_ts_dq`, and the last
     # `_hls_state["latency_window"]` samples are averaged.
-    def _watch_segment_latency(
-        hls_dir: Path,
-        seg_fps: float,
-        seg_duration_s: float,
-        stop: threading.Event,
-    ) -> None:
-        seen: set[str] = set()
-        # Initial snapshot of any pre-existing .ts files (defensive - start()
-        # already deletes stale chunks, but skip if any survive).
-        try:
-            for p in hls_dir.glob("*.ts"):
-                seen.add(p.name)
-        except OSError:
-            pass
-
-        # Estimate frames per segment from the negotiated FPS. Clamp so weird
-        # camera streams that report fps=120 don't drain the queue too fast.
-        frames_per_seg = max(1, int(round(seg_duration_s * max(1.0, min(seg_fps, 60.0)))))
-        log.info(
-            f"HLS: latency watcher armed (~{frames_per_seg} frames/segment, "
-            f"window={_hls_state.get('latency_window', 20)})"
-        )
-
-        while not stop.is_set():
-            try:
-                # mtime-sorted so we process segments in the order FFmpeg wrote them
-                ts_files = sorted(
-                    (p for p in hls_dir.glob("*.ts") if p.name not in seen and p.is_file()),
-                    key=lambda p: p.stat().st_mtime,
-                )
-            except OSError:
-                ts_files = []
-
-            for p in ts_files:
-                seen.add(p.name)
-                try:
-                    seg_written_time = p.stat().st_mtime
-                except OSError:
-                    seg_written_time = time.time()
-
-                # Pop ~frames_per_seg oldest frame-read timestamps, or whatever
-                # is there: FFmpeg can flush the first segment early. The
-                # IndexError guard keeps the watcher alive if a writer ever
-                # touches the deque without holding _hls_lock.
-                popped: list[float] = []
-                with _hls_lock:
-                    n = min(frames_per_seg, len(_hls_frame_ts_dq))
-                    for _ in range(n):
-                        try:
-                            popped.append(_hls_frame_ts_dq.popleft())
-                        except IndexError:
-                            break
-
-                if not popped:
-                    # No frame timestamps queued for this segment - happens
-                    # if we missed the .ts notification window. Skip silently
-                    # rather than poison the average with bogus data.
-                    continue
-
-                # Median age = the typical frame's time-to-playable. Using the
-                # median (not the mean) is robust against the first/last frame
-                # outliers that bracket each segment's flush window.
-                popped.sort()
-                median_ts = popped[len(popped) // 2]
-                latency = max(0.0, seg_written_time - median_ts)
-
-                with _hls_lock:
-                    _hls_segment_latencies.append(latency)
-                    avg = sum(_hls_segment_latencies) / len(_hls_segment_latencies)
-                    _hls_state["latency_last_s"]  = round(latency, 3)
-                    _hls_state["latency_avg_s"]   = round(avg, 3)
-                    _hls_state["latency_samples"] = len(_hls_segment_latencies)
-
-            # Cap the seen-set so a long-running stream with delete_segments
-            # doesn't grow it unbounded. 256 entries × ~12 chars ≈ trivial.
-            if len(seen) > 256:
-                seen = set(sorted(seen)[-128:])
-
-            # Poll twice per chunk; FFmpeg writes a new .ts every seg_duration_s.
-            stop.wait(timeout=max(0.25, seg_duration_s / 2.0))
-
     threading.Thread(
         target=_watch_segment_latency,
         args=(hls_dir, fps, 2.0, stop_event),
@@ -346,30 +409,6 @@ def _hls_annotator_thread(
     # EOF, so a stream nobody watches (closed tab, phone off Wi-Fi) would pin
     # running=True and make every later /api/hls/start return 409. Setting
     # stop_event is enough: the frame loop's finally block does the teardown.
-    def _hls_idle_watchdog(stop: threading.Event, started: float) -> None:
-        while not stop.wait(timeout=5.0):
-            with _hls_lock:
-                if not _hls_state.get("running"):
-                    return
-                last = _hls_state.get("last_segment_fetch")
-            now = time.monotonic()
-            if last is None:
-                # Nobody has fetched a segment yet. Allow a generous grace for
-                # RTSP connect + warmup + the client's own playlist polling.
-                if now - started > HLS_STARTUP_GRACE_S:
-                    log.info(
-                        f"HLS: no client fetched a segment within "
-                        f"{HLS_STARTUP_GRACE_S}s of start; stopping the stream "
-                        "so the slot is not held.")
-                    stop.set()
-                    return
-            elif now - last > HLS_IDLE_TIMEOUT_S:
-                log.info(
-                    f"HLS: no segment fetched for {HLS_IDLE_TIMEOUT_S}s; "
-                    "stopping the abandoned stream.")
-                stop.set()
-                return
-
     threading.Thread(
         target=_hls_idle_watchdog,
         args=(stop_event, time.monotonic()),

@@ -131,13 +131,14 @@ Not verified: these are summaries of what each page said, read through a fetch h
 - `retention.estimate` (28, now under 15): `_folder_usage`, `_estimate_bytes_per_day`, `_headroom_days`. Checked against the old file on 225 scenarios (file layouts, policies, history values, disk states): identical.
 - `autocompress_runner.scan_once` (25, now under 15): `_scan_settings`, `_find_candidates`. The batch ownership and locking code was not touched. Checked on 216 scenarios (all six profiles, overrides, stability outcomes): identical.
 - `hls_runner._hls_annotator_thread` (31 to 18): `_open_capture`, `_probe_frame_size`, `_build_hls_ffmpeg_cmd`, and the three nested watchers lifted to module level. Checked by running old and new on a real 3 s clip with a fake ffmpeg: identical command, 77 identical frames, identical state in all five cases. Not covered: a real RTSP stream and its 10 s timeout.
+- `retention.purge_once` (29 to 13): `_purge_candidates`, `_purge_by_age`, `_purge_by_size`. `_delete` (the confinement and in-flight guard before each unlink) and the order of operations were not touched. Checked on real temp folders against the old file: 120 scenarios (layouts, eight policies, an in-flight file, an undeletable read only file), identical summaries and identical surviving files. The index prune and notification were stubbed in the comparison so real data could not be touched.
 - Encryption routes handed to Victor: docs/ENCRYPTION-CLEANUP-PLAN.md and GitHub issue 53.
-- Still open from the Phase 3 list: `purge_once` (deletes files, so it needs care), `benchmark_enhancement`, `main` in tuning_experiment, `LayerSegmentEncoder.add_frame`, `render_demo`, `api_segments`, `_detect_gdrive_root`, `parse`, `analyze_video`, `find_crf_for_target`, `read_plates_from_video`, and the main loop of `run_pipeline`.
+- Still open from the Phase 3 list: `benchmark_enhancement`, `main` in tuning_experiment, `LayerSegmentEncoder.add_frame`, `render_demo`, `api_segments`, `_detect_gdrive_root`, `parse`, `analyze_video`, `find_crf_for_target`, `read_plates_from_video`, and the main loop of `run_pipeline`.
 
 ## Numbers, 2026-11-09 (baseline at the start of the cleanup in brackets)
 
-- Tests: 2415 passed, 47 skipped, 0 failed [2140 passed, 46 skipped, 0 failed]. The 275 more passing tests cover the new features and the pinned helpers.
-- run_pipeline complexity 103 [123]. Grade D or worse functions: 14 [19]. Functions above 15 in the ratchet baseline: 35 [39].
+- Tests: 2425 passed, 47 skipped, 0 failed [2140 passed, 46 skipped, 0 failed]. The 285 more passing tests cover the new features and the pinned helpers.
+- run_pipeline complexity 103 [123]. Grade D or worse functions: 13 [19]. Functions above 15 in the ratchet baseline: 34 [39].
 - vulture at 80 percent: 0 findings [0]. At 60 percent: 80 lines [80]; two of those are `request.max_content_length = ...` assignments, which are false positives.
 - pip-audit: 0 of 131 packages with advisories [15 packages, 168 advisories]. zizmor offline: 0 findings [17].
 - Not verified anywhere in this cleanup: a real GitHub Actions run, the new Settings panel in a browser, large real uploads, and super-resolution on real images with pillow 13.

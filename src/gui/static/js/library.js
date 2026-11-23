@@ -681,3 +681,146 @@ window.addEventListener("DOMContentLoaded", async () => {
     });
   }
 });
+
+
+// ── Trash panel (roadmap 12.4) ─────────────────────────────────────────────
+// Delete only moves videos into a .svcs_trash folder. This panel lists what is
+// there and lets the user put videos back or erase them for good. Erasing asks
+// first, because it is the one thing in the Library that cannot be undone.
+window._svcsTrash = { items: [], sel: new Set() };
+
+function _trashEl(id) { return document.getElementById(id); }
+
+function _trashDate(ts) {
+  try { return new Date(ts * 1000).toLocaleString(); } catch (e) { return ""; }
+}
+
+function _trashRender() {
+  const t = window._svcsTrash;
+  const list = _trashEl("library-trash-list");
+  if (!list) return;
+  const total = t.items.reduce((n, i) => n + (i.size || 0), 0);
+  _trashEl("library-trash-summary").textContent = t.items.length
+    ? t.items.length + (t.items.length === 1 ? " video, " : " videos, ") + _fmtBytes(total) + " in the trash"
+    : "The trash is empty.";
+  list.innerHTML = t.items.map((i) =>
+    '<label class="x-trash-row">' +
+    '<input type="checkbox" data-path="' + _esc(i.path) + '"' + (t.sel.has(i.path) ? " checked" : "") +
+    ' aria-label="Select ' + _esc(i.name) + '"/>' +
+    '<span class="x-trash-name">' + _esc(i.name) + '</span>' +
+    '<span class="x-trash-meta">' + _fmtBytes(i.size) + " &middot; deleted " + _esc(_trashDate(i.trashed_at)) + '</span>' +
+    '</label>').join("");
+  list.querySelectorAll("input[type=checkbox]").forEach((cb) => {
+    cb.addEventListener("change", () => {
+      if (cb.checked) t.sel.add(cb.dataset.path); else t.sel.delete(cb.dataset.path);
+      _trashSync();
+    });
+  });
+  _trashSync();
+}
+
+function _trashSync() {
+  const t = window._svcsTrash;
+  const n = t.sel.size;
+  _trashEl("library-trash-restore").disabled = n === 0;
+  _trashEl("library-trash-purge").disabled = n === 0;
+  _trashEl("library-trash-empty").disabled = t.items.length === 0;
+}
+
+function _trashStatus(msg) {
+  const el = _trashEl("library-trash-status");
+  if (el) el.textContent = msg || "";
+}
+
+async function libLoadTrash() {
+  const folder = (_trashEl("library-folder") || {}).value || "";
+  try {
+    const resp = await fetch("/api/library/trash?folder=" + _enc(folder.trim()));
+    if (resp.status === 404) { _trashStatus("This version of the app has no trash list yet."); return; }
+    const data = await resp.json();
+    window._svcsTrash.items = data.items || [];
+    window._svcsTrash.sel = new Set();
+    _trashStatus("");
+    _trashRender();
+  } catch (e) {
+    _trashStatus("Could not reach the app to read the trash.");
+  }
+}
+
+async function libToggleTrash() {
+  const panel = _trashEl("library-trash");
+  if (!panel) return;
+  const open = panel.hidden;
+  panel.hidden = !open;
+  _trashEl("library-trash-btn").setAttribute("aria-expanded", open ? "true" : "false");
+  if (open) await libLoadTrash();
+}
+window.libToggleTrash = libToggleTrash;
+
+async function _trashPost(url, paths, extra) {
+  const folder = (_trashEl("library-folder") || {}).value || "";
+  const resp = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(Object.assign({ paths: paths, folder: folder.trim() }, extra || {})),
+  });
+  let data = {};
+  try { data = await resp.json(); } catch (_) { /* non JSON error body */ }
+  return data;
+}
+
+async function libTrashRestore() {
+  const paths = Array.from(window._svcsTrash.sel);
+  if (!paths.length) return;
+  _trashStatus("Restoring...");
+  try {
+    const data = await _trashPost("/api/library/trash/restore", paths);
+    const ok = (data.restored || []).length;
+    const bad = (data.failed || []).length;
+    await libLoadTrash();
+    await loadLibrary();
+    _trashStatus(ok ? ok + (ok === 1 ? " video" : " videos") + " put back in the library." +
+      (bad ? " " + bad + " could not be restored." : "") : (data.error || "Could not restore the selected videos."));
+  } catch (e) {
+    _trashStatus("Could not reach the app to restore.");
+  }
+}
+window.libTrashRestore = libTrashRestore;
+
+async function _trashErase(paths, what) {
+  const msg = "Erase " + what + " for good?\n\nThis cannot be undone. The files are removed from the disk.";
+  if (!window.confirm(msg)) return;
+  _trashStatus("Erasing...");
+  try {
+    // The server takes at most 200 videos per request, so a big trash goes in chunks.
+    const data = { purged: [], failed: [], freed_bytes: 0 };
+    for (let i = 0; i < paths.length; i += 200) {
+      const part = await _trashPost("/api/library/trash/purge", paths.slice(i, i + 200), { confirm: true });
+      data.purged = data.purged.concat(part.purged || []);
+      data.failed = data.failed.concat(part.failed || []);
+      data.freed_bytes += part.freed_bytes || 0;
+      if (part.error) data.error = part.error;
+    }
+    const ok = data.purged.length;
+    const bad = data.failed.length;
+    await libLoadTrash();
+    _trashStatus(ok ? ok + (ok === 1 ? " video" : " videos") + " erased, " + _fmtBytes(data.freed_bytes || 0) +
+      " freed." + (bad ? " " + bad + " could not be erased." : "") : (data.error || "Could not erase the selected videos."));
+  } catch (e) {
+    _trashStatus("Could not reach the app to erase.");
+  }
+}
+
+function libTrashPurge() {
+  const paths = Array.from(window._svcsTrash.sel);
+  if (!paths.length) return;
+  _trashErase(paths, paths.length === 1 ? "this video" : paths.length + " videos");
+}
+window.libTrashPurge = libTrashPurge;
+
+function libTrashEmpty() {
+  const paths = window._svcsTrash.items.map((i) => i.path);
+  if (!paths.length) return;
+  _trashErase(paths, "everything in the trash (" + paths.length + (paths.length === 1 ? " video" : " videos") + ")");
+}
+window.libTrashEmpty = libTrashEmpty;

@@ -13,6 +13,9 @@ compress flow. Endpoints:
                                  inline detail player
   * POST /api/library/compress - validate a path and hand it to the start flow
   * POST /api/library/delete   - move videos to a recoverable .svcs_trash folder
+  * GET  /api/library/trash    - list what is in the trash
+  * POST /api/library/trash/restore - put trashed videos back
+  * POST /api/library/trash/purge   - erase trashed videos for good (confirm: true)
 
 Thumbnails are generated with one ffmpeg frame and cached under the OS cache dir
 so listing stays fast and the request thread is never blocked twice for the same
@@ -661,3 +664,147 @@ def api_library_delete():
     return jsonify({"ok": bool(moved) and not failed, "moved": moved,
                     "failed": failed}), status
 
+
+# ── Trash: list, restore, purge (roadmap 12.4) ─────────────────────────────
+# Delete (above) only ever MOVES a video into a ``.svcs_trash`` folder beside
+# it. These routes finish the story: see what is in the trash, put a video back
+# where it came from, or erase it for good. Erasing is the one irreversible
+# thing the Library can do, so it needs an explicit ``confirm: true``.
+
+_TRASH_LIST_CAP = 2000
+
+
+def _safe_trashed(raw, context_folder: str = ""):
+    """Like _safe_video, but the file must sit directly inside a trash folder."""
+    p = _safe_video(raw if isinstance(raw, str) else "", context_folder)
+    if p is None or p.parent.name != TRASH_DIRNAME:
+        return None
+    return p
+
+
+def _find_trash_dirs(folder: Path):
+    """Every ``.svcs_trash`` folder at or below ``folder`` (hls folders skipped)."""
+    found = []
+    for dirpath, dirnames, _files in os.walk(folder):
+        if TRASH_DIRNAME in dirnames:
+            found.append(Path(dirpath) / TRASH_DIRNAME)
+        dirnames[:] = [d for d in dirnames
+                       if d.lower() not in ("hls", TRASH_DIRNAME) and not d.startswith(".")]
+    return found
+
+
+def _drop_if_empty(trash: Path) -> None:
+    try:
+        trash.rmdir()  # only succeeds when nothing is left inside
+    except OSError:
+        pass
+
+
+@library_bp.route("/api/library/trash", methods=["GET"])
+def api_library_trash():
+    """List trashed videos under the library folder, newest first."""
+    folder = _resolve_folder(request.args.get("folder", ""))
+    if not folder.is_dir():
+        return jsonify({"error": "folder not found"}), 404
+    items, truncated = [], False
+    for trash in _find_trash_dirs(folder):
+        try:
+            entries = list(os.scandir(trash))
+        except OSError:
+            continue
+        for e in entries:
+            try:
+                if not e.is_file() or _suffix(e.name) not in VIDEO_EXTS:
+                    continue
+                st = e.stat()
+            except OSError:
+                continue
+            items.append({"name": e.name, "path": str(Path(e.path).resolve()),
+                          "size": st.st_size, "trashed_at": st.st_mtime,
+                          "restores_to": str(trash.parent)})
+            if len(items) >= _TRASH_LIST_CAP:
+                truncated = True
+                break
+        if truncated:
+            break
+    items.sort(key=lambda i: i["trashed_at"], reverse=True)
+    return jsonify({"items": items, "count": len(items),
+                    "total_bytes": sum(i["size"] for i in items),
+                    "truncated": truncated})
+
+
+def _trash_batch(data):
+    """Validate a restore/purge body; return (paths, folder, error_response)."""
+    if not data or not isinstance(data, dict):
+        return None, "", (jsonify({"error": "Request body must be a JSON object"}), 400)
+    paths = data.get("paths")
+    if not isinstance(paths, list) or not paths:
+        return None, "", (jsonify({"error": "paths must be a non-empty list"}), 400)
+    if len(paths) > _MAX_DELETE_BATCH:
+        return None, "", (jsonify({"error": f"at most {_MAX_DELETE_BATCH} videos per request"}), 400)
+    return paths, str(data.get("folder", "") or ""), None
+
+
+@library_bp.route("/api/library/trash/restore", methods=["POST"])
+def api_library_trash_restore():
+    """Move trashed videos back next to where they were. Never overwrites."""
+    paths, folder, err = _trash_batch(request.get_json(silent=True))
+    if err:
+        return err
+    restored, failed = [], []
+    for raw in paths:
+        p = _safe_trashed(raw, folder)
+        if p is None:
+            failed.append({"path": raw if isinstance(raw, str) else "",
+                           "error": "not a trashed video"})
+            continue
+        home = p.parent.parent
+        try:
+            target = _unique_trash_target(home, p.name)  # a free name in ``home``
+            p.replace(target)
+        except OSError as exc:
+            log.warning("Library: could not restore %s: %s", p.name, exc)
+            failed.append({"path": str(p), "error": "could not move the file back"})
+            continue
+        _drop_if_empty(p.parent)
+        log.info("Library: restored %s to %s", p.name, home)
+        restored.append({"path": str(p), "restored": str(target)})
+    if restored:
+        _reset_library_cache()
+    status = 200 if restored or not failed else 400
+    return jsonify({"ok": bool(restored) and not failed, "restored": restored,
+                    "failed": failed}), status
+
+
+@library_bp.route("/api/library/trash/purge", methods=["POST"])
+def api_library_trash_purge():
+    """Erase trashed videos for good. Needs ``"confirm": true`` in the body."""
+    data = request.get_json(silent=True)
+    paths, folder, err = _trash_batch(data)
+    if err:
+        return err
+    if data.get("confirm") is not True:
+        return jsonify({"error": "purging is permanent; send confirm: true"}), 400
+    purged, failed, freed = [], [], 0
+    for raw in paths:
+        p = _safe_trashed(raw, folder)
+        if p is None:
+            failed.append({"path": raw if isinstance(raw, str) else "",
+                           "error": "not a trashed video"})
+            continue
+        try:
+            size = p.stat().st_size
+            p.unlink()
+        except OSError as exc:
+            log.warning("Library: could not purge %s: %s", p.name, exc)
+            failed.append({"path": str(p), "error": "could not delete the file"})
+            continue
+        _drop_if_empty(p.parent)
+        freed += size
+        log.info("Library: purged %s from the trash", p.name)
+        purged.append({"path": str(p)})
+    if purged:
+        _reset_library_cache()
+    status = 200 if purged or not failed else 400
+    return jsonify({"ok": bool(purged) and not failed, "purged": purged,
+                    "failed": failed, "freed_bytes": freed}), status

@@ -2347,7 +2347,24 @@ header{min-height:56px;height:auto}
   .sidebar .preset-card.selected{box-shadow:none;border-width:2px;padding:calc(0.9rem - 1px) calc(1rem - 1px)}
   .sidebar .btn-row:has(#btn-start){margin-left:0;margin-right:0;padding:0.9rem 1.25rem;border:1px solid var(--border-ctl);border-radius:4px;margin:0 1.25rem 1rem}
 }
-/* ── Light theme ─────────────────────────────────────────────────────────
+/* ── Full width section bar; Compress panel only on Home (desktop) ────────
+   The redesign boards put the section tabs in one bar under the header and
+   show "Compress a video" next to Activity on Home only. Other sections use
+   the whole width. The markup order and every id are unchanged: .tab-area is
+   made transparent to the grid, so its nav and pages become main's items. */
+@media (min-width:721px){
+  main{grid-template-columns:minmax(420px,34%) minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
+  .tab-area{display:contents}
+  .tab-nav{grid-column:1 / -1;grid-row:1;height:48px;padding:0 1.5rem;background:var(--surface);border-bottom:1px solid var(--border)}
+  .tab-btn{font-size:0.8rem}
+  .sidebar{grid-column:1;grid-row:2;min-height:0}
+  .tab-page{grid-column:1 / -1;grid-row:2;min-height:0;overflow-y:auto}
+  main:has(#tab-home.active) .tab-page{grid-column:2}
+  main:not(:has(#tab-home.active)) .sidebar{display:none}
+  .sidebar{border-right:0}
+  .step-card{background:var(--surface);border:1px solid var(--border);border-radius:4px;margin:0 1.5rem 1.25rem}
+  .step-card .config-section:first-of-type{padding-top:0.25rem}
+  .side-title{padding:1rem 1.5rem 1rem}}/* ── Light theme ─────────────────────────────────────────────────────────
    Set by theme.js through html[data-theme="light"]. Accent colors are darker here
    because the dark theme's bright amber, green and teal fail contrast on a light page.
    Measured: text 14:1 or better, dim text 5.7:1, every accent 4.8:1 or better on all four
@@ -2432,6 +2449,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
       <h2 class="side-title">Compress a video</h2>
 
       <!-- ── STEP 1: Source ─────────────────────── -->
+      <div class="step-card">
       <div class="step-header">
         <span class="step-num">1</span>
         <span class="step-label">Choose the video</span>
@@ -2622,8 +2640,10 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
         </details>
         </details><!-- /codec-more -->
       </div>
+      </div><!-- /step-card 1 -->
 
       <!-- ── STEP 2: Preset ─────────────────────── -->
+      <div class="step-card">
       <div class="step-header" style="margin-top:0;">
         <span class="step-num">2</span>
         <span class="step-label">Pick what to keep</span>
@@ -2682,8 +2702,10 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
           <span class="preset-badge"></span>
         </div>
       </div>
+      </div><!-- /step-card 2 -->
 
       <!-- ── STEP 3: Options + Start ────────────── -->
+      <div class="step-card">
       <div class="step-header">
         <span class="step-num">3</span>
         <span class="step-label">Settings</span>
@@ -3053,6 +3075,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
         </div>
 
       </div><!-- /advanced-panel -->
+      </div><!-- /step-card 3 -->
 
       <!-- Action buttons -->
       <div class="last-result" id="last-result" hidden aria-live="polite">
@@ -3475,6 +3498,22 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
         </div>
 
         <div id="library-status" role="status"></div>
+        <div class="x-trashbar">
+          <button class="btn btn-ghost" id="library-trash-btn" onclick="libToggleTrash()" aria-expanded="false" aria-controls="library-trash">Trash</button>
+        </div>
+        <div id="library-trash" class="x-card x-trash" hidden>
+          <div class="x-trash-head">
+            <strong>Trash</strong>
+            <span id="library-trash-summary" aria-live="polite"></span>
+          </div>
+          <div id="library-trash-list" class="x-trash-list"></div>
+          <div class="x-trash-actions">
+            <button class="btn btn-primary" id="library-trash-restore" onclick="libTrashRestore()" disabled>Restore selected</button>
+            <button class="btn btn-ghost x-btn-danger" id="library-trash-purge" onclick="libTrashPurge()" disabled>Erase selected</button>
+            <button class="btn btn-ghost x-btn-danger" id="library-trash-empty" onclick="libTrashEmpty()" disabled>Empty trash</button>
+          </div>
+          <div id="library-trash-status" role="status"></div>
+        </div>
         <div id="library-stats-strip"></div>
 
         <div id="library-empty" style="display:none;">

@@ -401,7 +401,7 @@ def run_pipeline(
                  Adds per-frame CPU cost; not recommended for real-time sources.
         enhance_scale: Intermediate upscale factor used by the Enhancer.
                        Default 4 (matches RealESRGAN_x4plus weights).
-        encrypt: If True, encrypt each output segment with AES-256-CBC after
+        encrypt: If True, encrypt each output segment with AES-256-GCM after
                  encoding. Requires `encrypt_password` or `encrypt_key_file`.
                  The plaintext .mp4 is deleted; only the .mp4.enc file is kept.
                  Requires the `cryptography` package.

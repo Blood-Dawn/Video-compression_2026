@@ -3,6 +3,7 @@
 import io
 
 from gui.app import app
+from gui.routes.files_bp import _MULTIPART_OVERHEAD
 from utils import upload_limits
 
 
@@ -11,7 +12,7 @@ def test_max_content_length_matches_the_chunked_cap():
 
 
 def test_oversized_single_shot_upload_is_rejected_with_413():
-    over = upload_limits.max_upload_bytes() + 1
+    over = upload_limits.max_upload_bytes() + _MULTIPART_OVERHEAD + 1
     client = app.test_client()
     resp = client.post(
         "/api/upload",

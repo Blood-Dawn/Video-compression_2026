@@ -117,22 +117,12 @@ async function doDecryptPanel() {
       return;
     }
 
-    // Saved path comes back in a custom header - stream the bytes for
-    // playback AND tell the user where the persistent copy landed.
-    // Author: Bloodawn (KheivenD), 2026-05-03 (decrypt destination).
-    const savedPath = res.headers.get('X-Decrypted-Path') || '';
+    // The server deletes its plaintext copy once the download finishes, so
+    // the clip only exists as this in-browser blob (planner 11.8).
     const blob   = await res.blob();
     const blobUrl = URL.createObjectURL(blob);
-    const savedBase = savedPath ? savedPath.split(/[\\/]/).pop() : '';
-    statusEl.textContent = savedBase
-      ? `Decrypted → ${savedBase} (saved to Decrypted/)`
-      : 'Decrypted (playing)';
+    statusEl.textContent = 'Decrypted (playing, not saved to disk)';
     statusEl.style.color = 'var(--green)';
-    if (savedPath) {
-      pushNotif('DECRYPTED',
-        `Saved to: ${savedPath}`,
-        'success', null, 8000);
-    }
     // Switch to Metrics tab and play in the preview
     switchTab('metrics');
     playSegment(blobUrl, filePath + ' (decrypted)');

@@ -1081,7 +1081,7 @@
     }
 
     /* ─────────────── HOME TAB ─────────────── */
-    #tab-home { overflow: hidden; }
+    #tab-home { overflow-x: hidden; overflow-y: auto; }
     .home-hero {
       display: flex;
       align-items: center;
@@ -2105,7 +2105,7 @@
       padding: 1rem 1.5rem;
       border-bottom: 1px solid var(--border);
       background: var(--surface2);
-      position: sticky; top: 0;
+      position: static;
     }
     .help-modal-title {
       font-family: var(--display);
@@ -2300,7 +2300,7 @@ p,li{text-wrap:pretty}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:0.001ms !important;animation-iteration-count:1 !important;transition-duration:0.001ms !important;scroll-behavior:auto !important}
 }
-.sidebar .btn-row:has(#btn-start){position:sticky;bottom:0;z-index:5;background:var(--surface2);border-top:1px solid var(--border-ctl);padding:0.75rem 1rem;margin-left:-1rem;margin-right:-1rem}
+.sidebar .btn-row:has(#btn-start){position:static;margin-top:0.75rem}
 header{min-height:56px;height:auto}
 @media (max-width:720px){
   html{font-size:16px}

@@ -260,29 +260,46 @@ def _stream_file(path, size):
             yield chunk
 
 
-def _decrypted_response(enc_path, out):
-    """Build the download response for a decrypted clip.
+def _discard_decrypted(out):
+    """Delete the plaintext copy, then its Decrypted/ folder if now empty."""
+    try:
+        out.unlink(missing_ok=True)
+        out.parent.rmdir()
+    except OSError:
+        pass  # folder not empty (another clip mid-download) or already gone
 
-    Small clips are read at once so no file handle outlives the request (an
-    open handle blocks a re-decrypt replace on Windows). Larger clips stream
-    in chunks.
+
+def _decrypted_response(enc_path, out):
+    """Build the download response for a decrypted clip, then delete the copy.
+
+    The plaintext only exists to be downloaded, so it never outlives the
+    request. Small clips are read at once and deleted before the response is
+    returned (no file handle outlives the request; an open handle blocks the
+    delete on Windows). Larger clips stream in chunks and are deleted when
+    the response closes, whether the download finished or the client left.
     """
     try:
         size = out.stat().st_size
         data = out.read_bytes() if size <= _INLINE_MAX_BYTES else None
     except OSError as e:
+        _discard_decrypted(out)
         return jsonify({"error": f"Could not read decrypted file: {e}"}), 500
 
-    log.info("Decrypted %s -> %s (%d KB)", enc_path.name, out, size // 1024)
-    return Response(
+    log.info("Decrypted %s (%d KB); plaintext copy is removed after download",
+             enc_path.name, size // 1024)
+    if data is not None:
+        _discard_decrypted(out)
+    resp = Response(
         data if data is not None else _stream_file(out, size),
         mimetype="video/mp4",
         headers={
             "Content-Disposition": f'attachment; filename="{enc_path.stem}"',
             "Content-Length": str(size),
-            "X-Decrypted-Path": str(out),
         },
     )
+    if data is None:
+        resp.call_on_close(lambda: _discard_decrypted(out))
+    return resp
 
 
 @encryption_bp.route("/api/decrypt", methods=["POST"])
@@ -296,9 +313,9 @@ def api_decrypt():
         "key_file":  "/path/to/camera.key"  // mutually exclusive with password
       }
 
-    The plaintext is kept at <enc_dir>/Decrypted/<name> and also streamed to
-    the client; its path is returned in the X-Decrypted-Path header. The .enc
-    file is NOT deleted.
+    The plaintext is staged at <enc_dir>/Decrypted/<name> only to be sent to
+    the client, then deleted once the download finishes (planner 11.8). The
+    .enc file is NOT deleted.
 
     Returns the video file as application/octet-stream (or video/mp4) with
     Content-Disposition: attachment so the browser saves/plays it.
@@ -324,10 +341,8 @@ def api_decrypt():
     if err:
         return err
 
-    # The plaintext is kept in <enc_dir>/Decrypted/ as well as streamed: a
-    # browser download never says where the file went, and the metrics player
-    # replays the kept copy through /api/media.
-    # Author: Bloodawn (KheivenD), 2026-05-03 (decrypt destination fix).
+    # The plaintext is staged in <enc_dir>/Decrypted/ and removed after the
+    # download (see _decrypted_response); it is never left on disk.
     out_path, err = _prepare_decrypt_destination(enc_path)
     if err:
         return err

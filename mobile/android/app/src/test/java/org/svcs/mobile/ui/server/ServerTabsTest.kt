@@ -14,7 +14,7 @@ class ServerTabsTest {
     fun liveIsOfferedOnlyWhenTheServerStreams() {
         assertEquals(ServerTab.entries.toList(), visibleServerTabs(withLive))
         assertEquals(
-            listOf(ServerTab.HOME, ServerTab.LIBRARY, ServerTab.EVENTS, ServerTab.METRICS),
+            listOf(ServerTab.HOME, ServerTab.LIBRARY, ServerTab.EVENTS, ServerTab.METRICS, ServerTab.CAM),
             visibleServerTabs(fieldEdition),
         )
         // Capabilities not known yet: no LIVE rather than a tab that 404s.

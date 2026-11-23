@@ -465,6 +465,9 @@ class SvcsApi(
     override fun savings(): Fetched<Savings> =
         getJson("${baseUrl.trimEnd('/')}/api/savings")
 
+    override fun securityCam(): Fetched<SecurityCamInfo> =
+        getJson("${baseUrl.trimEnd('/')}/api/security-cam")
+
     /**
      * URL for one thumbnail. Handed to Coil, which uses [httpClient].
      *

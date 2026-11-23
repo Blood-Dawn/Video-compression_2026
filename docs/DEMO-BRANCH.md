@@ -23,8 +23,8 @@ This is the one branch the Project Showcase (Wednesday 12/9/26) is built and dem
 | 13.2 | Home page: all four modes, each with what it does and when to use it | 11/23 to 11/25 | Done |
 | 13.3 | Accurate result numbers (Saved percent, MB before and after) | 11/23 to 11/25 | Done on the server and the Home page. See below |
 | 13.4 | Segment length: whole video default, recommended, presets | 11/23 to 11/25 | Done |
-| 13.1 | Security cam: phone records, desktop compresses | 11/25 to 12/1 | Desktop side done. Android side designed, not built. See docs/SECURITY-CAM.md |
-| 12.3 | Live camera testing: phone on the patio, then the EMEET SmartCam S600 | 11/28 to 12/1 | Waits on 13.1 Android |
+| 13.1 | Security cam: phone records, desktop compresses | 11/25 to 12/1 | Desktop and Android both built. Verified on the emulator: 1 minute clips upload, compress and show real sizes (76 to 77 percent saved on the test clips). Real phone and 5 minute length still untested. See docs/SECURITY-CAM.md |
+| 12.3 | Live camera testing: phone on the patio, then the EMEET SmartCam S600 | 11/28 to 12/1 | 13.1 Android is built, so this can start |
 | 12.4 | Restore and purge for the trash folder | 11/30 to 12/2 | Open |
 | 12.6 | Review and merge open PRs (includes 8.9) | 11/30 to 12/2 | Open |
 | 3.11 | Fresh install walkthrough (issue 48) | 12/1 to 12/2 | Open |

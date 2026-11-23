@@ -41,6 +41,9 @@ import org.svcs.mobile.ui.server.live.LiveScreen
 import org.svcs.mobile.ui.server.live.LiveViewModel
 import org.svcs.mobile.ui.server.metrics.MetricsScreen
 import org.svcs.mobile.ui.server.metrics.MetricsViewModel
+import org.svcs.mobile.securitycam.ClipQueue
+import org.svcs.mobile.ui.server.cam.SecurityCamScreen
+import org.svcs.mobile.ui.server.cam.SecurityCamViewModel
 import org.svcs.mobile.ui.theme.SvcsAmber
 import org.svcs.mobile.ui.theme.SvcsBorder
 import org.svcs.mobile.ui.theme.SvcsSurface
@@ -55,6 +58,7 @@ enum class ServerTab(val label: String, val icon: ImageVector) {
     LIVE("LIVE", SvcsIcons.Live),
     EVENTS("EVENTS", SvcsIcons.Events),
     METRICS("METRICS", SvcsIcons.Metrics),
+    CAM("CAM", SvcsIcons.Live),
 }
 
 /**
@@ -120,6 +124,10 @@ fun ServerScreen(
                     vm = viewModel(key = "events-$sessionEpoch") { EventsViewModel(client) })
                 ServerTab.METRICS -> MetricsScreen(
                     vm = viewModel(key = "metrics-$sessionEpoch") { MetricsViewModel(client) })
+                ServerTab.CAM -> SecurityCamScreen(
+                    vm = viewModel(key = "cam-$sessionEpoch") {
+                        SecurityCamViewModel(client, ClipQueue.workStates(appContext))
+                    })
             }
         }
     }

@@ -98,6 +98,9 @@ interface SvcsApiClient {
 
     fun savings(): Fetched<Savings>
 
+    /** The desktop's Security cam settings and recent clips (read only here). */
+    fun securityCam(): Fetched<SecurityCamInfo>
+
     // ── live (HLS) ───────────────────────────────────────────────────────
 
     fun hlsStatus(): Fetched<HlsStatus>

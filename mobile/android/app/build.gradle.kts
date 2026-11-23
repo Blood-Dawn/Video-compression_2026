@@ -223,6 +223,13 @@ dependencies {
     // Fall roadmap Phase 2: on-device detection for "Smart Compress".
     implementation(libs.litert)
 
+    // Security cam (roadmap 13.1): record clips with CameraX from a foreground service.
+    implementation(libs.androidx.camera.core)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.video)
+    implementation(libs.androidx.lifecycle.service)
+
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
     testImplementation(libs.kotlinx.coroutines.test)

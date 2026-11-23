@@ -20,7 +20,7 @@ The phone does not stream video, and Bluetooth is not used. Bluetooth is far too
 - `src/gui/static/js/security_cam.js` and the Security cam tab in `index.html`.
 - `tests/test_security_cam.py`.
 
-## Android (designed, not built yet)
+## Android (built, emulator verified 2026-11-23)
 
 Nothing in the app records video today. The manifest says it asks for no camera permission, so that note changes too.
 
@@ -52,3 +52,6 @@ Pass means each clip shows its Saved percent, and the same figure appears on the
 ## Privacy
 
 A camera that faces a public road records people. Keep the footage on your own machines and use it only for the course demo.
+
+Android status, 2026-11-23: built as the CAM tab under SERVER. Files: securitycam/SecurityCamService.kt (CameraX, camera foreground service), ClipQueue.kt (own folder and unique work name), SecurityCamBus.kt, ui/server/cam/ (screen and view model), net/SecurityCamModels.kt. Cam clips go through UploadWorker with the quiet flag, which skips the per clip notification and skips the phone's Auto-compress toggle, because the desktop watcher compresses them (without that, each clip was compressed twice and one result was bad). Tested on the svcs_test emulator against this branch: pairing, camera permission, 1 minute clips, upload, compress, sizes on both screens. A short gap of under a second between clips is expected. Not yet tested: a physical phone, the 5 minute length over a long run, screen off recording, and low space behavior.
+

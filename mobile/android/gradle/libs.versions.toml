@@ -37,6 +37,7 @@ robolectric = "4.14.1"
 kotlinxCoroutines = "1.9.0"
 work = "2.10.0"
 litert = "1.4.2"
+camerax = "1.4.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -93,6 +94,13 @@ litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "
 # Server Mode LIBRARY thumbnails (LibraryScreen), fetched with the app's
 # authenticated OkHttp client. The compressor's own thumbnails use
 # ContentResolver.loadThumbnail instead (ui/components/VideoThumbnail.kt).
+# Security cam (roadmap 13.1): CameraX records the clips. Apache-2.0, no Play
+# Services needed, so F-Droid stays open.
+androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
+androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
+androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
+androidx-camera-video = { group = "androidx.camera", name = "camera-video", version.ref = "camerax" }
+androidx-lifecycle-service = { group = "androidx.lifecycle", name = "lifecycle-service", version.ref = "lifecycle" }
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 
 junit = { group = "junit", name = "junit", version.ref = "junit" }

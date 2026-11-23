@@ -65,6 +65,9 @@ class UploadWorker(
         const val KEY_DISPLAY_NAME = "display_name"
         const val KEY_SHA256 = "sha256"
         const val KEY_TRACKING_ID = "tracking_id"
+        /** Security cam clips: no per-clip notification and no server-side auto-compress
+         *  (the desktop watcher compresses them). */
+        const val KEY_QUIET = "quiet"
 
         /** Progress Data: 0..100. */
         const val KEY_PROGRESS_PERCENT = "progress_percent"
@@ -91,6 +94,7 @@ class UploadWorker(
             displayName: String,
             sha256: String,
             trackingId: String,
+            quiet: Boolean = false,
         ): OneTimeWorkRequest =
             OneTimeWorkRequestBuilder<UploadWorker>()
                 .setInputData(
@@ -99,6 +103,7 @@ class UploadWorker(
                         KEY_DISPLAY_NAME to displayName,
                         KEY_SHA256 to sha256,
                         KEY_TRACKING_ID to trackingId,
+                        KEY_QUIET to quiet,
                     ),
                 )
                 .setConstraints(
@@ -125,6 +130,9 @@ class UploadWorker(
             return fail("The upload request was incomplete.", null, null)
         }
         val file = File(path)
+        // Security cam clips (quiet): the desktop watcher compresses them, so the
+        // server must not also start a Library compress for each one.
+        val quiet = inputData.getBoolean(KEY_QUIET, false)
         val checkpoints = DataStoreCheckpointStore(applicationContext, trackingId)
         if (!file.isFile) {
             return fail("The phone's copy of the video is gone; pick it again.", file, checkpoints)
@@ -148,7 +156,7 @@ class UploadWorker(
                         displayName = displayName,
                         sha256 = sha,
                         checkpoints = checkpoints,
-                        autoCompress = { store.autoCompressUpload() },
+                        autoCompress = { !quiet && store.autoCompressUpload() },
                         onProgress = { pct ->
                             setProgress(workDataOf(KEY_PROGRESS_PERCENT to pct))
                             tryForeground(pct)
@@ -161,7 +169,7 @@ class UploadWorker(
             return when (outcome) {
                 is UploadOutcome.Succeeded -> {
                     cleanup(file, checkpoints)
-                    notifyDone("Upload finished", outcome.message)
+                    if (!quiet) notifyDone("Upload finished", outcome.message)
                     Result.success(workDataOf(KEY_MESSAGE to outcome.message))
                 }
                 is UploadOutcome.Failed -> fail(outcome.message, file, checkpoints)

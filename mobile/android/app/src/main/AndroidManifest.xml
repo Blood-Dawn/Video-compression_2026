@@ -2,8 +2,9 @@
 <!--
   SVCS Mobile - manifest.
 
-  Permissions are deliberately minimal. No location, no camera, no contacts,
-  and no storage permission: the compressor reads only videos the user picks
+  Permissions are deliberately minimal. No location, no contacts, and no storage
+  permission. The camera is used only by the opt-in Security cam (CAMERA, below),
+  never by the compressor: the compressor reads only videos the user picks
   or shares in (a per-file grant), and writes its output through MediaStore,
   which needs no permission on API 29+.
 
@@ -54,6 +55,15 @@
          above and org.svcs.mobile.update.UpdateManager). -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- Security cam (roadmap 13.1): record clips with the back camera from a
+         foreground service, and hold the CPU awake while the screen is off.
+         Camera hardware is NOT required, so the compressor still installs on
+         devices and emulators without one. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
     <application
         android:name=".SvcsApplication"
         android:allowBackup="false"
@@ -96,6 +106,11 @@
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="mediaProcessing|dataSync"
             tools:node="merge" />
+
+        <service
+            android:name=".securitycam.SecurityCamService"
+            android:exported="false"
+            android:foregroundServiceType="camera" />
 
         <!-- Fall 3.18: exposes only getExternalFilesDir()/updates/ (where
              UpdateManager downloads and verifies a new APK) as a content://

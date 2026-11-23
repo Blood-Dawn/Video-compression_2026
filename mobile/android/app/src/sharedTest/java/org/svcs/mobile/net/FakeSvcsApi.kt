@@ -171,6 +171,9 @@ class FakeSvcsApi : SvcsApiClient {
         return savingsResult
     }
 
+    var securityCamResult: Fetched<SecurityCamInfo> = Fetched.Ok(SecurityCamInfo())
+    override fun securityCam(): Fetched<SecurityCamInfo> = securityCamResult
+
     // ── live (HLS) ───────────────────────────────────────────────────────
 
     var hlsStatusResult: Fetched<HlsStatus> = Fetched.Ok(HlsStatus())

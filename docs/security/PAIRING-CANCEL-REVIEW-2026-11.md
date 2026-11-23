@@ -4,9 +4,10 @@
 **Reviewer:** Victor De Souza Teixeira
 **Code reviewed:** `ServerSettingsViewModel.kt`, `ServerSettingsScreen.kt`,
 `PairingFlowInstrumentedTest.kt`, `device_tokens.mint_token`
-**Method:** reading the code. Nothing here was run on a device or emulator, because the
-Android build is not available in the review environment. Every claim marked
-"to confirm" needs one check on a phone.
+**Method:** reading the code. Nothing here was run on a device or emulator, and the fixes
+below were not compiled, because the Android SDK is not available in the review
+environment. Run `./gradlew :app:testDebugUnitTest` on a machine with the SDK, and check
+the items marked "to confirm" on a phone.
 
 ---
 
@@ -22,8 +23,8 @@ typing a draft:
 
 | ID | Finding | Severity | Status |
 |----|---------|----------|--------|
-| PR-01 | Push actions use the unsaved draft, not the saved pairing | Low | Open, fix proposed |
-| PR-02 | The draft is not reverted on cancel, and `ok` stays true after editing | Low | Open, to confirm on device |
+| PR-01 | Push actions use the unsaved draft, not the saved pairing | Low | Fixed in this branch, not yet compiled |
+| PR-02 | The draft is not reverted on cancel, and the green state stays after editing | Low | Fixed in this branch, not yet compiled |
 | PR-03 | An abandoned re-pair leaves an unused active device token on the server | Low | Open, operator action |
 
 ## PR-01 - Push actions use the unsaved draft
@@ -40,23 +41,24 @@ cancelled re-pair (new URL or token typed, never saved):
   on every change to either field while `pushLoaded` is false, so a half-typed token can be
   sent to a half-typed address as the user types.
 
-**Fix proposed.** Keep the saved pairing in separate fields (`savedUrl`, `savedToken`, set by
+**Fix (this branch).** Keep the saved pairing in separate fields (`savedUrl`, `savedToken`, set by
 the load in `init` and by `save()`), build `pairedApi()` from those, and key the
 `LaunchedEffect` on them. Add a JVM test: type a draft, call `savePushConfig()`, assert the
 fake client was built with the saved credentials.
 
 ## PR-02 - The draft survives a cancel, and `ok` is not reset on edit
 
-* `onServerUrlChanged` and `onTokenChanged` do not reset `ok`. After one successful TEST, a
-  new token typed over it still shows the green "ok" state until the next TEST finishes.
-  SAVE is enabled whenever `!busy`, so a user can save an untested token. This is a design
-  choice, but the stale green state is misleading.
+* `onServerUrlChanged` and `onTokenChanged` did not reset `ok`. After one successful TEST, a
+  new token typed over it still showed the green "ok" colour on the next message. This is
+  cosmetic: SAVE & OPEN only appears while `capabilities` is set, and both handlers already
+  clear that, so an untested token cannot be saved from the screen.
 * There is no revert path. If the view model outlives the screen (to confirm: how
   `viewModel()` is scoped in the nav graph), returning to the screen shows the draft next
   to the saved pairing that the rest of the app is actually using.
 
-**Fix proposed.** Reset `ok` and `capabilities` in both change handlers, and add a
-"discard changes" action that reloads from `TokenStore`.
+**Fix (this branch).** Both change handlers now reset `ok`, and a DISCARD CHANGES button
+(shown only while the draft differs from the saved pairing) restores the saved values
+without writing anything.
 
 ## PR-03 - An abandoned re-pair leaves an unused token
 
@@ -67,6 +69,13 @@ secret except the person who copied it), but unused tokens widen the "lost phone
 
 **Action.** Operator revokes unused tokens in the dashboard device list. A later improvement
 is a default expiry for new tokens or a "never used" badge in that list.
+
+## What changed in code
+
+`ServerSettingsViewModel` gained `savedUrl` and `savedToken` (set on load and in `save()`);
+`pairedApi()` and the push `LaunchedEffect` use them; `discardChanges()` was added. Four JVM
+tests in `ServerSettingsViewModelTest` cover: push uses the saved pairing, a draft alone
+enables nothing, editing clears the connected state, discard restores the saved values.
 
 ## What was not covered
 

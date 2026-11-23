@@ -159,6 +159,15 @@ fun ServerSettingsScreen(
                 Text(if (state.busy) "TESTING..." else "TEST CONNECTION")
             }
 
+            // An unsaved re-pair can be dropped without leaving the screen.
+            if (state.savedUrl.isNotBlank() &&
+                (state.serverUrl != state.savedUrl || state.token != state.savedToken)
+            ) {
+                TextButton(onClick = vm::discardChanges, enabled = !state.busy) {
+                    Text("DISCARD CHANGES")
+                }
+            }
+
             state.message?.let { msg ->
                 Card(modifier = Modifier.fillMaxWidth()) {
                     Text(
@@ -232,8 +241,8 @@ fun ServerSettingsScreen(
             // SERVER, because the server is what posts to ntfy, so this is a
             // remote control rather than a phone preference. Hidden until the
             // pairing exists, since without it there is nothing to talk to.
-            if (state.serverUrl.isNotBlank() && state.token.isNotBlank()) {
-                LaunchedEffect(state.serverUrl, state.token) {
+            if (state.savedUrl.isNotBlank() && state.savedToken.isNotBlank()) {
+                LaunchedEffect(state.savedUrl, state.savedToken) {
                     if (!state.pushLoaded) vm.loadPushConfig()
                 }
                 Card(modifier = Modifier.fillMaxWidth()) {

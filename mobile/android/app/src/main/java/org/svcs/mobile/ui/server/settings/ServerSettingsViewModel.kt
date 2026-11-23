@@ -28,6 +28,15 @@ data class ServerSettingsState(
     val settingsLoaded: Boolean = false,
     val serverUrl: String = "",
     val token: String = "",
+    /**
+     * The pairing that is actually saved, as opposed to [serverUrl] and
+     * [token], which are the editable draft. Everything that talks to the
+     * server on the user's behalf (push settings) must use these, so a
+     * re-pair the user typed but never saved, or cancelled, cannot send the
+     * push topic and token to an address that was never tested or consented to.
+     */
+    val savedUrl: String = "",
+    val savedToken: String = "",
     val busy: Boolean = false,
     val ok: Boolean = false,
     val message: String? = null,
@@ -100,7 +109,8 @@ class ServerSettingsViewModel @JvmOverloads constructor(
             val tok = store.token().orEmpty()
             val auto = store.autoCompressUpload()
             _state.update {
-                it.copy(serverUrl = url, token = tok, autoCompressUpload = auto, settingsLoaded = true)
+                it.copy(serverUrl = url, token = tok, savedUrl = url, savedToken = tok,
+                    autoCompressUpload = auto, settingsLoaded = true)
             }
         }
     }
@@ -117,13 +127,26 @@ class ServerSettingsViewModel @JvmOverloads constructor(
     fun onServerUrlChanged(v: String) {
         publicAddressAccepted = false
         _state.update {
-            it.copy(serverUrl = v, urlError = null, message = null,
+            it.copy(serverUrl = v, urlError = null, message = null, ok = false,
                 capabilities = null, needsPublicConsent = false)
         }
     }
 
     fun onTokenChanged(v: String) {
-        _state.update { it.copy(token = v, message = null, capabilities = null) }
+        _state.update { it.copy(token = v, message = null, ok = false, capabilities = null) }
+    }
+
+    /**
+     * Throw away an unsaved re-pair and go back to the saved pairing.
+     * Nothing is written: storage only changes in [save].
+     */
+    fun discardChanges() {
+        publicAddressAccepted = false
+        _state.update {
+            it.copy(serverUrl = it.savedUrl, token = it.savedToken, ok = false,
+                message = null, urlError = null, capabilities = null,
+                needsPublicConsent = false)
+        }
     }
 
     fun confirmPublicAddress() {
@@ -195,8 +218,8 @@ class ServerSettingsViewModel @JvmOverloads constructor(
 
     /** An API client on the SAVED pairing, or null if there is not one yet. */
     private fun pairedApi(): SvcsApiClient? {
-        val url = normalizeUrl(_state.value.serverUrl.trim()) ?: return null
-        val tok = _state.value.token.trim()
+        val url = normalizeUrl(_state.value.savedUrl.trim()) ?: return null
+        val tok = _state.value.savedToken.trim()
         if (tok.isBlank()) return null
         return apiFactory(url, tok)
     }
@@ -332,10 +355,13 @@ class ServerSettingsViewModel @JvmOverloads constructor(
 
     fun save() {
         viewModelScope.launch {
-            store.setServerUrl(_state.value.serverUrl.trim())
-            store.setToken(_state.value.token.trim())
+            val url = _state.value.serverUrl.trim()
+            val tok = _state.value.token.trim()
+            store.setServerUrl(url)
+            store.setToken(tok)
             _state.update {
-                it.copy(message = "Saved.", ok = true, saveCount = it.saveCount + 1)
+                it.copy(message = "Saved.", ok = true, saveCount = it.saveCount + 1,
+                    savedUrl = url, savedToken = tok)
             }
             // Re-read the server-side push settings with the credentials that
             // were just saved. The screen's LaunchedEffect cannot do this: it

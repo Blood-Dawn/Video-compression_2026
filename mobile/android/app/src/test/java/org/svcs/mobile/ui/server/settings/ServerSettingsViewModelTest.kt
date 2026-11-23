@@ -80,11 +80,15 @@ class ServerSettingsViewModelTest {
     /** Builds the ViewModel and waits for init's TokenStore read, which runs
      *  on DataStore's own thread. Without the wait that read could land after
      *  a test typed a URL and overwrite it. */
-    private fun newViewModel(fake: FakeSvcsApi): ServerSettingsViewModel {
+    private fun newViewModel(
+        fake: FakeSvcsApi,
+        /** Records every (url, token) a client was built with. */
+        built: MutableList<Pair<String, String>>? = null,
+    ): ServerSettingsViewModel {
         val app = RuntimeEnvironment.getApplication()
         val vm = ServerSettingsViewModel(
             app,
-            apiFactory = { _, _ -> fake },
+            apiFactory = { url, tok -> built?.add(url to tok); fake },
             ioDispatcher = testDispatcher,
             tokenCipher = InMemoryCipher,
         )
@@ -248,5 +252,91 @@ class ServerSettingsViewModelTest {
 
         assertEquals(false, vm.state.value.pushLoaded)
         assertEquals(0, fake.savePushConfigCalls.size)
+    }
+
+    // ── 7.4: how a cancelled or unsaved re-pair behaves ──────────────────
+
+    @Test
+    fun `push actions use the saved pairing, never an unsaved draft`() = runTest {
+        val fake = FakeSvcsApi()
+        val built = mutableListOf<Pair<String, String>>()
+        val vm = newViewModel(fake, built)
+        testDispatcher.scheduler.runCurrent()
+
+        vm.onServerUrlChanged("192.168.1.42:5000")
+        vm.onTokenChanged("secret-token")
+        vm.save()
+        vm.awaitSaved()
+        built.clear()
+
+        // A re-pair the user starts and never saves.
+        vm.onServerUrlChanged("10.9.9.9:5000")
+        vm.onTokenChanged("draft-token")
+        vm.onPushTopicChanged("https://ntfy.sh/my-topic")
+        vm.savePushConfig()
+        vm.testPush()
+        vm.loadPushConfig()
+        testDispatcher.scheduler.runCurrent()
+
+        assertTrue(built.isNotEmpty())
+        assertTrue(built.all { it == ("http://192.168.1.42:5000" to "secret-token") })
+    }
+
+    @Test
+    fun `an unsaved draft alone does not enable push actions`() = runTest {
+        val fake = FakeSvcsApi()
+        val built = mutableListOf<Pair<String, String>>()
+        val vm = newViewModel(fake, built)
+        testDispatcher.scheduler.runCurrent()
+
+        vm.onServerUrlChanged("192.168.1.42:5000")
+        vm.onTokenChanged("draft-token")
+        vm.loadPushConfig()
+        vm.savePushConfig()
+        testDispatcher.scheduler.runCurrent()
+
+        assertEquals(0, built.size)
+        assertEquals(false, vm.state.value.pushLoaded)
+    }
+
+    @Test
+    fun `editing the url or token clears the connected state`() = runTest {
+        val fake = FakeSvcsApi()
+        val vm = newViewModel(fake)
+        testDispatcher.scheduler.runCurrent()
+        vm.onServerUrlChanged("192.168.1.42:5000")
+        vm.onTokenChanged("secret-token")
+        vm.save()
+        vm.awaitSaved()
+        assertTrue(vm.state.value.ok)
+
+        vm.onTokenChanged("another-token")
+        assertEquals(false, vm.state.value.ok)
+
+        vm.save()
+        vm.awaitSaved(2)
+        assertTrue(vm.state.value.ok)
+        vm.onServerUrlChanged("192.168.1.43:5000")
+        assertEquals(false, vm.state.value.ok)
+    }
+
+    @Test
+    fun `discardChanges restores the saved pairing and writes nothing`() = runTest {
+        val fake = FakeSvcsApi()
+        val vm = newViewModel(fake)
+        testDispatcher.scheduler.runCurrent()
+        vm.onServerUrlChanged("192.168.1.42:5000")
+        vm.onTokenChanged("secret-token")
+        vm.save()
+        vm.awaitSaved()
+
+        vm.onServerUrlChanged("10.9.9.9:5000")
+        vm.onTokenChanged("draft-token")
+        vm.discardChanges()
+
+        assertEquals("192.168.1.42:5000", vm.state.value.serverUrl)
+        assertEquals("secret-token", vm.state.value.token)
+        assertEquals(null, vm.state.value.capabilities)
+        assertEquals(1, vm.state.value.saveCount)
     }
 }

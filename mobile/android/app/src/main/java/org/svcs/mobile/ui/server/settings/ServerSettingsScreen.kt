@@ -318,7 +318,10 @@ fun ServerSettingsScreen(
                             ) { Text(if (state.pushBusy) "WORKING..." else "SEND TEST") }
                             Button(
                                 onClick = vm::savePushConfig,
-                                enabled = !state.pushBusy,
+                                // Not until this pairing's settings have loaded:
+                                // saving before that would write defaults over
+                                // what the server really has.
+                                enabled = !state.pushBusy && state.pushLoaded,
                                 modifier = Modifier.weight(1f),
                             ) { Text("SAVE ALERTS") }
                         }

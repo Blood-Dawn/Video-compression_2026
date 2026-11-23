@@ -339,4 +339,22 @@ class ServerSettingsViewModelTest {
         assertEquals(null, vm.state.value.capabilities)
         assertEquals(1, vm.state.value.saveCount)
     }
+
+    @Test
+    fun `save marks the view model busy until the write finishes`() = runTest {
+        val fake = FakeSvcsApi()
+        val vm = newViewModel(fake)
+        testDispatcher.scheduler.runCurrent()
+        vm.onServerUrlChanged("192.168.1.42:5000")
+        vm.onTokenChanged("secret-token")
+
+        vm.save()
+        // The screen disables DISCARD CHANGES while busy, so a discard cannot
+        // race a write that is still in flight.
+        assertTrue(vm.state.value.busy)
+
+        vm.awaitSaved()
+        assertEquals(false, vm.state.value.busy)
+        assertEquals("secret-token", vm.state.value.savedToken)
+    }
 }

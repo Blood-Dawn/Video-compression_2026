@@ -84,3 +84,21 @@ def test_sorting_in_place(sort, order, expected):
     items = lb._filter_library_items(ITEMS, None, "", None, None, "all")
     assert lb._sort_library_items(items, sort, order) is None
     assert [i["name"] for i in items] == expected
+
+
+
+# ── natural name sort and multi-word search ──────────────────────────────────
+
+def test_name_sort_is_natural():
+    from gui.routes import library_bp as lb
+    items = [{"name": n, "size": 1, "mtime": 0.0} for n in ("clip10.mp4", "clip2.mp4", "Clip1.mp4", "gate_a.mp4")]
+    lb._sort_library_items(items, "name", "asc")
+    assert [i["name"] for i in items] == ["Clip1.mp4", "clip2.mp4", "clip10.mp4", "gate_a.mp4"]
+
+
+def test_search_matches_words_in_any_order():
+    from gui.routes import library_bp as lb
+    assert lb._name_matches("gate_cam_0814.mp4", "0814 gate")
+    assert lb._name_matches("Gate_Cam.mp4", "gate cam")
+    assert not lb._name_matches("gate_cam.mp4", "gate patio")
+    assert lb._name_matches("anything.mp4", "")

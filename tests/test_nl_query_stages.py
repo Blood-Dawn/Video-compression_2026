@@ -19,10 +19,36 @@ def _run(stage, text):
     return left, clauses, params, explain
 
 
-def test_between_window_orders_the_hours_and_removes_its_words():
-    left, clauses, params, explain = _run(nq._parse_time_windows, "red car between 5pm and 9am")
+def test_between_window_removes_its_words_and_keeps_the_order():
+    left, clauses, params, explain = _run(nq._parse_time_windows, "red car between 9am and 5pm")
     assert params == [9, 17] and explain == {"hours": [9, 17]}
     assert "between" not in left and "red car" in left and len(clauses) == 1
+    assert " OR " not in clauses[0]
+
+
+def test_between_window_wraps_through_midnight():
+    _, clauses, params, explain = _run(nq._parse_time_windows, "between 9pm and 5am")
+    assert params == [21, 5] and explain == {"hours": [21, 5]}
+    assert " OR " in clauses[0]
+
+
+def test_after_does_not_swallow_a_date():
+    left, clauses, _, _ = _run(nq._parse_time_windows, "after 2026-11-01")
+    assert clauses == [] and "2026-11-01" in left
+
+
+def test_last_n_days_and_this_week():
+    _, clauses, params, explain = _run(nq._parse_dates, "cars last 7 days")
+    assert params == [(date.today() - timedelta(days=6)).strftime("%Y%m%d")] and clauses[0].endswith(">= ?")
+    assert "since" in explain
+    _, _, params, _ = _run(nq._parse_dates, "this week")
+    assert params == [(date.today() - timedelta(days=6)).strftime("%Y%m%d")]
+
+
+@pytest.mark.parametrize("text", ["show camera footage", "camera red car", "cam people"])
+def test_camera_word_alone_is_not_a_camera_id(text):
+    _, clauses, _, explain = _run(nq._parse_camera, text)
+    assert clauses == [] and "camera" not in explain
 
 
 def test_after_and_before_accept_minutes_and_am_pm():
@@ -36,11 +62,11 @@ def test_no_time_words_leaves_everything_alone():
 
 def test_iso_date_and_relative_days():
     left, clauses, params, explain = _run(nq._parse_dates, "clips 2026-05-01 here")
-    assert params == ["2026-05-01"] and explain == {"date": "2026-05-01"} and "2026" not in left
+    assert params == ["20260501"] and explain == {"date": "2026-05-01"} and "2026" not in left
     _, _, params, explain = _run(nq._parse_dates, "yesterday")
-    assert params == [(date.today() - timedelta(days=1)).isoformat()]
+    assert params == [(date.today() - timedelta(days=1)).strftime("%Y%m%d")]
     _, _, params, _ = _run(nq._parse_dates, "today")
-    assert params == [date.today().isoformat()]
+    assert params == [date.today().strftime("%Y%m%d")]
 
 
 @pytest.mark.parametrize("text,cam", [("cam2", "2"), ("camera 3", "3"), ("camera_north", "north"),
@@ -73,3 +99,35 @@ def test_parse_composes_the_stages_in_order():
     assert out["explain"]["count"] == {"person_count": ">= 2"}
     assert out["params"][-4:] == ["xyzzy"] * 4          # unknown word falls through to free text
     assert nq.parse(None) == nq.parse("")
+
+
+def test_time_filters_work_on_the_pipelines_compact_timestamps(tmp_path):
+    """Real rows look like 20260315T213000Z; strftime() cannot read those."""
+    import sqlite3
+    from datetime import datetime
+    db = tmp_path / "ts.db"
+    today = date.today().strftime("%Y%m%d")
+    stamps = {"night": f"{today}T233000Z", "noon": f"{today}T120000Z", "early": f"{today}T040000Z",
+              "old": "20200101T233000Z", "iso_night": f"{date.today().isoformat()}T22:15:00Z"}
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE segments (id INTEGER PRIMARY KEY, timestamp TEXT, camera_id TEXT, file_path TEXT, "
+                 "hidden INTEGER, object_classes TEXT, dominant_color TEXT, scene_type TEXT, time_of_day TEXT, "
+                 "object_type TEXT, person_count INTEGER, vehicle_count INTEGER, duration REAL, file_size INTEGER)")
+    for name, ts in stamps.items():
+        conn.execute("INSERT INTO segments (timestamp, camera_id, file_path, hidden) VALUES (?,?,?,0)", (ts, "cam1", name))
+    conn.commit()
+
+    def ids(q):
+        c, p = [], []
+        left = nq._parse_time_windows(q, c, p, {})
+        nq._parse_dates(left, c, p, {})
+        where = " AND ".join(c) or "1=1"
+        return {r[0] for r in conn.execute(f"SELECT file_path FROM segments WHERE {where}", p)}
+
+    assert ids("after 9pm") == {"night", "old", "iso_night"}
+    assert ids("between 9pm and 5am") == {"night", "early", "old", "iso_night"}
+    c, p = [], []
+    nq._parse_dates("today", c, p, {})
+    got = {r[0] for r in conn.execute(f"SELECT file_path FROM segments WHERE {c[0]}", p)}
+    assert got == {"night", "noon", "early", "iso_night"}
+    conn.close()

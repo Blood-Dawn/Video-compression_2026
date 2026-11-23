@@ -26,6 +26,7 @@ Author: Bloodawn (KheivenD), 2026-06-03 (FIX 6 - library/gallery).
 
 import hashlib
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -305,6 +306,20 @@ def _parse_ext_filter(ext_raw: str):
     return {("." + e.lstrip(".")) for e in ext_raw.split(",") if e.strip()}
 
 
+_DIGITS = re.compile(r"(\d+)")
+
+
+def _natural_key(name: str) -> list:
+    """Sort key where numbers compare as numbers: clip2 sorts before clip10."""
+    return [int(part) if part.isdigit() else part for part in _DIGITS.split(name.lower())]
+
+
+def _name_matches(name: str, q: str) -> bool:
+    """Every word in the query must appear in the name, in any order."""
+    low = name.lower()
+    return all(word in low for word in q.split())
+
+
 def _filter_library_items(all_items, allowed_exts, q, min_size, max_size, kind):
     """Apply the search and filter query params to a cached listing.
 
@@ -316,7 +331,7 @@ def _filter_library_items(all_items, allowed_exts, q, min_size, max_size, kind):
     for i in all_items:
         if allowed_exts is not None and i["_ext"] not in allowed_exts:
             continue
-        if q and q not in i["name"].lower():
+        if q and not _name_matches(i["name"], q):
             continue
         if min_size is not None and i["size"] < min_size:
             continue
@@ -337,7 +352,7 @@ def _filter_library_items(all_items, allowed_exts, q, min_size, max_size, kind):
 
 def _sort_library_items(items, sort: str, order: str) -> None:
     """Sort in place by name, size or date (anything else sorts by date)."""
-    key = {"name": lambda x: x["name"].lower(),
+    key = {"name": lambda x: _natural_key(x["name"]),
            "size": lambda x: x["size"],
            "date": lambda x: x["mtime"]}.get(sort, lambda x: x["mtime"])
     items.sort(key=key, reverse=(order != "asc"))

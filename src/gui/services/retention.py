@@ -137,6 +137,11 @@ def set_policy(cfg: dict) -> dict:
     return pol
 
 
+# Growth needs at least this much history. Extrapolating a few minutes of
+# recording to a per-day rate overstates it badly (and shows "0 days left").
+_MIN_SPAN_SECONDS = 6 * 3600
+
+
 # ── helpers ────────────────────────────────────────────────────────────────────
 
 def _compressed_dir(output_dir: str) -> Path | None:
@@ -312,6 +317,52 @@ def purge_once(output_dir: str, policy: dict | None = None,
     return summary
 
 
+def preview_purge(output_dir: str, policy: dict | None = None, now: float | None = None) -> dict:
+    """What a purge would delete right now, without deleting anything.
+
+    Same rules as purge_once (age first, then oldest-first down to the size
+    budget, fresh and in-flight files skipped). Returns counts and bytes so the
+    UI can say "6 clips, 1.2 GB" before the user confirms.
+    """
+    out = {"count": 0, "bytes": 0, "by_age": 0, "by_size": 0}
+    try:
+        pol = policy if policy is not None else get_policy()
+        if not pol.get("enabled"):
+            return out
+        max_age_days = int(pol.get("max_age_days") or 0)
+        max_total_gb = float(pol.get("max_total_gb") or 0.0)
+        if max_age_days <= 0 and max_total_gb <= 0:
+            return out
+        comp_dir = _compressed_dir(output_dir)
+        if comp_dir is None:
+            return out
+        now = time.time() if now is None else now
+        stats = _purge_candidates(comp_dir, now)
+        gone = set()
+        if max_age_days > 0:
+            cutoff = now - max_age_days * 86400
+            for p, size, mtime in stats:
+                if mtime < cutoff:
+                    gone.add(p)
+                    out["by_age"] += 1
+                    out["bytes"] += size
+        if max_total_gb > 0:
+            rest = [(p, s) for (p, s, _m) in stats if p not in gone]
+            total = sum(s for _, s in rest)
+            budget = max_total_gb * _GB
+            for p, s in rest:
+                if total <= budget:
+                    break
+                gone.add(p)
+                out["by_size"] += 1
+                out["bytes"] += s
+                total -= s
+        out["count"] = len(gone)
+    except Exception as exc:  # noqa: BLE001
+        log.debug("Retention preview failed: %s", exc)
+    return out
+
+
 def _notify_purge(summary: dict, output_dir: str) -> None:
     """Record the purge as a job-history entry so it shows in Recent Jobs."""
     try:
@@ -354,8 +405,9 @@ def _estimate_bytes_per_day(used: int, oldest, newest):
     """Daily growth: from recent job history, else the folder size over its age."""
     bpd = _bytes_per_day_from_history()
     if bpd is None and used > 0 and oldest and newest and newest > oldest:
-        span_days = max((newest - oldest) / 86400, 1.0 / 24)  # >= 1 hour
-        bpd = used / span_days
+        span = newest - oldest
+        if span >= _MIN_SPAN_SECONDS:  # a few minutes of footage says nothing about a day
+            bpd = used / (span / 86400.0)
     return bpd
 
 
@@ -388,7 +440,7 @@ def estimate(output_dir: str, policy: dict | None = None) -> dict:
     """
     out = {"available": False, "free_gb": None, "used_gb": None,
            "bytes_per_day": None, "est_days_headroom": None,
-           "policy_days": None}
+           "policy_days": None, "would_delete": 0, "would_free_bytes": 0}
     try:
         base = Path(output_dir).resolve()
         try:
@@ -409,6 +461,9 @@ def estimate(output_dir: str, policy: dict | None = None) -> dict:
             out["policy_days"] = int(pol["max_age_days"])
 
         out["est_days_headroom"] = _headroom_days(bpd, used, usage, pol)
+        wp = preview_purge(output_dir, pol)
+        out["would_delete"] = wp["count"]
+        out["would_free_bytes"] = wp["bytes"]
 
         out["available"] = True
     except Exception as exc:  # noqa: BLE001
@@ -428,7 +483,7 @@ def _bytes_per_day_from_history() -> float | None:
         if not starts or not ends:
             return None
         span = max(ends) - min(starts)
-        if span <= 0:
+        if span < _MIN_SPAN_SECONDS:
             return None
         total_out = sum(int(j.get("bytes_out") or 0) for j in jobs)
         return total_out / (span / 86400.0)

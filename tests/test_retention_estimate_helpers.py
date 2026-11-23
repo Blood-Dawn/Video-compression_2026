@@ -44,9 +44,11 @@ def test_growth_falls_back_to_size_over_age(monkeypatch):
     assert ret._estimate_bytes_per_day(1000, 1000.0, 1000.0 + 2 * 86400.0) == 500.0
 
 
-def test_growth_span_is_at_least_an_hour(monkeypatch):
+def test_growth_needs_six_hours_of_history(monkeypatch):
     monkeypatch.setattr(ret, "_bytes_per_day_from_history", lambda: None)
-    assert ret._estimate_bytes_per_day(100, 1000.0, 1001.0) == 100 * 24
+    assert ret._estimate_bytes_per_day(100, 1000.0, 1001.0) is None
+    assert ret._estimate_bytes_per_day(100, 1000.0, 1000.0 + 5 * 3600) is None
+    assert ret._estimate_bytes_per_day(100, 1000.0, 1000.0 + 6 * 3600) == 400.0
 
 
 @pytest.mark.parametrize("used,oldest,newest", [(0, None, None), (100, 5.0, 5.0), (100, None, None)])

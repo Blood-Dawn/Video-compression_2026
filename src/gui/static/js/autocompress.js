@@ -284,7 +284,11 @@ function _retRenderEstimate(est) {
   if (est.est_days_headroom != null) {
     lines.push("Estimated headroom: ~" + _retFmtDays(est.est_days_headroom));
   } else {
-    lines.push("Headroom: record more footage to estimate");
+    lines.push("Headroom: needs about 6 hours of recorded footage to estimate");
+  }
+  if (est.would_delete > 0) {
+    lines.push("Would remove now: " + est.would_delete + " clip" + (est.would_delete === 1 ? "" : "s") +
+      " (" + ((est.would_free_bytes || 0) / 1e9).toFixed(2) + " GB)");
   }
   el.innerHTML = lines.map(_esc).join("<br>");
   window._retLastEstimate = est;
@@ -349,7 +353,7 @@ async function retentionPurgeNow() {
   if (_age && _age !== "0") _lim.push("older than " + _age + " days");
   if (_gb && _gb !== "0") _lim.push("beyond a total of " + _gb + " GB");
   const _msg = "Delete compressed clips" + (_lim.length ? " " + _lim.join(" or ") : " that exceed the retention limits") +
-    " now?" + (_e.used_gb != null ? "\n\nCompressed clips currently use " + _e.used_gb + " GB." : "") +
+    " now?" + (_e.would_delete != null ? "\n\nThis removes " + _e.would_delete + " clip" + (_e.would_delete === 1 ? "" : "s") + " (" + ((_e.would_free_bytes || 0) / 1e9).toFixed(2) + " GB)." : "") + (_e.used_gb != null ? "\n\nCompressed clips currently use " + _e.used_gb + " GB." : "") +
     "\n\nOriginals and clips written today are kept. This cannot be undone.";
   if (!window.confirm(_msg)) return;
   if (btn) { btn.disabled = true; btn.textContent = "Purging..."; }

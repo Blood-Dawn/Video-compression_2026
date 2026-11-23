@@ -330,3 +330,53 @@ def test_daemon_calls_retention_after_scan(iso, monkeypatch):
         {"folder": str(iso / "watch"), "output_dir": str(iso / "out"),
          "mode": "mode0", "poll_interval": 2}, stop)
     assert called.get("dir") == str(iso / "out")
+
+
+# ── purge preview (what "Purge now" would remove) ─────────────────────────────
+
+def test_preview_matches_what_purge_removes_by_age_and_size(iso):
+    comp = cidx.compressed_subdir(iso / "out")
+    _mkclip(comp, "a.mp4", age_days=20, size=1000)   # too old
+    _mkclip(comp, "b.mp4", age_days=5, size=1000)
+    _mkclip(comp, "c.mp4", age_days=3, size=1000)
+    _mkclip(comp, "d.mp4", age_days=1, size=1000)
+    pol = {"enabled": True, "max_age_days": 10, "max_total_gb": 1500 / 1e9}
+    pv = ret.preview_purge(str(iso / "out"), pol)
+    assert pv["by_age"] == 1
+    assert pv["by_size"] == 2          # 3 left (3000 B), budget 1500 B: drop b and c
+    assert pv["count"] == 3 and pv["bytes"] == 3000
+    # Preview deletes nothing, and a real purge removes exactly that many.
+    assert len(list(comp.glob("*.mp4"))) == 4
+    summary = ret.purge_once(str(iso / "out"), pol)
+    assert summary["deleted"] == pv["count"] and summary["freed_bytes"] == pv["bytes"]
+
+
+def test_preview_is_empty_when_off_or_unlimited(iso):
+    comp = cidx.compressed_subdir(iso / "out")
+    _mkclip(comp, "a.mp4", age_days=50)
+    assert ret.preview_purge(str(iso / "out"), {"enabled": False, "max_age_days": 1, "max_total_gb": 0})["count"] == 0
+    assert ret.preview_purge(str(iso / "out"), {"enabled": True, "max_age_days": 0, "max_total_gb": 0})["count"] == 0
+
+
+def test_preview_skips_fresh_files(iso):
+    comp = cidx.compressed_subdir(iso / "out")
+    _mkclip(comp, "live.mp4", age_days=0.0)
+    pv = ret.preview_purge(str(iso / "out"), {"enabled": True, "max_age_days": 1, "max_total_gb": 0.000001})
+    assert pv["count"] == 0
+
+
+def test_estimate_reports_the_preview(iso):
+    comp = cidx.compressed_subdir(iso / "out")
+    _mkclip(comp, "a.mp4", age_days=30, size=2000)
+    est = ret.estimate(str(iso / "out"), {"enabled": True, "max_age_days": 7, "max_total_gb": 0})
+    assert est["would_delete"] == 1 and est["would_free_bytes"] == 2000
+
+
+def test_history_burst_is_not_extrapolated_to_a_day(iso, monkeypatch):
+    now = time.time()
+    jobs = [{"kind": "autocompress", "bytes_out": 500_000_000, "started_at": now - 600, "ended_at": now - 300},
+            {"kind": "autocompress", "bytes_out": 500_000_000, "started_at": now - 290, "ended_at": now}]
+    monkeypatch.setattr(ret._jh, "recent_jobs", lambda limit=50: jobs)
+    assert ret._bytes_per_day_from_history() is None      # ten minutes of history says nothing about a day
+    jobs[0]["started_at"] = now - 12 * 3600
+    assert round(ret._bytes_per_day_from_history() / 1e9, 1) == 2.0   # 1 GB over 12 h is 2 GB/day

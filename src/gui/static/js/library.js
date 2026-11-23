@@ -391,6 +391,7 @@ function _libKindCounts() {
 function filterLibrary() {
   const all = window._svcsLibrary.all || [];
   const q = ((document.getElementById("library-search") || {}).value || "").trim().toLowerCase();
+  const qWords = q.split(/\s+/).filter(Boolean);
   const ext = ((document.getElementById("library-ext") || {}).value || "").toLowerCase();
   const sortVal = (document.getElementById("library-sort") || {}).value || "date-desc";
   const ageDays = parseInt((document.getElementById("library-age") || {}).value || "0", 10) || 0;
@@ -398,7 +399,7 @@ function filterLibrary() {
   const kind = window._svcsLibrary.kind || "all";
   _lsSet("svcs.lib.sort", sortVal);
   let list = all.filter((v) => {
-    if (q && !v.name.toLowerCase().includes(q)) return false;
+    if (q && !qWords.every((w) => v.name.toLowerCase().includes(w))) return false;
     if (ext && !v.name.toLowerCase().endsWith("." + ext)) return false;
     if (cutoff && !(v.mtime >= cutoff)) return false;
     if (kind === "compressed" && v.kind !== "compressed") return false;
@@ -410,7 +411,7 @@ function filterLibrary() {
     // Lowercase each name once instead of twice per comparison; this runs on
     // every keystroke in the search box.
     list = list.map((v) => [v.name.toLowerCase(), v])
-      .sort((a, b) => a[0].localeCompare(b[0]))
+      .sort((a, b) => a[0].localeCompare(b[0], undefined, { numeric: true }))
       .map((pair) => pair[1]);
   } else {
     list.sort(field === "size" ? (a, b) => a.size - b.size : (a, b) => a.mtime - b.mtime);

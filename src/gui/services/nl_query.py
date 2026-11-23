@@ -58,7 +58,14 @@ _STOPWORDS = {
     "videos", "segment", "segments", "footage", "from", "to",
 }
 
-_HOUR_EXPR = "CAST(strftime('%H', timestamp) AS INTEGER)"
+_NOT_A_CAMERA_ID = (set(_STOPWORDS) | set(_CLASS_WORDS) | set(_COLOR_WORDS) | set(_SCENE_WORDS)
+                    | set(_TOD_WORDS) | set(_DAYPART_HOURS) | {"era", "ras", "today", "yesterday", "after", "before", "between"})
+
+# The pipeline stores timestamps as 20260315T213000Z; older rows and tests use
+# 2026-03-15T21:30:00Z. strftime() reads only the second form (it returns NULL
+# for the first), so every time filter works on a normalized compact string.
+_TS = "replace(replace(replace(timestamp, '-', ''), ':', ''), ' ', 'T')"
+_HOUR_EXPR = f"CAST(substr({_TS}, 10, 2) AS INTEGER)"
 
 
 def _to_24h(hour: int, ampm: str | None) -> int:
@@ -75,19 +82,22 @@ def _parse_time_windows(text: str, clauses: list, params: list, explain: dict) -
     if m:
         h1 = _to_24h(int(m.group(1)), m.group(2))
         h2 = _to_24h(int(m.group(3)), m.group(4))
-        lo, hi = min(h1, h2), max(h1, h2)
-        clauses.append(f"{_HOUR_EXPR} >= ? AND {_HOUR_EXPR} < ?")
-        params.extend([lo, hi])
-        explain["hours"] = [lo, hi]
+        if h1 <= h2:
+            clauses.append(f"{_HOUR_EXPR} >= ? AND {_HOUR_EXPR} < ?")
+        else:
+            # "between 9pm and 5am" runs through midnight.
+            clauses.append(f"({_HOUR_EXPR} >= ? OR {_HOUR_EXPR} < ?)")
+        params.extend([h1, h2])
+        explain["hours"] = [h1, h2]
         text = text.replace(m.group(0), " ")
-    m = re.search(r"after\s+(\d{1,2})(?::\d{2})?\s*(am|pm)?", text)
+    m = re.search(r"after\s+(\d{1,2})(?![\d-])(?::\d{2})?\s*(am|pm)?", text)
     if m:
         h = _to_24h(int(m.group(1)), m.group(2))
         clauses.append(f"{_HOUR_EXPR} >= ?")
         params.append(h)
         explain["after_hour"] = h
         text = text.replace(m.group(0), " ")
-    m = re.search(r"before\s+(\d{1,2})(?::\d{2})?\s*(am|pm)?", text)
+    m = re.search(r"before\s+(\d{1,2})(?![\d-])(?::\d{2})?\s*(am|pm)?", text)
     if m:
         h = _to_24h(int(m.group(1)), m.group(2))
         clauses.append(f"{_HOUR_EXPR} < ?")
@@ -103,15 +113,23 @@ def _parse_dates(text: str, clauses: list, params: list, explain: dict) -> str:
     # so a date is a simple prefix match on the bound value.
     m = re.search(r"\b(20\d{2}-\d{2}-\d{2})\b", text)
     if m:
-        clauses.append("timestamp LIKE ? || '%'")
-        params.append(m.group(1))
+        clauses.append(f"{_TS} LIKE ? || '%'")
+        params.append(m.group(1).replace("-", ""))
         explain["date"] = m.group(1)
+        text = text.replace(m.group(0), " ")
+    m = re.search(r"\b(?:last|past)\s+(\d{1,3})\s+days?\b", text) or re.search(r"\b(this week)\b", text)
+    if m:
+        n = int(m.group(1)) if m.group(1).isdigit() else 7
+        since = (date.today() - timedelta(days=max(n - 1, 0))).isoformat()
+        clauses.append(f"{_TS} >= ?")
+        params.append(since.replace("-", ""))
+        explain["since"] = since
         text = text.replace(m.group(0), " ")
     for word, delta in (("today", 0), ("yesterday", 1)):
         if re.search(rf"\b{word}\b", text):
             day = (date.today() - timedelta(days=delta)).isoformat()
-            clauses.append("timestamp LIKE ? || '%'")
-            params.append(day)
+            clauses.append(f"{_TS} LIKE ? || '%'")
+            params.append(day.replace("-", ""))
             explain["date"] = day
             text = re.sub(rf"\b{word}\b", " ", text)
     return text
@@ -121,6 +139,8 @@ def _parse_camera(text: str, clauses: list, params: list, explain: dict) -> str:
     """"cam2", "camera 2", "camera_north". Returns the leftover text."""
     # Camera: "cam2", "camera 2", "camera_north".
     m = re.search(r"\bcam(?:era)?[\s_]*([a-z0-9_-]+)\b", text)
+    if m and m.group(1) in _NOT_A_CAMERA_ID:
+        m = None  # "camera footage" asks about footage, it does not name a camera
     if m:
         cam = m.group(1)
         clauses.append("camera_id LIKE '%' || ? || '%'")

@@ -48,6 +48,15 @@ except ModuleNotFoundError:
 _SK_FILE = _paths.state_file("flask_secret")
 app.config["SECRET_KEY"] = _load_or_create_secret_key(_SK_FILE)
 
+# Hard cap on any request body, so the single shot /api/upload cannot fill the
+# disk. It matches the chunked upload cap (utils.upload_limits.max_upload_bytes); a chunk body
+# is far below it.
+try:
+    from utils.upload_limits import max_upload_bytes as _max_upload_bytes
+except ModuleNotFoundError:  # pragma: no cover - import path shim
+    from src.utils.upload_limits import max_upload_bytes as _max_upload_bytes
+app.config["MAX_CONTENT_LENGTH"] = _max_upload_bytes()
+
 # State globals live in gui.state and logging in gui.logging_setup. They are
 # re-exported here because the gui.app.* test contract reaches into them.
 # Importing gui.logging_setup wires the root logger and registers the atexit

@@ -133,6 +133,158 @@ def _path_under_any(p: Path, roots: list[Path]) -> bool:
     return any(p_res == r or r in p_res.parents for r in roots)
 
 
+# ── request helpers shared by /api/encrypt and /api/decrypt ──────────────────
+#
+# Each returns (value, error_response). A handler keeps its early returns:
+#     value, err = helper(...)
+#     if err:
+#         return err
+# so the order of the checks, and with it every status code, is the order the
+# handler calls them in.
+
+
+def _parse_crypto_request():
+    """Read file_path, password and key_file from the JSON body.
+
+    Returns ((file_path, password, key_file), None), or (None, 400 response).
+    """
+    body = request.get_json(silent=True) or {}
+    raw_path = body.get("file_path", "").strip()
+    password = body.get("password") or None
+    key_file = body.get("key_file") or None
+    if not raw_path:
+        return None, (jsonify({"error": "file_path is required"}), 400)
+    if not password and not key_file:
+        return None, (jsonify({"error": "Either password or key_file is required"}), 400)
+    return (raw_path, password, key_file), None
+
+
+def _trusted_path(raw_path, safe_roots, route):
+    """Resolve raw_path and require it to sit under a trusted root (SEC-005).
+
+    Returns (resolved_path, None), or (None, 403 response).
+    """
+    path = Path(raw_path).resolve()
+    if not _path_under_any(path, safe_roots):
+        log.warning("%s: rejected path outside trusted roots: %s (roots=%s)",
+                    route, path, [str(r) for r in safe_roots])
+        return None, (jsonify({
+            "error": "file_path is outside the trusted folders. Allowed: "
+                     + " | ".join(str(r) for r in safe_roots)
+        }), 403)
+    return path, None
+
+
+def _read_key_file(key_file, safe_roots, route):
+    """Read raw key bytes from a key file that sits under a trusted root.
+
+    Returns (key_bytes, None); (None, None) when no key file was given;
+    (None, 403 response) for a path outside the trusted roots; (None, 400
+    response) when it cannot be read. SEC-005: without the confinement,
+    either route would read an arbitrary file off disk as key material.
+    """
+    if not key_file:
+        return None, None
+    kf_path = Path(key_file).resolve()
+    if not _path_under_any(kf_path, safe_roots):
+        log.warning("%s: rejected key_file outside trusted roots: %s", route, kf_path)
+        return None, (jsonify({"error": "key_file is outside the trusted folders"}), 403)
+    try:
+        return kf_path.read_bytes(), None
+    except OSError as e:
+        return None, (jsonify({"error": f"Cannot read key file: {e}"}), 400)
+
+
+# ── /api/decrypt ─────────────────────────────────────────────────────────────
+
+
+def _check_decrypt_source(enc_path):
+    """404 for a missing file, 400 for anything that is not a .enc file."""
+    if not enc_path.exists():
+        return jsonify({"error": f"File not found: {enc_path.name}"}), 404   # name only, no full path
+    if enc_path.suffix.lower() != ".enc":
+        return jsonify({"error": "Only .enc files can be decrypted via this endpoint"}), 400
+    return None
+
+
+def _prepare_decrypt_destination(enc_path):
+    """Create <enc_dir>/Decrypted/ and clear any stale copy of the output.
+
+    Returns (out_path, None), or (None, 500 response) when the folder cannot
+    be created.
+    """
+    dec_dir = enc_path.parent / "Decrypted"
+    try:
+        dec_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        return None, (jsonify({"error": f"Could not create Decrypted/ folder: {e}"}), 500)
+
+    plain_name = enc_path.name[:-4] if enc_path.name.lower().endswith(".enc") else enc_path.stem
+    out_path = dec_dir / plain_name
+
+    # Re-decrypting replaces any stale copy; the .enc is the source of truth.
+    try:
+        if out_path.exists():
+            out_path.unlink()
+    except OSError:
+        pass
+    return out_path, None
+
+
+def _run_decrypt(enc_path, password, raw_key, out_path):
+    """Decrypt to out_path. Returns (out_path, None), (None, 403) when the key
+    is wrong or the file was tampered with, (None, 500) for anything else."""
+    try:
+        out = _decrypt_file(
+            enc_path,
+            password=password,
+            key=raw_key,
+            output_path=out_path,
+        )
+    except RuntimeError as e:
+        return None, (jsonify({"error": str(e)}), 403)
+    except Exception as e:  # noqa: BLE001
+        return None, (jsonify({"error": f"Decryption failed: {e}"}), 500)
+    return out, None
+
+
+def _stream_file(path, size):
+    """Yield path in _STREAM_CHUNK pieces, opening it lazily and stopping at size."""
+    remaining = size
+    with open(path, "rb") as fh:
+        while remaining > 0:
+            chunk = fh.read(min(_STREAM_CHUNK, remaining))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+            yield chunk
+
+
+def _decrypted_response(enc_path, out):
+    """Build the download response for a decrypted clip.
+
+    Small clips are read at once so no file handle outlives the request (an
+    open handle blocks a re-decrypt replace on Windows). Larger clips stream
+    in chunks.
+    """
+    try:
+        size = out.stat().st_size
+        data = out.read_bytes() if size <= _INLINE_MAX_BYTES else None
+    except OSError as e:
+        return jsonify({"error": f"Could not read decrypted file: {e}"}), 500
+
+    log.info("Decrypted %s -> %s (%d KB)", enc_path.name, out, size // 1024)
+    return Response(
+        data if data is not None else _stream_file(out, size),
+        mimetype="video/mp4",
+        headers={
+            "Content-Disposition": f'attachment; filename="{enc_path.stem}"',
+            "Content-Length": str(size),
+            "X-Decrypted-Path": str(out),
+        },
+    )
+
+
 @encryption_bp.route("/api/decrypt", methods=["POST"])
 def api_decrypt():
     """Decrypt an .enc segment and stream the plaintext back to the browser.
@@ -154,109 +306,35 @@ def api_decrypt():
     if not _CRYPTO_AVAILABLE:
         return jsonify({"error": "cryptography package not installed"}), 503
 
-    body      = request.get_json(silent=True) or {}
-    enc_path_raw = body.get("file_path", "").strip()
-    password  = body.get("password") or None
-    key_file  = body.get("key_file") or None
+    req, err = _parse_crypto_request()
+    if err:
+        return err
+    raw_path, password, key_file = req
 
-    if not enc_path_raw:
-        return jsonify({"error": "file_path is required"}), 400
-    if not password and not key_file:
-        return jsonify({"error": "Either password or key_file is required"}), 400
-
-    # Security: file_path must sit under output_dir, the project root, or the
-    # OneDrive root (see _safe_segment_roots).
+    # file_path and key_file must sit under output_dir, the project root, or
+    # the OneDrive root (see _safe_segment_roots).
     safe_roots = _safe_segment_roots()
-    enc_path = Path(enc_path_raw).resolve()
-    if not _path_under_any(enc_path, safe_roots):
-        log.warning("api_decrypt: rejected path outside trusted roots: %s "
-                    "(roots=%s)", enc_path, [str(r) for r in safe_roots])
-        return jsonify({
-            "error": "file_path is outside the trusted folders. Allowed: "
-                     + " | ".join(str(r) for r in safe_roots)
-        }), 403
-
-    if not enc_path.exists():
-        return jsonify({"error": f"File not found: {enc_path.name}"}), 404   # name only, no full path
-
-    if enc_path.suffix.lower() != ".enc":
-        return jsonify({"error": "Only .enc files can be decrypted via this endpoint"}), 400
-
-    # Security: same trust check for the key file.
-    raw_key = None
-    if key_file:
-        kf_path = Path(key_file).resolve()
-        if not _path_under_any(kf_path, safe_roots):
-            log.warning("api_decrypt: rejected key_file outside trusted roots: %s", kf_path)
-            return jsonify({"error": "key_file is outside the trusted folders"}), 403
-        try:
-            with open(kf_path, "rb") as kf:
-                raw_key = kf.read()
-        except OSError as e:
-            return jsonify({"error": f"Cannot read key file: {e}"}), 400
+    enc_path, err = _trusted_path(raw_path, safe_roots, "api_decrypt")
+    if err:
+        return err
+    err = _check_decrypt_source(enc_path)
+    if err:
+        return err
+    raw_key, err = _read_key_file(key_file, safe_roots, "api_decrypt")
+    if err:
+        return err
 
     # The plaintext is kept in <enc_dir>/Decrypted/ as well as streamed: a
     # browser download never says where the file went, and the metrics player
     # replays the kept copy through /api/media.
     # Author: Bloodawn (KheivenD), 2026-05-03 (decrypt destination fix).
-    dec_dir = enc_path.parent / "Decrypted"
-    try:
-        dec_dir.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        return jsonify({"error": f"Could not create Decrypted/ folder: {e}"}), 500
-
-    plain_name = enc_path.name[:-4] if enc_path.name.lower().endswith(".enc") else enc_path.stem
-    out_path = dec_dir / plain_name
-
-    # Re-decrypting replaces any stale copy; the .enc is the source of truth.
-    try:
-        if out_path.exists():
-            out_path.unlink()
-    except OSError:
-        pass
-
-    try:
-        out = _decrypt_file(
-            enc_path,
-            password=password,
-            key=raw_key,
-            output_path=out_path,
-        )
-    except RuntimeError as e:
-        return jsonify({"error": str(e)}), 403
-    except Exception as e:  # noqa: BLE001
-        return jsonify({"error": f"Decryption failed: {e}"}), 500
-
-    # Small clips are read at once so no file handle outlives the request
-    # (an open handle blocks a re-decrypt replace on Windows). Larger clips
-    # stream in chunks, opening the file lazily and stopping at the size sent.
-    try:
-        size = out.stat().st_size
-        body = out.read_bytes() if size <= _INLINE_MAX_BYTES else None
-    except OSError as e:
-        return jsonify({"error": f"Could not read decrypted file: {e}"}), 500
-
-    def _stream():
-        remaining = size
-        with open(out, "rb") as fh:
-            while remaining > 0:
-                chunk = fh.read(min(_STREAM_CHUNK, remaining))
-                if not chunk:
-                    break
-                remaining -= len(chunk)
-                yield chunk
-
-    stem = enc_path.stem
-    log.info("Decrypted %s -> %s (%d KB)", enc_path.name, out, size // 1024)
-    return Response(
-        body if body is not None else _stream(),
-        mimetype="video/mp4",
-        headers={
-            "Content-Disposition": f'attachment; filename="{stem}"',
-            "Content-Length": str(size),
-            "X-Decrypted-Path": str(out),
-        },
-    )
+    out_path, err = _prepare_decrypt_destination(enc_path)
+    if err:
+        return err
+    out, err = _run_decrypt(enc_path, password, raw_key, out_path)
+    if err:
+        return err
+    return _decrypted_response(enc_path, out)
 
 
 @encryption_bp.route("/api/encrypt", methods=["POST"])

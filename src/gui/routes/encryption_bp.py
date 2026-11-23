@@ -377,24 +377,6 @@ def _encrypt_target(src_path, safe_roots):
     return enc_subdir / (src_path.name + ".enc"), None
 
 
-def _encrypt_without_output_path(src_path, password, raw_key, target_enc):
-    """Fallback for an _encrypt_file that lacks output_path: encrypt next to
-    the source, then move the result into Encrypted/."""
-    try:
-        tmp_enc = _encrypt_file(
-            src_path,
-            password=password,
-            key=raw_key,
-            delete_original=False,
-        )
-        # Move into Encrypted/ (it landed next to src by default)
-        return Path(tmp_enc).rename(target_enc), None
-    except (ValueError, FileNotFoundError) as e:
-        return None, (jsonify({"error": str(e)}), 400)
-    except Exception as e:  # noqa: BLE001
-        return None, (jsonify({"error": f"Encryption failed: {e}"}), 500)
-
-
 def _run_encrypt(src_path, password, raw_key, target_enc):
     """Encrypt src_path to target_enc, keeping the source file.
 
@@ -409,11 +391,6 @@ def _run_encrypt(src_path, password, raw_key, target_enc):
             delete_original=False,    # keep the source mp4
             output_path=target_enc,
         )
-    except TypeError:
-        # Older _encrypt_file signature without output_path. Fall back to
-        # in-place encrypt + move-and-restore-original.
-        log.warning("api_encrypt: _encrypt_file lacks output_path; using fallback")
-        return _encrypt_without_output_path(src_path, password, raw_key, target_enc)
     except (ValueError, FileNotFoundError) as e:
         return None, (jsonify({"error": str(e)}), 400)
     except Exception as e:  # noqa: BLE001

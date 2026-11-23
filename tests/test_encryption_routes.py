@@ -10,7 +10,7 @@ disk) so the split is provably behavior-preserving.
 Deliberately NOT pinned here, because planner 11.8 changes them on purpose and
 tests/test_decrypt_cleanup.py covers the new behavior:
   * the plaintext copy left in Decrypted/ and the X-Decrypted-Path header
-  * the TypeError fallback in /api/encrypt
+  * (removed in step 4) the TypeError fallback in /api/encrypt; see test_encrypt_a_type_error_is_a_normal_500
 
 Password mode runs PBKDF2 at 600,000 iterations (about half a second per
 call), so only one test uses it; the rest use raw keys.
@@ -450,3 +450,17 @@ def test_a_file_encrypted_by_independent_code_decrypts(tmp_path):
     src = tmp_path / "foreign.mp4.enc"
     src.write_bytes(blob)
     assert enc.decrypt_file(src, key=KEY, output_path=tmp_path / "out.mp4").read_bytes() == PLAIN
+
+
+def test_encrypt_a_type_error_is_a_normal_500(env):
+    """The old output_path-less fallback is gone: a TypeError is just a failure."""
+    src = _plain(env.allowed)
+    key = _keyfile(env.allowed)
+
+    def boom(*a, **k):
+        raise TypeError("unexpected keyword")
+    env.monkeypatch.setattr(env.eb, "_encrypt_file", boom)
+    r = env.client.post("/api/encrypt", json={"file_path": str(src), "key_file": str(key)})
+    assert r.status_code == 500
+    assert r.get_json()["error"].startswith("Encryption failed: ")
+    assert src.exists()

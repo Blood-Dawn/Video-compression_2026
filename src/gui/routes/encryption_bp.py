@@ -5,6 +5,8 @@ AES-256 key generation and per-segment encrypt / decrypt.
 Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - blueprints).
 """
 
+import time
+import uuid
 from pathlib import Path
 from flask import Blueprint, jsonify, request, Response
 
@@ -52,6 +54,8 @@ _ROOT = Path(__file__).resolve().parents[3]
 # Read size for streaming a decrypted clip back to the browser.
 _STREAM_CHUNK = 64 * 1024
 _INLINE_MAX_BYTES = 64 * 1024 * 1024
+_STAGE_PREFIX = ".svcs-dec-"          # marks a staged plaintext file we own
+_STAGE_MAX_AGE_S = 3600                # older staged files are leftovers of a crash
 
 encryption_bp = Blueprint("encryption", __name__)
 
@@ -207,28 +211,52 @@ def _check_decrypt_source(enc_path):
     return None
 
 
+def _sweep_stale_staged(dec_dir):
+    """Remove staged plaintext left by a crashed or killed server.
+
+    Only our own marked files, and only once they are old enough that no
+    live download can still be reading them.
+    """
+    cutoff = time.time() - _STAGE_MAX_AGE_S
+    try:
+        for f in dec_dir.iterdir():
+            if (f.name.startswith(_STAGE_PREFIX) and f.is_file()
+                    and not f.is_symlink() and f.stat().st_mtime < cutoff):
+                f.unlink(missing_ok=True)
+    except OSError as e:
+        log.warning("api_decrypt: could not sweep stale staged plaintext in %s: %s", dec_dir, e)
+
+
 def _prepare_decrypt_destination(enc_path):
-    """Create <enc_dir>/Decrypted/ and clear any stale copy of the output.
+    """Create <enc_dir>/Decrypted/ and pick a private staging path in it.
+
+    Each request gets its own uniquely named file, so two downloads of the
+    same clip never share (or delete) each other's plaintext. A symlinked
+    Decrypted/ is refused so cleanup can never reach outside the folder.
+    A copy kept by an older version of the route is cleared too.
 
     Returns (out_path, None), or (None, 500 response) when the folder cannot
-    be created.
+    be created or is a symlink.
     """
     dec_dir = enc_path.parent / "Decrypted"
     try:
         dec_dir.mkdir(parents=True, exist_ok=True)
     except OSError as e:
         return None, (jsonify({"error": f"Could not create Decrypted/ folder: {e}"}), 500)
+    if dec_dir.is_symlink():
+        return None, (jsonify({"error": "Could not use Decrypted/ folder: it is a symbolic link"}), 500)
 
     plain_name = enc_path.name[:-4] if enc_path.name.lower().endswith(".enc") else enc_path.stem
-    out_path = dec_dir / plain_name
 
-    # Re-decrypting replaces any stale copy; the .enc is the source of truth.
+    # Clear a plaintext copy left by an earlier version, which kept it.
     try:
-        if out_path.exists():
-            out_path.unlink()
+        legacy = dec_dir / plain_name
+        if legacy.is_file() and not legacy.is_symlink():
+            legacy.unlink()
     except OSError:
         pass
-    return out_path, None
+    _sweep_stale_staged(dec_dir)
+    return dec_dir / f"{_STAGE_PREFIX}{uuid.uuid4().hex}-{plain_name}", None
 
 
 def _run_decrypt(enc_path, password, raw_key, out_path):
@@ -261,12 +289,23 @@ def _stream_file(path, size):
 
 
 def _discard_decrypted(out):
-    """Delete the plaintext copy, then its Decrypted/ folder if now empty."""
+    """Delete this request's staged plaintext, then Decrypted/ if now empty.
+
+    Never follows a symlinked folder. A failure is logged (the file is
+    swept at the next decrypt once it is old enough), not silently dropped.
+    """
     try:
+        if out.parent.is_symlink() or out.is_symlink():
+            log.warning("api_decrypt: refusing to delete %s (symbolic link)", out)
+            return
         out.unlink(missing_ok=True)
+    except OSError as e:
+        log.warning("api_decrypt: could not delete decrypted copy %s: %s", out, e)
+        return
+    try:
         out.parent.rmdir()
     except OSError:
-        pass  # folder not empty (another clip mid-download) or already gone
+        pass  # not empty (another download in flight) or already gone
 
 
 def _decrypted_response(enc_path, out):

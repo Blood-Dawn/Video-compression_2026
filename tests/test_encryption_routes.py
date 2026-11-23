@@ -459,8 +459,14 @@ def test_encrypt_a_type_error_is_a_normal_500(env):
 
     def boom(*a, **k):
         raise TypeError("unexpected keyword")
-    env.monkeypatch.setattr(env.eb, "_encrypt_file", boom)
+    calls = []
+
+    def counting_boom(*a, **k):
+        calls.append(1)
+        boom()
+    env.monkeypatch.setattr(env.eb, "_encrypt_file", counting_boom)
     r = env.client.post("/api/encrypt", json={"file_path": str(src), "key_file": str(key)})
+    assert len(calls) == 1          # no retry through a fallback
     assert r.status_code == 500
     assert r.get_json()["error"].startswith("Encryption failed: ")
     assert src.exists()

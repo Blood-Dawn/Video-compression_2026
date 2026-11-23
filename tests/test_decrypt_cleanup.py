@@ -66,3 +66,62 @@ def test_a_neighbouring_clip_in_decrypted_survives_the_cleanup(env):
     assert r.status_code == 200
     assert other.read_bytes() == b"keep me"
     assert not (dec / "clip.mp4").exists()
+
+
+def test_two_requests_for_the_same_clip_do_not_share_a_staging_file(env):
+    enc_path = _enc(env.allowed)
+    key = _keyfile(env.allowed)
+    seen = []
+    real = env.eb._prepare_decrypt_destination
+
+    def spy(p):
+        out, err = real(p)
+        seen.append(out)
+        return out, err
+    env.monkeypatch.setattr(env.eb, "_prepare_decrypt_destination", spy)
+    assert _decrypt(env, enc_path, key).status_code == 200
+    assert _decrypt(env, enc_path, key).status_code == 200
+    assert seen[0] != seen[1]
+
+
+def test_a_symlinked_decrypted_folder_is_refused_and_nothing_outside_is_deleted(env):
+    victim_dir = env.outside / "victim"
+    victim_dir.mkdir()
+    victim = victim_dir / "clip.mp4"
+    victim.write_bytes(b"precious")
+    (env.allowed / "Decrypted").symlink_to(victim_dir, target_is_directory=True)
+    r = _decrypt(env, _enc(env.allowed), _keyfile(env.allowed))
+    assert r.status_code == 500
+    assert victim.read_bytes() == b"precious"
+
+
+def test_stale_staged_plaintext_is_swept_but_other_files_are_not(env):
+    import os
+    import time
+    dec = env.allowed / "Decrypted"
+    dec.mkdir()
+    old = dec / (env.eb._STAGE_PREFIX + "deadbeef-clip.mp4")
+    old.write_bytes(b"leftover")
+    past = time.time() - 2 * env.eb._STAGE_MAX_AGE_S
+    os.utime(old, (past, past))
+    fresh = dec / (env.eb._STAGE_PREFIX + "cafe-clip.mp4")
+    fresh.write_bytes(b"in flight")
+    mine = dec / "notes.txt"
+    mine.write_bytes(b"user file")
+    assert _decrypt(env, _enc(env.allowed), _keyfile(env.allowed)).status_code == 200
+    assert not old.exists()
+    assert fresh.exists() and mine.exists()
+
+
+def test_a_failed_delete_is_logged_not_silent(env, caplog):
+    import logging
+    out = env.allowed / "Decrypted" / "x.mp4"
+    out.parent.mkdir()
+    out.write_bytes(b"x")
+
+    def refuse(self, missing_ok=False):
+        raise PermissionError("locked")
+    env.monkeypatch.setattr(type(out), "unlink", refuse)
+    with caplog.at_level(logging.WARNING):
+        env.eb._discard_decrypted(out)
+    assert "could not delete decrypted copy" in caplog.text

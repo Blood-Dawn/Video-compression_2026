@@ -157,10 +157,10 @@ work) to week 4 rather than rushing the security testing.
 | --- | --- | --- | --- | --- |
 | 4.1 | Diagnose the mobile pairing persistence defect | Kheiven | Root cause proven by a failing unit test, not by inspection | Complete Sep 22 |
 | 4.2 | Fix pairing persistence and prove it with an instrumented test | Kheiven | A phone that pairs once stays paired across restarts and app updates | Complete Sep 22 |
-| 4.3 | Implement the upload `CoroutineWorker` with a foreground notification | Jorge | Upload runs outside the view model scope with visible progress | Not started |
-| 4.4 | Test upload survival: force-stop mid-transfer and confirm resume | Jorge | Transfer resumes from the server-reported offset and completes | Not started |
-| 4.5 | Wire desktop event toasts to the existing SSE stream | Ashleyn | An `EVENT` line raises exactly one toast; other log lines raise none | Not started |
-| 4.6 | Write browser tests for the EVENTS panel | Ashleyn | Rows render from a seeded events file; empty state verified | Not started |
+| 4.3 | Implement the upload `CoroutineWorker` with a foreground notification | Jorge | Upload runs outside the view model scope with visible progress | Complete Sep 27 |
+| 4.4 | Test upload survival: force-stop mid-transfer and confirm resume | Jorge | Transfer resumes from the server-reported offset and completes | Complete Sep 27 |
+| 4.5 | Wire desktop event toasts to the existing SSE stream | Ashleyn | An `EVENT` line raises exactly one toast; other log lines raise none | In progress |
+| 4.6 | Write browser tests for the EVENTS panel | Ashleyn | Rows render from a seeded events file; empty state verified | In progress |
 | 4.7 | Implement drag-to-draw for exclude rectangles and crossing lines | Riley | Zones round-trip through POST and GET with normalized coordinates intact | Not started |
 | 4.8 | Implement loiter zones and the SAVE and CLEAR actions | Riley | Full toolbar working, banner states that changes apply to the next run | Not started |
 | 4.9 | Implement `utils/event_webhook.py` with the SSRF guard | Victor | Events post to a configured URL, fire and forget, two second timeout. Marked done 2026-09-27: duplicated 3.9/3.10, already Completed | Complete Sep 27 |
@@ -175,8 +175,8 @@ work) to week 4 rather than rushing the security testing.
 | 5.2 | Design and produce the real Android launcher icon | Kheiven | Adaptive icon at every density replacing the template robot | Complete Oct 7 |
 | 5.3 | Begin the per-camera HLS registry refactor | Jorge | Design written; the single global stream slot is identified and scoped | Not started |
 | 5.4 | Add regression tests for the existing single-camera HLS behavior | Jorge | Existing behavior pinned before the refactor changes it | Not started |
-| 5.5 | Extend the query archive sidebar with full-text and multi-tag search | Ashleyn | Desktop query UI matches the multi-type CLI capability | Not started |
-| 5.6 | Write an integration test for event and query interaction | Ashleyn | Pipeline run produces events that the query interface can retrieve | Not started |
+| 5.5 | Extend the query archive sidebar with full-text and multi-tag search | Ashleyn | Desktop query UI matches the multi-type CLI capability | In progress |
+| 5.6 | Write an integration test for event and query interaction | Ashleyn | Pipeline run produces events that the query interface can retrieve | In progress |
 | 5.7 | Add the camera id datalist from library folder labels | Riley | Zone editor offers real camera ids rather than free text | Not started |
 | 5.8 | Browser-verify the zone editor against a real backdrop frame | Riley | Screenshot evidence of a zone drawn over actual footage | Not started |
 | 5.9 | Review the mobile credential storage path end to end | Victor | Written finding on whether a failed decrypt fails closed or returns a stale credential | Complete Oct 7 |
@@ -192,8 +192,8 @@ work) to week 4 rather than rushing the security testing.
 | 6.2 | Research the UnifiedPush distributor registration flow | Kheiven | Written design for native push replacing the separate ntfy app | Complete Oct 7 |
 | 6.3 | Implement the per-camera HLS registry | Jorge | Two cameras stream simultaneously without one blocking the other | Not started |
 | 6.4 | Update the HLS idle watchdog for multiple streams | Jorge | Each stream reaped independently on abandonment | Not started |
-| 6.5 | Write the semantic search research document | Ashleyn | `docs/RESEARCH-SEMANTIC-SEARCH.md` covering model choice, storage, offline story | Not started |
-| 6.6 | Build the semantic search skeleton with a stub embedder | Ashleyn | Opt-in extra; no model downloaded in CI | Not started |
+| 6.5 | Write the semantic search research document | Ashleyn | `docs/RESEARCH-SEMANTIC-SEARCH.md` covering model choice, storage, offline story | In progress |
+| 6.6 | Build the semantic search skeleton with a stub embedder | Ashleyn | Opt-in extra; no model downloaded in CI | In progress |
 | 6.7 | Run the CDnet corpus with and without exclude zones | Riley | Measured file size difference from zone masking | Not started |
 | 6.8 | Write up the zone compression benefit with numbers | Riley | Table for the final report; the claim is either confirmed or corrected | Not started |
 | 6.9 | Add the server endpoint for registering a push endpoint per device | Victor | Device tokens can carry a push endpoint for the native path | Complete Oct 7 |

@@ -337,6 +337,147 @@ def api_decrypt():
     return _decrypted_response(enc_path, out)
 
 
+# ── /api/encrypt ─────────────────────────────────────────────────────────────
+
+
+def _check_encrypt_source(src_path):
+    """404 for a missing file, 400 for a file that is already encrypted."""
+    if not src_path.exists():
+        return jsonify({"error": f"File not found: {src_path.name}"}), 404
+    if src_path.suffix.lower() == ".enc":
+        return jsonify({"error": "File is already encrypted (.enc)"}), 400
+    return None
+
+
+def _encrypt_target(src_path, safe_roots):
+    """Choose the .enc destination and create its folder.
+
+    The encrypted-output folder chosen in Setup wins, else a sibling
+    "Encrypted/" next to the source. A cloud destination is only ever used
+    when the user chose it. SEC-006: if that folder escapes the trusted
+    roots, fall back to the sibling Encrypted/ next to the (already
+    confined) source, so a .enc is never written to an arbitrary path.
+
+    Returns (target_enc_path, None), or (None, 500 response) when the folder
+    cannot be created.
+    """
+    with _state_lock:
+        chosen_enc = (_status.get("config", {}).get("encrypted_dir") or "").strip()
+    enc_subdir = Path(chosen_enc) if chosen_enc else src_path.parent / "Encrypted"
+
+    if not _path_under_any(enc_subdir.resolve(), safe_roots):
+        log.warning("api_encrypt: encrypted_dir %s is outside the trusted roots; "
+                    "writing to a sibling Encrypted/ instead", enc_subdir)
+        enc_subdir = src_path.parent / "Encrypted"
+
+    try:
+        enc_subdir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        return None, (jsonify({"error": f"Could not create Encrypted/ folder: {e}"}), 500)
+    return enc_subdir / (src_path.name + ".enc"), None
+
+
+def _encrypt_without_output_path(src_path, password, raw_key, target_enc):
+    """Fallback for an _encrypt_file that lacks output_path: encrypt next to
+    the source, then move the result into Encrypted/."""
+    try:
+        tmp_enc = _encrypt_file(
+            src_path,
+            password=password,
+            key=raw_key,
+            delete_original=False,
+        )
+        # Move into Encrypted/ (it landed next to src by default)
+        return Path(tmp_enc).rename(target_enc), None
+    except (ValueError, FileNotFoundError) as e:
+        return None, (jsonify({"error": str(e)}), 400)
+    except Exception as e:  # noqa: BLE001
+        return None, (jsonify({"error": f"Encryption failed: {e}"}), 500)
+
+
+def _run_encrypt(src_path, password, raw_key, target_enc):
+    """Encrypt src_path to target_enc, keeping the source file.
+
+    Returns (enc_path, None), (None, 400) for bad arguments, (None, 500)
+    for anything else.
+    """
+    try:
+        enc_path = _encrypt_file(
+            src_path,
+            password=password,
+            key=raw_key,
+            delete_original=False,    # keep the source mp4
+            output_path=target_enc,
+        )
+    except TypeError:
+        # Older _encrypt_file signature without output_path. Fall back to
+        # in-place encrypt + move-and-restore-original.
+        log.warning("api_encrypt: _encrypt_file lacks output_path; using fallback")
+        return _encrypt_without_output_path(src_path, password, raw_key, target_enc)
+    except (ValueError, FileNotFoundError) as e:
+        return None, (jsonify({"error": str(e)}), 400)
+    except Exception as e:  # noqa: BLE001
+        return None, (jsonify({"error": f"Encryption failed: {e}"}), 500)
+    return enc_path, None
+
+
+def _insert_encrypted_row(conn, src_path, enc_path):
+    """Insert the .enc copy's row, cloning the original's metadata when the
+    original has one."""
+    # Clone the original row's metadata when it exists.
+    row = conn.execute(
+        "SELECT timestamp, camera_id, target_detected, roi_count, "
+        "       file_size, duration, object_type, "
+        "       COALESCE(avg_sharpness, 0), sharpness_label, "
+        "       COALESCE(object_classes, '[]'), dominant_color, "
+        "       COALESCE(scene_type, 'unknown'), time_of_day, "
+        "       COALESCE(vehicle_count, 0), COALESCE(person_count, 0) "
+        "FROM segments WHERE file_path = ?",
+        (str(src_path),),
+    ).fetchone()
+    enc_size = enc_path.stat().st_size
+    if row:
+        conn.execute(
+            "INSERT INTO segments (timestamp, camera_id, target_detected, "
+            "  roi_count, file_size, duration, file_path, object_type, "
+            "  avg_sharpness, sharpness_label, object_classes, "
+            "  dominant_color, scene_type, time_of_day, "
+            "  vehicle_count, person_count) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (row[0], row[1], row[2], row[3], enc_size, row[5],
+             str(enc_path), row[6], row[7], row[8], row[9],
+             row[10], row[11], row[12], row[13], row[14]),
+        )
+    else:
+        # File came from outside the pipeline: minimal row.
+        conn.execute(
+            "INSERT INTO segments (timestamp, camera_id, target_detected, "
+            "  roi_count, file_size, duration, file_path, object_type) "
+            "VALUES (datetime('now'), ?, 0, 0, ?, 0, ?, 'unknown')",
+            (src_path.stem, enc_size, str(enc_path)),
+        )
+    conn.commit()
+
+
+def _record_encrypted_segment(src_path, enc_path):
+    """Add a row for the .enc copy; the original row stays.
+
+    Only when a pipeline has already created the database: opening a missing
+    path makes sqlite create an empty metadata.db, which turns the storage and
+    search routes into 500s ("no such table: segments"). A failure here is
+    logged, never raised: the file was encrypted, so the request still succeeds.
+    Author: Bloodawn (KheivenD), 2026-09-24 (cleanup sweep).
+    """
+    try:
+        db_path = _get_db_path()
+        if not db_path.exists():
+            raise FileNotFoundError(f"no metadata database at {db_path} yet")
+        with get_connection(str(db_path)) as conn:
+            _insert_encrypted_row(conn, src_path, enc_path)
+    except Exception as e:  # noqa: BLE001
+        log.warning("api_encrypt: DB update failed: %s", e)
+
+
 @encryption_bp.route("/api/encrypt", methods=["POST"])
 def api_encrypt():
     """Encrypt a plaintext segment to a SIBLING ``Encrypted/`` folder.
@@ -365,148 +506,31 @@ def api_encrypt():
         return jsonify({"error": "cryptography package not installed. "
                                   "Run: uv sync   (or: pip install cryptography)"}), 503
 
-    body         = request.get_json(silent=True) or {}
-    raw_path     = body.get("file_path", "").strip()
-    password     = body.get("password") or None
-    key_file     = body.get("key_file") or None
+    req, err = _parse_crypto_request()
+    if err:
+        return err
+    raw_path, password, key_file = req
 
-    if not raw_path:
-        return jsonify({"error": "file_path is required"}), 400
-    if not password and not key_file:
-        return jsonify({"error": "Either password or key_file is required"}), 400
-
-    src_path = Path(raw_path).resolve()
-
-    # Same trust check as decrypt: only files inside the trusted roots.
+    # Same trust checks as decrypt: file_path and key_file inside the trusted roots.
     safe_roots = _safe_segment_roots()
-    if not _path_under_any(src_path, safe_roots):
-        log.warning("api_encrypt: rejected path outside trusted roots: %s", src_path)
-        return jsonify({
-            "error": "file_path is outside the trusted folders. Allowed: "
-                     + " | ".join(str(r) for r in safe_roots)
-        }), 403
+    src_path, err = _trusted_path(raw_path, safe_roots, "api_encrypt")
+    if err:
+        return err
+    err = _check_encrypt_source(src_path)
+    if err:
+        return err
+    raw_key, err = _read_key_file(key_file, safe_roots, "api_encrypt")
+    if err:
+        return err
 
-    if not src_path.exists():
-        return jsonify({"error": f"File not found: {src_path.name}"}), 404
+    target_enc, err = _encrypt_target(src_path, safe_roots)
+    if err:
+        return err
+    enc_path, err = _run_encrypt(src_path, password, raw_key, target_enc)
+    if err:
+        return err
 
-    if src_path.suffix.lower() == ".enc":
-        return jsonify({"error": "File is already encrypted (.enc)"}), 400
-
-    raw_key = None
-    if key_file:
-        kf_path = Path(key_file).resolve()
-        # SEC-005: confine the key file to the trusted roots, exactly as the
-        # decrypt route does. Without this, encrypt would read an arbitrary file
-        # off disk as key material (inconsistent with decrypt).
-        if not _path_under_any(kf_path, safe_roots):
-            log.warning("api_encrypt: rejected key_file outside trusted roots: %s", kf_path)
-            return jsonify({"error": "key_file is outside the trusted folders"}), 403
-        try:
-            raw_key = kf_path.read_bytes()
-        except OSError as e:
-            return jsonify({"error": f"Cannot read key file: {e}"}), 400
-
-    # Destination: the encrypted-output folder chosen in Setup, else a sibling
-    # "Encrypted/" next to the source. A cloud destination is only ever used
-    # when the user chose it.
-    with _state_lock:
-        chosen_enc = (_status.get("config", {}).get("encrypted_dir") or "").strip()
-    if chosen_enc:
-        enc_subdir = Path(chosen_enc)
-    else:
-        enc_subdir = src_path.parent / "Encrypted"
-
-    # SEC-006: never write the .enc to an arbitrary path. If the configured
-    # encrypted_dir escapes the trusted roots, fall back to a sibling Encrypted/
-    # next to the (already-confined) source.
-    if not _path_under_any(enc_subdir.resolve(), safe_roots):
-        log.warning("api_encrypt: encrypted_dir %s is outside the trusted roots; "
-                    "writing to a sibling Encrypted/ instead", enc_subdir)
-        enc_subdir = src_path.parent / "Encrypted"
-
-    try:
-        enc_subdir.mkdir(parents=True, exist_ok=True)
-    except OSError as e:
-        return jsonify({"error": f"Could not create Encrypted/ folder: {e}"}), 500
-
-    target_enc = enc_subdir / (src_path.name + ".enc")
-
-    try:
-        enc_path = _encrypt_file(
-            src_path,
-            password=password,
-            key=raw_key,
-            delete_original=False,    # keep the source mp4
-            output_path=target_enc,
-        )
-    except TypeError:
-        # Older _encrypt_file signature without output_path. Fall back to
-        # in-place encrypt + move-and-restore-original.
-        log.warning("api_encrypt: _encrypt_file lacks output_path; using fallback")
-        try:
-            tmp_enc = _encrypt_file(
-                src_path,
-                password=password,
-                key=raw_key,
-                delete_original=False,
-            )
-            # Move into Encrypted/ (it landed next to src by default)
-            enc_path = Path(tmp_enc).rename(target_enc)
-        except (ValueError, FileNotFoundError) as e:
-            return jsonify({"error": str(e)}), 400
-        except Exception as e:  # noqa: BLE001
-            return jsonify({"error": f"Encryption failed: {e}"}), 500
-    except (ValueError, FileNotFoundError) as e:
-        return jsonify({"error": str(e)}), 400
-    except Exception as e:  # noqa: BLE001
-        return jsonify({"error": f"Encryption failed: {e}"}), 500
-
-    # Add a row for the .enc copy; the original row stays. Only when a
-    # pipeline has already created the database: opening a missing path makes
-    # sqlite create an empty metadata.db, which turns the storage and search
-    # routes into 500s ("no such table: segments").
-    # Author: Bloodawn (KheivenD), 2026-09-24 (cleanup sweep).
-    try:
-        db_path = _get_db_path()
-        if not db_path.exists():
-            raise FileNotFoundError(f"no metadata database at {db_path} yet")
-        with get_connection(str(db_path)) as conn:
-            # Clone the original row's metadata when it exists.
-            row = conn.execute(
-                "SELECT timestamp, camera_id, target_detected, roi_count, "
-                "       file_size, duration, object_type, "
-                "       COALESCE(avg_sharpness, 0), sharpness_label, "
-                "       COALESCE(object_classes, '[]'), dominant_color, "
-                "       COALESCE(scene_type, 'unknown'), time_of_day, "
-                "       COALESCE(vehicle_count, 0), COALESCE(person_count, 0) "
-                "FROM segments WHERE file_path = ?",
-                (str(src_path),),
-            ).fetchone()
-            enc_size = enc_path.stat().st_size
-            if row:
-                conn.execute(
-                    "INSERT INTO segments (timestamp, camera_id, target_detected, "
-                    "  roi_count, file_size, duration, file_path, object_type, "
-                    "  avg_sharpness, sharpness_label, object_classes, "
-                    "  dominant_color, scene_type, time_of_day, "
-                    "  vehicle_count, person_count) "
-                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    (row[0], row[1], row[2], row[3], enc_size, row[5],
-                     str(enc_path), row[6], row[7], row[8], row[9],
-                     row[10], row[11], row[12], row[13], row[14]),
-                )
-            else:
-                # File came from outside the pipeline: minimal row.
-                conn.execute(
-                    "INSERT INTO segments (timestamp, camera_id, target_detected, "
-                    "  roi_count, file_size, duration, file_path, object_type) "
-                    "VALUES (datetime('now'), ?, 0, 0, ?, 0, ?, 'unknown')",
-                    (src_path.stem, enc_size, str(enc_path)),
-                )
-            conn.commit()
-    except Exception as e:  # noqa: BLE001
-        log.warning("api_encrypt: DB update failed: %s", e)
-        # The file was encrypted, so the request still succeeds.
+    _record_encrypted_segment(src_path, enc_path)
 
     size_kb = int(enc_path.stat().st_size / 1024)
     log.info("Encrypted segment: %s -> %s (%d KB)  [original kept]",

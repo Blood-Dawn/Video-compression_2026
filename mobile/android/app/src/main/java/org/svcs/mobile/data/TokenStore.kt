@@ -121,6 +121,22 @@ class TokenStore(
         context.settingsStore.edit { it[TOKEN_BLOB] = cipher.encrypt(token) }
     }
 
+    /**
+     * Save the URL and the token together, in one DataStore transaction.
+     *
+     * Two separate writes could be interrupted between them (the process is
+     * killed, the second write throws) and leave a new URL next to the old
+     * token, a pairing that never worked. The token is encrypted first, so a
+     * Keystore failure writes nothing at all.
+     */
+    suspend fun setPairing(url: String, token: String) {
+        val blob = cipher.encrypt(token)
+        context.settingsStore.edit {
+            it[SERVER_URL] = url.trim()
+            it[TOKEN_BLOB] = blob
+        }
+    }
+
     /** Forget the token. Used on unpair and after a failed decrypt. */
     suspend fun clearToken() {
         context.settingsStore.edit { it.remove(TOKEN_BLOB) }

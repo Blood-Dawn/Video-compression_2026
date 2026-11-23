@@ -28,6 +28,15 @@ data class ServerSettingsState(
     val settingsLoaded: Boolean = false,
     val serverUrl: String = "",
     val token: String = "",
+    /**
+     * The pairing that is actually saved, as opposed to [serverUrl] and
+     * [token], which are the editable draft. Everything that talks to the
+     * server on the user's behalf (push settings) must use these, so a
+     * re-pair the user typed but never saved, or cancelled, cannot send the
+     * push topic and token to an address that was never tested or consented to.
+     */
+    val savedUrl: String = "",
+    val savedToken: String = "",
     val busy: Boolean = false,
     val ok: Boolean = false,
     val message: String? = null,
@@ -100,7 +109,12 @@ class ServerSettingsViewModel @JvmOverloads constructor(
             val tok = store.token().orEmpty()
             val auto = store.autoCompressUpload()
             _state.update {
-                it.copy(serverUrl = url, token = tok, autoCompressUpload = auto, settingsLoaded = true)
+                // The saved pairing always loads; the editable draft only fills
+                // in if the user has not already started typing.
+                it.copy(serverUrl = it.serverUrl.ifEmpty { url },
+                    token = it.token.ifEmpty { tok },
+                    savedUrl = url, savedToken = tok,
+                    autoCompressUpload = auto, settingsLoaded = true)
             }
         }
     }
@@ -117,13 +131,26 @@ class ServerSettingsViewModel @JvmOverloads constructor(
     fun onServerUrlChanged(v: String) {
         publicAddressAccepted = false
         _state.update {
-            it.copy(serverUrl = v, urlError = null, message = null,
+            it.copy(serverUrl = v, urlError = null, message = null, ok = false,
                 capabilities = null, needsPublicConsent = false)
         }
     }
 
     fun onTokenChanged(v: String) {
-        _state.update { it.copy(token = v, message = null, capabilities = null) }
+        _state.update { it.copy(token = v, message = null, ok = false, capabilities = null) }
+    }
+
+    /**
+     * Throw away an unsaved re-pair and go back to the saved pairing.
+     * Nothing is written: storage only changes in [save].
+     */
+    fun discardChanges() {
+        publicAddressAccepted = false
+        _state.update {
+            it.copy(serverUrl = it.savedUrl, token = it.savedToken, ok = false,
+                message = null, urlError = null, capabilities = null,
+                needsPublicConsent = false)
+        }
     }
 
     fun confirmPublicAddress() {
@@ -154,12 +181,20 @@ class ServerSettingsViewModel @JvmOverloads constructor(
             return
         }
 
+        val probedUrl = raw
+        val probedToken = _state.value.token.trim()
         _state.update { it.copy(busy = true, message = null, capabilities = null) }
         viewModelScope.launch {
             val result = withContext(ioDispatcher) {
-                apiFactory(normalized, _state.value.token.trim()).probe()
+                apiFactory(normalized, probedToken).probe()
             }
             _state.update { s ->
+                // The user edited the URL or token while this probe was in
+                // flight. Its result describes credentials that are no longer
+                // on screen, so it must not mark the new ones as tested.
+                if (s.serverUrl.trim() != probedUrl || s.token.trim() != probedToken) {
+                    return@update s.copy(busy = false)
+                }
                 when (result) {
                     is ProbeResult.Ok -> s.copy(
                         busy = false, ok = true, capabilities = result.capabilities,
@@ -195,8 +230,8 @@ class ServerSettingsViewModel @JvmOverloads constructor(
 
     /** An API client on the SAVED pairing, or null if there is not one yet. */
     private fun pairedApi(): SvcsApiClient? {
-        val url = normalizeUrl(_state.value.serverUrl.trim()) ?: return null
-        val tok = _state.value.token.trim()
+        val url = normalizeUrl(_state.value.savedUrl.trim()) ?: return null
+        val tok = _state.value.savedToken.trim()
         if (tok.isBlank()) return null
         return apiFactory(url, tok)
     }
@@ -224,10 +259,16 @@ class ServerSettingsViewModel @JvmOverloads constructor(
     /** Fetch the settings once, so the switches show the server's truth. */
     fun loadPushConfig() {
         val api = pairedApi() ?: return
+        val forUrl = _state.value.savedUrl
+        val forToken = _state.value.savedToken
         _state.update { it.copy(pushBusy = true) }
         viewModelScope.launch {
             val res = withContext(ioDispatcher) { api.getPushConfig() }
             _state.update { s ->
+                // The pairing changed while this fetch was in flight: these are
+                // the previous server's settings and must not be shown or saved
+                // to the new one. The new pairing's own fetch reports instead.
+                if (s.savedUrl != forUrl || s.savedToken != forToken) return@update s
                 when (res) {
                     is Fetched.Ok -> s.copy(
                         pushBusy = false, pushLoaded = true,
@@ -331,11 +372,29 @@ class ServerSettingsViewModel @JvmOverloads constructor(
     }
 
     fun save() {
+        // Busy for the whole write, so DISCARD CHANGES (disabled while busy)
+        // cannot race it and leave a pairing the user meant to drop.
+        _state.update { it.copy(busy = true) }
         viewModelScope.launch {
-            store.setServerUrl(_state.value.serverUrl.trim())
-            store.setToken(_state.value.token.trim())
+            val url = _state.value.serverUrl.trim()
+            val tok = _state.value.token.trim()
+            try {
+                store.setPairing(url, tok)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(busy = false, ok = false,
+                        message = "Could not save the pairing: ${e.message}")
+                }
+                return@launch
+            }
             _state.update {
-                it.copy(message = "Saved.", ok = true, saveCount = it.saveCount + 1)
+                // pushLoaded goes back to false: the settings on screen belong
+                // to the previous pairing until this one's fetch succeeds.
+                it.copy(busy = false, message = "Saved.", ok = true,
+                    saveCount = it.saveCount + 1,
+                    savedUrl = url, savedToken = tok, pushLoaded = false)
             }
             // Re-read the server-side push settings with the credentials that
             // were just saved. The screen's LaunchedEffect cannot do this: it

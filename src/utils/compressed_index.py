@@ -119,8 +119,14 @@ def signature(source) -> str:
 
 def record(source, output, preset: str | None = None,
            mode: str | None = None, when: float | None = None,
-           index_path: Path | None = None) -> dict:
-    """Record that ``source`` was compressed to ``output``. Returns the entry."""
+           index_path: Path | None = None,
+           output_bytes: int | None = None) -> dict:
+    """Record that ``source`` was compressed to ``output``. Returns the entry.
+
+    ``output_bytes`` is the combined size of every file the job wrote. A job
+    split into segments has several outputs but ``output`` names only the
+    newest, so the saving would be measured against one segment without it.
+    """
     sig = signature(source)
     entry = {
         "source": str(_resolved(source)),
@@ -130,6 +136,8 @@ def record(source, output, preset: str | None = None,
         "mode": mode,
         "when": when if when is not None else time.time(),
     }
+    if output_bytes is not None and output_bytes > 0:
+        entry["output_bytes"] = int(output_bytes)
     # Locked read-modify-write so a concurrent prune_missing()/record() cannot
     # clobber the file and lose entries.
     with _index_lock:

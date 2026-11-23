@@ -192,3 +192,70 @@ def test_endpoint_returns_200_on_a_clean_install(client):
     d = r.get_json()
     assert d["measured"]["files"] >= 0
     assert d["recorded"]["segments"] >= 0
+
+
+# ── demo branch: one set of display numbers, and segment planning ────────────
+
+def test_measured_carries_the_shared_result_block(tmp_path, fake_index):
+    """Dashboard text comes from the shared algorithm, not from page script."""
+    sig, entry = _pair(tmp_path, "clip", source_size=184 * 1024 * 1024,
+                       output_size=70 * 1024)
+    fake_index({sig: entry})
+    m = sav.measured_savings()
+    assert m["result"]["verdict"] == "saved"
+    assert m["result"]["headline"].startswith("Saved ")
+    assert m["last"]["name"] == "clip_out.mp4"
+    assert m["last"]["saved_pct"] == m["result"]["saved_pct"]
+
+
+def test_split_job_uses_the_combined_output_size(tmp_path, fake_index):
+    """A job cut into segments records one output path but all its bytes.
+    Measuring against the newest segment alone would overstate the saving."""
+    sig, entry = _pair(tmp_path, "split", source_size=1000, output_size=100)
+    entry["output_bytes"] = 400  # four segments of about 100 bytes
+    fake_index({sig: entry})
+    m = sav.measured_savings()
+    assert m["output_bytes"] == 400
+    assert m["saved_pct"] == 60.0
+    assert m["result"]["saved_pct"] == 60
+
+
+def test_no_files_gives_no_result_block(fake_index):
+    fake_index({})
+    m = sav.measured_savings()
+    assert m["result"] is None and m["last"] is None
+
+
+def test_segment_plan_for_a_live_source(client):
+    body = client.get("/api/segment-plan").get_json()
+    assert body["kind"] == "live"
+    assert body["default_seconds"] == 600
+
+
+def test_segment_plan_for_a_file(client, tmp_path, monkeypatch):
+    clip = tmp_path / "gate.mp4"
+    clip.write_bytes(b"x" * 2048)
+    monkeypatch.setattr(sav._ps, "allowed_media_roots", lambda: [tmp_path])
+    monkeypatch.setattr(sav, "_probe_duration", lambda p: 130.0)
+    body = client.get("/api/segment-plan", query_string={"path": str(clip)}).get_json()
+    assert body["kind"] == "file"
+    assert body["default_seconds"] == 131        # whole video, one file
+    assert body["recommended_seconds"] == 70     # half, rounded up to 10 s
+    assert body["clips_at_recommended"] == 2
+    assert body["source_bytes"] == 2048
+
+
+def test_segment_plan_refuses_paths_outside_the_media_roots(client, tmp_path, monkeypatch):
+    clip = tmp_path / "gate.mp4"
+    clip.write_bytes(b"x")
+    monkeypatch.setattr(sav._ps, "allowed_media_roots", lambda: [tmp_path / "elsewhere"])
+    res = client.get("/api/segment-plan", query_string={"path": str(clip)})
+    assert res.status_code == 403
+
+
+def test_segment_plan_reports_an_unreadable_video(client, tmp_path, monkeypatch):
+    clip = tmp_path / "bad.mp4"
+    clip.write_bytes(b"not a video")
+    monkeypatch.setattr(sav._ps, "allowed_media_roots", lambda: [tmp_path])
+    monkeypatch.setattr(sav, "_probe_duration", lambda p: None)
+    assert client.get("/api/segment-plan", query_string={"path": str(clip)}).status_code == 422

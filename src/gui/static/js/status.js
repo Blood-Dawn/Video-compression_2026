@@ -91,6 +91,9 @@ async function pollStatus() {
         // user-dismissed completion summary and refresh the job record.
         maybeShowLatestJobSummary('pipeline');
         loadRecentJobs();
+        // The index records the output just after the run ends.
+        pollMeasuredSavings();
+        setTimeout(pollMeasuredSavings, 3000);
       }
     }
 
@@ -264,15 +267,33 @@ async function pollMeasuredSavings() {
     const res = await fetch('/api/savings');
     const d = await res.json();
     const m = d.measured || {};
-    if (m.files > 0 && m.saved_bytes > 0) {
-      const savedMb = m.saved_bytes / (1024 * 1024);
-      const savedStr = savedMb >= 1024 ? (savedMb / 1024).toFixed(2) + ' GB' : savedMb.toFixed(1) + ' MB';
-      const ratioStr = m.ratio ? ` (${m.ratio}\u00d7)` : '';
-      el.textContent = `Measured: ${savedStr} saved over ${m.files} file${m.files === 1 ? '' : 's'}${ratioStr}`;
+    window._measuredSavings = m;
+    const r = m.result;
+    if (m.files > 0 && r && r.verdict === 'saved') {
+      const savedStr = r.saved_mb >= 1024 ? (r.saved_mb / 1024).toFixed(2) + ' GB' : r.saved_mb.toFixed(1) + ' MB';
+      const ratioStr = r.ratio ? `, ${r.ratio.toFixed(1)}\u00d7 smaller` : '';
+      el.textContent = `Measured: ${savedStr} saved over ${m.files} file${m.files === 1 ? '' : 's'} (${r.saved_pct}%${ratioStr})`;
+    } else if (m.files > 0 && r) {
+      el.textContent = `Measured: no space saved over ${m.files} file${m.files === 1 ? '' : 's'}`;
     } else {
       el.textContent = 'Measured: no compressed files with a known source yet';
     }
+    _renderLastResult(m.last);
+    _applyMeasuredToLibrary();
   } catch (e) {}
+}
+
+// The Home page "Last result" card: the newest compressed file, measured from
+// real file sizes (shared algorithm, see utils/result_numbers.py).
+function _renderLastResult(last) {
+  const card = document.getElementById('last-result');
+  if (!card) return;
+  if (!last || last.verdict === 'unknown') { card.hidden = true; return; }
+  const head = document.getElementById('lr-head');
+  head.textContent = last.headline;
+  head.classList.toggle('none', last.verdict !== 'saved');
+  document.getElementById('lr-detail').textContent = `${last.name}: ${last.detail}`;
+  card.hidden = false;
 }
 
 function _updateCompressionRatio() {
@@ -290,7 +311,8 @@ function _updateCompressionRatio() {
   if (totalCompMb > 0 && totalRawMb > 0) {
     const ratio = totalRawMb / totalCompMb;
     _lastCompressionRatio = ratio.toFixed(1);
-    ratioEl.textContent = `~${_lastCompressionRatio}× smaller than raw`;
+    ratioEl.textContent = `Estimate vs raw frames: about ${_lastCompressionRatio}\u00d7`;
+    ratioEl.title = 'An estimate against uncompressed frames, not against your source file. The measured figure is under it.';
     ratioEl.style.color = ratio >= 10 ? 'var(--green)' : ratio >= 3 ? 'var(--teal)' : 'var(--text-dim)';
   }
 }

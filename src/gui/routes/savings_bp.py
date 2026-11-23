@@ -21,17 +21,24 @@ Author: Bloodawn (KheivenD), 2026-07-19 (M2.3).
 """
 
 import stat
+import subprocess
 from pathlib import Path
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
 try:
     from utils import compressed_index as _cidx
     from utils.db.schema import get_connection
+    from utils.ffmpeg import ffprobe_path
+    from utils.result_numbers import format_result, plan_segments, summarize_result
+    from gui.services import path_safety as _ps
     from gui.services.db_helpers import _get_db_path
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.utils import compressed_index as _cidx
     from src.utils.db.schema import get_connection
+    from src.utils.ffmpeg import ffprobe_path
+    from src.utils.result_numbers import format_result, plan_segments, summarize_result
+    from src.gui.services import path_safety as _ps
     from src.gui.services.db_helpers import _get_db_path
 
 savings_bp = Blueprint("savings", __name__)
@@ -53,6 +60,22 @@ def _parse_source_size(signature: str) -> int:
     return 0
 
 
+def _result_block(source_bytes: int, output_bytes: int) -> dict:
+    """The numbers and the sentences the dashboard shows, from one algorithm."""
+    r = summarize_result([(source_bytes, output_bytes)])
+    r.update(format_result(r))
+    return r
+
+
+def _output_size(entry: dict, on_disk: int) -> int:
+    """Combined output size of a job: a split job recorded all its files."""
+    try:
+        recorded = int((entry or {}).get("output_bytes") or 0)
+    except (TypeError, ValueError):
+        recorded = 0
+    return recorded if recorded > 0 else on_disk
+
+
 def measured_savings() -> dict:
     """Real source-versus-output totals over files SVCS compressed.
 
@@ -63,6 +86,8 @@ def measured_savings() -> dict:
     files = 0
     source_bytes = 0
     output_bytes = 0
+    last_when = -1.0
+    last = None
     try:
         entries = (_cidx._load().get("entries", {}) or {}).values()
     except Exception:  # noqa: BLE001 - a broken index must not 500 the endpoint
@@ -80,7 +105,7 @@ def measured_savings() -> dict:
             continue
         if not stat.S_ISREG(st.st_mode):
             continue
-        osz = st.st_size
+        osz = _output_size(e, st.st_size)
         ssz = _parse_source_size(sig)
         # A source size of 0 means the signature was written for a file that
         # could not be stat'd; counting it would overstate the saving.
@@ -89,6 +114,10 @@ def measured_savings() -> dict:
         files += 1
         source_bytes += ssz
         output_bytes += osz
+        when = float((e or {}).get("when") or 0)
+        if when >= last_when:
+            last_when = when
+            last = (Path(out).name, ssz, osz)
 
     saved = max(0, source_bytes - output_bytes)
     ratio = (source_bytes / output_bytes) if output_bytes else None
@@ -100,6 +129,11 @@ def measured_savings() -> dict:
         "saved_bytes": saved,
         "ratio": round(ratio, 2) if ratio else None,
         "saved_pct": round(pct, 1) if pct is not None else None,
+        # One set of display numbers for the totals and for the newest job,
+        # so every screen shows the same figures.
+        "result": _result_block(source_bytes, output_bytes) if files else None,
+        "last": ({"name": last[0], **_result_block(last[1], last[2])}
+                 if last else None),
     }
 
 
@@ -151,3 +185,42 @@ def api_savings():
             "source file and therefore no ratio."
         ),
     })
+
+
+def _probe_duration(path: Path):
+    """Length of a video in seconds from ffprobe, or None if it cannot be read."""
+    try:
+        out = subprocess.run(
+            [ffprobe_path(), "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=nw=1:nk=1", str(path)],
+            capture_output=True, text=True, timeout=20,
+        )
+        value = float((out.stdout or "").strip().splitlines()[0])
+    except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+        return None
+    return value if value > 0 else None
+
+
+@savings_bp.route("/api/segment-plan", methods=["GET"])
+def api_segment_plan():
+    """Segment length choices for a file (``path``) or a live source (no path).
+
+    The default is the whole video as one file; the recommendation is half of
+    it. Paths are confined to the allowed media roots like every other route
+    that reads a caller-supplied path.
+    """
+    raw = (request.args.get("path") or "").strip()
+    if not raw:
+        return jsonify(plan_segments(None))
+    target = Path(raw).resolve()
+    if not _ps.is_path_allowed(target, _ps.allowed_media_roots()):
+        return jsonify({"error": "Path is outside the allowed media folders."}), 403
+    if not target.is_file():
+        return jsonify({"error": "File not found."}), 404
+    duration = _probe_duration(target)
+    if duration is None:
+        return jsonify({"error": "The video length could not be read."}), 422
+    plan = plan_segments(duration)
+    plan["duration_s"] = round(duration, 1)
+    plan["source_bytes"] = target.stat().st_size
+    return jsonify(plan)

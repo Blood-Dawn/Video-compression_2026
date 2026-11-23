@@ -59,13 +59,7 @@ function selectPreset(card) {
   }
   // Same per-source segment-length default as _onInputSourceChange; an
   // explicit slider choice (_segLenUserTouched) survives a preset click.
-  if (!_segLenUserTouched) {
-    const segSlider = document.getElementById('segment-seconds-slider');
-    const srcVal = (document.getElementById('input-source') || {}).value || '';
-    const defSeg = _defaultSegLenForSource(srcVal);
-    if (segSlider) segSlider.value = defSeg;
-    _onSegLenChange(defSeg);
-  }
+  if (window.SegPlan) SegPlan.refresh();
 }
 
 // ── Advanced panel toggle ──────────────────────────────────────
@@ -112,7 +106,8 @@ function _defaultSegLenForSource(val) {
 // oninput handler of the visible slider.
 function _onSegLenUserChange(val) {
   _segLenUserTouched = true;
-  _onSegLenChange(val);
+  if (window.SegPlan) SegPlan.setFixed(val);
+  else _onSegLenChange(val);
 }
 
 function _onSegLenChange(val) {
@@ -126,11 +121,7 @@ function _onSegLenChange(val) {
 function _friendlyStatus(data) {
   if (!data.running) {
     if (data.segment_count > 0) {
-      const mb = _lastStorageMb || 0;
-      const ratio = _lastCompressionRatio;
-      if (ratio && ratio > 1) {
-        return { text: `Done: ${data.segment_count} segment${data.segment_count > 1 ? 's' : ''} saved · ${ratio}× smaller than raw`, cls: 'done' };
-      }
+      // The measured result (real file sizes) is on the Last result card.
       return { text: `Done: ${data.segment_count} segment${data.segment_count > 1 ? 's' : ''} saved`, cls: 'done' };
     }
     return { text: 'Ready. Configure a source and press Start.', cls: '' };
@@ -270,13 +261,9 @@ function _onInputSourceChange(val) {
     // Store the auto-derived ID in the hidden field
     document.getElementById('camera-id-auto').value = _autoCamera(val);
   }
-  // Per-source segment-length default, unless the user already picked one.
-  if (!_segLenUserTouched) {
-    const segSlider = document.getElementById('segment-seconds-slider');
-    const defSeg = _defaultSegLenForSource(val);
-    if (segSlider) segSlider.value = defSeg;
-    _onSegLenChange(defSeg);
-  }
+  // Whole video for a file, 10 minutes for a live source; a length the user
+  // picked is kept. SegPlan asks the server for the plan of this source.
+  if (window.SegPlan) SegPlan.refresh(val);
   // Keep DEMO tab source display in sync
   _syncDemoSrcDisplay();
 }
@@ -606,7 +593,8 @@ function _applyImportedConfig(cfg) {
   if (cfg.segment_seconds != null) {
     const slider = document.getElementById('segment-seconds-slider');
     slider.value = cfg.segment_seconds;
-    _onSegLenChange(cfg.segment_seconds);
+    if (window.SegPlan) SegPlan.setFixed(cfg.segment_seconds);
+    else _onSegLenChange(cfg.segment_seconds);
   }
 
   // BG method + warmup: try to find matching sensitivity slider position,
@@ -893,10 +881,10 @@ function _showSegTooltip(evt, seg) {
 
   // Compression result
   if (ratio !== null) {
-    lines.push(`Compressed: ${savedPct}% smaller than raw`);
-    lines.push(`   Before: ~${rawMb.toFixed(0)} MB uncompressed`);
+    lines.push(`Estimate vs raw frames: ${savedPct}% smaller`);
+    lines.push(`   Raw frames would be about ${rawMb.toFixed(0)} MB`);
     lines.push(`   After:  ${compMb >= 1 ? compMb.toFixed(1) + ' MB' : seg.file_size_kb + ' KB'} saved to disk`);
-    lines.push(`   Ratio:  ${ratio}× space saving`);
+    lines.push(`   Estimated ratio: ${ratio}×`);
   } else {
     lines.push(` File size: ${compMb >= 1 ? compMb.toFixed(1) + ' MB' : seg.file_size_kb + ' KB'}`);
   }

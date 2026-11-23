@@ -272,6 +272,9 @@ function switchTab(name) {
   // Auto-compress tab: start/stop its status poll + log stream on show/hide.
   if (name === 'autocompress' && typeof acOnTabShow === 'function') acOnTabShow();
   if (name !== 'autocompress' && typeof acOnTabHide === 'function') acOnTabHide();
+  // Security cam tab: refresh while it is open, stop when it is hidden.
+  if (name === 'security' && typeof scOnTabShow === 'function') scOnTabShow();
+  if (name !== 'security' && typeof scOnTabHide === 'function') scOnTabHide();
 }
 
 // ── Metrics table filter ──────────────────────────────────────
@@ -324,7 +327,7 @@ window.addEventListener('DOMContentLoaded', () => {
   // Initialize sensitivity slider display
   _onSensitivityChange(document.getElementById('sensitivity-slider').value);
   // Initialize segment length slider display
-  _onSegLenChange(document.getElementById('segment-seconds-slider').value);
+  // Segment length is set by SegPlan.refresh() through _onInputSourceChange above.
   // Load LAN IP for teammate sharing
   _loadLanUrl();
 

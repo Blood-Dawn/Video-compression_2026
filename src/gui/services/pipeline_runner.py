@@ -376,7 +376,7 @@ def _record_compressed_outputs(config: dict) -> None:
         if probe.returncode != 0 or "video" not in (probe.stdout or ""):
             log.warning("Not indexing unverified output %s", output.name)
             return
-        cidx.record(src, output, mode=config.get("mode"))
+        cidx.record(src, output, mode=config.get("mode"), output_bytes=out_total)
         log.info("Compressed index: %s -> %s", src.name, output.name)
     except Exception as exc:  # noqa: BLE001 - best effort
         log.warning("Compressed-index recording skipped: %s", exc)

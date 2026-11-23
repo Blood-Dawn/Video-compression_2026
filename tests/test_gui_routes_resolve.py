@@ -107,6 +107,11 @@ SAMPLES = [
     ("GET", "/api/capabilities"),
     # M2.3: compression savings summary.
     ("GET", "/api/savings"),
+    # Demo branch: segment length plan for a file or live source.
+    ("GET", "/api/segment-plan"),
+    # Demo branch: Security cam settings and receiving state.
+    ("GET", "/api/security-cam"),
+    ("POST", "/api/security-cam"),
     # R5 5.4: natural-language search.
     ("GET", "/api/nl_search"),
     # R5 5.6/5.7: zones config + behavior events.
@@ -168,4 +173,4 @@ def test_sample_count_matches_route_count():
     # /api/timelapse route (quiet-period summary generation), +1 for
     # /api/upload/limit (upload size cap, GET+POST on one rule), +1 for
     # /api/library/delete (move videos to the trash folder).
-    assert len(SAMPLES) == len(rules) == 99
+    assert len(SAMPLES) == len(rules) == 102

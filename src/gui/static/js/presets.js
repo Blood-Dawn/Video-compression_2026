@@ -46,14 +46,11 @@ function applyPreset(key) {
   _setField("bg-method", cfg.bg_method || "MOG2");
   // Move the visible slider and its "Xs"/"Xm" label too; _setField() alone
   // only updates the hidden input, so the slider would show a stale length.
-  const _segVal = cfg.segment_seconds || 60;
-  const _segSlider = document.getElementById("segment-seconds-slider");
-  if (_segSlider) _segSlider.value = _segVal;
-  if (typeof _onSegLenChange === "function") {
-    _onSegLenChange(_segVal);
-  } else {
-    _setField("segment-seconds", _segVal);
-  }
+  // Segment length is not part of what a surveillance preset decides here.
+  // The Segment Length control (segment_plan.js) defaults to the whole video
+  // for a file and to 10 minutes for a live source, and only changes when the
+  // user picks a length. A preset's own segment_seconds stays in the config
+  // for the CLI and for exported settings.
   _setField("object-filter-toggle", !!cfg.object_filter);
   // Record the active preset for pipeline.js (it sends preset + background_crf).
   window._svcsPreset = { key: key, background_crf: cfg.background_crf };

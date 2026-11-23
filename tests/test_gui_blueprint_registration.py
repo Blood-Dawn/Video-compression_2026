@@ -111,6 +111,8 @@ EXPECTED = {
     "/api/capabilities": "capabilities",
     # M2.3: compression savings summary.
     "/api/savings": "savings",
+    "/api/segment-plan": "savings",
+    "/api/security-cam": "security_cam",
     # R5 5.6/5.7: zones config + behavior events.
     "/api/zones": "events",
     "/api/events/recent": "events",
@@ -148,6 +150,7 @@ EXPECTED_BLUEPRINTS = {
     "tokens",          # M0.10: device-token management for the mobile client
     "capabilities",    # M0.6: capabilities probe for the mobile client
     "savings",         # M2.3: compression savings summary
+    "security_cam",    # Demo branch: phone as a camera, compressed here
     "events",          # R5 5.6/5.7: zones config + behavior events
     "ingest",          # R6 Track B: chunked resumable upload
     "push",            # R6 Track C: closed-app push settings
@@ -176,7 +179,7 @@ def test_route_count():
     # competitive-gap pass's /api/timelapse (quiet-period summary generation),
     # then +1 for /api/upload/limit (GET+POST on one rule, upload size cap).
     rules = _rules()
-    assert len(rules) == 98, f"expected 98 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 100, f"expected 100 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_blueprints_registered():

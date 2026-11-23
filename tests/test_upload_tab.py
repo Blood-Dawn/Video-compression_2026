@@ -46,9 +46,10 @@ def test_upload_is_second_after_home_before_metrics(html):
 
 def test_full_nav_order(html):
     # FIX 4 inserted TOOLS (between SEARCH and ENCRYPT); FIX 6 inserted LIBRARY
-    # (right after UPLOAD); R3.1c inserted AUTO-COMPRESS (right after LIBRARY).
+    # (right after UPLOAD); R3.1c inserted AUTO-COMPRESS (right after LIBRARY);
+    # the demo branch inserted SECURITY CAM (right after AUTO-COMPRESS).
     assert _nav_order(html) == [
-        "home", "upload", "library", "autocompress",
+        "home", "upload", "library", "autocompress", "security",
         "metrics", "search", "tools", "encrypt"]
 
 

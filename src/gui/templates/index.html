@@ -1045,6 +1045,7 @@
     .tab-btn[data-tab="upload"].active  { color: var(--purple); border-bottom-color: var(--purple); }
     .tab-btn[data-tab="library"].active { color: var(--tab-library);       border-bottom-color: var(--tab-library); }
     .tab-btn[data-tab="autocompress"].active { color: var(--tab-autocompress);  border-bottom-color: var(--tab-autocompress); }
+    .tab-btn[data-tab="security"].active { color: var(--teal);   border-bottom-color: var(--teal); }
     .tab-btn[data-tab="metrics"].active { color: var(--green);  border-bottom-color: var(--green); }
     .tab-btn[data-tab="search"].active  { color: var(--teal);   border-bottom-color: var(--teal); }
     .tab-btn[data-tab="tools"].active   { color: var(--tab-tools);       border-bottom-color: var(--tab-tools); }
@@ -1945,6 +1946,32 @@
       display: block;
     }
     .preset-card.selected .preset-name { color: var(--amber); }
+    .preset-use {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--teal);
+      letter-spacing: 0.04em;
+      display: block;
+      margin-top: 0.25rem;
+    }
+    .seg-plan-rec {
+      font-family: var(--mono); font-size: 0.75rem; color: var(--text);
+      display: flex; flex-wrap: wrap; gap: 0.4rem 0.6rem; align-items: center;
+      margin: 0.35rem 0 0.5rem;
+    }
+    .seg-plan-rec[hidden] { display: none; }
+    .seg-plan-rec .seg-note { color: var(--text-dim); }
+    .seg-plan-presets { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 0.4rem; }
+    .seg-pbtn { font-size: 0.75rem; padding: 0.35rem 0.7rem; min-height: 32px; }
+    .seg-pbtn.on { background: var(--amber); border-color: var(--amber); color: var(--amber-ink, #0b0f14); font-weight: 700; }
+    .seg-plan-hint { font-family: var(--mono); font-size: 0.72rem; color: var(--text-dim); }
+    .seg-plan details summary { cursor: pointer; font-family: var(--mono); font-size: 0.72rem; color: var(--text-dim); margin-top: 0.4rem; }
+    .last-result { border: 1px solid var(--border); border-radius: 3px; padding: 0.55rem 0.75rem; margin-bottom: 0.5rem; font-family: var(--mono); }
+    .last-result[hidden] { display: none; }
+    .last-result .lr-k { font-size: 0.7rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; }
+    .last-result .lr-head { font-size: 1.1rem; color: var(--green); margin: 0.15rem 0; }
+    .last-result .lr-head.none { color: var(--amber-text, var(--amber)); }
+    .last-result .lr-detail, .last-result .lr-note { font-size: 0.75rem; color: var(--text-dim); }
     .preset-desc {
       font-family: var(--mono);
       font-size: 0.75rem;
@@ -2627,27 +2654,31 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
           <span class="preset-modeno">Mode 0</span>
           <span class="preset-name">Live surveillance</span>
           <span class="preset-desc">Keeps every frame. Output is about the size of the source.</span>
+          <span class="preset-use">Best for busy scenes like a road.</span>
           <span class="preset-badge"></span>
         </div>
         <div class="preset-card" data-mode="mode1" onclick="selectPreset(this)">
           <span class="preset-icon" aria-hidden="true">◈</span>
           <span class="preset-modeno">Mode 1</span>
           <span class="preset-name">Event recording</span>
-          <span class="preset-desc">Keeps only stretches with motion. Skips empty footage.</span>
+          <span class="preset-desc">Saves only the stretches with motion. Skips empty footage.</span>
+          <span class="preset-use">Best for quiet scenes with short events.</span>
           <span class="preset-badge"></span>
         </div>
         <div class="preset-card" data-mode="mode2" onclick="selectPreset(this)">
           <span class="preset-icon" aria-hidden="true">◧</span>
           <span class="preset-modeno">Mode 2</span>
           <span class="preset-name">Smart compress</span>
-          <span class="preset-desc">Sharp patches around movement on a saved background.</span>
+          <span class="preset-desc">Full background plus sharp patches around moving objects.</span>
+          <span class="preset-use">Best when the background still matters.</span>
           <span class="preset-badge"></span>
         </div>
         <div class="preset-card" data-mode="mode3" onclick="selectPreset(this)">
           <span class="preset-icon" aria-hidden="true">◉</span>
           <span class="preset-modeno">Mode 3</span>
           <span class="preset-name">Objects only</span>
-          <span class="preset-desc">Keeps the nearest vehicles and people. Smallest file size.</span>
+          <span class="preset-desc">Aggressive compression. Keeps only the nearest vehicles and people.</span>
+          <span class="preset-use">Smallest files.</span>
           <span class="preset-badge"></span>
         </div>
       </div>
@@ -2674,18 +2705,29 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
       </div>
 
       <!-- Segment length -->
-      <div class="config-section" style="padding-top:0.5rem;padding-bottom:0.5rem;">
+      <div class="config-section seg-plan" style="padding-top:0.5rem;padding-bottom:0.5rem;">
         <div class="config-field" style="margin-bottom:0;">
-          <label class="config-label" for="segment-seconds-slider">Segment Length
-            <span style="color:var(--amber);font-size: 0.75rem;margin-left:4px;" id="seg-len-val">60s</span>
-          </label>
-          <input type="range" id="segment-seconds-slider" min="10" max="1800" step="10" value="60"
-                 oninput="_onSegLenUserChange(this.value)"/>
-          <input type="hidden" id="segment-seconds" value="60" />
-          <div class="slider-endpoints">
-            <span>10s (many small files)</span>
-            <span>30min (few large files)</span>
+          <span class="config-label" id="seg-plan-label">Segment Length
+            <span style="color:var(--amber);font-size: 0.75rem;margin-left:4px;" id="seg-len-val">Whole video</span>
+          </span>
+          <div class="seg-plan-rec" id="seg-plan-rec" hidden>
+            <span>Recommended: <b id="seg-plan-rec-val"></b></span>
+            <span class="seg-note" id="seg-plan-rec-note"></span>
+            <button type="button" class="btn btn-ghost seg-pbtn" id="seg-plan-use-rec"
+                    onclick="SegPlan.useRecommended()">Use recommended</button>
           </div>
+          <div class="seg-plan-presets" id="seg-plan-presets" role="group" aria-labelledby="seg-plan-label"></div>
+          <div class="seg-plan-hint" id="seg-plan-hint" role="status"></div>
+          <details>
+            <summary>Custom length</summary>
+            <input type="range" id="segment-seconds-slider" min="10" max="1800" step="10" value="60"
+                   oninput="_onSegLenUserChange(this.value)" aria-label="Custom segment length"/>
+            <div class="slider-endpoints">
+              <span>10s (many small files)</span>
+              <span>30min (few large files)</span>
+            </div>
+          </details>
+          <input type="hidden" id="segment-seconds" value="86400" />
         </div>
       </div>
 
@@ -3013,6 +3055,12 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
       </div><!-- /advanced-panel -->
 
       <!-- Action buttons -->
+      <div class="last-result" id="last-result" hidden aria-live="polite">
+        <div class="lr-k">Last result</div>
+        <div class="lr-head" id="lr-head"></div>
+        <div class="lr-detail" id="lr-detail"></div>
+        <div class="lr-note">Measured from the file sizes on disk.</div>
+      </div>
             <div id="start-hint" role="status" hidden style="margin-top:auto;margin-bottom:0.4rem;font-size:0.8rem;color:var(--amber-text);">Choose an output destination in Setup first.</div>
       <div class="btn-row" style="margin-top:0;">
         <button id="btn-start" class="btn btn-primary" onclick="startPipeline()">▶ START</button>
@@ -3042,6 +3090,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
         <button class="tab-btn"        data-tab="upload"  onclick="switchTab('upload')">UPLOAD</button>
         <button class="tab-btn"        data-tab="library" onclick="switchTab('library')">LIBRARY</button>
         <button class="tab-btn"        data-tab="autocompress" onclick="switchTab('autocompress')">AUTO-COMPRESS</button>
+        <button class="tab-btn"        data-tab="security" onclick="switchTab('security')">SECURITY CAM</button>
         <button class="tab-btn"        data-tab="metrics" onclick="switchTab('metrics')">METRICS</button>
         <button class="tab-btn"        data-tab="search"  onclick="switchTab('search')">SEARCH</button>
         {% if server_features %}
@@ -3460,6 +3509,58 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
       </div>
 
       <!-- ══════════════════ AUTO-COMPRESS TAB ══════════════════ -->
+      <div id="tab-security" class="tab-page x-page">
+        <div class="x-wrap">
+        <div class="x-head">
+          <div>
+            <h2 class="x-title">Security cam</h2>
+            <p class="x-sub">Use a paired phone as a camera. The phone records a short clip, sends it here over your network, and this computer compresses it. The phone sends finished clips, not live video.</p>
+          </div>
+          <span id="sc-state-badge" class="x-badge is-off" role="status">OFF</span>
+        </div>
+
+        <div class="x-card">
+          <div class="x-row x-between">
+            <div>
+              <h3 class="x-h3" id="sc-status-title">Security cam is off</h3>
+              <div class="x-hint x-mono" id="sc-status-line" role="status">Not watching. Turn it on, then start Security cam on the phone.</div>
+            </div>
+            <button class="btn btn-primary" id="sc-toggle-btn" onclick="scToggle()">Turn ON</button>
+          </div>
+          <div class="x-hint" id="sc-note" role="status"></div>
+        </div>
+
+        <div class="x-card">
+          <h3 class="x-h3">Settings</h3>
+          <p class="x-hint">The phone reads the clip length when you press Start in the app.</p>
+          <span class="x-lbl" id="sc-len-label">Clip length</span>
+          <div class="seg-plan-presets" id="sc-lengths" role="group" aria-labelledby="sc-len-label"></div>
+          <label class="x-lbl" for="sc-mode">Compression</label>
+          <select id="sc-mode" aria-label="Compression mode for Security cam clips" onchange="scSetMode(this.value)">
+            <option value="mode0">Mode 0, Live Surveillance (best for busy scenes like a road)</option>
+            <option value="mode1">Mode 1, Event Recording (best for quiet scenes with short events)</option>
+            <option value="mode2">Mode 2, Smart Compress (best when the background still matters)</option>
+            <option value="mode3">Mode 3, Object Only (smallest files)</option>
+          </select>
+        </div>
+
+        <div class="x-card">
+          <h3 class="x-h3">Paired phones</h3>
+          <div id="sc-phones"></div>
+        </div>
+
+        <div class="x-card">
+          <h3 class="x-h3">Recent clips</h3>
+          <div class="table-wrap x-tablewrap" tabindex="0" role="region" aria-label="Recent Security cam clips">
+            <table>
+              <thead><tr><th>Received</th><th>Clip</th><th>Original</th><th>Compressed</th><th>Saved</th></tr></thead>
+              <tbody id="sc-clips"></tbody>
+            </table>
+          </div>
+        </div>
+        </div>
+      </div>
+
       <div id="tab-autocompress" class="tab-page x-page">
         <div class="x-wrap">
         <div class="x-head">
@@ -4365,7 +4466,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
           </div>
           <div class="help-row">
             <span class="help-term">Storage Saved</span>
-            <span class="help-def">Estimated compression ratio versus storing the raw uncompressed video. Calculated from segment metadata (resolution, fps, duration) vs. actual file size. A ratio of 20× means the compressed file is 95% smaller than raw.</span>
+            <span class="help-def">An estimate against storing the raw uncompressed video, worked out from segment metadata (resolution, fps, duration) and the real file size. It is not measured against your source file. The Measured line and the Last result card compare real source and output file sizes.</span>
           </div>
           <div class="help-row">
             <span class="help-term">Hover tooltip</span>
@@ -4615,7 +4716,9 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
   </script>
   <script src="{{ url_for('static', filename='js/strings.js') }}"></script>
   <script src="{{ url_for('static', filename='js/setup.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/svcs_numbers.js') }}"></script>
   <script src="{{ url_for('static', filename='js/pipeline.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/segment_plan.js') }}"></script>
   <script src="{{ url_for('static', filename='js/status.js') }}"></script>
   <script src="{{ url_for('static', filename='js/global_status.js') }}"></script>
   <script src="{{ url_for('static', filename='js/files.js') }}"></script>
@@ -4628,6 +4731,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
   <script src="{{ url_for('static', filename='js/vendor/uPlot.iife.min.js') }}"></script>
   <script src="{{ url_for('static', filename='js/library.js') }}"></script>
   <script src="{{ url_for('static', filename='js/autocompress.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/security_cam.js') }}"></script>
 <script src="{{ url_for('static', filename='js/tabs.js') }}"></script>
   <script src="{{ url_for('static', filename='js/metrics.js') }}"></script>
   <script src="{{ url_for('static', filename='js/plates.js') }}"></script>

@@ -142,6 +142,17 @@ function _updateHomeRecent(segments) {
   }).join('');
 }
 
+// Space saved on the Metrics tab: the measured figure (real source and output
+// file sizes, from /api/savings) replaces the raw frame estimate when it exists.
+function _applyMeasuredToLibrary() {
+  const r = (window._measuredSavings || {}).result;
+  const val = document.getElementById('mlib-saved');
+  const note = document.getElementById('mlib-saved-note');
+  if (!val || !r || r.verdict !== 'saved') return;
+  val.textContent = r.saved_mb >= 1024 ? (r.saved_mb / 1024).toFixed(2) + ' GB' : r.saved_mb.toFixed(1) + ' MB';
+  if (note) note.textContent = `Measured: ${r.saved_pct}% smaller than the source files`;
+}
+
 // ── Metrics library summary ────────────────────────────────────
 function _updateLibrarySummary(segments) {
   const n = segments.length;
@@ -160,6 +171,7 @@ function _updateLibrarySummary(segments) {
   set('mlib-segments', n > 0 ? n : ' - ');
   set('mlib-size', totalMb >= 1 ? totalMb.toFixed(1) + ' MB' : (totalKb > 0 ? totalKb.toFixed(0) + ' KB' : ' - '));
   set('mlib-saved', savedMb > 1 ? '~' + savedMb.toFixed(0) + ' MB' : (n > 0 ? '<1 MB' : ' - '));
+  _applyMeasuredToLibrary();
   set('mlib-avg-dur', n > 0 ? (totalDur / n).toFixed(1) + 's avg' : ' - ');
   set('mlib-enc', encCount > 0 ? encCount + ' / ' + n : (n > 0 ? 'None' : ' - '));
 }

@@ -4,10 +4,10 @@
 **Reviewer:** Victor De Souza Teixeira
 **Code reviewed:** `ServerSettingsViewModel.kt`, `ServerSettingsScreen.kt`,
 `PairingFlowInstrumentedTest.kt`, `device_tokens.mint_token`
-**Method:** reading the code. Nothing here was run on a device or emulator, and the fixes
-below were not compiled, because the Android SDK is not available in the review
-environment. Run `./gradlew :app:testDebugUnitTest` on a machine with the SDK, and check
-the items marked "to confirm" on a phone.
+**Method:** reading the code. The fixes below were compiled and the JVM unit tests run with
+`./gradlew :app:testDebugUnitTest` (BUILD SUCCESSFUL, run by Victor on a Mac on 2026-11-23).
+Nothing was run on a device or emulator, so the items marked "to confirm" still need one
+check on a phone.
 
 ---
 
@@ -23,8 +23,8 @@ typing a draft:
 
 | ID | Finding | Severity | Status |
 |----|---------|----------|--------|
-| PR-01 | Push actions use the unsaved draft, not the saved pairing | Low | Fixed in this branch, not yet compiled |
-| PR-02 | The draft is not reverted on cancel, and the green state stays after editing | Low | Fixed in this branch, not yet compiled |
+| PR-01 | Push actions use the unsaved draft, not the saved pairing | Low | Fixed in this branch, unit tests pass |
+| PR-02 | The draft is not reverted on cancel, and the green state stays after editing | Low | Fixed in this branch, unit tests pass |
 | PR-03 | An abandoned re-pair leaves an unused active device token on the server | Low | Open, operator action |
 
 ## PR-01 - Push actions use the unsaved draft
@@ -79,6 +79,6 @@ enables nothing, editing clears the connected state, discard restores the saved 
 
 ## What was not covered
 
-* No on-device or emulator run (to confirm items above).
+* No on-device or emulator run (to confirm items above), including the DISCARD CHANGES button.
 * Server side behavior of the revoked-then-re-paired flow beyond what
   `rePairingReplacesTheOldCredentialsAndBumpsSaveCount` already asserts.

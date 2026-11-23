@@ -2360,7 +2360,10 @@ main{display:block;height:calc(100vh - 56px)}
 .step-card{background:var(--surface);border:1px solid var(--border);border-radius:4px;margin:0 0 1.25rem 1.5rem}
 .step-card .config-section:first-of-type{padding-top:0.25rem}
 .compress-col .side-title{padding:1rem 1.5rem 1rem}
-@media (max-width:1100px){.home-grid{grid-template-columns:minmax(0,1fr)}.step-card{margin-right:1.5rem}}
+@media (max-width:1100px){.home-grid{grid-template-columns:minmax(0,1fr)}.step-card{margin-right:1.5rem}
+  header{flex-wrap:wrap;gap:0.25rem 1rem;padding:0.5rem 1.5rem;height:auto;min-height:56px}
+  .logo-sub{display:none}
+  main,.tab-area,.tab-page{max-width:100%;min-width:0}}
 @media (max-width:720px){.step-card{margin:0 0.75rem 1rem}.compress-col .side-title{padding:1rem 0.75rem}}
 /* ── Light theme ─────────────────────────────────────────────────────────
    Set by theme.js through html[data-theme="light"]. Accent colors are darker here
@@ -4014,7 +4017,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
                   </tr>
                 </thead>
               <tbody id="segments-tbody">
-                <tr><td colspan="16" class="empty-state">No compressed segments yet. Pick a source in the sidebar and press START, or drop a file on the UPLOAD tab - finished segments appear here.</td></tr>
+                <tr><td colspan="16" class="empty-state">No compressed segments yet. Choose a video on Home and press Start. Finished segments appear here.</td></tr>
               </tbody>
             </table>
           </div>
@@ -4341,7 +4344,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
           </div>
           <div class="help-row">
             <span class="help-term">Tools tab (RTSP + HLS)</span>
-            <span class="help-def">Advanced streaming tools moved out of the sidebar: run a local
+            <span class="help-def">Advanced streaming tools live on the Tools tab: run a local
               RTSP server (MediaMTX) and view a live HLS stream in the browser.</span>
           </div>
           <div class="help-row">

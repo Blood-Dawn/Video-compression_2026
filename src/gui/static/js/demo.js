@@ -394,7 +394,7 @@ async function loadSearchDemoVideos() {
     const runs = await res.json();
 
     if (!runs.length) {
-      body.innerHTML = '<div style="font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);padding:0.5rem 0;">No demo runs found. Run a demo from the sidebar to generate comparison videos.</div>';
+      body.innerHTML = '<div style="font-family:var(--mono);font-size:0.75rem;color:var(--text-dim);padding:0.5rem 0;">No demo runs found. Run a demo from Home to generate comparison videos.</div>';
       if (count) count.textContent = '';
       return;
     }

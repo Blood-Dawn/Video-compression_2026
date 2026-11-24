@@ -152,10 +152,12 @@ fun CompressScreen(vm: CompressViewModel) {
 }
 
 @Composable
-private fun ScreenHeader(title: String, subtitle: String) {
+private fun ScreenHeader(title: String, subtitle: String = "") {
     Column(Modifier.fillMaxWidth()) {
         Text(title, style = MaterialTheme.typography.titleLarge, color = SvcsTextBright, modifier = Modifier.semantics { heading() })
-        Text(subtitle.uppercase(), style = MaterialTheme.typography.labelSmall, color = SvcsTextDim)
+        if (subtitle.isNotEmpty()) {
+            Text(subtitle.uppercase(), style = MaterialTheme.typography.labelSmall, color = SvcsTextDim)
+        }
     }
 }
 
@@ -167,7 +169,7 @@ private fun EmptyView(lifetime: CompressViewModel.Lifetime, onPick: () -> Unit) 
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        ScreenHeader("COMPRESS", "On this phone - no upload, no server")
+        ScreenHeader("COMPRESS")
         SvcsPanel(accent = SvcsAmber, onClick = onPick, modifier = Modifier.fillMaxWidth()) {
             Column(
                 Modifier.fillMaxWidth().heightIn(min = 250.dp).padding(vertical = 18.dp),
@@ -186,14 +188,7 @@ private fun EmptyView(lifetime: CompressViewModel.Lifetime, onPick: () -> Unit) 
                 }
                 Spacer(Modifier.height(18.dp))
                 Text("PICK A VIDEO", fontFamily = SvcsDisplay, fontSize = 34.sp, letterSpacing = 1.5.sp, color = SvcsTextBright)
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "Shrink it for Discord, WhatsApp, email or just to save space.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = SvcsText,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                )
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(20.dp))
                 androidx.compose.material3.Button(
                     onClick = onPick,
                     modifier = Modifier.fillMaxWidth().heightIn(min = 56.dp),
@@ -205,12 +200,6 @@ private fun EmptyView(lifetime: CompressViewModel.Lifetime, onPick: () -> Unit) 
                 ) {
                     Text("Pick a video", style = MaterialTheme.typography.titleMedium)
                 }
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    "You can also share a video to SVCS from any app.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = SvcsTextDim,
-                )
             }
         }
         if (lifetime.videos > 0) {
@@ -278,7 +267,7 @@ private fun ConfigureView(s: CompressState, vm: CompressViewModel, onPick: () ->
                 .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 104.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            ScreenHeader("COMPRESS", "On this phone - no upload, no server")
+            ScreenHeader("COMPRESS")
             SourceCard(s, onChange = onPick)
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

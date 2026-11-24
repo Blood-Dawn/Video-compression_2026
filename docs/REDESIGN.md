@@ -138,19 +138,20 @@ Change: Encrypt and Decrypt side by side, method as a segmented choice (Password
 
 ### 8.10 Implementation order and status
 
-Status key as above. Items 1 to 9 are implemented on this branch. Item 10 is partly done: axe reported 0 A/AA violations in both themes, the full test suite passed (2138 passed, 45 skipped), and the keyboard pass beyond native controls is not done.
+Status key as above. Checked 2026-11-24 on the source build (demo/final-showcase) at 1280 and 390 px wide.
 
-- [x] 1. Page frame and shared classes (title, card, segmented control, switch, chips, table) added once to the template CSS.
-- [x] 2. Tools (largest and most self contained).
-- [x] 3. Library and detail.
-- [x] 4. Metrics (needs the per day data decision).
+- [x] 1. Page frame and shared classes live in `src/gui/static/css/tabs.css` (x-wrap, x-head, x-card, x-seg, x-switch, chips, tables).
+- [x] 2. Tools: sticky section list, one card per tool, switches with On or Off text, Show buttons on secrets.
+- [x] 3. Library and detail: filters, grid and list, selection, detail panel.
+- [x] 4. Metrics: tiles, charts, segment table, slide over detail panel (off canvas by design).
 - [x] 5. Search.
 - [x] 6. Auto compress.
 - [x] 7. Encrypt.
-- [x] 8. Upload.
-- [x] 9. Phone width pass for all of the above.
-- [ ] 10. Per tab: axe scan in light and dark, keyboard pass, full tests, screenshots.
+- [x] 8. Upload: merged into Home (step 1 of the Compress a video page) instead of a separate tab.
+- [~] 9. Phone width pass: no horizontal overflow on any tab at 390 px. Library video name buttons were 18 px tall and are now 44 px. Not checked on a real phone.
+- [ ] 10. Per tab: axe scan in light and dark, keyboard pass, screen reader pass. Not done in this pass.
 
+Also fixed 2026-11-24: the Home tab clipped its lower steps (overflow hidden), the Start bar floated over step content, and the Help title bar stayed pinned while scrolling.
 ### 8.11 Open questions for the team
 
 - Library multi select and bulk delete: confirm the delete path deletes files on disk or only list entries.

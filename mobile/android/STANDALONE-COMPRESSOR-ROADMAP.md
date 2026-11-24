@@ -653,3 +653,8 @@ cited inline above; full source lists per topic:
 - Google Play Console new-developer-account closed-testing requirements,
   Android developer verification (Aug 2026 rollout) announcements, Adapty
   2026 mobile monetization report, F-Droid Inclusion Policy
+
+## 3.0 dev addendum (2026-11-24)
+
+Encrypted clip playback and the storage cap notification are scoped in docs/ANDROID-3.0-SCOPE.md.
+

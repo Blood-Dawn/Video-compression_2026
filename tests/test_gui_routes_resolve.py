@@ -93,6 +93,8 @@ SAMPLES = [
     ("POST", "/api/library/compress"),
     ("POST", "/api/library/delete"),
     ("GET", "/api/library/trash"),
+    ("GET", "/api/library/encrypted"),
+    ("GET", "/api/library/enc_file"),
     ("POST", "/api/library/trash/restore"),
     ("POST", "/api/library/trash/purge"),
     ("POST", "/api/autocompress/start"),
@@ -176,4 +178,4 @@ def test_sample_count_matches_route_count():
     # /api/timelapse route (quiet-period summary generation), +1 for
     # /api/upload/limit (upload size cap, GET+POST on one rule), +1 for
     # /api/library/delete (move videos to the trash folder).
-    assert len(SAMPLES) == len(rules) == 105
+    assert len(SAMPLES) == len(rules) == 107

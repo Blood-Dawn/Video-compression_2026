@@ -247,6 +247,14 @@ class SvcsApi(
         getJson("${baseUrl.trimEnd('/')}/api/setup/state")
 
     /** Newest finished jobs (the M5 notifier polls this with limit=1). */
+    override fun encryptedClips(folder: String?): Fetched<EncryptedClips> =
+        getJson("${baseUrl.trimEnd('/')}/api/library/encrypted" +
+            if (folder.isNullOrBlank()) "" else "?folder=" + java.net.URLEncoder.encode(folder, "UTF-8"))
+
+    override fun encFileUrl(path: String, folder: String?): String =
+        "${baseUrl.trimEnd('/')}/api/library/enc_file?path=" +
+            java.net.URLEncoder.encode(path, "UTF-8") + folderSuffix(folder)
+
     override fun jobsRecent(limit: Int): Fetched<JobsRecent> =
         getJson("${baseUrl.trimEnd('/')}/api/jobs/recent?limit=$limit")
 

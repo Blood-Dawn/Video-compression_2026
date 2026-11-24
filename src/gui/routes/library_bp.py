@@ -601,6 +601,85 @@ def api_library_file():
     return send_file(str(p), mimetype=mime, conditional=True)
 
 
+def _safe_enc(raw: str, context_folder: str = ""):
+    """Resolve a path to an existing ``.enc`` file inside an allowed folder.
+
+    Same confinement rules as ``_safe_video``. The bytes are ciphertext, so
+    serving them leaks nothing the files themselves would not, but the route
+    still must not read arbitrary files off the host.
+    """
+    raw = (raw or "").strip()
+    if not raw:
+        return None
+    try:
+        p = Path(raw).resolve()
+        if not (p.is_file() and p.suffix.lower() == ".enc"):
+            return None
+    except (OSError, ValueError):
+        return None
+    if _ps.is_path_allowed(p, _ps.allowed_media_roots()):
+        return p
+    ctx = (context_folder or "").strip()
+    if ctx:
+        try:
+            root = Path(ctx).resolve()
+            if root.is_dir():
+                p.relative_to(root)
+                return p
+        except (OSError, ValueError):
+            return None
+    return None
+
+
+@library_bp.route("/api/library/encrypted", methods=["GET"])
+def api_library_encrypted():
+    """List .enc clips under the library folder (newest first, max 500).
+
+    The phone decrypts them itself, so the password never reaches the server.
+    """
+    folder = _resolve_folder(request.args.get("folder", ""))
+    if not folder.is_dir():
+        return jsonify({"items": [], "count": 0})
+    # Only the operator's media folders. Unlike the video grid this route
+    # walks subfolders, so it must not be pointed at C:\\ or a home folder.
+    if not _ps.is_path_allowed(folder, _ps.allowed_media_roots()):
+        return jsonify({"error": "folder is outside the media folders"}), 400
+    items = []
+    visited = 0
+    base_depth = len(folder.parts)
+    for root, dirs, files in os.walk(folder):
+        dirs[:] = [d for d in dirs if d != ".svcs_trash"]
+        if len(Path(root).parts) - base_depth >= 4:
+            dirs[:] = []
+        for name in files:
+            visited += 1
+            if visited > 20000:
+                break
+            if not name.lower().endswith(".enc"):
+                continue
+            fp = Path(root) / name
+            try:
+                st = fp.stat()
+            except OSError:
+                continue
+            items.append({"name": name, "path": str(fp), "size": st.st_size,
+                          "mtime": st.st_mtime})
+        if visited > 20000:
+            break
+    items.sort(key=lambda i: i["mtime"], reverse=True)
+    items = items[:500]
+    return jsonify({"items": items, "count": len(items), "folder": str(folder)})
+
+
+@library_bp.route("/api/library/enc_file", methods=["GET"])
+def api_library_enc_file():
+    """Download one encrypted clip as raw bytes (range-enabled)."""
+    p = _safe_enc(request.args.get("path", ""), request.args.get("folder", ""))
+    if p is None:
+        return jsonify({"error": "not an encrypted clip"}), 400
+    return send_file(str(p), mimetype="application/octet-stream", conditional=True)
+
+
 @library_bp.route("/api/library/compress", methods=["POST"])
 def api_library_compress():
     """Validate a chosen library video and hand its path back to the UI.

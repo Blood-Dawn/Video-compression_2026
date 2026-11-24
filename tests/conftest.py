@@ -184,3 +184,20 @@ def _isolate_gui_state(tmp_path, monkeypatch):
             continue
         monkeypatch.setattr(mod, "_GUI_STATE_FILE", tmp_path / "gui_state.json", raising=False)
     yield
+
+@pytest.fixture(autouse=True)
+def _isolate_state_files(tmp_path, monkeypatch):
+    """Send every utils.paths.state_file() (job history, indexes, cpu averages)
+    to the test's own folder, so no test writes the developer's real state."""
+    for modname in ("utils.paths", "src.utils.paths"):
+        try:
+            mod = __import__(modname, fromlist=["state_file"])
+        except Exception:
+            continue
+
+        def _state_file(name, _root=tmp_path / "state"):
+            _root.mkdir(parents=True, exist_ok=True)
+            return _root / name
+
+        monkeypatch.setattr(mod, "state_file", _state_file, raising=False)
+    yield

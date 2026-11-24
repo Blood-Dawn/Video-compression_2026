@@ -12,4 +12,6 @@
 -->
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <external-files-path name="updates" path="updates/" />
+    <!-- Decrypted clips for one hand-off to a video player; wiped on next use. -->
+    <cache-path name="clips" path="clips/" />
 </paths>

@@ -21,6 +21,7 @@ Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - pipeline-runner extracti
 
 import subprocess
 import threading
+import os
 import time
 from pathlib import Path
 
@@ -454,9 +455,22 @@ def _record_job_history(config, stop_event, started, error, frames, segments,
             status = "error"
         else:
             status = "completed"
+        outs = _run_outputs(config, started)
+        bytes_out = 0
+        for o in outs:
+            try:
+                bytes_out += os.path.getsize(o)
+            except OSError:
+                pass
+        try:
+            bytes_in = os.path.getsize(src) if os.path.isfile(src) else 0
+        except OSError:
+            bytes_in = 0
         job_history.record_job(
             "pipeline",
             label=label,
+            bytes_in=bytes_in,
+            bytes_out=bytes_out,
             started_at=started,
             ended_at=time.time(),
             status=status,
@@ -468,7 +482,7 @@ def _record_job_history(config, stop_event, started, error, frames, segments,
                     "note": no_output_note(status, frames, segments),
                     **({"larger_note": output_note} if output_note else {})},
             error=error,
-            outputs=_run_outputs(config, started),
+            outputs=outs,
         )
     except Exception:  # noqa: BLE001 - history must never affect the pipeline
         pass

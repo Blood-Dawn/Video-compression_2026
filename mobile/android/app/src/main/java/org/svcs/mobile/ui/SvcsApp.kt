@@ -177,7 +177,7 @@ fun SvcsApp(
                     } else if (newest != null && ts != null && ts != lastSeen) {
                         lastSeen = ts
                         JobNotifier.notifyJobDone(
-                            appContext, newest.label, newest.status)
+                            appContext, newest.label, newest.status, newest.kind)
                     }
                 }
                 // R6 Track A4: behavior events ride the same poll cadence.

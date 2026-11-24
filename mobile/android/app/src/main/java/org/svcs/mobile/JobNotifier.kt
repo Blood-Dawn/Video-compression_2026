@@ -46,19 +46,21 @@ object JobNotifier {
         ) == PackageManager.PERMISSION_GRANTED
 
     /** Post one completion notification. Silently a no-op without permission. */
-    fun notifyJobDone(context: Context, label: String, status: String) {
+    fun notifyJobDone(context: Context, label: String, status: String, kind: String = "") {
         if (!canNotify(context)) return
         ensureChannel(context)
         val mgr = context.getSystemService(Context.NOTIFICATION_SERVICE)
             as NotificationManager
-        val text = when (status) {
+        val isCap = kind == "cap"
+        val text = if (isCap) label.ifBlank { "Auto-compress stopped: the storage cap was reached." }
+        else when (status) {
             "completed" -> "$label finished compressing."
             "stopped" -> "$label was stopped."
             else -> "$label ended: $status."
         }
         val notif = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.stat_sys_download_done)
-            .setContentTitle("SVCS job ${status}")
+            .setContentTitle(if (isCap) "SVCS storage cap reached" else "SVCS job ${status}")
             .setContentText(text)
             .setAutoCancel(true)
             .build()

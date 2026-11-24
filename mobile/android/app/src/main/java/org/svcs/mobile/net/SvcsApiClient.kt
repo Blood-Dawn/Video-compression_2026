@@ -50,6 +50,14 @@ interface SvcsApiClient {
     /** Newest finished jobs. */
     fun jobsRecent(limit: Int = 1): Fetched<JobsRecent>
 
+    /** Encrypted clips under the library folder. Default: not supported. */
+    fun encryptedClips(folder: String? = null): Fetched<EncryptedClips> =
+        Fetched.Failed("Encrypted clips are not supported by this client.")
+
+    /** Raw ciphertext download URL for one clip. */
+    fun encFileUrl(path: String, folder: String? = null): String = ""
+
+
     /** URL for one thumbnail, folder-pinned. */
     fun thumbUrl(path: String, folder: String? = null): String
 

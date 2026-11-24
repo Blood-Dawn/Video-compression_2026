@@ -265,6 +265,22 @@ sealed interface ChunkResult {
     data class Failed(val detail: String) : ChunkResult
 }
 
+/** GET /api/library/encrypted - clips the phone can download and open locally. */
+@Serializable
+data class EncryptedClip(
+    val name: String = "",
+    val path: String = "",
+    val size: Long = 0,
+    val mtime: Double = 0.0,
+)
+
+@Serializable
+data class EncryptedClips(
+    val items: List<EncryptedClip> = emptyList(),
+    val count: Int = 0,
+    val folder: String = "",
+)
+
 /** GET /api/jobs/recent - the M5 notifier watches the newest entry. */
 @Serializable
 data class JobsRecent(val jobs: List<JobEntry> = emptyList())

@@ -3,6 +3,7 @@ package org.svcs.mobile.ui.server.library
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -75,6 +76,12 @@ fun LibraryScreen(vm: LibraryViewModel) {
     // dialog names match the desktop preset cards so the two UIs teach each
     // other. mode1 is the highlighted default (H.264, plays anywhere).
     var compressTarget by remember { mutableStateOf<LibraryItem?>(null) }
+    var showEncrypted by remember { mutableStateOf(false) }
+    if (showEncrypted) {
+        vm.apiClient()?.let { client ->
+            EncryptedClipsDialog(client, state.folderPath) { showEncrypted = false }
+        }
+    }
     compressTarget?.let { target ->
         CompressModeDialog(
             clipName = target.displayName(),
@@ -190,12 +197,14 @@ fun LibraryScreen(vm: LibraryViewModel) {
         // The desktop library's Originals | Compressed | All views (M4).
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(top = 6.dp),
+            modifier = Modifier.padding(top = 6.dp)
+                .horizontalScroll(androidx.compose.foundation.rememberScrollState()),
         ) {
             KindChip("ALL", state.kind == "all") { vm.setKind("all") }
             KindChip("ORIGINALS", state.kind == "original") { vm.setKind("original") }
             KindChip("COMPRESSED", state.kind == "compressed") { vm.setKind("compressed") }
             KindChip("OUTPUTS", false) { vm.showOutputs() }
+            KindChip("ENCRYPTED", false) { showEncrypted = true }
             KindChip("REFRESH", false) { vm.refresh() }
             // R6 Track B: pick a gallery video, upload resumably, compress.
             val picker = androidx.activity.compose.rememberLauncherForActivityResult(

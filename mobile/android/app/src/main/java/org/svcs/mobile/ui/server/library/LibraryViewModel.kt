@@ -131,6 +131,9 @@ class LibraryViewModel(
         api?.thumbUrl(item.path, _state.value.folderPath)
 
     /** Range-enabled playback URL for the in-app player (M4). */
+    /** The API client for dialogs that talk to the server directly. */
+    fun apiClient(): SvcsApiClient? = api
+
     fun fileUrl(item: LibraryItem): String? =
         api?.fileUrl(item.path, _state.value.folderPath)
 

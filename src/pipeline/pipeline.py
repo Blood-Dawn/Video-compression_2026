@@ -231,8 +231,9 @@ def _resolve_foreground_crf(mode: str, crf) -> int:
     """Foreground CRF: an explicit value wins, otherwise a per-mode default.
 
     Modes get progressively more aggressive foreground CRF from mode0 to mode3
-    so each mode compresses harder than the last: mode0 and mode1 use 18,
-    mode2 uses 23, mode3 uses 38 (its blacked-out background takes near-zero
+    so each mode compresses harder than the last: mode0 uses 26 (regular
+    everyday compression, every frame kept), mode1 uses 18 (event clips stay
+    near lossless), mode2 uses 23, mode3 uses 38 (its blacked-out background takes near-zero
     bits, so the ROI pixels get compressed hardest).
     """
     if crf is not None:
@@ -241,6 +242,8 @@ def _resolve_foreground_crf(mode: str, crf) -> int:
         return 38
     if mode == "mode2":
         return 23
+    if mode == "mode0":
+        return 26
     return 18
 
 

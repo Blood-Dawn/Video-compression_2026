@@ -23,7 +23,7 @@ from pipeline.pipeline import (  # noqa: E402
 
 
 @pytest.mark.parametrize("mode,expected", [
-    ("mode0", 18), ("mode1", 18), ("mode2", 23), ("mode3", 38),
+    ("mode0", 26), ("mode1", 18), ("mode2", 23), ("mode3", 38),
     ("unknown", 18), ("", 18),
 ])
 def test_foreground_crf_defaults_per_mode(mode, expected):

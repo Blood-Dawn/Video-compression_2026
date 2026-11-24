@@ -454,6 +454,10 @@ def scan_once(
         for f in candidates:
             if stop_event is not None and stop_event.is_set():
                 break
+            # Size cap: when the compressed folder is full and the policy says
+            # "stop", do not start another file. Notify once per full period.
+            if _cap_blocks(output_dir):
+                break
             if not wf._is_fully_written(f, settle_seconds, stable_checks):
                 log.info("Auto-compress skipping (still writing): %s", f.name)
                 batch_done += 1
@@ -484,6 +488,47 @@ def scan_once(
             _record_batch_job(watch_root, pass_started, attempted, done,
                               interrupted, errors)
     return done
+
+
+def _cap_blocks(output_dir) -> bool:
+    """True when the size cap is reached and compressing must pause.
+
+    Publishes ``cap_reached`` in the status (the UI shows a banner), and
+    records one job-history entry (which also triggers the push and webhook
+    notifications) when the cap is first hit. Clears the flag once there is
+    room again, so compressing resumes by itself after space is freed or the
+    cap is raised.
+    """
+    try:
+        try:
+            from gui.services import retention as _retention
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.gui.services import retention as _retention
+        cs = _retention.cap_status(output_dir)
+    except Exception:  # noqa: BLE001 - a cap check must never break a scan
+        return False
+    with _ac_lock:
+        was = bool(_ac_status.get("cap_reached"))
+        _ac_status["cap_reached"] = bool(cs["stop"])
+        _ac_status["cap_used_bytes"] = cs["used_bytes"]
+        _ac_status["cap_bytes"] = cs["cap_bytes"]
+    if cs["stop"] and not was:
+        def _sz(n):
+            return "%.1f GB" % (n / 1e9) if n >= 1e9 else "%.0f MB" % (n / 1e6)
+        msg = ("Storage cap reached (%s of %s). Auto-compress is paused "
+               "until space is freed or the cap is raised."
+               % (_sz(cs["used_bytes"]), _sz(cs["cap_bytes"])))
+        log.warning("Auto-compress: %s", msg)
+        try:
+            try:
+                from gui.services import job_history
+            except ModuleNotFoundError:  # pragma: no cover
+                from src.gui.services import job_history
+            job_history.record_job("cap", label=msg, status="stopped",
+                                   bytes_in=cs["used_bytes"], bytes_out=0)
+        except Exception:  # noqa: BLE001
+            pass
+    return bool(cs["stop"])
 
 
 def _record_batch_job(watch_root, pass_started, attempted, done,
@@ -518,6 +563,7 @@ def _record_batch_job(watch_root, pass_started, attempted, done,
             bytes_in=sum(int(e.get("src_bytes", 0) or 0) for e in done),
             bytes_out=sum(int(e.get("out_bytes", 0) or 0) for e in done),
             error="; ".join(errors[-3:]) if errors else None,
+            outputs=[e.get("output") for e in done if e.get("output")],
         )
     except Exception:  # noqa: BLE001 - history must never break the daemon
         pass
@@ -558,6 +604,7 @@ def _run_autocompress_thread(config: dict, stop_event: threading.Event) -> None:
             # 24/7 compressed footage stays bounded on disk. Best effort - a
             # retention error never stops the daemon (purge_once never raises).
             _enforce_retention(output_dir)
+            _cap_blocks(output_dir)  # refresh the cap flag and notify on first hit
             # Sleep in short slices so a stop is honoured promptly.
             for _ in range(poll_interval * 2):
                 if stop_event.is_set():

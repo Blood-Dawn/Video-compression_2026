@@ -303,7 +303,8 @@ function _updateCompressionRatio() {
   let totalRawMb = 0;
   let totalCompMb = 0;
   _segmentData.forEach(s => {
-    const rawMb = (s.duration_s * (s.width || 640) * (s.height || 480) * 3 * (s.fps || 25)) / 1e6;
+    const rawMb = _rawMbOf(s);
+    if (rawMb === null) return;              // unknown size: leave this clip out
     const compMb = (s.file_size_kb || 0) / 1024;
     totalRawMb += rawMb;
     totalCompMb += compMb;
@@ -311,8 +312,8 @@ function _updateCompressionRatio() {
   if (totalCompMb > 0 && totalRawMb > 0) {
     const ratio = totalRawMb / totalCompMb;
     _lastCompressionRatio = ratio.toFixed(1);
-    ratioEl.textContent = `Estimate vs raw frames: about ${_lastCompressionRatio}\u00d7`;
-    ratioEl.title = 'An estimate against uncompressed frames, not against your source file. The measured figure is under it.';
+    ratioEl.textContent = `Against uncompressed frames: ${_lastCompressionRatio}\u00d7`;
+    ratioEl.title = 'Computed from each clip real resolution, frame rate and length. This compares with uncompressed frames, not with your source file; the measured figure is under it.';
     ratioEl.style.color = ratio >= 10 ? 'var(--green)' : ratio >= 3 ? 'var(--teal)' : 'var(--text-dim)';
   }
 }

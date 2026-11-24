@@ -23,6 +23,7 @@
 #define MyAppExeName "SVCS.exe"
 
 [Setup]
+ChangesAssociations=yes
 ; A stable AppId so upgrades replace the prior install (keep this GUID forever).
 AppId={{8E2C1F4A-3B6D-4E2A-9C7F-5A1D0B2E6C44}
 AppName={#MyAppName}
@@ -85,6 +86,12 @@ Source: "..\dist\SVCS\_internal\ffmpeg\*"; DestDir: "{app}\_internal\ffmpeg"; \
 ; still runs, just with plain bicubic upscaling instead of AI enhancement.
 Source: "..\dist\SVCS\_internal\models\*"; DestDir: "{app}\_internal\models"; \
     Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist; Components: enhance_models
+
+[Registry]
+; Double-clicking a .enc file opens the SVCS Unlock viewer (asks for the password or key file).
+Root: HKA; Subkey: "Software\Classes\.enc"; ValueType: string; ValueData: "SVCS.EncryptedVideo"; Flags: uninsdeletevalue
+Root: HKA; Subkey: "Software\Classes\SVCS.EncryptedVideo"; ValueType: string; ValueData: "SVCS encrypted video"; Flags: uninsdeletekey
+Root: HKA; Subkey: "Software\Classes\SVCS.EncryptedVideo\shell\open\command"; ValueType: string; ValueData: """{app}\SVCS-Unlock.exe"" ""%1"""
 
 [Icons]
 Name: "{group}\SVCS Dashboard"; Filename: "{app}\{#MyAppExeName}"

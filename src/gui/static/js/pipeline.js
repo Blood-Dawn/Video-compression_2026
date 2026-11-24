@@ -863,10 +863,10 @@ function toggleHomeLog() {
 const _tooltip = document.getElementById('seg-tooltip');
 
 function _showSegTooltip(evt, seg) {
-  const rawMb  = (seg.duration_s * (seg.width || 640) * (seg.height || 480) * 3 * (seg.fps || 25)) / 1e6;
+  const rawMb  = _rawMbOf(seg);
   const compMb = seg.file_size_kb / 1024;
-  const ratio  = rawMb > 0 ? (rawMb / compMb).toFixed(1) : null;
-  const savedPct = rawMb > 0 ? Math.round((1 - compMb / rawMb) * 100) : null;
+  const ratio  = rawMb && compMb > 0 ? (rawMb / compMb).toFixed(1) : null;
+  const savedPct = rawMb ? Math.round((1 - compMb / rawMb) * 100) : null;
   const isEnc  = seg.file_path && seg.file_path.endsWith('.enc');
 
   // ── Plain-English lines ──────────────────────────────────
@@ -881,10 +881,10 @@ function _showSegTooltip(evt, seg) {
 
   // Compression result
   if (ratio !== null) {
-    lines.push(`Estimate vs raw frames: ${savedPct}% smaller`);
+    lines.push(`Against uncompressed frames: ${savedPct}% smaller`);
     lines.push(`   Raw frames would be about ${rawMb.toFixed(0)} MB`);
     lines.push(`   After:  ${compMb >= 1 ? compMb.toFixed(1) + ' MB' : seg.file_size_kb + ' KB'} saved to disk`);
-    lines.push(`   Estimated ratio: ${ratio}×`);
+    lines.push(`   Ratio: ${ratio}×`);
   } else {
     lines.push(` File size: ${compMb >= 1 ? compMb.toFixed(1) + ' MB' : seg.file_size_kb + ' KB'}`);
   }

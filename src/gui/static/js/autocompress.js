@@ -205,6 +205,18 @@ function _acRenderStatus(st) {
     _acStatusLine("Idle. Not watching.");
   }
 
+  if (st.cap_reached) {
+    const sz = (n) => (n >= 1e9 ? (n / 1e9).toFixed(1) + " GB" : Math.round(n / 1e6) + " MB");
+    _acStatusLine("Paused: storage cap reached (" + sz(st.cap_used_bytes) + " of " + sz(st.cap_bytes) +
+                  "). Free space or raise the cap and compressing resumes by itself.");
+    if (!window._acCapToasted && typeof pushNotif === "function") {
+      window._acCapToasted = true;
+      pushNotif("Storage cap reached", "Auto-compress is paused until space is freed or the cap is raised.", "warning", null, 12000);
+    }
+  } else {
+    window._acCapToasted = false;
+  }
+
   const recEl = document.getElementById("ac-recent");
   if (recEl) {
     const recent = st.recent || [];
@@ -317,6 +329,8 @@ async function retentionRefresh() {
     if (en) en.checked = !!p.enabled;
     if (age && !_retLoaded) age.value = p.max_age_days || "";
     if (gb && !_retLoaded) gb.value = p.max_total_gb || "";
+    const onFull = document.getElementById("ret-on-full");
+    if (onFull && !_retLoaded) onFull.value = p.on_full || "stop";
     _retLoaded = true;
     _retRenderEstimate(data.estimate);
   } catch (e) { /* keep last render */ }
@@ -328,6 +342,7 @@ async function retentionSave() {
     enabled: !!document.getElementById("ret-enabled")?.checked,
     max_age_days: (document.getElementById("ret-max-age")?.value || "0").trim() || "0",
     max_total_gb: (document.getElementById("ret-max-gb")?.value || "0").trim() || "0",
+    on_full: document.getElementById("ret-on-full")?.value || "stop",
   };
   try {
     const data = await (await fetch("/api/retention", {

@@ -129,6 +129,56 @@ def _enhance_rois(frame, regions, enhancer):
     return frame
 
 
+def _enhance_patches(frame, regions, enhancer):
+    """Enhance each region and return only the patches: [(x, y, w, h, patch)].
+
+    The caller pastes these onto the CURRENT frame. Returning whole enhanced
+    frames (the old behaviour) meant later frames were replaced by an older
+    one, which froze and ghosted moving content.
+    """
+    fh, fw = frame.shape[:2]
+    patches = []
+    for r in regions:
+        x = max(0, min(int(r.x), fw - 1))
+        y = max(0, min(int(r.y), fh - 1))
+        w = min(int(r.w), fw - x)
+        h = min(int(r.h), fh - y)
+        if w <= 0 or h <= 0:
+            continue
+        out = enhancer.upscale_roi(frame, (x, y, w, h))
+        patches.append((x, y, w, h, out[y:y + h, x:x + w].copy()))
+    return patches
+
+
+def _iou(a, b):
+    """Intersection over union of two (x, y, w, h) boxes."""
+    ax2, ay2, bx2, by2 = a[0] + a[2], a[1] + a[3], b[0] + b[2], b[1] + b[3]
+    iw = max(0, min(ax2, bx2) - max(a[0], b[0]))
+    ih = max(0, min(ay2, by2) - max(a[1], b[1]))
+    inter = iw * ih
+    union = a[2] * a[3] + b[2] * b[3] - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _paste_patches(frame, patches, regions, min_iou=0.3):
+    """Paste enhanced patches onto ``frame`` where a current region still sits.
+
+    Returns a new frame when anything was pasted, else ``frame`` unchanged.
+    A patch whose object has moved on (no current region overlaps it) is
+    skipped, so nothing stale ever lands on the live frame.
+    """
+    if not patches or not regions:
+        return frame
+    out = None
+    for (x, y, w, h, patch) in patches:
+        if not any(_iou((x, y, w, h), (r.x, r.y, r.w, r.h)) >= min_iou for r in regions):
+            continue
+        if out is None:
+            out = frame.copy()
+        out[y:y + h, x:x + w] = patch
+    return out if out is not None else frame
+
+
 def _source_bitrate_kbps(input_source, total_frames: int, fps: float) -> int:
     """Average bitrate of a source file in kbps, or 0 when it cannot be measured."""
     try:
@@ -587,7 +637,8 @@ def run_pipeline(
     _enhance_executor: ThreadPoolExecutor | None = None
     _enhance_future: Future | None = None
     _enhance_frame_counter = 0          # counts post-warmup frames for N-frame sampling
-    _last_enhanced_frame = None         # cached result from the last enhancement pass
+    _last_enhanced_patches = []         # enhanced ROI patches from the last completed pass
+    _last_patches_frame = 0             # frame counter when those patches were produced
     if enhance or upscale_output:
         _enh_device = None if enhance_device == "auto" else enhance_device
         # enhance_model is the user's explicit pick among the 6 real backends
@@ -928,18 +979,21 @@ def run_pipeline(
                         # Collect the previous result before submitting the next.
                         if _enhance_future is not None and _enhance_future.done():
                             try:
-                                _last_enhanced_frame = _enhance_future.result()
+                                _last_enhanced_patches = _enhance_future.result()
+                                _last_patches_frame = _enhance_frame_counter
                             except Exception as _e:  # noqa: BLE001 - any SR backend error; enhancement is optional
                                 log.debug("Enhancement error (ignored): %s", _e)
 
                         # Copy: the worker thread must not see this frame change.
                         _enhance_future = _enhance_executor.submit(
-                            _enhance_rois, frame.copy(), eligible, enhancer
+                            _enhance_patches, frame.copy(), eligible, enhancer
                         )
 
-                # Use cached enhanced frame if we have one
-                if _last_enhanced_frame is not None and _last_enhanced_frame.shape == frame.shape:
-                    frame = _last_enhanced_frame
+                # Paste the latest enhanced patches onto THIS frame, only where an
+                # object is still present and only while they are fresh.
+                if _last_enhanced_patches and (
+                        _enhance_frame_counter - _last_patches_frame) <= 3 * max(1, enhance_every_n):
+                    frame = _paste_patches(frame, _last_enhanced_patches, regions)
 
             mode_decision = get_mode_decision(mode, regions)
 

@@ -78,6 +78,7 @@ def record_job(
     bytes_in: int = 0,
     bytes_out: int = 0,
     error: str | None = None,
+    outputs: list | None = None,
 ) -> dict | None:
     """Append one finished job to the history. Returns the entry, or None.
 
@@ -100,6 +101,9 @@ def record_job(
             "bytes_in": int(bytes_in or 0),
             "bytes_out": int(bytes_out or 0),
             "error": _scrub_credentials(str(error)) if error else None,
+            # Output video paths this job produced (capped) so Home can
+            # offer Play and Encrypt per finished file.
+            "outputs": [str(o) for o in (outputs or [])][:25],
         }
         with _jobs_lock:
             jobs = _load()

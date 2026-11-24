@@ -7,6 +7,14 @@
  * global (reachable from inline on* handlers and the other modules).
  * Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - JS split).
  */
+// Uncompressed size of a clip in MB, from its real width, height, frame rate and
+// length. Returns null when any of them is unknown (for example an encrypted
+// clip), so callers show nothing instead of a number built on assumed defaults.
+function _rawMbOf(s) {
+  if (!s || !(s.width > 0) || !(s.height > 0) || !(s.fps > 0) || !(s.duration_s > 0)) return null;
+  return (s.duration_s * s.width * s.height * 3 * s.fps) / 1e6;
+}
+
 async function loadSegments() {
   try {
     const res  = await fetch('/api/segments');
@@ -157,20 +165,22 @@ function _applyMeasuredToLibrary() {
 function _updateLibrarySummary(segments) {
   const n = segments.length;
   let totalKb = 0, totalDur = 0, encCount = 0;
-  let rawMb = 0;  // estimated uncompressed size, for the savings figure
   for (const s of segments) {
     totalKb += s.file_size_kb || 0;
     totalDur += s.duration_s || 0;
     if (s.file_path && s.file_path.endsWith('.enc')) encCount++;
-    rawMb += (s.duration_s * (s.width || 640) * (s.height || 480) * 3 * (s.fps || 25)) / 1e6;
   }
   const totalMb = totalKb / 1024;
-  const savedMb = rawMb > 0 ? rawMb - totalMb : 0;
 
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
   set('mlib-segments', n > 0 ? n : ' - ');
   set('mlib-size', totalMb >= 1 ? totalMb.toFixed(1) + ' MB' : (totalKb > 0 ? totalKb.toFixed(0) + ' KB' : ' - '));
-  set('mlib-saved', savedMb > 1 ? '~' + savedMb.toFixed(0) + ' MB' : (n > 0 ? '<1 MB' : ' - '));
+  // Space saved is shown only when it was measured from real file sizes (source
+  // versus output). It used to be guessed from an assumed 640x480 25 fps raw
+  // size, which is not a real number, so it is blank until measured.
+  set('mlib-saved', ' - ');
+  const savedNote = document.getElementById('mlib-saved-note');
+  if (savedNote) savedNote.textContent = 'Shown once measured against the original file';
   _applyMeasuredToLibrary();
   set('mlib-avg-dur', n > 0 ? (totalDur / n).toFixed(1) + 's avg' : ' - ');
   set('mlib-enc', encCount > 0 ? encCount + ' / ' + n : (n > 0 ? 'None' : ' - '));
@@ -277,8 +287,8 @@ function showMetricsDetail(s) {
   if (!grid) return;
   const isEnc = s.file_path && s.file_path.endsWith('.enc');
   const compMb = (s.file_size_kb || 0) / 1024;
-  const rawMb = (s.duration_s * (s.width || 640) * (s.height || 480) * 3 * (s.fps || 25)) / 1e6;
-  const ratio = rawMb > 0 && compMb > 0 ? (rawMb / compMb).toFixed(1) + '×' : ' - ';
+  const rawMb = _rawMbOf(s);
+  const ratio = rawMb && compMb > 0 ? (rawMb / compMb).toFixed(1) + '×' : ' - ';
   // Same camera label as the table cell.
   // Author: Bloodawn (KheivenD), 2026-05-03 (UI fix pass).
   const camDisplay = _segCamLabel(s);
@@ -291,8 +301,9 @@ function showMetricsDetail(s) {
     ['Target', s.target_detected ? '▲ YES' : '○ no'],
     ['Motion Regions', s.roi_count],
     ['Size', compMb >= 1 ? compMb.toFixed(2) + ' MB' : (s.file_size_kb || 0) + ' KB'],
-    ['Raw video (est)', rawMb > 0 ? rawMb.toFixed(1) + ' MB' : ' - '],
-    ['Smaller than raw (est)', ratio],
+    ['Resolution', s.width && s.height ? s.width + ' x ' + s.height + (s.fps ? ' at ' + Math.round(s.fps) + ' fps' : '') : ' - '],
+    ['Uncompressed size', rawMb ? rawMb.toFixed(1) + ' MB' : ' - '],
+    ['Smaller than uncompressed', ratio],
     ['Quality', s.sharpness_label || ' - '],
     ['Encrypted', isEnc ? 'Yes (AES-256)' : 'No'],
   ];

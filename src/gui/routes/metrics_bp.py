@@ -32,14 +32,12 @@ def api_system_metrics():
     # The background sampler keeps _power_state fresh every ~2 s, so no
     # blocking cpu_percent() call is needed here.
 
-    # Battery runtime: the OS estimate when there is one, else a linear
-    # estimate from charge against a 3-hour baseline.
+    # Battery runtime: only the figure the operating system reports. There is no
+    # fallback guess; without an OS estimate the dashboard shows none.
     estimated_hrs = None
     if snap["battery_pct"] is not None and not snap["battery_plugged"]:
         if snap["battery_mins_left"] is not None:
             estimated_hrs = round(snap["battery_mins_left"] / 60, 2)
-        else:
-            estimated_hrs = round((snap["battery_pct"] / 100) * 3.0, 2)
 
     snap["available"] = True
     snap["estimated_hrs"] = estimated_hrs

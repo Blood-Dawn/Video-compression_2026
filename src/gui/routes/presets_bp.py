@@ -163,9 +163,18 @@ def api_config_import():
         # preset is the named preset key (None for a hand-tuned config); crf
         # None means the mode default.
         "preset":           (str(data.get("preset")) if str(data.get("preset", "")) in PRESETS else None),
-        "codec":            _choice("codec", VALID_CODECS, "auto"),
+        "codec":            _choice("codec", set(VALID_CODECS) | {"libx265", "h264_nvenc", "hevc_nvenc", "av1_nvenc"}, "auto"),
         "crf":              _int("crf", None, lo=0, hi=63),
         "background_crf":   _int("background_crf", 45, lo=0, hi=63),
+        # Profile fields (v1.1). Absent in older files, so they default off.
+        "verbose":          _bool("verbose"),
+        "target_vmaf":      _int("target_vmaf", None, lo=85, hi=97),
+        "max_bitrate_kbps": _int("max_bitrate_kbps", None, lo=0, hi=200000),
+        "gop_seconds":      _int("gop_seconds", None, lo=0, hi=600),
+        "denoise":          _choice("denoise", {"", "hqdn3d", "atadenoise"}, ""),
+        "roi_qp":           _bool("roi_qp"),
+        "segment_default":  _bool("segment_default", data.get("segment_seconds") is None),
+        "advanced_open":    _bool("advanced_open"),
     }
 
     with _state_lock:

@@ -167,3 +167,20 @@ def _reset_auth_throttle():
     _reset_throttle()
     yield
     _reset_throttle()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_gui_state(tmp_path, monkeypatch):
+    """Keep tests from writing the developer's real gui_state.json.
+
+    Tests that move the library folder or change retention call
+    _save_gui_state(), which used to overwrite the real file under
+    %LOCALAPPDATA%. Patch the path on both import spellings of the module.
+    """
+    for modname in ("gui.services.gui_state_persist", "src.gui.services.gui_state_persist"):
+        try:
+            mod = __import__(modname, fromlist=["_GUI_STATE_FILE"])
+        except Exception:
+            continue
+        monkeypatch.setattr(mod, "_GUI_STATE_FILE", tmp_path / "gui_state.json", raising=False)
+    yield

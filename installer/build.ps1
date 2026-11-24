@@ -194,7 +194,15 @@ if (Test-Path $FFmpegBin) {
         Write-Host "      downloading $FFmpegUrl"
         Invoke-WebRequest -Uri $FFmpegUrl -OutFile $tmpZip -UseBasicParsing
         if (Test-Path $tmpExtract) { Remove-Item $tmpExtract -Recurse -Force }
-        Expand-Archive -Path $tmpZip -DestinationPath $tmpExtract -Force
+        # Windows PowerShell 5.1 can fail inside Expand-Archive (missing 3-argument
+        # ExtractToDirectory overload), so prefer the tar that ships with Windows.
+        New-Item -ItemType Directory -Force $tmpExtract | Out-Null
+        $tarOk = $false
+        if (Get-Command tar.exe -ErrorAction SilentlyContinue) {
+            & tar.exe -xf $tmpZip -C $tmpExtract
+            $tarOk = ($LASTEXITCODE -eq 0)
+        }
+        if (-not $tarOk) { Expand-Archive -Path $tmpZip -DestinationPath $tmpExtract -Force }
         # Archive: ffmpeg-*-win64-gpl-shared/{bin/*.exe+*.dll, LICENSE, ...}
         $srcExe = Get-ChildItem -Path $tmpExtract -Recurse -Filter "ffmpeg.exe" | Select-Object -First 1
         if (-not $srcExe) { throw "ffmpeg.exe not found in the downloaded archive" }

@@ -133,7 +133,29 @@ def api_jobs_recent():
     completion-summary modal. ?limit=N caps the list (default 20).
     """
     limit = request.args.get("limit", 20, type=int)
-    return jsonify({"jobs": _job_history.recent_jobs(limit=limit)})
+    jobs = _job_history.recent_jobs(limit=limit)
+    from urllib.parse import quote
+    for j in jobs:
+        files = []
+        for raw in (j.get("outputs") or []):
+            try:
+                p = Path(str(raw))
+                exists = p.is_file()
+                enc = p.suffix.lower() == ".enc"
+                files.append({
+                    "path": str(p),
+                    "name": p.name,
+                    "exists": exists,
+                    "encrypted": enc,
+                    "size": p.stat().st_size if exists else 0,
+                    "url": (f"/api/media?path={quote(str(p))}"
+                            if exists and not enc and p.suffix.lower() in
+                            (".mp4", ".webm", ".mov", ".avi") else None),
+                })
+            except OSError:
+                continue
+        j["files"] = files
+    return jsonify({"jobs": jobs})
 
 
 def _parse_input_source(data: dict):

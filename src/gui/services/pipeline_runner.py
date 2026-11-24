@@ -406,6 +406,34 @@ def no_output_note(status, frames, segments):
     return NO_CLIPS_NOTE if frames else NO_FRAMES_NOTE
 
 
+def _run_outputs(config, started) -> list:
+    """Video files this run wrote: files under output_dir modified since start.
+
+    Newest first, capped. Plain mtime scan so it works for every mode and for
+    encrypted (.enc) output alike. Never raises.
+    """
+    try:
+        out_dir = Path(str(config.get("output_dir") or ""))
+        if not out_dir.is_dir() or not started:
+            return []
+        found = []
+        for p in out_dir.rglob("*"):
+            if p.suffix.lower() not in (".mp4", ".mkv", ".enc") or not p.is_file():
+                continue
+            if "Decrypted" in p.parts:
+                continue
+            try:
+                m = p.stat().st_mtime
+            except OSError:
+                continue
+            if m >= float(started) - 2:
+                found.append((m, str(p.resolve())))
+        found.sort(reverse=True)
+        return [f for _, f in found[:25]]
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def _record_job_history(config, stop_event, started, error, frames, segments,
                         output_note=None):
     """Persist this run to the job history (R4 Phase 1). Never raises."""
@@ -440,6 +468,7 @@ def _record_job_history(config, stop_event, started, error, frames, segments,
                     "note": no_output_note(status, frames, segments),
                     **({"larger_note": output_note} if output_note else {})},
             error=error,
+            outputs=_run_outputs(config, started),
         )
     except Exception:  # noqa: BLE001 - history must never affect the pipeline
         pass

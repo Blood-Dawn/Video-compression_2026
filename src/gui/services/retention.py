@@ -66,6 +66,10 @@ _DEFAULT_POLICY = {
     "enabled": False,
     "max_age_days": 0,      # 0 = no age limit
     "max_total_gb": 0.0,    # 0 = no size limit
+    # What happens when the size cap is reached: "stop" pauses compressing and
+    # notifies the user (nothing is deleted); "delete_oldest" frees space by
+    # purging the oldest compressed clips.
+    "on_full": "stop",
 }
 
 
@@ -112,6 +116,7 @@ def get_policy() -> dict:
     pol["enabled"] = bool(pol.get("enabled"))
     pol["max_age_days"] = _finite_int(pol.get("max_age_days"), 0, 0, 3650)
     pol["max_total_gb"] = _finite_float(pol.get("max_total_gb"), 0.0, 0.0, 1_000_000.0)
+    pol["on_full"] = "delete_oldest" if pol.get("on_full") == "delete_oldest" else "stop"
     return pol
 
 
@@ -126,6 +131,8 @@ def set_policy(cfg: dict) -> dict:
             pol["max_age_days"] = _finite_int(cfg["max_age_days"], pol["max_age_days"], 0, 3650)
         if "max_total_gb" in cfg:
             pol["max_total_gb"] = _finite_float(cfg["max_total_gb"], pol["max_total_gb"], 0.0, 1_000_000.0)
+        if "on_full" in cfg:
+            pol["on_full"] = "delete_oldest" if cfg["on_full"] == "delete_oldest" else "stop"
     try:
         try:
             from gui.services.gui_state_persist import set_retention_config
@@ -302,7 +309,7 @@ def purge_once(output_dir: str, policy: dict | None = None,
             deleted_paths |= _purge_by_age(stats, comp_dir, now - max_age_days * 86400, summary)
 
         # 2) Size purge (oldest-first) on what remains.
-        if max_total_gb > 0:
+        if max_total_gb > 0 and pol.get("on_full", "delete_oldest") == "delete_oldest":
             _purge_by_size(stats, deleted_paths, comp_dir, max_total_gb * _GB, summary)
 
         if deleted_paths:
@@ -346,7 +353,7 @@ def preview_purge(output_dir: str, policy: dict | None = None, now: float | None
                     gone.add(p)
                     out["by_age"] += 1
                     out["bytes"] += size
-        if max_total_gb > 0:
+        if max_total_gb > 0 and pol.get("on_full", "delete_oldest") == "delete_oldest":
             rest = [(p, s) for (p, s, _m) in stats if p not in gone]
             total = sum(s for _, s in rest)
             budget = max_total_gb * _GB
@@ -376,6 +383,31 @@ def _notify_purge(summary: dict, output_dir: str) -> None:
         )
     except Exception:  # noqa: BLE001
         pass
+
+
+# ── size cap: stop compressing when full ───────────────────────────────────────
+
+def cap_status(output_dir: str, policy: dict | None = None) -> dict:
+    """Is the compressed folder at its size cap, and should compressing stop?
+
+    ``stop`` is True only when the policy is enabled, ``on_full`` is "stop",
+    a size cap is set, and the folder already holds at least that many bytes.
+    Reads only; never raises (an unreadable folder reports not-full).
+    """
+    out = {"stop": False, "used_bytes": 0, "cap_bytes": 0}
+    try:
+        pol = policy if policy is not None else get_policy()
+        cap = float(pol.get("max_total_gb") or 0.0) * _GB
+        out["cap_bytes"] = int(cap)
+        if not pol.get("enabled") or cap <= 0:
+            return out
+        comp_dir = cidx.compressed_subdir(Path(output_dir).resolve(), create=False)
+        used, _o, _n = _folder_usage(comp_dir)
+        out["used_bytes"] = int(used)
+        out["stop"] = pol.get("on_full", "stop") == "stop" and used >= cap
+    except Exception as exc:  # noqa: BLE001
+        log.debug("Retention cap check failed: %s", exc)
+    return out
 
 
 # ── estimate (days = disk / bitrate) ────────────────────────────────────────────

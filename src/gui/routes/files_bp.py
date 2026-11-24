@@ -246,6 +246,44 @@ def _cpu_stats_for_dir(d: str, cpu_cache: dict):
     return cpu_cache[d]
 
 
+_VIDEO_DIMS_CACHE: dict = {}
+
+
+def _video_dims(path: Path):
+    """(width, height, fps) read from the video file itself, or (None, None, None).
+
+    Cached by path and mtime. Encrypted or missing files report unknown, never a
+    guess: the dashboard's "raw size" figures are only shown when these are real.
+    """
+    try:
+        st = path.stat()
+    except OSError:
+        return None, None, None
+    key = (str(path), st.st_mtime_ns)
+    hit = _VIDEO_DIMS_CACHE.get(key)
+    if hit is not None:
+        return hit
+    dims = (None, None, None)
+    if path.suffix.lower() in _PLAYABLE_EXTS:
+        try:
+            import cv2
+            cap = cv2.VideoCapture(str(path))
+            try:
+                w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
+                h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
+                fps = float(cap.get(cv2.CAP_PROP_FPS) or 0)
+            finally:
+                cap.release()
+            if w > 0 and h > 0 and fps > 0:
+                dims = (w, h, round(fps, 3))
+        except Exception:  # noqa: BLE001 - probing is best effort
+            pass
+    if len(_VIDEO_DIMS_CACHE) > 4000:
+        _VIDEO_DIMS_CACHE.clear()
+    _VIDEO_DIMS_CACHE[key] = dims
+    return dims
+
+
 def _segment_to_json(r, db_dir: str, cpu_cache: dict) -> dict:
     """One /api/segments row as the JSON object the dashboard expects."""
     abs_path = _segment_absolute_path(r[6], db_dir)
@@ -261,7 +299,11 @@ def _segment_to_json(r, db_dir: str, cpu_cache: dict) -> dict:
     # None for every cpu_* field when no sampler ran for this folder.
     cpu_stats = _cpu_stats_for_dir(db_dir, cpu_cache) or {}
 
+    width, height, fps = _video_dims(abs_path)
     return {
+        "width":           width,
+        "height":          height,
+        "fps":             fps,
         "timestamp":       r[0],
         "camera_id":       r[1],
         "target_detected": bool(r[2]),

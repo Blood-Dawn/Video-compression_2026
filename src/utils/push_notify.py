@@ -609,6 +609,8 @@ def _job_message(entry: dict) -> "tuple[str, str, str]":
         err = str(entry.get("error") or "").strip()
         detail = f": {err}" if err else ""
         return ("SVCS: compression failed", f"{label} failed{took}{detail}", "x")
+    if str(entry.get("kind") or "") == "cap":
+        return ("SVCS: storage cap reached", f"{label}", "warning")
     if status == "stopped":
         return ("SVCS: compression stopped", f"{label} was stopped{took}.", "warning")
     bin_, bout = int(entry.get("bytes_in") or 0), int(entry.get("bytes_out") or 0)

@@ -336,17 +336,49 @@ async function maybeShowLatestJobSummary(kind) {
 }
 
 // ── Recent jobs panel (HOME) ─────────────────────────────────────────────────
+// One merged list: every finished job, with the video files it produced.
+// Each file has Play (or Unlock when encrypted) and Encrypt, like Metrics.
+const _JOB_FILES_SHOWN = 6;
+let _jobFileIndex = [];   // flat list so onclick handlers need no escaped paths
+
+function _jobFileButtons(f) {
+  const i = _jobFileIndex.push(f) - 1;
+  if (!f.exists) return '<span class="jf-missing" title="The file is no longer on disk">missing</span>';
+  if (f.encrypted) {
+    return '<button class="btn-play-sm btn-enc x-act" title="Encrypted. Click to unlock and play" ' +
+      'aria-label="Unlock and play ' + escHtml(f.name) + '" onclick="_jobUnlock(' + i + ')">Unlock</button>' +
+      '<span class="x-badge is-on" title="Already encrypted">Locked</span>';
+  }
+  return (f.url
+      ? '<button class="btn-play-sm x-act" aria-label="Play ' + escHtml(f.name) + '" onclick="_jobPlay(' + i + ')">Play</button>'
+      : '') +
+    '<button class="btn-play-sm x-act" title="Encrypt this video" aria-label="Encrypt ' + escHtml(f.name) +
+    '" onclick="_jobEncrypt(' + i + ')">Encrypt</button>';
+}
+function _jobPlay(i)    { const f = _jobFileIndex[i]; if (f) playSegment(f.url, f.path); }
+function _jobUnlock(i)  { const f = _jobFileIndex[i]; if (f) promptDecrypt(f.path); }
+function _jobEncrypt(i) { const f = _jobFileIndex[i]; if (f) promptEncryptSegment(f.path); }
+function _jobShowAll(el, i) {
+  const box = document.getElementById('job-files-' + i);
+  if (!box) return;
+  box.querySelectorAll('.job-file.is-extra').forEach(n => n.style.display = '');
+  el.remove();
+}
+
 async function loadRecentJobs() {
   const list = document.getElementById('jobs-list');
   if (!list) return;
   try {
-    const data = await (await fetch('/api/jobs/recent?limit=8')).json();
+    const data = await (await fetch('/api/jobs/recent?limit=30')).json();
     const jobs = data.jobs || [];
+    const count = document.getElementById('jobs-count');
+    if (count) count.textContent = jobs.length ? jobs.length + ' job' + (jobs.length === 1 ? '' : 's') : '';
     if (!jobs.length) {
-      list.innerHTML = '<div class="jobs-empty">No jobs yet. Finished compressions (manual runs and auto-compress batches) will be listed here.</div>';
+      list.innerHTML = '<div class="jobs-empty">No jobs yet. Finished compressions (manual runs and auto-compress batches) will be listed here, each with Play and Encrypt.</div>';
       return;
     }
-    list.innerHTML = jobs.map(j => {
+    _jobFileIndex = [];
+    list.innerHTML = jobs.map((j, ji) => {
       const c = j.counts || {};
       const what = j.kind === 'autocompress' ? (c.compressed ?? 0) + ' file(s)'
                  : j.kind === 'retention'    ? (c.deleted ?? 0) + ' purged'
@@ -357,11 +389,22 @@ async function loadRecentJobs() {
         : ((j.bytes_in > 0 && j.bytes_out > 0)
             ? ', saved ' + fmtBytes(Math.max(0, j.bytes_in - j.bytes_out)) : '');
       const status = String(j.status || 'completed');
-      return '<div class="job-row">' +
+      const files = j.files || [];
+      const fileRows = files.map((f, fi) =>
+        '<div class="job-file' + (fi >= _JOB_FILES_SHOWN ? ' is-extra' : '') + '"' +
+          (fi >= _JOB_FILES_SHOWN ? ' style="display:none"' : '') + '>' +
+          '<span class="jf-name" title="' + escHtml(f.path) + '">' + escHtml(f.name) + '</span>' +
+          '<span class="jf-size">' + (f.exists ? fmtBytes(f.size) : '') + '</span>' +
+          _jobFileButtons(f) + '</div>').join('');
+      const more = files.length > _JOB_FILES_SHOWN
+        ? '<div class="job-files-more"><a href="#" onclick="_jobShowAll(this,' + ji + ');return false;">+ ' +
+          (files.length - _JOB_FILES_SHOWN) + ' more</a></div>' : '';
+      return '<div class="job-block"><div class="job-row">' +
         '<span class="job-status ' + escHtml(status) + '">' + escHtml(status.toUpperCase()) + '</span>' +
         '<span class="job-label" title="' + escHtml(j.label || '') + '">' + escHtml(j.label || ' - ') + '</span>' +
         '<span class="job-meta">' + escHtml(what + saved +
-          (j.elapsed_s != null ? ', ' + fmtDuration(j.elapsed_s) : '')) + '</span>' +
+          (j.elapsed_s != null ? ', ' + fmtDuration(j.elapsed_s) : '')) + '</span></div>' +
+        (files.length ? '<div class="job-files" id="job-files-' + ji + '">' + fileRows + more + '</div>' : '') +
         '</div>';
     }).join('');
   } catch (e) { /* panel keeps its previous contents */ }

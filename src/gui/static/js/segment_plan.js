@@ -139,9 +139,16 @@
       .catch(function () { /* keep the safe default */ });
   }
 
+  function get() { return { kind: state.kind, seconds: state.kind === 'fixed' ? state.seconds : null }; }
+
+  function setDefault() {
+    state = { kind: 'default', seconds: null };
+    render();
+  }
+
   function useRecommended() {
     if (plan && plan.kind === 'file') setFixed(plan.recommended_seconds);
   }
 
-  window.SegPlan = { refresh: refresh, setFixed: setFixed, useRecommended: useRecommended };
+  window.SegPlan = { refresh: refresh, setFixed: setFixed, setDefault: setDefault, get: get, useRecommended: useRecommended };
 })();

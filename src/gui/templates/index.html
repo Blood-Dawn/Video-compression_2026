@@ -2249,10 +2249,11 @@
     background:#0d1520; border-top:2px solid var(--border);
     display:flex; flex-direction:column;
     max-height:0; overflow:hidden;
-    transition:max-height 0.22s ease;
+    visibility:hidden;
+    transition:max-height 0.22s ease, visibility 0s linear 0.22s;
     box-shadow:0 -6px 18px rgba(0,0,0,0.35);
   }
-  #global-drawer.open { max-height:300px; }
+  #global-drawer.open { max-height:300px; visibility:visible; transition:max-height 0.22s ease, visibility 0s; }
   .global-drawer-head {
     flex-shrink:0; display:flex; align-items:center; gap:0.6rem;
     padding:0.4rem 0.75rem; border-bottom:1px solid var(--border);
@@ -2392,6 +2393,7 @@ html[data-theme="light"] .config-hint code,html[data-theme="light"] code{backgro
 html[data-theme="light"] thead th{box-shadow:0 1px 0 0 var(--border),0 2px 6px rgba(20,35,58,0.10)}
 html[data-theme="light"] [style*="#6ab0f5"]{color:#0b5aa8 !important}
 html[data-theme="light"] .btn-primary{color:#ffffff}
+html[data-theme="light"] .seg-pbtn.on{color:#ffffff}
 html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;border-color:#a15f00}
 .theme-toggle{background:none;border:1px solid var(--border-ctl);border-radius:50%;width:44px;height:44px;flex-shrink:0;color:var(--text-dim);font-size:1rem;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s}
 .theme-toggle:hover{border-color:var(--amber);color:var(--amber)}

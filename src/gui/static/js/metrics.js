@@ -206,7 +206,7 @@ function _applyHardwareMetrics(d) {
       const maxAvg = Math.max(1, ...keys.map(k => avgs[k]?.avg || 0));
       rows.innerHTML = keys.map(k => {
         const a = avgs[k];
-        if (!a) return `<div class="metrics-library-row" style="opacity:0.4"><span>${modeLabels[k]}</span><span style="font-size:0.75rem;color:var(--text-dim);">no data yet</span></div>`;
+        if (!a) return `<div class="metrics-library-row"><span>${modeLabels[k]}</span><span style="font-size:0.75rem;color:var(--text-dim);">no data yet</span></div>`;
         const pct = (a.avg / Math.max(maxAvg, 100)) * 100;
         const color = a.avg > 70 ? 'var(--red)' : a.avg > 40 ? 'var(--amber)' : 'var(--green)';
         // FIX 2: samples loaded from a prior install are flagged historical so

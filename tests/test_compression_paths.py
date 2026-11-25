@@ -65,3 +65,22 @@ def test_every_entry_point_passes_the_same_overlay_switch():
     assert "overlays=_overlays" in auto
     assert "overlays=False" in demo            # the demo renderer draws its own
     assert 'object_filter=config.get("object_filter", True)' in runner
+
+
+def test_yolo_answer_is_reused_for_the_same_object_for_a_few_frames():
+    from detection.object_filter import ObjectFilter
+
+    class R:
+        def __init__(self, x):
+            self.x, self.y, self.w, self.h, self.area = x, 10, 60, 120, 7200
+
+    f = ObjectFilter.__new__(ObjectFilter)
+    f._available, f.use_suppression, f.min_box_px = True, False, 4
+    f.reclassify_every, f._label_cache, f._frame_no = 5, [], 0
+    calls = []
+    f._classify_box_labels = lambda frame, x, y, w, h: (calls.append(x) or {"person"}, False)
+    frame = np.zeros((200, 300, 3), np.uint8)
+    for step in range(10):
+        kept = f.filter(frame, [R(20 + step)])      # moves 1 px per frame
+        assert len(kept) == 1 and f.last_detected_classes[0] == {"person"}
+    assert len(calls) == 2                          # frames 1 and 6, not all 10

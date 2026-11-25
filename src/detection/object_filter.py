@@ -285,6 +285,14 @@ class ObjectFilter:
         self.min_box_px = min_box_px
         self.use_suppression = use_suppression
         self.suppress_after = suppress_after
+        # Speed: a moving object barely changes between frames, so a box that
+        # overlaps one YOLO already classified in the last few frames reuses
+        # that answer instead of running the model again. Measured 2026-11-25:
+        # YOLO on every box of every frame took modes 1-3 from ~1.9x down to
+        # ~1.0x playback speed on a 1080p clip.
+        self.reclassify_every = 5
+        self._label_cache: list = []      # [(x, y, w, h, labels|None, pose, frame_no)]
+        self._frame_no = 0
         # Pose confirmation (planner 6.11): an additive, independent signal
         # on top of the existing bbox classifier - see pose_onnx_backend.py's
         # module docstring for why. Off by default; enabling it never
@@ -435,6 +443,7 @@ class ObjectFilter:
         to turn that into a human-readable segment type label.
         """
         # Reset per-frame label tracking
+        self._frame_no += 1
         self.last_detected_classes: dict[int, set[str]] = {}
         self.last_pose_confirmed: dict[int, bool] = {}
 
@@ -464,7 +473,7 @@ class ObjectFilter:
                 kept.append(region)
                 continue
 
-            labels, pose_confirmed = self._classify_box_labels(frame, x, y, w, h)
+            labels, pose_confirmed = self._cached_labels(frame, x, y, w, h)
             if labels is not None:
                 self.last_detected_classes[len(kept)] = labels
                 self.last_pose_confirmed[len(kept)] = pose_confirmed
@@ -511,6 +520,29 @@ class ObjectFilter:
     # ------------------------------------------------------------------
     # Classification
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _iou(a, b) -> float:
+        ax, ay, aw, ah = a
+        bx, by, bw, bh = b
+        ix = max(0, min(ax + aw, bx + bw) - max(ax, bx))
+        iy = max(0, min(ay + ah, by + bh) - max(ay, by))
+        inter = ix * iy
+        union = aw * ah + bw * bh - inter
+        return inter / union if union > 0 else 0.0
+
+    def _cached_labels(self, frame, x, y, w, h):
+        """YOLO's answer for this box, reused from a recent overlapping box."""
+        n = self._frame_no
+        self._label_cache = [c for c in self._label_cache
+                             if n - c[6] < self.reclassify_every]
+        if self.reclassify_every > 1:
+            for c in self._label_cache:
+                if self._iou((x, y, w, h), c[:4]) >= 0.5:
+                    return (set(c[4]) if c[4] is not None else None), c[5]
+        labels, pose = self._classify_box_labels(frame, x, y, w, h)
+        self._label_cache.append((x, y, w, h, labels, pose, n))
+        return labels, pose
 
     def _classify_box_labels(
         self, frame: np.ndarray, x: int, y: int, w: int, h: int

@@ -461,6 +461,7 @@ async function startPipeline() {
     encrypt_password: document.getElementById('encrypt-password').value,
     encrypt_key_file: document.getElementById('encrypt-keyfile').value.trim(),
     object_filter:    document.getElementById('object-filter-toggle').checked,
+    overlays:         document.getElementById('overlay-toggle') ? document.getElementById('overlay-toggle').checked : true,
     filter_confidence: parseFloat(document.getElementById('filter-confidence').value),
     // Codec selector - Save To section. Pass through to /api/start. Default
     // "auto" lets the backend pick the per-mode codec (H.264 for mode0/1, AV1

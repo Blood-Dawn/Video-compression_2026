@@ -212,3 +212,12 @@ def test_consent_banner_pads_the_page_so_it_covers_nothing():
 def test_hls_stop_cancels_pending_playlist_retries():
     js = (JS / "hls.js").read_text(encoding="utf-8")
     assert js.count("window._hlsAttachGen = (window._hlsAttachGen || 0) + 1") >= 3
+
+
+# ── 2026-11-25 compression-path fixes ────────────────────────────────────
+
+
+def test_release_build_refuses_to_ship_without_detector_and_ai_models():
+    build = (ROOT / "installer" / "build.ps1").read_text(encoding="utf-8")
+    assert '"yolov8n.onnx"' in build and "FSRCNN_x4.pb" in build
+    assert "Missing model assets" in build and "Bundle is missing" in build

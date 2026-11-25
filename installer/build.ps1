@@ -33,7 +33,9 @@ param(
     [switch]$Installer,          # also package dist\SVCS into SVCS-Setup-*.exe via Inno Setup
     [switch]$Sign,               # Authenticode-sign the bundle exe + installer (TASK 5b.1)
     [int]$SmokePort = 5000,
-    [int]$SmokeTimeoutSec = 60
+    [int]$SmokeTimeoutSec = 60,
+    [string]$AssetsDir = "",     # folder holding yolov8n.onnx and models\*.pb (default: $env:SVCS_ASSETS_DIR, then the sibling Video-compression_2026 checkout)
+    [switch]$AllowMissingAssets  # build anyway without the detector / AI models (NOT for releases)
 )
 
 $ErrorActionPreference = "Stop"
@@ -169,6 +171,43 @@ if (-not $Quick) {
     Write-Host "[2/4] Skipping clean (-Quick passed)" -ForegroundColor DarkGray
 }
 
+# ── Step 2.4: runtime model assets ───────────────────────────────────
+# yolov8n.onnx (person/vehicle detection, search labels) and the AI
+# super-resolution weights are gitignored, so a fresh clone or a git worktree
+# does not have them. The 3.1 and 3.2 dev installers were built from such a
+# worktree and shipped WITHOUT them: no YOLO labels and bicubic-only "AI"
+# enhance. Copy them in from an assets folder, and refuse to build a release
+# without them.
+$RequiredAssets = @("yolov8n.onnx")
+$ModelAssets = @("ESPCN_x2.pb","ESPCN_x3.pb","ESPCN_x4.pb","FSRCNN_x2.pb","FSRCNN_x3.pb","FSRCNN_x4.pb",
+                 "EDSR_x2.pb","EDSR_x3.pb","EDSR_x4.pb","LapSRN_x2.pb","LapSRN_x4.pb","LapSRN_x8.pb")
+$assetSources = @($AssetsDir, $env:SVCS_ASSETS_DIR, (Join-Path (Split-Path $RepoRoot -Parent) "Video-compression_2026")) |
+    Where-Object { $_ -and (Test-Path $_) -and ((Resolve-Path $_).Path -ne (Resolve-Path $RepoRoot).Path) }
+function Copy-AssetIfMissing([string]$rel) {
+    $dest = Join-Path $RepoRoot $rel
+    if (Test-Path $dest) { return $true }
+    foreach ($src in $assetSources) {
+        $cand = Join-Path $src $rel
+        if (Test-Path $cand) {
+            New-Item -ItemType Directory -Force (Split-Path $dest) | Out-Null
+            Copy-Item $cand $dest
+            Write-Host "      copied $rel from $src" -ForegroundColor DarkGray
+            return $true
+        }
+    }
+    return $false
+}
+Write-Host "[2.4] Checking model assets..." -ForegroundColor Cyan
+$missing = @()
+foreach ($a in $RequiredAssets) { if (-not (Copy-AssetIfMissing $a)) { $missing += $a } }
+foreach ($m in $ModelAssets) { if (-not (Copy-AssetIfMissing (Join-Path "models" $m))) { $missing += "models\$m" } }
+if ($missing.Count -gt 0) {
+    $msg = "Missing model assets: " + ($missing -join ", ") + ". Pass -AssetsDir <folder> or set SVCS_ASSETS_DIR."
+    if ($AllowMissingAssets) { Write-Warning $msg } else { throw $msg }
+} else {
+    Write-Host "      detector and AI models present" -ForegroundColor Green
+}
+
 # ── Step 2.5: vendor FFmpeg (M2 TASK 2.3) ─────────────────────────────
 # Download a pinned FFmpeg once into tools/ffmpeg/bin so the installer is
 # self-contained (the app resolves the bundled binary first; see
@@ -265,6 +304,15 @@ $UnlockBuilt = Join-Path $RepoRoot "dist\SVCS-Unlock.exe"
 if (-not (Test-Path $UnlockBuilt)) { throw "SVCS-Unlock build finished but $UnlockBuilt is missing" }
 Copy-Item $UnlockBuilt (Join-Path (Split-Path $BundleExe) "SVCS-Unlock.exe") -Force
 Write-Host "      SVCS-Unlock.exe copied into the bundle" -ForegroundColor Green
+
+# The bundle must really carry the detector and the AI models (see Step 2.4).
+$internal = Join-Path (Split-Path $BundleExe) "_internal"
+foreach ($rel in @("yolov8n.onnx", "models\FSRCNN_x4.pb", "models\ESPCN_x4.pb")) {
+    if (-not (Test-Path (Join-Path $internal $rel))) {
+        $msg = "Bundle is missing $rel"
+        if ($AllowMissingAssets) { Write-Warning $msg } else { throw $msg }
+    }
+}
 
 # ── Step 3.5: package the Inno Setup installer (M2 TASK 2.4, opt-in) ───
 # Sign the bundle exe BEFORE Inno packages it, so the installed app is signed too.

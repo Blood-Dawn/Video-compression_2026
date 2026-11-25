@@ -244,7 +244,8 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
             encrypt=config.get("encrypt", False),
             encrypt_password=config.get("encrypt_password") or None,
             encrypt_key_file=config.get("encrypt_key_file") or None,
-            object_filter=config.get("object_filter", False),
+            object_filter=config.get("object_filter", True),
+            overlays=bool(config.get("overlays", True)),
             filter_confidence=float(config.get("filter_confidence", 0.30)),
             stop_event=stop_event,
             # "auto" / None -> run_pipeline picks the per-mode default codec

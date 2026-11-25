@@ -240,7 +240,9 @@ def _build_start_config(data: dict, camera_id: str, resolved_input, output_dir: 
         "encrypt": bool(data.get("encrypt", False)),
         "encrypt_password": data.get("encrypt_password", ""),
         "encrypt_key_file": encrypt_key_file,
-        "object_filter": bool(data.get("object_filter", False)),
+        "object_filter": bool(data.get("object_filter", True)),
+        # One switch for boxes, mode name and time on the saved video.
+        "overlays": bool(data.get("overlays", True)),
         "filter_confidence": _number(data, "filter_confidence", float, 0.30),
         # Codec: "auto" (default; libx264 for mode0/mode1, libsvtav1 for
         # mode2/mode3 via config.default_codec_for_mode), "libsvtav1",

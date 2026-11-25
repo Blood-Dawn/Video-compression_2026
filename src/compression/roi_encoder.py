@@ -93,7 +93,8 @@ from utils.ffmpeg import ffmpeg_path   # bundled-first ffmpeg resolution (TASK 2
 
 # ── Corner overlay ────────────────────────────────────────────────────────────
 
-def draw_corner_overlay(frame: np.ndarray, mode_label: str, elapsed_s: int) -> None:
+def draw_corner_overlay(frame: np.ndarray, mode_label: str, elapsed_s: int,
+                        time_text: str | None = None) -> None:
     """Burn a semi-transparent info box into the top-left corner of *frame*.
 
     Modifies the array in-place. Shows the mode name on the first line and
@@ -105,14 +106,19 @@ def draw_corner_overlay(frame: np.ndarray, mode_label: str, elapsed_s: int) -> N
         mode_label: Short mode string, e.g. "MODE 0 · 24/7".
         elapsed_s:  Seconds elapsed since the segment started.
     """
-    mins, secs = divmod(elapsed_s, 60)
-    lines = [mode_label, f"{mins:02d}:{secs:02d}"]
+    if time_text:
+        lines = [mode_label, time_text]
+    else:
+        mins, secs = divmod(elapsed_s, 60)
+        lines = [mode_label, f"{mins:02d}:{secs:02d}"]
 
+    # Scale with the picture so the label stays readable on 1080p and 4K.
+    k          = max(1.0, frame.shape[0] / 540.0)
     font       = cv2.FONT_HERSHEY_SIMPLEX
-    font_scale = 0.42
-    thickness  = 1
-    line_h     = 18
-    padding    = 6
+    font_scale = 0.42 * k
+    thickness  = max(1, int(round(k)))
+    line_h     = int(18 * k)
+    padding    = int(6 * k)
 
     sizes = [cv2.getTextSize(ln, font, font_scale, thickness)[0] for ln in lines]
     box_w = max(sz[0] for sz in sizes) + 2 * padding
@@ -140,9 +146,43 @@ def draw_corner_overlay(frame: np.ndarray, mode_label: str, elapsed_s: int) -> N
 _MODE_LABELS = {
     "mode0": "MODE 0 - 24/7",
     "mode1": "MODE 1 - EVENT",
-    "mode2": "MODE 2 - PATCHES",
+    "mode2": "MODE 2 - SMART",
     "mode3": "MODE 3 - OBJ ONLY",
 }
+
+#: Box colors (BGR) by what YOLO said is inside; anything else stays green.
+_VEHICLES = {"car", "truck", "bus", "motorcycle", "bicycle"}
+
+
+def _box_color(label: str) -> tuple[int, int, int]:
+    name = (label or "").split(" ")[0].lower()
+    if name == "person":
+        return (0, 165, 255)      # orange
+    if name in _VEHICLES:
+        return (255, 160, 0)      # blue
+    return (0, 255, 0)            # green: moving, not classified
+
+
+def draw_labeled_boxes(out: np.ndarray, boxes, labels=None) -> None:
+    """Draw each ROI box, with its class name (e.g. "person") when known."""
+    h, w = out.shape[:2]
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    k = max(1.0, h / 540.0)
+    fs, th_line = 0.45 * k, max(2, int(round(2 * k)))
+    for i, (bx, by, bw, bh) in enumerate(boxes):
+        x1, y1 = max(0, bx), max(0, by)
+        x2, y2 = min(w, bx + bw), min(h, by + bh)
+        if x2 <= x1 or y2 <= y1:
+            continue
+        label = (labels[i] if labels and i < len(labels) else "") or ""
+        color = _box_color(label)
+        cv2.rectangle(out, (x1, y1), (x2, y2), color, th_line)
+        if label:
+            tt = max(1, int(round(k)))
+            (tw, th), _ = cv2.getTextSize(label, font, fs, tt)
+            ty = y1 - 4 if y1 - th - 6 >= 0 else y1 + th + 4
+            cv2.rectangle(out, (x1, ty - th - 3), (x1 + tw + 6, ty + 3), color, -1)
+            cv2.putText(out, label, (x1 + 3, ty), font, fs, (0, 0, 0), tt, cv2.LINE_AA)
 
 
 # Cached encoder availability - `_ffmpeg_has_encoder()` checks the ffmpeg
@@ -522,6 +562,8 @@ class ROIEncoder:
         draw_boxes: bool,
         mode_label: str,
         elapsed_s: int,
+        labels: list[str] | None = None,
+        time_text: str | None = None,
     ) -> np.ndarray:
         """Apply mode compositing, green ROI boxes and the corner overlay.
 
@@ -542,15 +584,10 @@ class ROIEncoder:
             out = frame.copy()
 
         if draw_boxes:
-            h, w = frame.shape[:2]
-            for bx, by, bw, bh in boxes:
-                x1, y1 = max(0, bx), max(0, by)
-                x2, y2 = min(w, bx + bw), min(h, by + bh)
-                if x2 > x1 and y2 > y1:
-                    cv2.rectangle(out, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            draw_labeled_boxes(out, boxes, labels)
 
         if mode_label:
-            draw_corner_overlay(out, mode_label, elapsed_s)
+            draw_corner_overlay(out, mode_label, elapsed_s, time_text)
         return out
 
     # ------------------------------------------------------------------
@@ -1005,6 +1042,8 @@ class ROIEncoder:
         draw_roi_boxes: bool | None = None,
         measure_sharpness: bool = True,
         compress_background: bool = False,
+        labels: list[str] | None = None,
+        time_text: str | None = None,
     ) -> None:
         """Write one frame to the open streaming segment.
 
@@ -1027,6 +1066,8 @@ class ROIEncoder:
             draw_boxes=self.draw_roi_boxes if draw_roi_boxes is None else draw_roi_boxes,
             mode_label=mode_label,
             elapsed_s=int(self._stream_frame_count / self._stream_fps),
+            labels=labels,
+            time_text=time_text,
         )
 
         if measure_sharpness and boxes:

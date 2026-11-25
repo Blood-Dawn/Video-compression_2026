@@ -3383,6 +3383,17 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
         </p>
       </div>
 
+      <!-- One overlay switch for Start, Auto-compress and Demo -->
+      <div class="config-section" style="padding-top:0.5rem;padding-bottom:0.25rem;">
+        <div class="toggle-row">
+          <input type="checkbox" id="overlay-toggle" checked aria-describedby="overlay-hint"/>
+          <label for="overlay-toggle" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text);cursor:pointer;">
+            Show boxes, labels, mode and time on the video
+          </label>
+        </div>
+        <p class="config-hint" id="overlay-hint">Draws a box around each person or vehicle with its name, plus the mode and the time in the corner. Turn off to save a clean copy.</p>
+      </div>
+
       <!-- Encryption toggle (friendly) -->
       <div class="config-section" style="padding-top:0.5rem;padding-bottom:0.75rem;">
         <div class="toggle-row">
@@ -3512,7 +3523,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
               </div>
               <div class="config-field" style="margin-top:0.75rem;">
                 <label class="config-label" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
-                  <input type="checkbox" id="object-filter-toggle" onchange="_onObjectFilterChange(this.checked)" aria-describedby="object-filter-hint"/>
+                  <input type="checkbox" id="object-filter-toggle" checked onchange="_onObjectFilterChange(this.checked)" aria-describedby="object-filter-hint"/>
                   Smart filter &amp; object detection (recommended)
                 </label>
                 <p class="config-hint" id="object-filter-hint">Uses YOLOv8-nano to confirm each moving region is a real target (person, vehicle, animal) before recording, eliminating false triggers from trees, flags, and lighting changes. This is also the only source of the Object Type, Color, and Person/Vehicle Count data shown in Metrics and used by Search - leave it off and every segment will be recorded as type "unknown" regardless of what is actually in the video.</p>
@@ -3524,7 +3535,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
                 </label>
                 <p class="config-hint" id="verbose-hint">Normal shows the key steps. Verbose adds per-frame progress and per-segment detail (detections, size, ratio, percent done) to the live log and console.</p>
               </div>
-              <div class="config-field" id="filter-confidence-row" style="display:none;">
+              <div class="config-field" id="filter-confidence-row">
                 <label class="config-label" for="filter-confidence">Filter Confidence</label>
                 <input type="range" id="filter-confidence" min="0.10" max="0.70" step="0.05" value="0.30"
                        oninput="document.getElementById('filter-conf-val').textContent=(+this.value).toFixed(2)" aria-describedby="filter-confidence-hint"/>

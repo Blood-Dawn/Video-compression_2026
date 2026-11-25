@@ -362,6 +362,9 @@ def run_all_demos(
             output_dir=str(mode_dir),
             mode=mode,
             demo=True,
+            # The demo renderer draws its own boxes, labels and time on top;
+            # burning them into the segments too would draw everything twice.
+            overlays=False,
         )
 
         _cb(

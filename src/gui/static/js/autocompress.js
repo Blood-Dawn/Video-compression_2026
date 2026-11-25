@@ -33,6 +33,8 @@ function _acRequestBody() {
     folder: (document.getElementById("ac-folder")?.value || "").trim(),
     profile: (document.getElementById("ac-profile")?.value || "") || null,
     delete_original: !!document.getElementById("ac-delete-original")?.checked,
+    // Same overlay switch as Home, so both paths produce the same video.
+    overlays: document.getElementById("overlay-toggle") ? document.getElementById("overlay-toggle").checked : true,
   };
   Object.assign(body, _acSelectedCompression());
   return body;

@@ -63,6 +63,7 @@ def api_autocompress_start():
         "profile": (body.get("profile") or None),
         "delete_original": bool(body.get("delete_original", False)),
         "poll_interval": int(body.get("poll_interval", 10) or 10),
+        "overlays": bool(body.get("overlays", True)),
     }
     started = ac.start_autocompress(config)
     if not started:

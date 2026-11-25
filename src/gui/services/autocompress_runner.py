@@ -223,6 +223,7 @@ def _process_one(
             bg_method="MOG2",
             warmup_frames=_WARMUP_FRAMES,
             stop_event=stop_event,
+            overlays=_overlays,
             **encode_kwargs,
         )
     except Exception as exc:  # noqa: BLE001
@@ -635,6 +636,10 @@ def is_running() -> bool:
     return bool(_ac_thread and _ac_thread.is_alive())
 
 
+#: Boxes, mode name and time burned into auto-compressed clips (Home toggle).
+_overlays = True
+
+
 def start_autocompress(config: dict) -> bool:
     """Start the daemon with ``config``. Returns False if already running.
 
@@ -642,9 +647,10 @@ def start_autocompress(config: dict) -> bool:
     gui_state_persist so it survives a restart - but the daemon is only ever
     started here, on an explicit user toggle, never on app launch.
     """
-    global _ac_thread, _ac_stop
+    global _ac_thread, _ac_stop, _overlays
     if is_running():
         return False
+    _overlays = bool(config.get("overlays", True))
 
     _persist_config(config, enabled=True)
 

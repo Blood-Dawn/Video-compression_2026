@@ -17,6 +17,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+# Pipeline runs pick YOLO automatically when yolov8n.onnx is present; keep the
+# suite deterministic whether or not the model file is on this machine.
+import os  # noqa: E402
+os.environ.setdefault("SVCS_NO_AUTO_YOLO", "1")
+
 # Make src/ importable from any test file.
 SRC = Path(__file__).parent.parent / "src"
 if str(SRC) not in sys.path:

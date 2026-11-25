@@ -113,7 +113,7 @@ class DummyEncoder:
 
     def write_frame(self, frame, boxes=None, background_frame=None,
                     object_only=False, mode_label="", draw_roi_boxes=None,
-                    measure_sharpness=True, compress_background=False):
+                    measure_sharpness=True, compress_background=False, **kwargs):
         pass
 
     def abort_segment(self):
@@ -220,7 +220,7 @@ class TestEOFBoundaryBehavior:
         class RecordingEncoder(DummyEncoder):
             def write_frame(self, frame, boxes=None, background_frame=None,
                             object_only=False, mode_label="", draw_roi_boxes=None,
-                            measure_sharpness=True, compress_background=False):
+                            measure_sharpness=True, compress_background=False, **kwargs):
                 if calls["compress_background"] is None:
                     calls["compress_background"] = compress_background
 
@@ -357,7 +357,7 @@ class TestMode1Behavior:
 
             def write_frame(self, frame, boxes=None, background_frame=None,
                             object_only=False, mode_label="", draw_roi_boxes=None,
-                            measure_sharpness=True, compress_background=False):
+                            measure_sharpness=True, compress_background=False, **kwargs):
                 self._frame_count += 1
                 self._bbox_count += 1  # one bboxes_per_frame entry per write_frame call
                 if calls["compress_background"] is None:
@@ -511,7 +511,7 @@ class TestMode2Behavior:
 
             def write_frame(self, frame, boxes=None, background_frame=None,
                             object_only=False, mode_label="", draw_roi_boxes=None,
-                            measure_sharpness=True, compress_background=False):
+                            measure_sharpness=True, compress_background=False, **kwargs):
                 self._frame_count += 1
                 # Capture the first frame's object_only and background value
                 if self._object_only is None:
@@ -602,7 +602,7 @@ class TestMode2Behavior:
 
             def write_frame(self, frame, boxes=None, background_frame=None,
                             object_only=False, mode_label="", draw_roi_boxes=None,
-                            measure_sharpness=True, compress_background=False):
+                            measure_sharpness=True, compress_background=False, **kwargs):
                 if self._background_val is None:
                     self._background_val = (
                         None if background_frame is None
@@ -693,7 +693,7 @@ class TestMode2Behavior:
 
             def write_frame(self, frame, boxes=None, background_frame=None,
                             object_only=False, mode_label="", draw_roi_boxes=None,
-                            measure_sharpness=True, compress_background=False):
+                            measure_sharpness=True, compress_background=False, **kwargs):
                 calls["background_values_per_write"].append(
                     None if background_frame is None
                     else int(background_frame[0, 0, 0])
@@ -790,7 +790,7 @@ class TestMode3Behavior:
 
             def write_frame(self, frame, boxes=None, background_frame=None,
                             object_only=False, mode_label="", draw_roi_boxes=None,
-                            measure_sharpness=True, compress_background=False):
+                            measure_sharpness=True, compress_background=False, **kwargs):
                 self._frame_count += 1
                 self._bbox_count += 1
                 if self._object_only is None:

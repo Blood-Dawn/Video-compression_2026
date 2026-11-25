@@ -22,7 +22,9 @@ import argparse
 import json
 import logging
 import re
+import os
 import sys
+from datetime import datetime
 from collections import Counter, deque
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
@@ -355,6 +357,34 @@ def _load_zone_event_setup(camera_id: str):
     return zone_cfg, event_engine, zone_filter, append_events
 
 
+def _yolo_model_available() -> bool:
+    """True when yolov8n.onnx is where the ONNX detector looks for it.
+
+    SVCS_NO_AUTO_YOLO=1 turns the automatic choice off (the test suite sets it
+    so results do not depend on whether the model file happens to be present).
+    """
+    if os.environ.get("SVCS_NO_AUTO_YOLO") == "1":
+        return False
+    try:
+        from detection.onnx_backend import _default_model_path
+        return _default_model_path().is_file()
+    except Exception:  # noqa: BLE001 - no detector means MOG2 only
+        return False
+
+
+def _update_background_plate(accum, frame, mask, dilate_kernel, alpha=0.03):
+    """Running average of the pixels that are background in this frame.
+
+    Pixels under (a dilated) foreground mask are not learned, so moving
+    objects do not smear into the plate. Returns the float32 accumulator.
+    """
+    if accum is None or accum.shape != frame.shape:
+        return frame.astype(np.float32)
+    keep = cv2.bitwise_not(cv2.dilate(mask, dilate_kernel)) if mask is not None else None
+    cv2.accumulateWeighted(frame, accum, alpha, mask=keep)
+    return accum
+
+
 def run_pipeline(
     input_source,
     camera_id: str = "cam_00",
@@ -377,7 +407,7 @@ def run_pipeline(
     enhance_max_roi_px: int = 200,
     enhance_device: str = "auto",
     upscale_output: bool = False,
-    object_filter: bool = False,
+    object_filter: bool | None = None,
     filter_confidence: float = 0.30,
     stop_event=None,
     codec: str | None = None,
@@ -391,6 +421,7 @@ def run_pipeline(
     target_vmaf: float | None = None,
     use_pose_classification: bool = False,
     pose_confidence: float = 0.25,
+    overlays: bool = True,
 ):
     """
     Main pipeline loop.
@@ -616,6 +647,10 @@ def run_pipeline(
     initialize_database(db_path)
 
     obj_filter: ObjectFilter | None = None
+    if object_filter is None:
+        # Auto: classify with YOLO whenever the model shipped, so every run
+        # (Start, Auto-compress, Demo) labels people and vehicles for search.
+        object_filter = _yolo_model_available()
     if object_filter:
         obj_filter = ObjectFilter(
             confidence=filter_confidence, device="auto",
@@ -694,6 +729,16 @@ def run_pipeline(
     # FFmpeg is opened at segment start and frames are piped one by one as they
     # are read, so encoding and decoding overlap and nothing is buffered.
     last_clean_background = None
+    # Mode 2 needs a clean background plate to paste the moving patches on.
+    # It used to come ONLY from a gap with no detections; a scene that never
+    # goes fully quiet (a swaying branch, busy road) never had one, so mode 2
+    # was patches on black and looked exactly like mode 3. This running
+    # average learns every pixel only while it is background (mask == 0), so
+    # it converges to a clean plate even when something is always moving.
+    _bg_accum             = None
+    _bg_dilate            = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+    _bg_refresh_frames    = max(1, int(round((fps or 25) * 10)))
+    _frames_since_bg      = 0
     clean_frame_streak    = 0
     clean_frame_buffer    = deque(maxlen=max(1, mode2_background_lag_frames + 1))
     post_warmup_frame_count = 0
@@ -702,7 +747,14 @@ def run_pipeline(
     target_frames_this_segment = 0
     segment_index         = 0
     segment_start_background = None   # background keyframe for current mode2 segment
-    mode_label            = _MODE_LABELS.get(mode, "")
+    # One overlay switch for every entry point: boxes with class names, the
+    # mode name and the time, or a clean picture when overlays is False.
+    mode_label            = _MODE_LABELS.get(mode, "") if overlays else ""
+    try:
+        encoder.draw_roi_boxes = bool(overlays)
+    except AttributeError:  # pragma: no cover - minimal test doubles
+        pass
+    _is_live_source = not (isinstance(input_source, str) and os.path.isfile(input_source))
     object_only           = (mode == "mode3")
 
     # ── Per-segment metadata accumulators ────────────────────────────────────
@@ -745,9 +797,12 @@ def run_pipeline(
 
         bg = None
         if mode == "mode2":
-            raw_bg = (last_clean_background.copy()
-                      if last_clean_background is not None
-                      else np.zeros_like(first_frame))
+            if last_clean_background is not None:
+                raw_bg = last_clean_background.copy()
+            elif _bg_accum is not None:
+                raw_bg = cv2.convertScaleAbs(_bg_accum)
+            else:
+                raw_bg = np.zeros_like(first_frame)
             # If output is being upscaled, the background must match the upscaled
             # frame dimensions. last_clean_background is always stored pre-upscale.
             if upscale_output and enhancer is not None and last_clean_background is not None:
@@ -862,13 +917,20 @@ def run_pipeline(
                 log.debug("Frame cache write skipped: %s", _cexc)
 
             mask             = subtractor.apply(frame)
+            if mode == "mode2" and source_frame_index % 2 == 0:
+                _bg_accum = _update_background_plate(_bg_accum, frame, mask, _bg_dilate)
             raw_regions      = subtractor.get_foreground_regions(mask)
 
             # YOLO classification gate: drop leaves/shadows/false detections.
             # Tiny boxes (< min_box_px) are passed through unfiltered by ObjectFilter
             # so real targets that are briefly small don't get silently dropped.
+            _region_labels: dict = {}
             if obj_filter is not None:
                 regions = obj_filter.filter(frame, raw_regions)
+                for _i, _r in enumerate(regions):
+                    _cls = getattr(obj_filter, "last_detected_classes", {}).get(_i) or ()
+                    if _cls:
+                        _region_labels[id(_r)] = ", ".join(sorted(_cls))
                 # Accumulate YOLO labels for this segment's metadata
                 if segment_open and hasattr(obj_filter, "last_detected_classes"):
                     for labels in obj_filter.last_detected_classes.values():
@@ -1024,6 +1086,7 @@ def run_pipeline(
                             len(clean_frame_buffer) - mode2_background_lag_frames - 1,
                         )
                         last_clean_background = clean_frame_buffer[lag_index].copy()
+                        _frames_since_bg = 0
                         if segment_open and current_bg_frame is not None:
                             current_bg_frame = last_clean_background.copy()
                     clean_frame_streak = 0
@@ -1033,6 +1096,17 @@ def run_pipeline(
                     # No copy needed: every read returns a fresh array and a
                     # skipped frame is never modified after this point.
                     clean_frame_buffer.append(frame)
+                # No quiet gap for a while: refresh the plate from the
+                # learned background so lighting changes still show up.
+                _frames_since_bg += 1
+                if (segment_open and current_bg_frame is not None and _bg_accum is not None
+                        and _frames_since_bg >= _bg_refresh_frames):
+                    _frames_since_bg = 0
+                    plate = cv2.convertScaleAbs(_bg_accum)
+                    if upscale_output and enhancer is not None:
+                        plate = enhancer.upscale_frame(plate)
+                    if plate.shape == current_bg_frame.shape:
+                        current_bg_frame = plate
 
             if mode_decision.target_detected:
                 target_frames_this_segment += 1
@@ -1064,6 +1138,14 @@ def run_pipeline(
                 break
 
             boxes = [r.to_tuple() for r in regions]
+            box_labels = [_region_labels.get(id(r), "") for r in regions] if overlays else None
+            if not overlays:
+                time_text = None
+            elif _is_live_source:
+                time_text = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            else:
+                _ts = int(source_frame_index / fps) if fps > 0 else 0
+                time_text = f"{_ts // 3600:02d}:{_ts % 3600 // 60:02d}:{_ts % 60:02d}"
             if upscale_output and enhance_scale > 1 and boxes:
                 s = enhance_scale
                 boxes = [(x * s, y * s, w * s, h * s) for x, y, w, h in boxes]
@@ -1074,6 +1156,8 @@ def run_pipeline(
                 object_only=object_only,
                 mode_label=mode_label,
                 measure_sharpness=(len(boxes) > 0),
+                labels=box_labels,
+                time_text=time_text,
                 # No 8x background blur: mode 0 must leave the picture visually
                 # unchanged (product direction 2026-10-01), and modes 2 and 3
                 # already trade background detail for size by compositing.

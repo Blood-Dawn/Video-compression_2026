@@ -26,7 +26,10 @@ def _reference_overlay(frame, mode_label, elapsed_s):
     """The original full-frame blend: copy, black rectangle, addWeighted."""
     mins, secs = divmod(elapsed_s, 60)
     lines = [mode_label, f"{mins:02d}:{secs:02d}"]
-    font, scale, thick, line_h, pad = cv2.FONT_HERSHEY_SIMPLEX, 0.42, 1, 18, 6
+    # Same size rule as draw_corner_overlay: scales with the frame height.
+    k = max(1.0, frame.shape[0] / 540.0)
+    font, scale, thick = cv2.FONT_HERSHEY_SIMPLEX, 0.42 * k, max(1, int(round(k)))
+    line_h, pad = int(18 * k), int(6 * k)
     sizes = [cv2.getTextSize(ln, font, scale, thick)[0] for ln in lines]
     bx2 = 8 + max(sz[0] for sz in sizes) + 2 * pad
     by2 = 8 + len(lines) * line_h + 2 * pad

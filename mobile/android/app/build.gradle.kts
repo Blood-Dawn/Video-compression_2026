@@ -60,8 +60,8 @@ android {
         //      the file instead of shrinking it (reported: a 3.5 MB clip
         //      came back over 30 MB). Compression is now capped at the
         //      source's own bitrate whenever no explicit limit is set.
-        versionCode = 17
-        versionName = "3.1.0-dev"
+        versionCode = 18
+        versionName = "3.2.0-dev"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 

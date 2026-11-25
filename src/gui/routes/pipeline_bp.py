@@ -264,10 +264,10 @@ def _build_start_config(data: dict, camera_id: str, resolved_input, output_dir: 
         "verbose": bool(data.get("verbose", False)),
         # Storage cap (capped CRF), 0 = uncapped.
         "max_bitrate_kbps": _clamp_int(data.get("max_bitrate_kbps"), 0, 0, 200000),
-        # Pre-encode denoiser for night/IR footage: "", "hqdn3d", "atadenoise"
+        # Pre-encode denoiser for night/IR footage: "auto" (default, night footage only), "", "hqdn3d", "atadenoise"
         # (the encoder drops anything else).
-        "denoise": (str(data.get("denoise", "")).strip().lower()
-                    if data.get("denoise") else ""),
+        "denoise": (str(data.get("denoise")).strip().lower()
+                    if data.get("denoise") is not None else "auto"),
         # Encoder-level ROI (x264/x265 only), opt-in.
         "roi_qp": bool(data.get("roi_qp", False)),
         # Keyframe interval in seconds (long GOP for static cameras); 0 keeps

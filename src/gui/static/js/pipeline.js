@@ -487,7 +487,7 @@ async function startPipeline() {
                        : null),
     max_bitrate_kbps: ((document.getElementById('maxbitrate-input') || {}).value || '').trim(),
     gop_seconds:      ((document.getElementById('gop-input') || {}).value || '').trim(),
-    denoise:          (document.getElementById('denoise-select') || {}).value || '',
+    denoise:          ((document.getElementById('denoise-select') || {}).value) ?? 'auto',
     roi_qp:           (document.getElementById('roiqp-toggle') || {}).checked || false,
   };
 

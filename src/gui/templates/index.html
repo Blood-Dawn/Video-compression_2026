@@ -3234,7 +3234,8 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
           <div class="config-field" style="margin-top:0.4rem;">
             <label class="config-label" for="denoise-select">Denoise (night / IR)</label>
             <select id="denoise-select" style="width:100%;font-family:var(--mono);font-size: 0.75rem;" aria-label="denoise select">
-              <option value="" selected>Off</option>
+              <option value="auto" selected>Auto (only for night footage)</option>
+              <option value="">Off</option>
               <option value="hqdn3d">hqdn3d (light, fast)</option>
               <option value="atadenoise">atadenoise (temporal, static cams)</option>
             </select>
@@ -3436,6 +3437,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
                     <option value="fsrcnn">FSRCNN (AI, fast, needs downloaded weights)</option>
                     <option value="edsr">EDSR (AI, higher quality, slower, needs downloaded weights)</option>
                     <option value="lapsrn">LapSRN (AI, supports x2/x4/x8, needs downloaded weights)</option>
+                    <option value="realesrgan_onnx">Real-ESRGAN General (AI, small and fast, no extra install, needs realesr-general-x4v3.onnx in models)</option>
                     <option value="realesrgan">Real-ESRGAN (AI, best quality, needs the "enhance" install extra + weights)</option>
                     <option value="realesrnet">RealESRNet (AI, same family as Real-ESRGAN without the GAN sharpening, needs the "enhance" install extra + weights)</option>
                   </select>

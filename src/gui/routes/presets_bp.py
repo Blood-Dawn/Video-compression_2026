@@ -171,7 +171,7 @@ def api_config_import():
         "target_vmaf":      _int("target_vmaf", None, lo=85, hi=97),
         "max_bitrate_kbps": _int("max_bitrate_kbps", None, lo=0, hi=200000),
         "gop_seconds":      _int("gop_seconds", None, lo=0, hi=600),
-        "denoise":          _choice("denoise", {"", "hqdn3d", "atadenoise"}, ""),
+        "denoise":          _choice("denoise", {"", "auto", "hqdn3d", "atadenoise"}, ""),
         "roi_qp":           _bool("roi_qp"),
         "segment_default":  _bool("segment_default", data.get("segment_seconds") is None),
         "advanced_open":    _bool("advanced_open"),

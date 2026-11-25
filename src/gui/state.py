@@ -125,7 +125,7 @@ _VALID_DEVICES = {"auto", "cuda", "mps", "cpu"}
 # Every name must map to a real backend in src/enhancement/enhancer.py
 # (cv2.dnn_superres or basicsr's RRDBNet), or bicubic would silently run
 # under an AI model's label.
-_VALID_MODELS  = {"espcn", "fsrcnn", "edsr", "lapsrn", "realesrgan", "realesrnet", "bicubic"}
+_VALID_MODELS  = {"espcn", "fsrcnn", "edsr", "lapsrn", "realesrgan", "realesrnet", "realesrgan_onnx", "bicubic"}
 
 # Subfolder created inside whichever cloud root (OneDrive / Google Drive) is found.
 _CLOUD_SUBFOLDER = "SVCS"

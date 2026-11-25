@@ -354,7 +354,7 @@ class TestApiStart:
         cfg = resp.get_json()["config"]
         assert cfg["max_bitrate_kbps"] == 0      # uncapped default
         assert cfg["gop_seconds"] == 20          # long-GOP default
-        assert cfg["denoise"] == ""
+        assert cfg["denoise"] == "auto"          # night footage only; bright footage stays untouched
         assert cfg["roi_qp"] is False
 
         # Stop the fake run before starting the next one (avoid the 409 guard).

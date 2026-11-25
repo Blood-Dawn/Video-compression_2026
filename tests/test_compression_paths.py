@@ -84,3 +84,22 @@ def test_yolo_answer_is_reused_for_the_same_object_for_a_few_frames():
         kept = f.filter(frame, [R(20 + step)])      # moves 1 px per frame
         assert len(kept) == 1 and f.last_detected_classes[0] == {"person"}
     assert len(calls) == 2                          # frames 1 and 6, not all 10
+
+
+def _clip(path, level):
+    w = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), 10, (64, 48))
+    for _ in range(40):
+        w.write(np.full((48, 64, 3), level, np.uint8))
+    w.release()
+
+
+def test_auto_denoise_only_for_dark_footage(tmp_path):
+    dark, bright = tmp_path / "dark.mp4", tmp_path / "bright.mp4"
+    _clip(dark, 20)
+    _clip(bright, 140)
+    assert P._resolve_denoise("auto", "mode2", str(dark)) == "hqdn3d"
+    assert P._resolve_denoise("auto", "mode2", str(bright)) == ""
+    assert P._resolve_denoise("auto", "mode0", str(dark)) == ""        # mode 0 keeps every pixel
+    assert P._resolve_denoise("auto", "mode2", 0) == ""                # live camera index
+    assert P._resolve_denoise("atadenoise", "mode1", str(bright)) == "atadenoise"
+    assert P._resolve_denoise("", "mode1", str(dark)) == ""

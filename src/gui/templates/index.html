@@ -2457,6 +2457,8 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
                      margin-right:6px;"
               onmouseover="this.style.borderColor='var(--amber)';this.style.color='var(--amber)'"
               onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--text-dim)'">&#9993;</button>
+      <button type="button" id="adv-toggle" class="adv-toggle" aria-pressed="false"
+              onclick="SvcsSimple.toggle()" title="Show every setting">Advanced</button>
       <button onclick="openHelp()" title="Help" aria-label="Help"
               style="background:none;border:1px solid var(--border);border-radius:50%;
                      width:26px;height:26px;color:var(--text-dim);font-family:var(--mono);
@@ -3051,6 +3053,43 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
 
       <!-- ══════════════════ HOME TAB ══════════════════ -->
       <div id="tab-home" class="tab-page active">
+<!-- Simple Home (default). The upload box, mode cards, Start button, progress
+     and Recent Jobs are MOVED here from the full layout below by simple.js, so
+     there is one copy of each control and Advanced shows everything again. -->
+<div class="simple-home" id="simple-home">
+  <section class="sh-main" aria-label="Compress a video">
+    <h2 class="sh-title">Compress a video</h2>
+    <div class="sh-step"><span class="sh-num">1</span><span class="sh-lbl">Choose a video</span></div>
+    <div class="sh-slot" data-slot="upload"></div>
+    <div class="sh-step"><span class="sh-num">2</span><span class="sh-lbl">Pick a mode</span></div>
+    <div class="sh-slot" data-slot="modes"></div>
+    <div class="sh-step"><span class="sh-num">3</span><span class="sh-lbl">What matters to you?</span></div>
+    <fieldset class="sh-goals" aria-label="What matters to you">
+      <label class="sh-goal"><input type="checkbox" id="goal-small"/><span><b>Smallest files</b><small>Squeezes harder. Fine for review, softer detail.</small></span></label>
+      <label class="sh-goal"><input type="checkbox" id="goal-quality"/><span><b>Best picture</b><small>Sharper video, bigger files. Good for evidence.</small></span></label>
+      <label class="sh-goal"><input type="checkbox" id="goal-ai"/><span><b>Sharpen people and plates (AI)</b><small>Upscales the moving parts with an AI model.</small></span></label>
+      <label class="sh-goal"><input type="checkbox" id="goal-search" checked/><span><b>Find people and cars later</b><small>Labels what is in each clip so Search can find it.</small></span></label>
+      <label class="sh-goal"><input type="checkbox" id="goal-overlay" checked/><span><b>Show boxes, mode and time</b><small>Draws them on the saved video.</small></span></label>
+      <label class="sh-goal"><input type="checkbox" id="goal-split"/><span><b>Split long videos into 10-minute files</b><small>Easier to share and play.</small></span></label>
+      <label class="sh-goal"><input type="checkbox" id="goal-lock"/><span><b>Lock with a password</b><small>Only someone with the password can watch.</small></span></label>
+      <div class="sh-lock" id="sh-lock" hidden>
+        <label for="sh-lock-pw">Password</label>
+        <input type="password" id="sh-lock-pw" autocomplete="new-password" placeholder="12 or more characters"/>
+      </div>
+    </fieldset>
+    <div class="sh-slot" data-slot="start"></div>
+  </section>
+  <section class="sh-side" aria-label="Progress and recent jobs">
+    <div class="sh-slot" data-slot="progress"></div>
+    <div class="sh-totals" id="sh-totals" aria-live="polite">
+      <div class="sh-tot"><span class="sh-tot-k">Space saved</span><span class="sh-tot-v" id="sh-tot-saved">-</span></div>
+      <div class="sh-tot"><span class="sh-tot-k">Videos done</span><span class="sh-tot-v" id="sh-tot-files">-</span></div>
+      <div class="sh-tot"><span class="sh-tot-k">Average speed</span><span class="sh-tot-v" id="sh-tot-speed">-</span></div>
+    </div>
+    <div class="sh-slot" data-slot="result"></div>
+    <div class="sh-slot sh-jobs" data-slot="jobs"></div>
+  </section>
+</div>
 <div class="home-grid">
 <section class="sidebar compress-col" aria-label="Compression setup">
       <h2 class="side-title">Compress a video</h2>
@@ -4780,6 +4819,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
   <script src="{{ url_for('static', filename='js/dialogs.js') }}"></script>
   <script src="{{ url_for('static', filename='js/validation.js') }}"></script>
   <script src="{{ url_for('static', filename='js/widgets.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/simple.js') }}"></script>
 
 <!-- Global server-activity drawer: visible on every tab (not just Home),
      fed by the same /api/status poll and /api/logs SSE stream that already

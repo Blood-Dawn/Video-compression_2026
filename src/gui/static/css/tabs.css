@@ -269,3 +269,48 @@ details.x-card > summary.x-sum { display: flex; align-items: baseline; gap: 0.6r
 .x-speed td.sp-label { white-space: normal; word-break: break-word; min-width: 8rem; }
 .x-speed .sp-ok { color: var(--green); }
 .x-speed .sp-slow { color: var(--amber, #d9a400); }
+
+/* ── Simple Home (default) / Advanced switch (simple.js) ───────────────── */
+body.svcs-simple #tab-home .home-grid { display: none; }
+body.svcs-advanced #simple-home { display: none; }
+.adv-toggle { background: none; border: 1px solid var(--border); border-radius: 999px; color: var(--text-dim);
+  font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.06em; padding: 0.3rem 0.8rem; margin-right: 6px;
+  cursor: pointer; min-height: 32px; }
+.adv-toggle:hover, .adv-toggle[aria-pressed="true"] { border-color: var(--amber); color: var(--amber); }
+.simple-home { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 1.25rem;
+  padding: 1rem 1.5rem 1.5rem; align-items: start; }
+.sh-main, .sh-side { display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; }
+.sh-side { position: sticky; top: 0.75rem; }
+.sh-title { font-size: 1.9rem; font-weight: 400; margin: 0 0 0.25rem; }
+.sh-step { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.5rem; }
+.sh-num { width: 1.7rem; height: 1.7rem; border-radius: 50%; background: var(--amber); color: #fff;
+  display: inline-flex; align-items: center; justify-content: center; font-weight: 600; font-size: 0.85rem; }
+.sh-lbl { font-size: 1.05rem; font-weight: 600; }
+.sh-slot .upload-zone { min-height: 9rem; }
+.sh-slot .preset-grid { margin: 0; }
+.sh-goals { border: 0; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 0.5rem; }
+.sh-goal { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.7rem 0.8rem; border: 1px solid var(--border);
+  border-radius: var(--radius, 6px); background: var(--surface); cursor: pointer; }
+.sh-goal:has(input:checked) { border-color: var(--amber); }
+.sh-goal input { margin-top: 0.2rem; width: 1.05rem; height: 1.05rem; accent-color: var(--amber); flex-shrink: 0; }
+.sh-goal b { display: block; font-size: 0.9rem; font-weight: 600; }
+.sh-goal small { display: block; color: var(--text-dim); font-size: 0.78rem; line-height: 1.35; margin-top: 0.15rem; }
+.sh-lock { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 0.3rem; }
+.sh-lock input { max-width: 22rem; }
+.sh-slot[data-slot="start"] .btn-row { margin-top: 0.25rem; }
+.sh-slot[data-slot="start"] #btn-start { min-height: 3rem; font-size: 1rem; }
+.sh-jobs .jobs-panel { margin: 0; }
+.sh-jobs #jobs-list { max-height: calc(100vh - 16rem); overflow-y: auto; }
+@media (max-width: 900px) {
+  .simple-home { grid-template-columns: 1fr; padding: 0.75rem 1rem 1.25rem; }
+  .sh-side { position: static; }
+  .sh-jobs #jobs-list { max-height: none; }
+}
+#simple-home .preset-modeno { display: block; font-family: var(--mono); font-size: 0.72rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--amber); margin-bottom: 0.2rem; }
+.sh-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
+.sh-tot { border: 1px solid var(--border); border-radius: var(--radius, 6px); background: var(--surface); padding: 0.7rem 0.8rem;
+  display: flex; flex-direction: column; gap: 0.25rem; min-width: 0; }
+.sh-tot-k { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
+.sh-tot-v { font-size: 1.05rem; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+@media (max-width: 600px) { .sh-totals { grid-template-columns: 1fr; } }

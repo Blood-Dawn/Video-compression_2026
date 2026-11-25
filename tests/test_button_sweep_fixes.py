@@ -200,7 +200,8 @@ def test_setup_reopened_from_change_can_be_cancelled():
     html = (SRC / "gui" / "templates" / "index.html").read_text(encoding="utf-8")
     dialogs = (JS / "dialogs.js").read_text(encoding="utf-8")
     assert 'id="setup-cancel-btn" onclick="closeSetup()" hidden' in html
-    assert "_showSetupOverlay(true, true)" in js          # openSetup marks it reopened
+    assert "_showSetupOverlay(true, reopened !== false)" in js
+    assert "await openSetup(false)" in js                 # first run: no Cancel
     assert 'el.dataset.reopened !== "1"' in dialogs       # Escape works only then
 
 

@@ -169,9 +169,10 @@ function setupBrowseEncryptedDir() {
 }
 window.setupBrowseEncryptedDir = setupBrowseEncryptedDir;
 
-async function openSetup() {
+async function openSetup(reopened) {
   await _populateDestinations();
-  _showSetupOverlay(true, true);
+  // First run passes false: there is no earlier choice to go back to, so no Cancel.
+  _showSetupOverlay(true, reopened !== false);
 }
 window.openSetup = openSetup;
 
@@ -454,7 +455,7 @@ async function initSetup() {
   }
   if (!st.setup_complete) {
     _setStartEnabled(false);
-    await openSetup();
+    await openSetup(false);
   } else {
     _setStartEnabled(true);
   }

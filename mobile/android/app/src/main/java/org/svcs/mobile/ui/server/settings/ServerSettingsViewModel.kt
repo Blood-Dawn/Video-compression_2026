@@ -28,6 +28,9 @@ data class ServerSettingsState(
     val settingsLoaded: Boolean = false,
     val serverUrl: String = "",
     val token: String = "",
+    /** Pinned certificate fingerprint (64 hex), blank for plain http. */
+    val fingerprint: String = "",
+    val savedFingerprint: String = "",
     /**
      * The pairing that is actually saved, as opposed to [serverUrl] and
      * [token], which are the editable draft. Everything that talks to the
@@ -89,6 +92,9 @@ data class ServerSettingsState(
 class ServerSettingsViewModel @JvmOverloads constructor(
     app: Application,
     private val apiFactory: (String, String) -> SvcsApiClient = { url, tok -> SvcsApi(url, tok) },
+    /** Used instead of [apiFactory] when a certificate fingerprint is pinned. */
+    private val pinnedApiFactory: (String, String, String) -> SvcsApiClient =
+        { url, tok, fp -> SvcsApi(url, tok, fp) },
     /** Overridden in tests so a fetch resolves on the test's virtual clock. */
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     /** Always the Keystore cipher in the app. JVM tests pass an in-memory one
@@ -97,6 +103,9 @@ class ServerSettingsViewModel @JvmOverloads constructor(
 ) : AndroidViewModel(app) {
 
     private val store = TokenStore(app, tokenCipher)
+
+    private fun makeApi(url: String, tok: String, fp: String): SvcsApiClient =
+        if (fp.isBlank()) apiFactory(url, tok) else pinnedApiFactory(url, tok, fp)
     private val _state = MutableStateFlow(ServerSettingsState())
     val state: StateFlow<ServerSettingsState> = _state.asStateFlow()
 
@@ -107,6 +116,7 @@ class ServerSettingsViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             val url = store.serverUrl().orEmpty()
             val tok = store.token().orEmpty()
+            val fp = store.fingerprint().orEmpty()
             val auto = store.autoCompressUpload()
             _state.update {
                 // The saved pairing always loads; the editable draft only fills
@@ -114,6 +124,7 @@ class ServerSettingsViewModel @JvmOverloads constructor(
                 it.copy(serverUrl = it.serverUrl.ifEmpty { url },
                     token = it.token.ifEmpty { tok },
                     savedUrl = url, savedToken = tok,
+                    fingerprint = it.fingerprint.ifEmpty { fp }, savedFingerprint = fp,
                     autoCompressUpload = auto, settingsLoaded = true)
             }
         }
@@ -136,6 +147,25 @@ class ServerSettingsViewModel @JvmOverloads constructor(
         }
     }
 
+    fun onFingerprintChanged(v: String) {
+        _state.update { it.copy(fingerprint = v, message = null, ok = false, capabilities = null) }
+    }
+
+    /**
+     * Fill the whole pairing from a scanned QR code: svcs://pair?u=<url>&t=<token>[&fp=<hex>].
+     * Returns false when the text is not an SVCS pairing code.
+     */
+    fun applyPairingCode(code: String): Boolean {
+        val p = org.svcs.mobile.net.PairingCode.parse(code) ?: return false
+        publicAddressAccepted = false
+        _state.update {
+            it.copy(serverUrl = p.url, token = p.token, fingerprint = p.fingerprint.orEmpty(),
+                message = null, ok = false, urlError = null, capabilities = null,
+                needsPublicConsent = false)
+        }
+        return true
+    }
+
     fun onTokenChanged(v: String) {
         _state.update { it.copy(token = v, message = null, ok = false, capabilities = null) }
     }
@@ -147,7 +177,8 @@ class ServerSettingsViewModel @JvmOverloads constructor(
     fun discardChanges() {
         publicAddressAccepted = false
         _state.update {
-            it.copy(serverUrl = it.savedUrl, token = it.savedToken, ok = false,
+            it.copy(serverUrl = it.savedUrl, token = it.savedToken,
+                fingerprint = it.savedFingerprint, ok = false,
                 message = null, urlError = null, capabilities = null,
                 needsPublicConsent = false)
         }
@@ -183,10 +214,11 @@ class ServerSettingsViewModel @JvmOverloads constructor(
 
         val probedUrl = raw
         val probedToken = _state.value.token.trim()
+        val probedFp = _state.value.fingerprint.trim()
         _state.update { it.copy(busy = true, message = null, capabilities = null) }
         viewModelScope.launch {
             val result = withContext(ioDispatcher) {
-                apiFactory(normalized, probedToken).probe()
+                makeApi(normalized, probedToken, probedFp).probe()
             }
             _state.update { s ->
                 // The user edited the URL or token while this probe was in
@@ -233,7 +265,7 @@ class ServerSettingsViewModel @JvmOverloads constructor(
         val url = normalizeUrl(_state.value.savedUrl.trim()) ?: return null
         val tok = _state.value.savedToken.trim()
         if (tok.isBlank()) return null
-        return apiFactory(url, tok)
+        return makeApi(url, tok, _state.value.savedFingerprint)
     }
 
     fun onPushTopicChanged(v: String) {
@@ -378,8 +410,9 @@ class ServerSettingsViewModel @JvmOverloads constructor(
         viewModelScope.launch {
             val url = _state.value.serverUrl.trim()
             val tok = _state.value.token.trim()
+            val fp = org.svcs.mobile.net.PinnedTls.normalize(_state.value.fingerprint).orEmpty()
             try {
-                store.setPairing(url, tok)
+                store.setPairing(url, tok, fp.ifEmpty { null })
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -394,7 +427,8 @@ class ServerSettingsViewModel @JvmOverloads constructor(
                 // to the previous pairing until this one's fetch succeeds.
                 it.copy(busy = false, message = "Saved.", ok = true,
                     saveCount = it.saveCount + 1,
-                    savedUrl = url, savedToken = tok, pushLoaded = false)
+                    savedUrl = url, savedToken = tok, savedFingerprint = fp,
+                    fingerprint = fp, pushLoaded = false)
             }
             // Re-read the server-side push settings with the credentials that
             // were just saved. The screen's LaunchedEffect cannot do this: it

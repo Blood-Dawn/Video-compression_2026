@@ -132,10 +132,11 @@ fun SvcsApp(
         val isRepair = checked
         val url = store.serverUrl()
         val token = store.token()
+        val fingerprint = store.fingerprint()
         var newApi: SvcsApiClient? = null
         var newCaps: Capabilities? = null
         if (!url.isNullOrBlank() && !token.isNullOrBlank()) {
-            val client = SvcsApi(url, token)
+            val client = SvcsApi(url, token, fingerprint)
             val probe = withContext(Dispatchers.IO) { client.probe() }
             if (probe is ProbeResult.Ok) {
                 newApi = client

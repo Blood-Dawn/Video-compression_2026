@@ -347,6 +347,10 @@ def main():
         Timer(1.2, _open_browser, args=[args.host, args.port]).start()
 
     try:
+        from src.gui import tls_cert
+        _tls = tls_cert.start_https_listener(app, args.host)
+        if _tls:
+            print(f"  HTTPS for phones: port {_tls['port']}  fingerprint {_tls['fingerprint'][:16]}...")
         app.run(host=args.host, port=args.port, debug=False, threaded=True)
     except OSError as exc:
         # Port already in use is the most common Flask startup failure.

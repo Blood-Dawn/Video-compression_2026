@@ -80,6 +80,21 @@ function scRender(d) {
       }).join("")
     : '<div class="x-hint">No phone is paired. Pair one in Tools, then open Security cam in the app.</div>';
 
+  const alerts = document.getElementById("sc-alerts");
+  if (alerts) {
+    alerts.innerHTML = (d.alerts || []).length
+      ? d.alerts.map(function (a) {
+          const tags = (a.labels || []).map(function (t) {
+            return '<span class="x-tag' + (t === "person" ? " is-person" : t === "vehicle" ? " is-vehicle" : "") + '">' + _scEsc(t) + "</span>";
+          }).join("");
+          return '<div class="sc-alert">' +
+            (a.thumb ? '<img class="sc-alert-img" loading="lazy" alt="" src="' + _scEsc(a.thumb) + '">' : '<span class="sc-alert-img"></span>') +
+            '<div><b>' + _scEsc(a.title) + '</b><div class="x-hint x-mono">' + _scEsc(_scWhen(a.when)) + " &middot; " + _scEsc(a.name) + "</div>" +
+            (tags ? '<div class="x-tags">' + tags + "</div>" : "") + "</div></div>";
+        }).join("")
+      : '<div class="x-hint">No alerts yet. When a clip from the phone shows a person or vehicle (or motion), it is listed here and sent as a push if push is set up.</div>';
+  }
+
   const rows = document.getElementById("sc-clips");
   rows.innerHTML = (d.recent || []).length
     ? d.recent.map(function (c) {

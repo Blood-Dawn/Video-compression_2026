@@ -174,6 +174,20 @@ def _encode_kwargs_for(video_path: Path, mode: str, preset: str | None) -> dict:
 
 # ── per-file processing ───────────────────────────────────────────────────────
 
+def _security_cam_alert(record: dict) -> None:
+    """Clips from a paired phone raise an alert that says what was seen."""
+    try:
+        try:
+            from gui.routes.files_bp import _upload_dir
+            from gui.services import security_alerts
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.gui.routes.files_bp import _upload_dir
+            from src.gui.services import security_alerts
+        security_alerts.maybe_alert(record, _upload_dir())
+    except Exception as exc:  # noqa: BLE001 - an alert problem must not fail a compress
+        log.debug("Security cam alert skipped: %s", exc)
+
+
 def _process_one(
     src: Path,
     output_dir: str,
@@ -326,6 +340,7 @@ def _process_one(
         "src_bytes": src_bytes, "out_bytes": out_bytes,
     }
     _record_recent(record)
+    _security_cam_alert(record)
     return record
 
 

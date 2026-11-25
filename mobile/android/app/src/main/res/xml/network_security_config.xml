@@ -28,8 +28,12 @@
       public address. It mirrors is_private_bind() in src/gui/auth.py, and the
       Python side is tested in tests/test_network_guidance.py.
 
-  If the server ever grows real TLS, flip base-config to false and delete this
-  comment. That is the actual fix and it belongs on the server.
+  UPDATE 2026-11-25: the desktop server now also listens on HTTPS (port 5443,
+  self-signed certificate). The phone pins that certificate's SHA-256
+  fingerprint (net/PinnedTls.kt), so an https:// pairing is encrypted and is
+  not open to someone on the same Wi-Fi. Plain http is kept for existing
+  pairings and for people who turn HTTPS off. Once every pairing is https,
+  flip base-config to false.
 
   Author: Bloodawn (KheivenD), 2026-07-18 (M1.1).
 -->

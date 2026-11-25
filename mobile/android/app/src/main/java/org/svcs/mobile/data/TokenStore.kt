@@ -54,6 +54,7 @@ class TokenStore(
     private companion object {
         val SERVER_URL = stringPreferencesKey("server_url")
         val TOKEN_BLOB = stringPreferencesKey("token_blob")
+        val CERT_FINGERPRINT = stringPreferencesKey("cert_fingerprint")
         val LAST_LIVE_SOURCE = stringPreferencesKey("last_live_source")
         val AUTO_COMPRESS_UPLOAD = stringPreferencesKey("auto_compress_upload")
     }
@@ -89,6 +90,10 @@ class TokenStore(
 
     suspend fun serverUrl(): String? =
         context.settingsStore.data.first()[SERVER_URL]
+
+    /** SHA-256 of the server's pinned certificate, or null when paired over http. */
+    suspend fun fingerprint(): String? =
+        context.settingsStore.data.first()[CERT_FINGERPRINT]?.takeIf { it.isNotBlank() }
 
     suspend fun setServerUrl(url: String) {
         context.settingsStore.edit { it[SERVER_URL] = url.trim() }
@@ -129,11 +134,13 @@ class TokenStore(
      * token, a pairing that never worked. The token is encrypted first, so a
      * Keystore failure writes nothing at all.
      */
-    suspend fun setPairing(url: String, token: String) {
+    suspend fun setPairing(url: String, token: String, fingerprint: String? = null) {
         val blob = cipher.encrypt(token)
         context.settingsStore.edit {
             it[SERVER_URL] = url.trim()
             it[TOKEN_BLOB] = blob
+            val fp = org.svcs.mobile.net.PinnedTls.normalize(fingerprint)
+            if (fp != null) it[CERT_FINGERPRINT] = fp else it.remove(CERT_FINGERPRINT)
         }
     }
 

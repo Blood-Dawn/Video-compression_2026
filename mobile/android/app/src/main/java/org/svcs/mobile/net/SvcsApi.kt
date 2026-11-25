@@ -80,6 +80,8 @@ sealed interface ProbeResult {
 class SvcsApi(
     private val baseUrl: String,
     private val token: String,
+    /** SHA-256 of the server's self-signed certificate; null for plain http. */
+    private val fingerprint: String? = null,
 ) : SvcsApiClient {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -90,6 +92,7 @@ class SvcsApi(
         .connectTimeout(5, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .addInterceptor(AuthInterceptor(token))
+        .let { PinnedTls.apply(it, fingerprint) }
         .apply {
             // HTTP logging is gated by ENABLE_HTTP_LOG (Fall 3.2), not
             // BuildConfig.DEBUG directly: debug sets it true, release sets it

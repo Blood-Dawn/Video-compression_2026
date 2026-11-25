@@ -159,6 +159,34 @@ function _devicesCopyRow(title, value) {
   return wrap;
 }
 
+// A QR code holding the server address, the token and (when the server uses
+// HTTPS) the certificate fingerprint, so the phone scans instead of typing.
+// Format: svcs://pair?u=<address>&t=<token>[&fp=<sha256 hex>]
+function _devicesPairPayload(data) {
+  const u = data.server_url || window.location.origin;
+  return "svcs://pair?u=" + encodeURIComponent(u) + "&t=" + encodeURIComponent(data.token) +
+    (data.fingerprint ? "&fp=" + encodeURIComponent(data.fingerprint) : "");
+}
+
+function _devicesAddQr(resultEl, data) {
+  if (!window.SvcsQR) return;
+  try {
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "display:flex;gap:0.8rem;align-items:center;flex-wrap:wrap;margin:0.6rem 0;";
+    const box = document.createElement("div");
+    box.id = "devices-qr";
+    box.style.cssText = "background:#fff;padding:2px;border-radius:4px;line-height:0;";
+    box.innerHTML = window.SvcsQR.svg(_devicesPairPayload(data), { scale: 5, quiet: 2 });
+    const cap = document.createElement("div");
+    cap.style.cssText = "color:var(--text-dim);max-width:22rem;";
+    cap.textContent = "Scan this with the SVCS app (MORE, Server Mode, Scan QR) to fill in the address and token. "
+      + "Anyone who can see this code can pair, so close it when you are done.";
+    wrap.appendChild(box);
+    wrap.appendChild(cap);
+    resultEl.appendChild(wrap);
+  } catch (e) { /* too long for a QR: the copy rows above still work */ }
+}
+
 async function devicesMint() {
   const btn = document.getElementById("devices-mint-btn");
   const resultEl = document.getElementById("devices-mint-result");
@@ -186,6 +214,8 @@ async function devicesMint() {
       resultEl.appendChild(warn);
       resultEl.appendChild(_devicesCopyRow("Server address", data.server_url || window.location.origin));
       resultEl.appendChild(_devicesCopyRow("Token", data.token));
+      if (data.fingerprint) resultEl.appendChild(_devicesCopyRow("Certificate fingerprint", data.fingerprint));
+      _devicesAddQr(resultEl, data);
       const hint = document.createElement("div");
       hint.style.color = "var(--text-dim)";
       hint.textContent = "On the phone: MORE, then Server Mode. Enter the server address and the token, "

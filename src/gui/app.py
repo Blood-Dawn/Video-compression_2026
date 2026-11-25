@@ -364,4 +364,9 @@ if __name__ == "__main__":
     if _decision.auth_enabled:
         log.info("Dashboard auth: ENABLED (user %r)", _decision.username)
     log.info("Dashboard:     http://%s:%d", _host, _port)
+    try:
+        from gui import tls_cert
+    except ModuleNotFoundError:
+        from src.gui import tls_cert
+    tls_cert.start_https_listener(_app, _host)
     _app.run(host=_host, port=_port, debug=False, threaded=True)

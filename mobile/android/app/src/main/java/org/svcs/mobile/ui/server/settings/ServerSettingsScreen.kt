@@ -115,6 +115,30 @@ fun ServerSettingsScreen(
                 )
             }
 
+            // Pairing code: the dashboard's Pair panel shows a QR code. Scan it
+            // with the phone's camera app, copy the svcs://pair link it
+            // reads, and paste it here to fill address, token and certificate
+            // in one go. (No in-app scanner: that needs Google Play Services,
+            // which would close the F-Droid channel.)
+            var pairingCode by remember { mutableStateOf("") }
+            var codeError by remember { mutableStateOf<String?>(null) }
+            OutlinedTextField(
+                value = pairingCode,
+                onValueChange = { v ->
+                    pairingCode = v
+                    codeError = null
+                    if (v.trim().startsWith("svcs://")) {
+                        if (vm.applyPairingCode(v)) pairingCode = "" else codeError = "That is not a valid SVCS pairing code."
+                    }
+                },
+                label = { Text("PAIRING CODE (OPTIONAL)") },
+                placeholder = { Text("svcs://pair?...") },
+                singleLine = true,
+                isError = codeError != null,
+                supportingText = { codeError?.let { Text(it, color = SvcsRed) } },
+                modifier = Modifier.fillMaxWidth(),
+            )
+
             OutlinedTextField(
                 value = state.serverUrl,
                 onValueChange = vm::onServerUrlChanged,
@@ -147,6 +171,22 @@ fun ServerSettingsScreen(
                 color = SvcsTextDim,
             )
 
+            OutlinedTextField(
+                value = state.fingerprint,
+                onValueChange = vm::onFingerprintChanged,
+                label = { Text("CERTIFICATE FINGERPRINT (HTTPS)") },
+                placeholder = { Text("64 hex characters, from the Pair panel") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                "Use an https:// address and paste the fingerprint to encrypt the " +
+                    "link. The phone then trusts only that certificate, so nobody " +
+                    "else on the Wi-Fi can read your token or video.",
+                style = MaterialTheme.typography.bodySmall,
+                color = SvcsTextDim,
+            )
+
             Button(
                 onClick = vm::testConnection,
                 enabled = !state.busy && state.serverUrl.isNotBlank() &&
@@ -161,7 +201,8 @@ fun ServerSettingsScreen(
 
             // An unsaved re-pair can be dropped without leaving the screen.
             if (state.savedUrl.isNotBlank() &&
-                (state.serverUrl != state.savedUrl || state.token != state.savedToken)
+                (state.serverUrl != state.savedUrl || state.token != state.savedToken ||
+                    state.fingerprint != state.savedFingerprint)
             ) {
                 TextButton(onClick = vm::discardChanges, enabled = !state.busy) {
                     Text("DISCARD CHANGES")

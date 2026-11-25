@@ -32,6 +32,7 @@ try:
     from gui.routes.files_bp import _upload_dir
     from gui.routes.savings_bp import _output_size, _parse_source_size, _result_block
     from gui.services import autocompress_runner as ac
+    from gui.services import security_alerts
     from utils import compressed_index as _cidx
     from utils.paths import state_file
 except ModuleNotFoundError:  # pragma: no cover - import path shim
@@ -41,6 +42,7 @@ except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.routes.files_bp import _upload_dir
     from src.gui.routes.savings_bp import _output_size, _parse_source_size, _result_block
     from src.gui.services import autocompress_runner as ac
+    from src.gui.services import security_alerts
     from src.utils import compressed_index as _cidx
     from src.utils.paths import state_file
 
@@ -133,6 +135,7 @@ def _snapshot() -> dict:
         "watch_folder": str(folder),
         "phones": _phones(),
         "recent": recent_clips(folder),
+        "alerts": security_alerts.recent_alerts(),
     }
 
 

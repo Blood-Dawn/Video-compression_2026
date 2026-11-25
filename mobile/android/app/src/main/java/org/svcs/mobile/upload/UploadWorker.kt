@@ -144,6 +144,7 @@ class UploadWorker(
             val store = TokenStore(applicationContext)
             val url = store.serverUrl()
             val token = store.token()
+            val fingerprint = store.fingerprint()
             if (url.isNullOrBlank() || token.isNullOrBlank()) {
                 return fail("Not paired with a server any more. Pair under MORE, then upload again.", file, checkpoints)
             }
@@ -151,7 +152,7 @@ class UploadWorker(
             val outcome = withContext(Dispatchers.IO) {
                 FileUploadSource(file).use { source ->
                     UploadEngine(
-                        api = SvcsApi(url, token),
+                        api = SvcsApi(url, token, fingerprint),
                         source = source,
                         displayName = displayName,
                         sha256 = sha,

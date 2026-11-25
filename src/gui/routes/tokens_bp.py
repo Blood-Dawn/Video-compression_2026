@@ -53,6 +53,20 @@ def _server_url() -> str:
     return f"http://{ip}:{port}"
 
 
+def _https_info():
+    """(https server_url, fingerprint) when the HTTPS listener runs, else (None, None)."""
+    try:
+        from gui import tls_cert
+    except ModuleNotFoundError:
+        from src.gui import tls_cert
+    info = tls_cert.info()
+    if not info:
+        return None, None
+    http = _server_url()
+    host = http[len("http://"):].rsplit(":", 1)[0]
+    return f"https://{host}:{info['port']}", info["fingerprint"]
+
+
 def _require_password_auth():
     """Return a 403 Response if this request authenticated with a token.
 
@@ -115,13 +129,16 @@ def api_mint_token():
     # Never log the secret.
     log.info("Device token minted: label=%r id=%s expires=%s",
              rec.label, rec.id, rec.expires_at or "never")
+    https_url, fingerprint = _https_info()
     return jsonify({
         "token": secret,          # shown once; the client must store it now
         "id": rec.id,
         "label": rec.label,
         "created_at": rec.created_at,
         "expires_at": rec.expires_at,
-        "server_url": _server_url(),
+        "server_url": https_url or _server_url(),
+        "http_url": _server_url(),
+        "fingerprint": fingerprint,
         "warning": "Copy this token now. It cannot be shown again.",
     }), 201
 

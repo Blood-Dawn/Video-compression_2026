@@ -207,6 +207,12 @@ if ($missing.Count -gt 0) {
 } else {
     Write-Host "      detector and AI models present" -ForegroundColor Green
 }
+# Optional: Real-ESRGAN General (ONNX). Not required, the app falls back to FSRCNN without it.
+if (Copy-AssetIfMissing (Join-Path "models" "realesr-general-x4v3.onnx")) {
+    Write-Host "      optional Real-ESRGAN General model present" -ForegroundColor Green
+} else {
+    Write-Warning "Optional models\realesr-general-x4v3.onnx not found; the Real-ESRGAN General choice falls back to FSRCNN in this build."
+}
 
 # ── Step 2.5: vendor FFmpeg (M2 TASK 2.3) ─────────────────────────────
 # Download a pinned FFmpeg once into tools/ffmpeg/bin so the installer is

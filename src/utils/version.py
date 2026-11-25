@@ -28,7 +28,7 @@ import re
 # update check report that release as newer forever.
 # tests/test_version_consistency.py pins this value and trips on the last
 # published tag.
-APP_VERSION = "3.0.0.dev0"
+APP_VERSION = "3.1.0.dev0"
 
 # Release-stage ordering for comparison purposes. Anything not recognized
 # (including a fully final release, no suffix at all) ranks highest, so

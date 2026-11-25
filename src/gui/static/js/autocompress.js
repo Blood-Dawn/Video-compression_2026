@@ -28,6 +28,23 @@ function _acSelectedCompression() {
   return kind === "preset" ? { preset: val } : { mode: val || "mode0" };
 }
 
+// Four cards stand in for the old dropdown; the hidden <select id="ac-mode">
+// stays the single source of truth so every other function keeps working.
+function acSyncModeCards() {
+  const cur = ((document.getElementById("ac-mode") || {}).value || "mode:mode0").split(":")[1] || "mode0";
+  document.querySelectorAll(".ac-card").forEach((c) => {
+    const on = c.dataset.acMode === cur;
+    c.classList.toggle("selected", on);
+    c.setAttribute("aria-checked", on ? "true" : "false");
+  });
+}
+function acPickMode(mode) {
+  const sel = document.getElementById("ac-mode");
+  if (sel) sel.value = "mode:" + mode;
+  acSyncModeCards();
+}
+window.acPickMode = acPickMode;
+
 function _acRequestBody() {
   const body = {
     folder: (document.getElementById("ac-folder")?.value || "").trim(),
@@ -176,6 +193,7 @@ function _acRenderStatus(st) {
     if (pEl && s.profile) pEl.value = s.profile;
     const mEl = document.getElementById("ac-mode");
     if (mEl && s.mode) mEl.value = "mode:" + s.mode;
+    acSyncModeCards();
     _acFormRestored = true;
   }
 

@@ -314,3 +314,24 @@ body.svcs-advanced #simple-home { display: none; }
 .sh-tot-k { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
 .sh-tot-v { font-size: 1.05rem; font-weight: 600; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 @media (max-width: 600px) { .sh-totals { grid-template-columns: 1fr; } }
+
+/* Library: detected-label tags and mode badge on each clip */
+.x-tags { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-top: 0.3rem; }
+.x-tag { font-family: var(--mono); font-size: 0.68rem; padding: 0.05rem 0.4rem; border-radius: 3px; border: 1px solid var(--border-ctl); color: var(--text-dim); }
+.x-tag.is-person { color: #e08a2c; border-color: #e08a2c; }
+.x-tag.is-vehicle { color: #4f8fe0; border-color: #4f8fe0; }
+.x-badge.is-mode { color: var(--text); }
+/* Recent jobs: today's totals line */
+.jobs-summary { font-family: var(--mono); font-size: 0.75rem; color: var(--text-dim); padding: 0.35rem 0.75rem; border-bottom: 1px solid var(--border); }
+.jobs-summary b { color: var(--text); font-weight: 600; }
+
+/* Auto-compress: the same four mode choices as Home, as cards */
+.ac-modes-wrap { grid-column: 1 / -1; }
+.ac-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem; margin-top: 0.25rem; }
+.ac-card { text-align: left; background: var(--bg); border: 1px solid var(--border); border-radius: 3px; padding: 0.55rem 0.65rem; cursor: pointer; color: var(--text); display: flex; flex-direction: column; gap: 0.15rem; font: inherit; }
+.ac-card:hover { border-color: var(--border-bright); background: var(--surface2); }
+.ac-card.selected { border-color: var(--amber); background: var(--amber-glow); }
+.ac-card:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.ac-card-no { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); }
+.ac-card-name { font-weight: 600; font-size: 0.85rem; }
+.ac-card-desc { font-size: 0.75rem; color: var(--text-dim); }

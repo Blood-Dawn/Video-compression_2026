@@ -181,6 +181,10 @@ function _libActiveFilters() {
   if (kind === "compressed") out.push({ id: "kind", label: "Compressed" });
   const ext = ((document.getElementById("library-ext") || {}).value || "");
   if (ext) out.push({ id: "ext", label: ext.toUpperCase() });
+  const lab = ((document.getElementById("library-label") || {}).value || "");
+  if (lab) out.push({ id: "label", label: "Has " + lab });
+  const md = ((document.getElementById("library-mode") || {}).value || "");
+  if (md) out.push({ id: "mode", label: "Mode " + md.replace("mode", "") });
   const age = ((document.getElementById("library-age") || {}).value || "");
   if (age) out.push({ id: "age", label: _LIB_AGE_LABEL[age] || ("Last " + age + " days") });
   const q = ((document.getElementById("library-search") || {}).value || "").trim();
@@ -190,14 +194,14 @@ function _libActiveFilters() {
 
 function _libRemoveFilter(id) {
   if (id === "kind") { window._svcsLibrary.kind = "all"; setLibraryKind("all"); return; }
-  const map = { ext: "library-ext", age: "library-age", q: "library-search" };
+  const map = { ext: "library-ext", age: "library-age", q: "library-search", label: "library-label", mode: "library-mode" };
   const el = document.getElementById(map[id]);
   if (el) el.value = "";
   filterLibrary();
 }
 
 function libClearFilters() {
-  ["library-ext", "library-age", "library-search"].forEach((i) => {
+  ["library-ext", "library-age", "library-search", "library-label", "library-mode"].forEach((i) => {
     const el = document.getElementById(i);
     if (el) el.value = "";
   });
@@ -321,8 +325,22 @@ function _renderLibrary(list) {
     meta.className = "x-vmeta";
     const isComp = v.kind === "compressed";
     meta.innerHTML = '<span class="x-badge ' + (isComp ? "is-comp" : "is-orig") + '">' +
-      (isComp ? "Compressed" : "Original") + '</span><span class="x-size">' + _esc(_fmtSize(v.size)) + '</span>';
+      (isComp ? "Compressed" : "Original") + '</span>' +
+      (v.mode ? '<span class="x-badge is-mode">Mode ' + _esc(v.mode.replace("mode", "")) + '</span>' : '') +
+      '<span class="x-size">' + _esc(_fmtSize(v.size)) + '</span>';
     body.appendChild(meta);
+
+    if (v.labels && v.labels.length) {
+      const tags = document.createElement("div");
+      tags.className = "x-tags";
+      v.labels.slice(0, 5).forEach((t) => {
+        const el = document.createElement("span");
+        el.className = "x-tag" + (t === "person" ? " is-person" : t === "vehicle" ? " is-vehicle" : "");
+        el.textContent = t;
+        tags.appendChild(el);
+      });
+      body.appendChild(tags);
+    }
 
     const note = document.createElement("div");
     note.className = "x-saved";
@@ -397,11 +415,15 @@ function filterLibrary() {
   const ageDays = parseInt((document.getElementById("library-age") || {}).value || "0", 10) || 0;
   const cutoff = ageDays ? (Date.now() / 1000) - ageDays * 86400 : 0;
   const kind = window._svcsLibrary.kind || "all";
+  const labelF = ((document.getElementById("library-label") || {}).value || "");
+  const modeF = ((document.getElementById("library-mode") || {}).value || "");
   _lsSet("svcs.lib.sort", sortVal);
   let list = all.filter((v) => {
     if (q && !qWords.every((w) => v.name.toLowerCase().includes(w))) return false;
     if (ext && !v.name.toLowerCase().endsWith("." + ext)) return false;
     if (cutoff && !(v.mtime >= cutoff)) return false;
+    if (labelF && !(v.labels || []).includes(labelF)) return false;
+    if (modeF && v.mode !== modeF) return false;
     if (kind === "compressed" && v.kind !== "compressed") return false;
     if (kind === "original" && v.kind === "compressed") return false;
     return true;
@@ -423,6 +445,26 @@ function filterLibrary() {
   _renderLibrary(list);
 }
 window.filterLibrary = filterLibrary;
+
+function _populateLabelFilter(videos) {
+  const sel = document.getElementById("library-label");
+  if (!sel) return;
+  const cur = sel.value;
+  const seen = new Set();
+  (videos || []).forEach((v) => (v.labels || []).forEach((t) => seen.add(t)));
+  const order = ["person", "vehicle"];
+  const tags = Array.from(seen).sort((a, b) => {
+    const ia = order.indexOf(a), ib = order.indexOf(b);
+    return (ia < 0 ? 9 : ia) - (ib < 0 ? 9 : ib) || a.localeCompare(b);
+  });
+  sel.innerHTML = '<option value="">Anything detected</option>';
+  tags.forEach((t) => {
+    const o = document.createElement("option");
+    o.value = t; o.textContent = t.charAt(0).toUpperCase() + t.slice(1);
+    sel.appendChild(o);
+  });
+  if (cur && seen.has(cur)) sel.value = cur;
+}
 
 function _populateExtFilter(exts) {
   const sel = document.getElementById("library-ext");
@@ -447,7 +489,7 @@ async function loadLibrary() {
     // for the phone client's pagination. loadLibrary only runs on a user
     // action, and a user who just compressed something and clicks Load
     // expects to see it.
-    const base = "/api/library/videos?refresh=1";
+    const base = "/api/library/videos?refresh=1&page_size=200";
     const url = base + (folder ? "&folder=" + _enc(folder) : "");
     const data = await (await fetch(url)).json();
     if (folderEl && !folderEl.value && data.folder) folderEl.value = data.folder;
@@ -455,6 +497,7 @@ async function loadLibrary() {
     window._svcsLibrary.folder = data.folder || folder;
     window._svcsLibrary.all = data.videos || [];
     _populateExtFilter(data.extensions);
+    _populateLabelFilter(data.videos);
     if (data.exists === false) {
       _libShowEmpty("none");
       const tt = document.getElementById("library-empty-title");

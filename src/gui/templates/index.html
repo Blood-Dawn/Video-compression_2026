@@ -2824,6 +2824,16 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
             <select id="library-ext" onchange="filterLibrary()" title="File type" aria-label="Filter by file type">
               <option value="">All types</option>
             </select>
+            <select id="library-label" onchange="filterLibrary()" title="What was detected" aria-label="Filter by what was detected">
+              <option value="">Anything detected</option>
+            </select>
+            <select id="library-mode" onchange="filterLibrary()" title="Compression mode" aria-label="Filter by compression mode">
+              <option value="">Any mode</option>
+              <option value="mode0">Mode 0</option>
+              <option value="mode1">Mode 1</option>
+              <option value="mode2">Mode 2</option>
+              <option value="mode3">Mode 3</option>
+            </select>
             <select id="library-age" onchange="filterLibrary()" title="Age" aria-label="Filter by age">
               <option value="">Any time</option>
               <option value="1">Last 24 hours</option>
@@ -2978,9 +2988,23 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
             <button class="btn btn-ghost" id="ac-browse-btn" onclick="acBrowseFolder()">Browse...</button>
           </div>
           <div class="x-fields">
-            <div>
-              <label class="x-lbl" for="ac-mode">Compression</label>
-              <select id="ac-mode" title="Default compression" aria-label="Default compression mode">
+            <div class="ac-modes-wrap">
+              <span class="x-lbl" id="ac-mode-lbl">Compression</span>
+              <div class="ac-cards" role="radiogroup" aria-labelledby="ac-mode-lbl">
+                <button type="button" class="ac-card selected" role="radio" aria-checked="true" data-ac-mode="mode0" onclick="acPickMode('mode0')">
+                  <span class="ac-card-no">Mode 0</span><span class="ac-card-name">Live surveillance</span>
+                  <span class="ac-card-desc">Keeps every frame. Best for busy scenes.</span></button>
+                <button type="button" class="ac-card" role="radio" aria-checked="false" data-ac-mode="mode1" onclick="acPickMode('mode1')">
+                  <span class="ac-card-no">Mode 1</span><span class="ac-card-name">Event recording</span>
+                  <span class="ac-card-desc">Only the stretches with motion.</span></button>
+                <button type="button" class="ac-card" role="radio" aria-checked="false" data-ac-mode="mode2" onclick="acPickMode('mode2')">
+                  <span class="ac-card-no">Mode 2</span><span class="ac-card-name">Smart compress</span>
+                  <span class="ac-card-desc">Full background, sharp moving objects.</span></button>
+                <button type="button" class="ac-card" role="radio" aria-checked="false" data-ac-mode="mode3" onclick="acPickMode('mode3')">
+                  <span class="ac-card-no">Mode 3</span><span class="ac-card-name">Objects only</span>
+                  <span class="ac-card-desc">Smallest files. Nearest people and vehicles.</span></button>
+              </div>
+              <select id="ac-mode" title="Default compression" aria-label="Default compression mode" hidden>
                 <option value="mode:mode0">Mode 0 - record every frame (default)</option>
                 <option value="mode:mode1">Mode 1 - motion segments</option>
                 <option value="mode:mode2">Mode 2 - ROI AV1</option>

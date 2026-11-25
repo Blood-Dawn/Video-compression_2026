@@ -371,6 +371,8 @@ def api_library_videos():
       ext         - comma-separated extensions to keep (e.g. "mp4,mkv")
       min_size    - minimum size in BYTES
       max_size    - maximum size in BYTES
+      label       - keep clips whose detected labels include this one (person, vehicle ...)
+      mode        - keep clips made by this mode (mode0 .. mode3)
       sort        - name | size | date   (default: date)
       order       - asc | desc           (default: desc)
       page, page_size
@@ -420,14 +422,33 @@ def api_library_videos():
     items = _filter_library_items(all_items, allowed_exts, q, min_size, max_size, kind)
     _sort_library_items(items, sort, order)
 
+    # Detected labels (person, vehicle ...) and the mode that made each clip.
+    # label / mode are optional filters; without them only the page shown is
+    # looked up.
+    label_f = (request.args.get("label", "") or "").strip().lower()
+    mode_f = (request.args.get("mode", "") or "").strip().lower()
+    try:
+        from gui.services import library_labels as _ll
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.gui.services import library_labels as _ll
+    if label_f or mode_f:
+        items = _ll.attach(items)
+        if label_f:
+            items = [i for i in items if label_f in i["labels"]]
+        if mode_f:
+            items = [i for i in items if i["mode"] == mode_f]
+
     total = len(items)
     start = (page - 1) * page_size
+    page_items = items[start:start + page_size]
+    if not (label_f or mode_f):
+        page_items = _ll.attach(page_items)
     return jsonify({
         "folder": str(folder), "exists": True, "total": total,
         "page": page, "page_size": page_size,
         "sort": sort, "order": order, "extensions": exts, "kind": kind,
         "recursive": recursive, "truncated": truncated,
-        "videos": items[start:start + page_size],
+        "videos": page_items,
     })
 
 

@@ -416,6 +416,35 @@ function _jobShowAll(el, i) {
   el.remove();
 }
 
+// "Today: 12 clips, 1.4 GB saved". Counts runs that ended since local
+// midnight; space saved only from jobs that recorded both sizes.
+function _renderJobsSummary(jobs) {
+  let box = document.getElementById('jobs-summary');
+  const list = document.getElementById('jobs-list');
+  if (!box && list && list.parentNode) {
+    box = document.createElement('div');
+    box.id = 'jobs-summary';
+    box.className = 'jobs-summary';
+    list.parentNode.insertBefore(box, list);
+  }
+  if (!box) return;
+  const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+  const since = midnight.getTime() / 1000;
+  let clips = 0, saved = 0, runs = 0;
+  (jobs || []).forEach((j) => {
+    if (j.kind === 'retention' || !(j.ended_at >= since)) return;
+    if (String(j.status || 'completed') === 'error') return;
+    const c = j.counts || {};
+    runs++;
+    clips += j.kind === 'autocompress' ? (c.compressed || 0) : 1;
+    if (j.bytes_in > 0 && j.bytes_out > 0) saved += Math.max(0, j.bytes_in - j.bytes_out);
+  });
+  if (!runs) { box.hidden = true; box.textContent = ''; return; }
+  box.hidden = false;
+  box.innerHTML = 'Today: <b>' + clips + (clips === 1 ? ' clip' : ' clips') + '</b>' +
+    (saved > 0 ? ', <b>' + fmtBytes(saved) + '</b> saved' : '');
+}
+
 async function loadRecentJobs() {
   const list = document.getElementById('jobs-list');
   if (!list) return;
@@ -429,6 +458,7 @@ async function loadRecentJobs() {
       return;
     }
     _jobFileIndex = [];
+    _renderJobsSummary(jobs);
     list.innerHTML = jobs.map((j, ji) => {
       const c = j.counts || {};
       const what = j.kind === 'autocompress' ? (c.compressed ?? 0) + ' file(s)'

@@ -78,7 +78,7 @@ def _fit_into(frame: np.ndarray, cell: np.ndarray) -> None:
     new_w = max(1, int(w * scale))
     new_h = max(1, int(h * scale))
 
-    resized = cv2.resize(frame, (new_w, new_h))
+    resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_AREA)
     x = (cell_w - new_w) // 2
     y = (cell_h - new_h) // 2
     cell[y:y + new_h, x:x + new_w] = resized

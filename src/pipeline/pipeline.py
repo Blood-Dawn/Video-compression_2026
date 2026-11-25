@@ -385,6 +385,45 @@ def _update_background_plate(accum, frame, mask, dilate_kernel, alpha=0.03):
     return accum
 
 
+
+NIGHT_LUMA_THRESHOLD = 60.0
+
+
+def _resolve_denoise(denoise, mode: str, input_source) -> str:
+    """Turn denoise="auto" into "hqdn3d" for night or infrared footage, else off.
+
+    Night grain costs a lot of bits on areas that never change. A light
+    spatial plus temporal denoise before encoding removes most of that without
+    touching daytime footage. Mode 0 keeps every pixel as recorded, so it is
+    never denoised automatically. Live sources and unreadable files stay off.
+    An explicit "", "hqdn3d" or "atadenoise" always wins.
+    """
+    wanted = (denoise or "").strip().lower()
+    if wanted != "auto":
+        return wanted
+    if mode == "mode0" or not isinstance(input_source, (str, os.PathLike)):
+        return ""
+    try:
+        cap = cv2.VideoCapture(str(input_source))
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        if not cap.isOpened() or total < 10:
+            cap.release()
+            return ""
+        lumas = []
+        for frac in (0.1, 0.3, 0.5, 0.7, 0.9):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, int(total * frac))
+            ok, frame = cap.read()
+            if ok and frame is not None:
+                lumas.append(float(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).mean()))
+        cap.release()
+    except Exception:  # noqa: BLE001 - probing must never break a compression run
+        return ""
+    if lumas and (sum(lumas) / len(lumas)) < NIGHT_LUMA_THRESHOLD:
+        log.info("Night footage detected (mean luma %.0f): denoising with hqdn3d.",
+                 sum(lumas) / len(lumas))
+        return "hqdn3d"
+    return ""
+
 def run_pipeline(
     input_source,
     camera_id: str = "cam_00",
@@ -415,7 +454,7 @@ def run_pipeline(
     background_crf: int | None = None,
     verbose: bool = False,
     max_bitrate_kbps: int = 0,
-    denoise: str = "",
+    denoise: str = "auto",
     roi_qp: bool = False,
     gop_seconds: int = 20,
     target_vmaf: float | None = None,
@@ -618,6 +657,8 @@ def run_pipeline(
     # wins, even above the source rate).
     max_bitrate_kbps = _resolve_max_bitrate_kbps(
         mode, max_bitrate_kbps, input_source, total_frames, fps)
+
+    denoise = _resolve_denoise(denoise, mode, input_source)
 
     encoder = ROIEncoder(
         output_dir=output_dir,
@@ -1288,8 +1329,8 @@ if __name__ == "__main__":
                         help="Storage cap in kbps (capped CRF). 0 = uncapped.")
     parser.add_argument("--gop-seconds", type=int, default=20,
                         help="Keyframe interval in seconds (long GOP for static cameras). 0 = ffmpeg default.")
-    parser.add_argument("--denoise", default="", choices=["", "hqdn3d", "atadenoise"],
-                        help="Pre-encode denoiser for night/IR footage. Empty = off.")
+    parser.add_argument("--denoise", default="auto", choices=["", "auto", "hqdn3d", "atadenoise"],
+                        help="Pre-encode denoiser. auto = on for night/IR footage only (default); empty = off.")
     parser.add_argument("--roi-qp", action="store_true",
                         help="Encoder-level ROI (x264/x265 only): degrade long-static areas via addroi.")
     parser.add_argument("--target-vmaf", type=float, default=None,

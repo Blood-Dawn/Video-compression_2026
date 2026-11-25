@@ -56,8 +56,8 @@ class H264Writer:
             "-i", "pipe:0",
             # Output: H.264 in MP4, faststart for web streaming
             "-c:v", "libx264",
-            "-preset", "ultrafast",
-            "-crf", "23",
+            "-preset", "veryfast",
+            "-crf", "16",
             "-pix_fmt", "yuv420p",   # required: libx264 needs planar YUV
             "-movflags", "+faststart",
             self._output_path,

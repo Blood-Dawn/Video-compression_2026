@@ -93,8 +93,15 @@ _RRDBNET_MODELS: dict[str, str] = {
     "realesrnet": "RealESRNet_x4plus.pth",
 }
 
+# ONNX models run on ONNX Runtime, which the app already ships for YOLO, so
+# they need no torch. realesr-general-x4v3 is a small (~5 MB) Real-ESRGAN
+# variant trained for real-world video; it beats FSRCNN/ESPCN by a wide margin.
+_ONNX_SR_MODELS: dict[str, dict] = {
+    "realesrgan_onnx": {"filename": "realesr-general-x4v3.onnx", "scale": 4},
+}
+
 # Every recognised non-bicubic model id, for GUI/route validation.
-ALL_MODEL_IDS = frozenset({"bicubic", *_DNN_SR_MODELS, *_RRDBNET_MODELS})
+ALL_MODEL_IDS = frozenset({"bicubic", *_DNN_SR_MODELS, *_RRDBNET_MODELS, *_ONNX_SR_MODELS})
 
 
 def _nearest_supported_scale(model_id: str, requested: int) -> int:
@@ -336,6 +343,7 @@ class Enhancer:
 
         self._upsampler = None      # cv2.dnn_superres.DnnSuperResImpl, when active
         self._rrdb_upsampler = None  # RealESRGANer, when active
+        self._onnx_session = None   # onnxruntime.InferenceSession, when active
         self._using_nn  = False
         self._active_scale = scale
 
@@ -347,6 +355,65 @@ class Enhancer:
             self._load_dnn_superres()
         elif self.model_id in _RRDBNET_MODELS:
             self._load_rrdbnet()
+        elif self.model_id in _ONNX_SR_MODELS:
+            self._load_onnx()
+
+    # ------------------------------------------------------------------
+    # Internal: ONNX Runtime backend (Real-ESRGAN General x4v3)
+    # ------------------------------------------------------------------
+
+    _ONNX_TILE = 128      # input tile edge in pixels; bounds memory per run
+    _ONNX_PAD = 8         # overlap so tile seams do not show
+
+    def _load_onnx(self) -> None:
+        spec = _ONNX_SR_MODELS[self.model_id]
+        weights_path = self._explicit_model_path or (self._models_dir / spec["filename"])
+        if not weights_path.exists():
+            log.warning(
+                "%s weights not found at %s. Using bicubic fallback.",
+                self.model_id, weights_path,
+            )
+            return
+        try:
+            import onnxruntime as ort  # type: ignore
+            opts = ort.SessionOptions()
+            opts.log_severity_level = 3
+            self._onnx_session = ort.InferenceSession(
+                str(weights_path), opts, providers=["CPUExecutionProvider"],
+            )
+            self._using_nn = True
+            self._active_scale = spec["scale"]
+            self._device = "cpu"
+            log.info("%s loaded: %s (x%d) on CPU", self.model_id, weights_path.name, spec["scale"])
+        except Exception as exc:  # noqa: BLE001 - missing runtime or bad file; degrade to bicubic
+            log.warning(
+                "%s failed to initialise (%s: %s). Using bicubic fallback.",
+                self.model_id, type(exc).__name__, exc,
+            )
+            self._onnx_session = None
+            self._using_nn = False
+
+    def _enhance_onnx(self, frame: np.ndarray) -> np.ndarray:
+        """Upscale one BGR frame tile by tile (RGB float in, RGB float out)."""
+        sess = self._onnx_session
+        name = sess.get_inputs()[0].name
+        sc = self._active_scale
+        h, w = frame.shape[:2]
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB).astype(np.float32) / 255.0
+        out = np.zeros((h * sc, w * sc, 3), np.float32)
+        t, pad = self._ONNX_TILE, self._ONNX_PAD
+        for y0 in range(0, h, t):
+            for x0 in range(0, w, t):
+                y1, x1 = min(y0 + t, h), min(x0 + t, w)
+                ya, xa = max(y0 - pad, 0), max(x0 - pad, 0)
+                yb, xb = min(y1 + pad, h), min(x1 + pad, w)
+                tile = rgb[ya:yb, xa:xb].transpose(2, 0, 1)[None]
+                res = sess.run(None, {name: np.ascontiguousarray(tile)})[0][0]
+                res = res.transpose(1, 2, 0)
+                oy, ox = (y0 - ya) * sc, (x0 - xa) * sc
+                out[y0 * sc:y1 * sc, x0 * sc:x1 * sc] = res[oy:oy + (y1 - y0) * sc, ox:ox + (x1 - x0) * sc]
+        out = np.clip(out * 255.0 + 0.5, 0, 255).astype(np.uint8)
+        return cv2.cvtColor(out, cv2.COLOR_RGB2BGR)
 
     # ------------------------------------------------------------------
     # Internal: dnn_superres backends (ESPCN / FSRCNN / EDSR / LapSRN)
@@ -602,6 +669,9 @@ class Enhancer:
 
         if self._using_nn and self._rrdb_upsampler is not None:
             return self._enhance_rrdbnet(frame)
+
+        if self._using_nn and self._onnx_session is not None:
+            return self._enhance_onnx(frame)
 
         target_scale = scale if scale is not None else self.scale
         h, w = frame.shape[:2]

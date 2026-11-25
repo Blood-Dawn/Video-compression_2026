@@ -75,8 +75,12 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; Everything EXCEPT the bundled FFmpeg and AI Super-Resolution models goes in
 ; the required "main" component.
 Source: "..\dist\SVCS\*"; DestDir: "{app}"; \
-    Excludes: "_internal\ffmpeg\*,_internal\models\*,_internal\src\gui\static\src\*"; \
+    Excludes: "_internal\ffmpeg\*,_internal\models\*,_internal\src\gui\static\src\*,\SVCS-Unlock.exe"; \
     Flags: ignoreversion recursesubdirs createallsubdirs; Components: main
+; The .enc viewer is listed on its own (no skipifsourcedoesntexist) so ISCC
+; fails loudly if build.ps1 did not produce it; the [Registry] .enc
+; association below points at it.
+Source: "..\dist\SVCS\SVCS-Unlock.exe"; DestDir: "{app}"; Flags: ignoreversion; Components: main
 ; The bundled FFmpeg is its own optional component.
 Source: "..\dist\SVCS\_internal\ffmpeg\*"; DestDir: "{app}\_internal\ffmpeg"; \
     Flags: ignoreversion recursesubdirs createallsubdirs; Components: ffmpeg

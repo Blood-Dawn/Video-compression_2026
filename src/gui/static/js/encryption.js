@@ -23,21 +23,29 @@ function decMethodChanged() {
   document.getElementById('dec-keyfile-group').style.display  = pw ? 'none' : '';
 }
 
-async function browseEncFile() {
+async function _browseInto(inputId, kind, statusId) {
+  const input = document.getElementById(inputId);
+  const status = statusId ? document.getElementById(statusId) : null;
+  if (status) status.textContent = 'A file dialog is open on this PC. It may be behind this window.';
   try {
-    const res = await fetch('/api/browse');
+    const res = await fetch('/api/browse?kind=' + encodeURIComponent(kind));
     const data = await res.json();
-    if (data.path) document.getElementById('enc-src-path').value = data.path;
-  } catch(e) { /* ignore */ }
+    if (data.path) {
+      input.value = data.path;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      if (status) status.textContent = 'Selected ' + data.path.split(/[\\/]/).pop();
+    } else if (status) {
+      status.textContent = 'No file selected.';
+    }
+  } catch (e) {
+    if (status) status.textContent = 'Could not open the file dialog: ' + e;
+  }
 }
 
-async function browseDecFile() {
-  try {
-    const res = await fetch('/api/browse');
-    const data = await res.json();
-    if (data.path) document.getElementById('dec-src-path').value = data.path;
-  } catch(e) { /* ignore */ }
-}
+function browseEncFile() { return _browseInto('enc-src-path', 'video', 'enc-encrypt-status'); }
+function browseDecFile() { return _browseInto('dec-src-path', 'enc', 'enc-decrypt-status'); }
+function browseEncKey()  { return _browseInto('enc-keyfile-path', 'key', 'enc-encrypt-status'); }
+function browseDecKey()  { return _browseInto('dec-keyfile-path', 'key', 'enc-decrypt-status'); }
 
 // Called by per-row decrypt button - pre-fills the encrypt tab and switches to it
 function promptEncryptSegment(filePath) {

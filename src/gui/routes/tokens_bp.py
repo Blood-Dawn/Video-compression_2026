@@ -36,6 +36,23 @@ tokens_bp = Blueprint("tokens", __name__)
 _MAX_TOKENS = 50
 
 
+def _server_url() -> str:
+    """The address a phone on this network should type in: http://<LAN IP>:<port>."""
+    import socket
+    ip = "127.0.0.1"
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.connect(("8.8.8.8", 80))   # picks the default route; sends nothing
+            ip = s.getsockname()[0]
+    except OSError:
+        pass
+    try:
+        port = int(request.environ.get("SERVER_PORT") or 5000)
+    except (TypeError, ValueError):
+        port = 5000
+    return f"http://{ip}:{port}"
+
+
 def _require_password_auth():
     """Return a 403 Response if this request authenticated with a token.
 
@@ -67,7 +84,7 @@ def api_mint_token():
         return denied
 
     data = request.get_json(silent=True) or {}
-    label = str(data.get("label") or "").strip() or "device"
+    label = str(data.get("label") or "").strip()
 
     live = sum(1 for t in device_tokens.list_tokens() if t.is_usable())
     if live >= _MAX_TOKENS:
@@ -104,6 +121,7 @@ def api_mint_token():
         "label": rec.label,
         "created_at": rec.created_at,
         "expires_at": rec.expires_at,
+        "server_url": _server_url(),
         "warning": "Copy this token now. It cannot be shown again.",
     }), 201
 
@@ -144,3 +162,21 @@ def api_revoke_all_tokens():
         }), 503
     log.info("All device tokens revoked (%d).", n)
     return jsonify({"revoked": True, "count": n})
+
+
+@tokens_bp.route("/api/auth/tokens/<token_id>", methods=["PATCH"])
+def api_rename_token(token_id):
+    """Rename a device. A blank name goes back to the phone's own name or MAC."""
+    denied = _require_password_auth()
+    if denied is not None:
+        return denied
+    data = request.get_json(silent=True) or {}
+    try:
+        rec = device_tokens.rename_token(str(token_id), str(data.get("label") or ""))
+    except device_tokens.StoreUnreadable as exc:
+        log.error("Refusing to rename a token: %s", exc)
+        return jsonify({"error": "The device-token store could not be read. "
+                                 "Nothing was changed."}), 503
+    if rec is None:
+        return jsonify({"error": "No device with that id."}), 404
+    return jsonify(rec.to_public())

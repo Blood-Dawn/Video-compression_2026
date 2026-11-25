@@ -28,6 +28,7 @@ async function _setUsageConsent(consent) {
 function _dismissUsageBanner() {
   const b = document.getElementById("usage-consent-banner");
   if (b) b.remove();
+  document.body.style.paddingBottom = "";
 }
 
 function _buildUsageBanner() {
@@ -50,6 +51,9 @@ function _buildUsageBanner() {
     + "<button id='usage-accept' class='btn'>Share anonymously</button>"
     + "</div>";
   document.body.appendChild(b);
+  // The banner is fixed to the bottom; pad the page so it never sits on top
+  // of the last controls (on a fresh install it covered "Load profile").
+  document.body.style.paddingBottom = (b.offsetHeight + 32) + "px";
   document.getElementById("usage-accept").onclick = async () => {
     await _setUsageConsent(true);
     _syncUsageToggle(true);

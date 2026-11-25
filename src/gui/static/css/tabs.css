@@ -261,3 +261,11 @@ details.x-card > summary.x-sum { display: flex; align-items: baseline; gap: 0.6r
 .x-trash-name { font-weight: 600; color: var(--text-bright); margin-right: auto; overflow-wrap: anywhere; }
 .x-trash-meta { color: var(--text-dim); font-size: 0.85em; white-space: nowrap; }
 .x-trash-actions { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 0.7rem; }
+
+/* Compression speed card (Metrics tab) */
+.x-speed { width: 100%; border-collapse: collapse; font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.x-speed th, .x-speed td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.x-speed th { color: var(--text-dim); font-weight: 500; }
+.x-speed td.sp-label { white-space: normal; word-break: break-word; min-width: 8rem; }
+.x-speed .sp-ok { color: var(--green); }
+.x-speed .sp-slow { color: var(--amber, #d9a400); }

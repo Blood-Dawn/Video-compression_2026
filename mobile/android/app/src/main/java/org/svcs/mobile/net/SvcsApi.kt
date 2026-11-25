@@ -616,7 +616,27 @@ private class AuthInterceptor(private val token: String) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): okhttp3.Response {
         val req = chain.request().newBuilder()
             .header("Authorization", "Bearer $token")
+            .header("X-SVCS-Device-Name", phoneDisplayName())
             .build()
         return chain.proceed(req)
     }
+}
+
+/**
+ * The name the desktop shows for this phone in Paired devices, for example
+ * "Samsung SM-S918U". The desktop uses it until the owner renames the device.
+ * OkHttp only accepts printable ASCII in header values, so anything else is
+ * dropped rather than letting the request fail.
+ */
+internal fun phoneDisplayName(): String {
+    // Build fields are stubs in JVM unit tests; never let that break a request.
+    val maker = runCatching { android.os.Build.MANUFACTURER.orEmpty().trim() }.getOrDefault("")
+    val model = runCatching { android.os.Build.MODEL.orEmpty().trim() }.getOrDefault("")
+    val raw = when {
+        model.isEmpty() -> maker
+        maker.isEmpty() || model.startsWith(maker, ignoreCase = true) -> model
+        else -> maker.replaceFirstChar { it.uppercase() } + " " + model
+    }
+    val clean = raw.filter { it in ' '..'~' }.trim().take(64)
+    return clean.ifEmpty { "Android phone" }
 }

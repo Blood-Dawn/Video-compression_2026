@@ -548,30 +548,12 @@ def api_browse():
     Only useful when the browser is on the same machine as the server.
     Remote users should use /api/upload instead.
     """
-    script = (
-        "import tkinter as tk; from tkinter import filedialog; "
-        "root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True); "
-        "path = filedialog.askopenfilename("
-        "    title='Select video file',"
-        # R4 Phase 6: offer the common containers plus vendor/DVR exports; the
-        # 'All files' entry still lets the user pick anything FFmpeg can decode.
-        "    filetypes=[('Video files', '*.mp4 *.avi *.mov *.mkv *.ts *.m4v *.wmv "
-        "*.flv *.mpg *.mpeg *.dav *.264 *.h264 *.265 *.hevc *.g64 *.sdv *.mxf'), "
-        "('All files', '*.*')]"
-        "); root.destroy(); print(path or '', end='')"
-    )
     try:
-        result = subprocess.run(
-            [sys.executable, "-c", script],
-            capture_output=True,
-            text=True,
-            timeout=120,
-        )
-        path = (result.stdout or "").strip()
-    except (OSError, subprocess.SubprocessError) as exc:
-        log.warning("File picker failed: %s", exc)
-        path = ""
-    return jsonify({"path": path})
+        from gui.native_dialog import pick_file
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.gui.native_dialog import pick_file
+    kind = request.args.get("kind", "video")
+    return jsonify({"path": pick_file(kind)})
 
 
 _UPLOAD_DIR_LOCAL = _ROOT / "data" / "uploads"

@@ -335,6 +335,57 @@ async function maybeShowLatestJobSummary(kind) {
   } catch (e) { /* history unavailable - skip the summary quietly */ }
 }
 
+// ── Compression speed (video length against compression time) ─────────────
+// Under a minute, keep one decimal so a 0.4 s run does not read as "0s".
+function _fmtSecs(s) {
+  return s < 60 ? (Math.round(s * 10) / 10).toFixed(1) + 's' : fmtDuration(s);
+}
+
+function _speedText(c) {
+  if (!c || !c.realtime_x || !c.video_seconds || !c.wall_seconds) return '';
+  return ', ' + _fmtSecs(c.video_seconds) + ' of video in ' + _fmtSecs(c.wall_seconds) +
+    ' (' + c.realtime_x.toFixed(1) + 'x playback)';
+}
+
+async function loadSpeedPanel() {
+  const body = document.getElementById('mspeed-rows');
+  if (!body) return;
+  const summary = document.getElementById('mspeed-summary');
+  const wrap = document.getElementById('mspeed-wrap');
+  const note = document.getElementById('mspeed-note');
+  try {
+    const data = await (await fetch('/api/jobs/recent?limit=30')).json();
+    const runs = (data.jobs || []).filter(j => j.kind === 'pipeline' && j.counts && j.counts.realtime_x > 0);
+    if (!runs.length) {
+      if (wrap) wrap.hidden = true;
+      if (note) note.hidden = true;
+      return;
+    }
+    body.innerHTML = runs.map(j => {
+      const c = j.counts;
+      const fast = c.realtime_x >= 1;
+      const smaller = (j.bytes_in > 0 && j.bytes_out > 0) ? (j.bytes_in / j.bytes_out).toFixed(1) + 'x' : ' - ';
+      const ratio = c.time_ratio != null ? c.time_ratio.toFixed(2) : (c.wall_seconds / c.video_seconds).toFixed(2);
+      return '<tr><td class="sp-label" title="' + escHtml(j.label || '') + '">' + escHtml(j.label || ' - ') + '</td>' +
+        '<td>' + escHtml(String(c.mode || '').replace('mode', 'Mode ')) + '</td>' +
+        '<td>' + escHtml(_fmtSecs(c.video_seconds)) + '</td>' +
+        '<td>' + escHtml(_fmtSecs(c.wall_seconds)) + '</td>' +
+        '<td>' + escHtml(ratio) + '</td>' +
+        '<td class="' + (fast ? 'sp-ok' : 'sp-slow') + '">' + c.realtime_x.toFixed(1) + 'x ' +
+          (fast ? 'faster than playback' : 'slower than playback') + '</td>' +
+        '<td>' + escHtml(smaller) + '</td></tr>';
+    }).join('');
+    const slow = runs.filter(j => j.counts.realtime_x < 1).length;
+    if (summary) {
+      summary.textContent = slow === 0
+        ? 'Every recorded run finished faster than the video plays (' + runs.length + ' run' + (runs.length === 1 ? '' : 's') + ').'
+        : slow + ' of ' + runs.length + ' recorded runs were slower than the video plays.';
+    }
+    if (wrap) wrap.hidden = false;
+    if (note) note.hidden = false;
+  } catch (e) { /* panel keeps its previous contents */ }
+}
+
 // ── Recent jobs panel (HOME) ─────────────────────────────────────────────────
 // One merged list: every finished job, with the video files it produced.
 // Each file has Play (or Unlock when encrypted) and Encrypt, like Metrics.
@@ -403,7 +454,7 @@ async function loadRecentJobs() {
         '<span class="job-status ' + escHtml(status) + '">' + escHtml(status.toUpperCase()) + '</span>' +
         '<span class="job-label" title="' + escHtml(j.label || '') + '">' + escHtml(j.label || ' - ') + '</span>' +
         '<span class="job-meta">' + escHtml(what + saved +
-          (j.elapsed_s != null ? ', ' + fmtDuration(j.elapsed_s) : '')) + '</span></div>' +
+          (j.kind === 'pipeline' && _speedText(c) ? _speedText(c) : (j.elapsed_s != null ? ', ' + fmtDuration(j.elapsed_s) : ''))) + '</span></div>' +
         (files.length ? '<div class="job-files" id="job-files-' + ji + '">' + fileRows + more + '</div>' : '') +
         '</div>';
     }).join('');

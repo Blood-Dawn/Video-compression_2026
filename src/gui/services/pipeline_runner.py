@@ -435,6 +435,41 @@ def _run_outputs(config, started) -> list:
         return []
 
 
+def _speed_numbers(src, frames, started, ended):
+    """Video length, wall time and realtime factor for one run. Never raises.
+
+    video_seconds is frames processed divided by the source frame rate, so a
+    run stopped half way reports the half it actually did. realtime_x above
+    1.0 means the run finished faster than the video plays.
+    """
+    out = {}
+    try:
+        wall = float(ended) - float(started)
+        fps = 0.0
+        try:
+            import cv2
+            if os.path.isfile(src):
+                cap = cv2.VideoCapture(src)
+                try:
+                    fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+                finally:
+                    cap.release()
+        except Exception:  # noqa: BLE001
+            fps = 0.0
+        n = int(frames or 0)
+        if fps > 0 and n > 0 and wall > 0:
+            vs = n / fps
+            out = {"video_seconds": round(vs, 2),
+                   "wall_seconds": round(wall, 2),
+                   "realtime_x": round(vs / wall, 2),
+                   # compression time divided by video time: 0.5 means the
+                   # run took half as long as the video plays.
+                   "time_ratio": round(wall / vs, 3)}
+    except Exception:  # noqa: BLE001
+        out = {}
+    return out
+
+
 def _record_job_history(config, stop_event, started, error, frames, segments,
                         output_note=None):
     """Persist this run to the job history (R4 Phase 1). Never raises."""
@@ -466,16 +501,19 @@ def _record_job_history(config, stop_event, started, error, frames, segments,
             bytes_in = os.path.getsize(src) if os.path.isfile(src) else 0
         except OSError:
             bytes_in = 0
+        ended = time.time()
+        speed = _speed_numbers(src, frames, started, ended)
         job_history.record_job(
             "pipeline",
             label=label,
             bytes_in=bytes_in,
             bytes_out=bytes_out,
             started_at=started,
-            ended_at=time.time(),
+            ended_at=ended,
             status=status,
             counts={"frames": int(frames or 0), "segments": int(segments or 0),
                     "mode": config.get("mode", "mode0"),
+                    **speed,
                     # M4 job registry: lets a client correlate this history
                     # entry with the job_id it got back from /api/start.
                     "job_id": config.get("job_id"),

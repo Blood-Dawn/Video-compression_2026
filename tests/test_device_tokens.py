@@ -74,7 +74,8 @@ def test_public_view_withholds_the_hash(isolated_store):
     assert "sha256" not in pub
     assert set(pub) == {"id", "label", "created_at", "last_used_at",
                         "expires_at", "revoked", "expired",
-                        "has_push_endpoint"}   # a boolean, never the URL
+                        "has_push_endpoint",   # a boolean, never the URL
+                        "device_name", "mac", "custom_label"}
     assert "push_endpoint" not in pub
 
 

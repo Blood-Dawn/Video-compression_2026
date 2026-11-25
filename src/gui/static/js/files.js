@@ -184,6 +184,7 @@ function _updateLibrarySummary(segments) {
   _applyMeasuredToLibrary();
   set('mlib-avg-dur', n > 0 ? (totalDur / n).toFixed(1) + 's avg' : ' - ');
   set('mlib-enc', encCount > 0 ? encCount + ' / ' + n : (n > 0 ? 'None' : ' - '));
+  if (typeof loadSpeedPanel === 'function') loadSpeedPanel();
 }
 
 // ── Metrics row click ──────────────────────────────────────────

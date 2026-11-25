@@ -107,6 +107,7 @@ SAMPLES = [
     ("GET", "/api/auth/tokens"),
     ("POST", "/api/auth/tokens"),
     ("DELETE", "/api/auth/tokens/abc123"),
+    ("PATCH", "/api/auth/tokens/abc123"),
     ("POST", "/api/auth/tokens/revoke_all"),
     # M0.6: capabilities probe.
     ("GET", "/api/capabilities"),
@@ -178,4 +179,4 @@ def test_sample_count_matches_route_count():
     # /api/timelapse route (quiet-period summary generation), +1 for
     # /api/upload/limit (upload size cap, GET+POST on one rule), +1 for
     # /api/library/delete (move videos to the trash folder).
-    assert len(SAMPLES) == len(rules) == 107
+    assert len(SAMPLES) == len(rules) == 108

@@ -322,7 +322,7 @@ function _uploadVideoFile(file) {
       document.getElementById('input-source').value = data.path;
       _onInputSourceChange(data.path);
       _upCard('is-done', data.filename || file.name, 'Uploaded and ready (' + _fmtUpBytes(total) + ').',
-        '<div class="x-row"><button class="btn btn-primary" onclick="switchTab(\'home\')">Compress this video</button>' +
+        '<div class="x-row"><button class="btn btn-primary" onclick="startPipeline()">Compress this video</button>' +
         '<button class="btn btn-ghost" onclick="switchTab(\'library\')">Open in Library</button></div>');
       resolve();
     };

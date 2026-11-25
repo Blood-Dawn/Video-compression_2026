@@ -28,7 +28,6 @@ import hashlib
 import os
 import re
 import subprocess
-import sys
 import threading
 import time
 from pathlib import Path
@@ -502,35 +501,11 @@ def api_library_browse_folder():
     The dialog runs in a separate process so it never blocks the Flask worker.
     Returns {"path": "..."} (empty if cancelled).
     """
-    path = ""
     try:
-        if sys.platform == "win32":
-            ps = (
-                "Add-Type -AssemblyName System.Windows.Forms | Out-Null; "
-                "$d = New-Object System.Windows.Forms.FolderBrowserDialog; "
-                "$d.Description = 'Select a folder of videos'; "
-                "$d.ShowNewFolderButton = $true; "
-                "if ($d.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) "
-                "{ [Console]::Out.Write($d.SelectedPath) }"
-            )
-            result = subprocess.run(
-                ["powershell", "-NoProfile", "-NonInteractive", "-STA", "-Command", ps],
-                capture_output=True, text=True, timeout=300)
-        else:
-            script = (
-                "import tkinter as tk; from tkinter import filedialog; "
-                "root = tk.Tk(); root.withdraw(); root.attributes('-topmost', True); "
-                "path = filedialog.askdirectory(title='Select a folder of videos'); "
-                "root.destroy(); print(path or '', end='')"
-            )
-            result = subprocess.run([sys.executable, "-c", script],
-                                    capture_output=True, text=True, timeout=300)
-        path = (result.stdout or "").strip()
-    except (OSError, ValueError, subprocess.SubprocessError) as exc:
-        # ValueError covers a stdout that does not decode in the locale.
-        log.warning("Library folder picker failed: %s", exc)
-        path = ""
-    return jsonify({"path": path})
+        from gui.native_dialog import pick_folder
+    except ModuleNotFoundError:  # pragma: no cover - import path shim
+        from src.gui.native_dialog import pick_folder
+    return jsonify({"path": pick_folder("Select a folder of videos")})
 
 
 @library_bp.route("/api/library/meta", methods=["GET"])

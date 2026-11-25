@@ -95,6 +95,12 @@ class DeviceToken:
     # only by the device through its own token. Anyone holding it can push to
     # the phone, so it is stored here but never returned by to_public().
     push_endpoint: str | None = field(default=None, repr=False)
+    # Identity the PHONE reports (X-SVCS-Device-Name) and the MAC address the
+    # server saw for it on the LAN. The shown label follows them until the
+    # operator renames the device, which sets custom_label.
+    device_name: str | None = None
+    mac: str | None = None
+    custom_label: bool = False
 
     def is_expired(self, now: str | None = None) -> bool:
         """True if an expiry was set and it has passed."""
@@ -116,6 +122,9 @@ class DeviceToken:
             "revoked": self.revoked,
             "expired": self.is_expired(),
             "has_push_endpoint": bool(self.push_endpoint),
+            "device_name": self.device_name,
+            "mac": self.mac,
+            "custom_label": self.custom_label,
         }
 
     def to_record(self) -> dict[str, Any]:
@@ -128,6 +137,9 @@ class DeviceToken:
             "expires_at": self.expires_at,
             "revoked": self.revoked,
             "push_endpoint": self.push_endpoint,
+            "device_name": self.device_name,
+            "mac": self.mac,
+            "custom_label": self.custom_label,
         }
 
     @staticmethod
@@ -153,6 +165,12 @@ class DeviceToken:
                 push_endpoint=(str(rec["push_endpoint"])
                                if isinstance(rec.get("push_endpoint"), str)
                                and rec.get("push_endpoint") else None),
+                device_name=(str(rec["device_name"])[:64]
+                             if rec.get("device_name") else None),
+                mac=str(rec["mac"])[:17] if rec.get("mac") else None,
+                # Records written before this field existed had a typed label.
+                custom_label=bool(rec.get("custom_label",
+                                          rec.get("label") not in (None, "", "device"))),
             )
         except (KeyError, TypeError, ValueError):
             return None
@@ -309,7 +327,9 @@ def mint_token(label: str, ttl_days: int | None = None) -> tuple[str, DeviceToke
     The secret is returned exactly once and never stored. Callers must show it
     to the operator immediately and must not log it.
     """
-    clean = (label or "").strip()[:64] or "device"
+    clean = (label or "").strip()[:64]
+    custom = bool(clean)
+    clean = clean or WAITING_LABEL
     secret = TOKEN_PREFIX + secrets.token_urlsafe(_TOKEN_ENTROPY_BYTES)
     expires = None
     if ttl_days is not None and int(ttl_days) > 0:
@@ -322,6 +342,7 @@ def mint_token(label: str, ttl_days: int | None = None) -> tuple[str, DeviceToke
         sha256=token_hash(secret),
         created_at=_utc_now_iso(),
         expires_at=expires,
+        custom_label=custom,
     )
     with _LOCK:
         # Strict: appending to a partial read would delete the other devices.
@@ -397,6 +418,60 @@ def verify_token(presented: str, touch: bool = True) -> DeviceToken | None:
                 found.last_used_at = now
                 _write_all(tokens)
         return found
+
+
+WAITING_LABEL = "New device (waiting for the phone)"
+
+
+def _auto_label(t: DeviceToken) -> str:
+    return t.device_name or t.mac or WAITING_LABEL
+
+
+def note_device(token_id: str, device_name: str | None = None,
+                mac: str | None = None) -> bool:
+    """Record what a paired phone reported about itself. True if anything changed.
+
+    The label follows the reported name (or the MAC when no name came yet)
+    until the operator renames the device. Only writes when a value moves, so
+    the per-segment HLS requests do not rewrite the store.
+    """
+    name = (device_name or "").strip()[:64] or None
+    mac = (mac or "").strip().lower()[:17] or None
+    with _LOCK:
+        try:
+            tokens, dropped = _load_store()
+        except StoreUnreadable:
+            return False
+        if dropped:
+            return False      # rewriting would delete the corrupt records
+        for t in tokens:
+            if t.id != token_id or not t.is_usable():
+                continue
+            changed = False
+            if name and t.device_name != name:
+                t.device_name, changed = name, True
+            if mac and t.mac != mac:
+                t.mac, changed = mac, True
+            if not t.custom_label and t.label != _auto_label(t):
+                t.label, changed = _auto_label(t), True
+            if changed:
+                _write_all(tokens)
+            return changed
+        return False
+
+
+def rename_token(token_id: str, label: str) -> DeviceToken | None:
+    """Give a device the operator's own name. Blank goes back to the automatic one."""
+    clean = (label or "").strip()[:64]
+    with _LOCK:
+        tokens = _read_all_strict()   # read-modify-write; see mint_token
+        for t in tokens:
+            if t.id == token_id and not t.revoked:
+                t.custom_label = bool(clean)
+                t.label = clean or _auto_label(t)
+                _write_all(tokens)
+                return t
+        return None
 
 
 def set_push_endpoint(token_id: str, endpoint: str | None) -> bool:

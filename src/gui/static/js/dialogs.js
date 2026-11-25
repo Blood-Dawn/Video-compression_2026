@@ -46,7 +46,8 @@
       if (ev.key !== "Escape") return;
       for (var i = 0; i < IDS.length; i++) {
         var el = document.getElementById(IDS[i]);
-        if (!el || !isOpen(el) || NO_ESCAPE[IDS[i]]) continue;
+        if (!el || !isOpen(el)) continue;
+        if (NO_ESCAPE[IDS[i]] && el.dataset.reopened !== "1") continue;
         var btns = el.querySelectorAll("button");
         for (var j = 0; j < btns.length; j++) {
           if (/^(close|cancel|done|ok|\u00d7|x)$/i.test((btns[j].textContent || "").trim()) || /^close/i.test(btns[j].getAttribute("aria-label") || "")) {

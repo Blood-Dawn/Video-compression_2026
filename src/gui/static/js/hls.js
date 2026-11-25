@@ -55,7 +55,8 @@ async function hlsStart() {
     document.getElementById('btn-hls-stop').style.opacity = '1';
 
     // Retry attaching the player until the playlist is ready (max 10 retries, 2s each)
-    _attachHlsPlayer(data.playlist_url, camId, 0);
+    window._hlsAttachGen = (window._hlsAttachGen || 0) + 1;
+    _attachHlsPlayer(data.playlist_url, camId, 0, window._hlsAttachGen);
 
     // Poll HLS status every 1s for the first 15s (catches fast connection failures),
     // then drop to 3s once the stream is established.
@@ -74,7 +75,9 @@ async function hlsStart() {
   }
 }
 
-async function _attachHlsPlayer(playlistUrl, camId, attempt) {
+async function _attachHlsPlayer(playlistUrl, camId, attempt, gen) {
+  // Stop (or a newer Start) bumps the generation; drop stale retries.
+  if (gen !== undefined && gen !== window._hlsAttachGen) return;
   const MAX_RETRIES = 10;   // 10 × 2s = 20s total wait budget
   const RETRY_MS   = 2000;
   const video  = document.getElementById('hls-video');
@@ -86,7 +89,7 @@ async function _attachHlsPlayer(playlistUrl, camId, attempt) {
     if (!probe.ok) {
       if (attempt < MAX_RETRIES) {
         msgEl.textContent = `Waiting for FFmpeg… (attempt ${attempt + 1}/${MAX_RETRIES})`;
-        setTimeout(() => _attachHlsPlayer(playlistUrl, camId, attempt + 1), RETRY_MS);
+        setTimeout(() => _attachHlsPlayer(playlistUrl, camId, attempt + 1, gen), RETRY_MS);
         return;
       }
       msgEl.textContent = '[!] Playlist not ready after ' + MAX_RETRIES + ' retries. Check FFmpeg logs.';
@@ -95,7 +98,7 @@ async function _attachHlsPlayer(playlistUrl, camId, attempt) {
     }
   } catch (e) {
     if (attempt < MAX_RETRIES) {
-      setTimeout(() => _attachHlsPlayer(playlistUrl, camId, attempt + 1), RETRY_MS);
+      setTimeout(() => _attachHlsPlayer(playlistUrl, camId, attempt + 1, gen), RETRY_MS);
       return;
     }
     msgEl.textContent = '[!] Could not reach stream: ' + e.message;
@@ -133,6 +136,7 @@ async function _attachHlsPlayer(playlistUrl, camId, attempt) {
 }
 
 async function hlsStop() {
+  window._hlsAttachGen = (window._hlsAttachGen || 0) + 1;
   clearInterval(_hlsStatusTimer);
   // Cut the latency poller so it doesn't keep updating the banner after the
   // stream is gone (ROADMAP 5.1). Author: Bloodawn (KheivenD)
@@ -169,6 +173,9 @@ async function _hlsPollStatus() {
 
     if (!data.running) {
       clearInterval(_hlsStatusTimer);
+      // The stream is gone: stop waiting for its playlist, or the player keeps
+      // probing a playlist that will never appear (404 noise for 20 s).
+      window._hlsAttachGen = (window._hlsAttachGen || 0) + 1;
       const msgEl   = document.getElementById('hls-status-msg');
       const sideMsg = document.getElementById('hls-sidebar-msg');
       const btnStart = document.getElementById('btn-hls-start');

@@ -2750,7 +2750,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
                 <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size: 0.75rem;">
                   <thead>
                     <tr style="text-align:left;color:var(--text-dim);border-bottom:1px solid var(--border);">
-                      <th style="padding:0.25rem 0.4rem;">Label</th>
+                      <th style="padding:0.25rem 0.4rem;">Device</th>
                       <th style="padding:0.25rem 0.4rem;">Paired</th>
                       <th style="padding:0.25rem 0.4rem;">Last used</th>
                       <th style="padding:0.25rem 0.4rem;">Status</th>
@@ -3916,6 +3916,18 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
           </div>
         </div>
 
+        <div class="x-card" id="mspeed-card">
+          <div class="x-row x-between"><h3 class="x-h3">Compression speed <span class="x-n">video length against compression time</span></h3></div>
+          <p class="x-d" id="mspeed-summary">Run a compression to see how long it took against how long the video plays.</p>
+          <div class="x-tablewrap" id="mspeed-wrap" hidden>
+            <table class="x-speed" aria-label="Compression time against video length">
+              <thead><tr><th>Video</th><th>Mode</th><th>Video length</th><th>Compression time</th><th title="Compression time divided by video time">Time ratio</th><th>Speed</th><th>Smaller by</th></tr></thead>
+              <tbody id="mspeed-rows"></tbody>
+            </table>
+          </div>
+          <p class="x-d" id="mspeed-note" hidden>Time ratio is compression time divided by video time. Below 1.0 the run finished before the video would have finished playing.</p>
+        </div>
+
         <div class="x-two">
           <div class="x-card metrics-library-card">
             <h3 class="x-h3">System load <span class="x-n">last 10 minutes, CPU and RAM</span></h3>
@@ -4208,7 +4220,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
             </div>
             <div id="enc-keyfile-group" style="display:none;">
               <label class="x-lbl" for="enc-keyfile-path">Key file path</label>
-              <input type="text" id="enc-keyfile-path" placeholder="…/camera.key"/>
+              <div class="x-row"><input type="text" id="enc-keyfile-path" class="x-grow" placeholder="…/camera.key"/><button type="button" class="btn btn-ghost" onclick="browseEncKey()">Browse...</button></div>
             </div>
             <div class="x-row">
               <button type="button" class="btn btn-primary" onclick="doEncryptFile()">Encrypt file</button>
@@ -4242,7 +4254,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
             </div>
             <div id="dec-keyfile-group" style="display:none;">
               <label class="x-lbl" for="dec-keyfile-path">Key file path</label>
-              <input type="text" id="dec-keyfile-path" placeholder="…/camera.key"/>
+              <div class="x-row"><input type="text" id="dec-keyfile-path" class="x-grow" placeholder="…/camera.key"/><button type="button" class="btn btn-ghost" onclick="browseDecKey()">Browse...</button></div>
             </div>
             <div class="x-row">
               <button type="button" class="btn btn-primary" onclick="doDecryptPanel()">Unlock and play</button>
@@ -4691,6 +4703,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
       </div>
       <div id="setup-error" style="color:var(--red,#ff5555);font-size: 0.75rem;min-height:1em;margin-bottom:8px;"></div>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button class="btn btn-ghost" id="setup-cancel-btn" onclick="closeSetup()" hidden>Cancel</button>
         <button class="btn btn-ghost" onclick="saveSetup(true)">Skip (use local folder)</button>
         <button class="btn btn-primary" onclick="saveSetup(false)">Save and continue</button>
       </div>

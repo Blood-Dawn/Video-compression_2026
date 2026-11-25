@@ -38,10 +38,23 @@ function _setOutputFields(path) {
   if (demo && !demo.value) demo.value = path;
 }
 
-function _showSetupOverlay(show) {
+function _showSetupOverlay(show, reopened) {
   const ov = document.getElementById("setup-overlay");
-  if (ov) ov.style.display = show ? "flex" : "none";
+  if (!ov) return;
+  // Reopened from "Change...": the user already has a destination, so they
+  // can back out with Cancel or Escape instead of being forced to Skip (which
+  // would switch them to the local folder).
+  if (show) ov.dataset.reopened = reopened ? "1" : "";
+  const cancel = document.getElementById("setup-cancel-btn");
+  if (cancel) cancel.hidden = !(show && reopened);
+  ov.style.display = show ? "flex" : "none";
 }
+
+function closeSetup() {
+  _setupError("");
+  _showSetupOverlay(false);
+}
+window.closeSetup = closeSetup;
 
 function _setupError(msg) {
   const el = document.getElementById("setup-error");
@@ -158,7 +171,7 @@ window.setupBrowseEncryptedDir = setupBrowseEncryptedDir;
 
 async function openSetup() {
   await _populateDestinations();
-  _showSetupOverlay(true);
+  _showSetupOverlay(true, true);
 }
 window.openSetup = openSetup;
 

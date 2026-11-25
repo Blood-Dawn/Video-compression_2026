@@ -247,11 +247,31 @@ Write-Host "      Build OK in $([math]::Round($buildElapsed.TotalSeconds,1)) sec
 Write-Host "      Exe:  $BundleExe"
 Write-Host "      Size: $bundleSizeMB MB (dist\SVCS\ total)"
 
+# ── Step 3.2: SVCS-Unlock.exe (opens a .enc file on double-click) ─────
+# svcs.iss registers .enc -> {app}\SVCS-Unlock.exe. Before 3.1.0.dev1 this exe
+# was never built, so double-clicking an encrypted video did nothing at all.
+Write-Host "[3.2] Building SVCS-Unlock.exe..." -ForegroundColor Cyan
+$UnlockSpec = Join-Path $RepoRoot "installer\svcs_unlock.spec"
+Push-Location $RepoRoot
+try {
+    $unlockArgs = @("--noconfirm", $UnlockSpec)
+    if (-not $Quick) { $unlockArgs = @("--clean") + $unlockArgs }
+    & python -m PyInstaller @unlockArgs
+    if ($LASTEXITCODE -ne 0) { throw "PyInstaller (SVCS-Unlock) exited with code $LASTEXITCODE" }
+} finally {
+    Pop-Location
+}
+$UnlockBuilt = Join-Path $RepoRoot "dist\SVCS-Unlock.exe"
+if (-not (Test-Path $UnlockBuilt)) { throw "SVCS-Unlock build finished but $UnlockBuilt is missing" }
+Copy-Item $UnlockBuilt (Join-Path (Split-Path $BundleExe) "SVCS-Unlock.exe") -Force
+Write-Host "      SVCS-Unlock.exe copied into the bundle" -ForegroundColor Green
+
 # ── Step 3.5: package the Inno Setup installer (M2 TASK 2.4, opt-in) ───
 # Sign the bundle exe BEFORE Inno packages it, so the installed app is signed too.
 if ($Sign) {
     Write-Host "[3b/4] Signing bundle exe..." -ForegroundColor Cyan
     [void](Invoke-CodeSign -FilePath $BundleExe)
+    [void](Invoke-CodeSign -FilePath (Join-Path (Split-Path $BundleExe) "SVCS-Unlock.exe"))
 }
 
 if ($Installer) {

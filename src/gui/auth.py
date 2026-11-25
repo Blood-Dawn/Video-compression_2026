@@ -175,6 +175,64 @@ _fail_times: dict[str, list] = {}
 _locked_until: dict[str, float] = {}
 
 
+_MAC_CACHE: dict = {}
+_MAC_RE = None
+
+
+def _mac_for_ip(ip: str) -> str | None:
+    """MAC address of a LAN client from the OS ARP table, or None.
+
+    Cached per IP (also the misses) so a phone streaming HLS does not run
+    arp once per segment. Loopback (the emulator) has no MAC.
+    """
+    global _MAC_RE
+    import time as _t
+    if not ip or ip.startswith("127.") or ip == "::1":
+        return None
+    hit = _MAC_CACHE.get(ip)
+    if hit is not None and _t.time() - hit[1] < 600:
+        return hit[0] or None
+    mac = None
+    try:
+        import re as _re
+        import subprocess as _sp
+        import sys as _sys
+        _MAC_RE = _MAC_RE or _re.compile(r"(?i)\b([0-9a-f]{2}(?:[-:][0-9a-f]{2}){5})\b")
+        kw = {"capture_output": True, "text": True, "timeout": 3}
+        if _sys.platform == "win32":
+            kw["creationflags"] = 0x08000000
+            cmd = ["arp", "-a", ip]
+        else:
+            cmd = ["arp", "-n", ip]
+        out = _sp.run(cmd, **kw).stdout or ""
+        for line in out.splitlines():
+            if ip in line:
+                m = _MAC_RE.search(line)
+                if m:
+                    mac = m.group(1).replace("-", ":").lower()
+                    break
+    except Exception:  # noqa: BLE001 - best effort, never blocks auth
+        mac = None
+    _MAC_CACHE[ip] = (mac or "", _t.time())
+    return mac
+
+
+def _note_paired_device(rec, ip: str) -> None:
+    """Store the phone's reported name and its MAC on its token (best effort)."""
+    try:
+        name = request.headers.get("X-SVCS-Device-Name", "")
+        name = "".join(ch for ch in name if ch.isprintable())[:64].strip()
+        mac = None if rec.mac else _mac_for_ip(ip)
+        if (name and name != rec.device_name) or mac:
+            try:
+                from gui.device_tokens import note_device
+            except ModuleNotFoundError:  # pragma: no cover - import path shim
+                from src.gui.device_tokens import note_device
+            note_device(rec.id, name or None, mac)
+    except Exception:  # noqa: BLE001 - labels must never break a request
+        pass
+
+
 def _client_ip() -> str:
     """Client identity for throttling: the socket peer only.
 
@@ -354,6 +412,7 @@ def install_basic_auth(app: Flask, username: str, password: str) -> None:
                 g.svcs_auth_scheme = SCHEME_BEARER
                 g.svcs_device_id = rec.id
                 _record_success(ip)
+                _note_paired_device(rec, ip)
                 return None
             return _fail(ip)
 

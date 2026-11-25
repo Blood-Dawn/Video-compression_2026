@@ -7,7 +7,7 @@ Author: Bloodawn (KheivenD), 2026-06-02 (gui refactor - blueprints).
 
 import socket
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, jsonify, request
 
 try:
     from gui.state import _power_lock, _power_state
@@ -82,7 +82,10 @@ def api_network_info():
             lan_ip = s.getsockname()[0]
     except OSError:
         pass
-    port = 5000
+    try:
+        port = int(request.environ.get("SERVER_PORT") or 5000)
+    except (TypeError, ValueError):
+        port = 5000
     return jsonify({
         "lan_ip": lan_ip,
         "port": port,

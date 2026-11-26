@@ -514,6 +514,9 @@ def _record_job_history(config, stop_event, started, error, frames, segments,
             status=status,
             counts={"frames": int(frames or 0), "segments": int(segments or 0),
                     "mode": config.get("mode", "mode0"),
+                    # Whether the YOLO class gate was asked for, so the Metrics
+                    # speed table can show speed with YOLO on, per mode.
+                    "yolo": bool(config.get("object_filter", True)),
                     **speed,
                     # M4 job registry: lets a client correlate this history
                     # entry with the job_id it got back from /api/start.

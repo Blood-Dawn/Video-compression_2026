@@ -45,6 +45,7 @@ SAMPLES = [
     ("GET", "/api/query_segments"),
     ("GET", "/api/daily_summary"),
     ("GET", "/api/busiest"),
+    ("GET", "/api/detections_by_hour"),
     ("POST", "/api/demo"),
     ("GET", "/api/demo/status"),
     ("GET", "/api/demo/search_debug"),
@@ -179,4 +180,4 @@ def test_sample_count_matches_route_count():
     # /api/timelapse route (quiet-period summary generation), +1 for
     # /api/upload/limit (upload size cap, GET+POST on one rule), +1 for
     # /api/library/delete (move videos to the trash folder).
-    assert len(SAMPLES) == len(rules) == 108
+    assert len(SAMPLES) == len(rules) == 109

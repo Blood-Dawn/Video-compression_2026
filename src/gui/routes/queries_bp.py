@@ -10,11 +10,13 @@ from flask import Blueprint, jsonify, request
 
 try:
     from gui.services.gui_state_persist import _load_gui_state
-    from gui.services.db_helpers import _get_archive_db_path, _is_empty_db_error, _rows_to_segment_list
+    from gui.services.db_helpers import (_get_archive_db_path, _is_empty_db_error, _rows_to_segment_list,
+                                         hourly_detection_counts)
     from utils.db import (query_by_type, query_daily_storage_summary, query_segments_by_target_count)
 except ModuleNotFoundError:  # pragma: no cover - import path shim
     from src.gui.services.gui_state_persist import _load_gui_state
-    from src.gui.services.db_helpers import _get_archive_db_path, _is_empty_db_error, _rows_to_segment_list
+    from src.gui.services.db_helpers import (_get_archive_db_path, _is_empty_db_error, _rows_to_segment_list,
+                                             hourly_detection_counts)
     from src.utils.db import (query_by_type, query_daily_storage_summary, query_segments_by_target_count)
 
 queries_bp = Blueprint("queries", __name__)
@@ -135,3 +137,15 @@ def api_busiest():
 # pipeline and demo segments after a restart.
 # Author: Bloodawn (KheivenD), 2026-05-04 (output-dir persistence).
 _load_gui_state()
+
+
+@queries_bp.route("/api/detections_by_hour")
+def api_detections_by_hour():
+    """Clips with a person and clips with a vehicle, for each hour of the day."""
+    db_path = _get_archive_db_path()
+    if not db_path.exists():
+        return jsonify({"clips": 0, "hours": hourly_detection_counts(db_path)["hours"],
+                        "db_path": str(db_path)})
+    out = hourly_detection_counts(db_path)
+    out["db_path"] = str(db_path)
+    return jsonify(out)

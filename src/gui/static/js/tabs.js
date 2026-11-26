@@ -227,8 +227,55 @@ function xMetricsCharts(segments) {
   _xBars(document.getElementById("mchart-mode"), modeItems, "var(--teal)",
     modeItems.length ? "Average clip size by mode. " + modeItems.map((i) => i.label + ": " + i.text).join(", ") + "." : "No clips yet.");
   _xTable(document.getElementById("mchart-mode-table"), ["Mode", "Average clip size"], modeItems.map((i) => [i.label, i.text]));
+  xHourlyChart();
 }
 window.xMetricsCharts = xMetricsCharts;
+
+// People and vehicles by hour of the day: two bars per hour, direct labels on
+// non-zero bars, a text summary for screen readers, a table behind the link.
+async function xHourlyChart() {
+  const el = document.getElementById("mchart-hour");
+  if (!el) return;
+  let data;
+  try { data = await (await fetch("/api/detections_by_hour")).json(); } catch (e) { return; }
+  const hours = (data && data.hours) || [];
+  const total = hours.reduce((a, h) => a + h.people + h.vehicles, 0);
+  const sum = document.getElementById("mhour-summary");
+  if (!total) {
+    el.innerHTML = '<p class="x-hint">Nothing to chart yet. Clips that SVCS compresses with object detection on are counted here.</p>';
+    if (sum) sum.textContent = "Counts clips that had a person or a vehicle in them, across everything in the library.";
+    _xHourTable(hours);
+    return;
+  }
+  const W = 640, H = 200, padT = 20, padB = 26, padX = 8;
+  const max = Math.max.apply(null, hours.map((h) => Math.max(h.people, h.vehicles))) || 1;
+  const slot = (W - padX * 2) / 24, bw = Math.max(3, slot * 0.36);
+  let g = "";
+  hours.forEach((h, i) => {
+    const x0 = padX + slot * i + (slot - bw * 2 - 2) / 2;
+    [["people", "var(--amber)", h.people], ["vehicles", "var(--teal)", h.vehicles]].forEach((s, k) => {
+      const bh = s[2] ? Math.max(2, (s[2] / max) * (H - padT - padB)) : 0;
+      const x = x0 + k * (bw + 2), y = H - padB - bh;
+      if (bh) g += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + bh.toFixed(1) + '" rx="2" fill="' + s[1] + '"/>';
+      if (s[2]) g += '<text x="' + (x + bw / 2).toFixed(1) + '" y="' + (y - 3).toFixed(1) + '" text-anchor="middle" class="x-ct">' + s[2] + '</text>';
+    });
+    if (i % 3 === 0) g += '<text x="' + (padX + slot * i + slot / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle" class="x-ct x-ct-dim">' + String(i).padStart(2, "0") + '</text>';
+  });
+  const legend = '<div class="x-legend" style="font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;"><span style="color:var(--amber)">&#9632;</span> People &nbsp; <span style="color:var(--teal)">&#9632;</span> Vehicles</div>';
+  const peak = hours.slice().sort((a, b) => (b.people + b.vehicles) - (a.people + a.vehicles))[0];
+  const summary = "Clips with people and vehicles by hour. Busiest hour " + String(peak.hour).padStart(2, "0") + ":00 with " + peak.people + " people clips and " + peak.vehicles + " vehicle clips.";
+  el.innerHTML = legend + '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + _xEsc(summary) + '" preserveAspectRatio="xMidYMid meet">' + g + '</svg>';
+  if (sum) sum.textContent = "Busiest hour is " + String(peak.hour).padStart(2, "0") + ":00, with " + peak.people + " clips with people and " + peak.vehicles + " with vehicles.";
+  _xHourTable(hours);
+}
+function _xHourTable(hours) {
+  const t = document.getElementById("mchart-hour-table");
+  if (!t) return;
+  t.innerHTML = '<table><thead><tr><th>Hour</th><th>Clips with people</th><th>Clips with vehicles</th></tr></thead><tbody>' +
+    hours.filter((h) => h.people || h.vehicles).map((h) => '<tr><td>' + String(h.hour).padStart(2, "0") + ':00</td><td>' + h.people + '</td><td>' + h.vehicles + '</td></tr>').join("") +
+    '</tbody></table>';
+}
+window.xHourlyChart = xHourlyChart;
 
 // "Space saved": measured numbers when SVCS compressed real files, otherwise
 // the old estimate with its caveat spelled out.

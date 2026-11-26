@@ -186,7 +186,7 @@ def test_insert_segment_pose_verified_person_count_defaults_to_zero(tmp_path):
     )
     results = query_by_type("person", db_path=db_path)
     assert len(results) == 1
-    assert results[0][-1] == 0  # pose_verified_person_count is the last column
+    assert results[0][-2] == 0  # pose_verified_person_count is second to last (detection_times is last)
 
 
 def test_insert_segment_pose_verified_person_count_is_stored(tmp_path):
@@ -207,7 +207,7 @@ def test_insert_segment_pose_verified_person_count_is_stored(tmp_path):
     )
     results = query_by_type("person", db_path=db_path)
     assert len(results) == 1
-    assert results[0][-1] == 1
+    assert results[0][-2] == 1
 
 
 def test_schema_migration_adds_pose_column_to_old_database(tmp_path):

@@ -368,6 +368,7 @@ async function loadSpeedPanel() {
       const ratio = c.time_ratio != null ? c.time_ratio.toFixed(2) : (c.wall_seconds / c.video_seconds).toFixed(2);
       return '<tr><td class="sp-label" title="' + escHtml(j.label || '') + '">' + escHtml(j.label || ' - ') + '</td>' +
         '<td>' + escHtml(String(c.mode || '').replace('mode', 'Mode ')) + '</td>' +
+        '<td>' + (c.yolo === undefined ? ' - ' : (c.yolo ? 'On' : 'Off')) + '</td>' +
         '<td>' + escHtml(_fmtSecs(c.video_seconds)) + '</td>' +
         '<td>' + escHtml(_fmtSecs(c.wall_seconds)) + '</td>' +
         '<td>' + escHtml(ratio) + '</td>' +
@@ -376,10 +377,21 @@ async function loadSpeedPanel() {
         '<td>' + escHtml(smaller) + '</td></tr>';
     }).join('');
     const slow = runs.filter(j => j.counts.realtime_x < 1).length;
+    // With YOLO on, the slowest run in each mode, so "stays above 1x" is one glance.
+    const yoloRuns = runs.filter(j => j.counts.yolo);
+    const perMode = {};
+    yoloRuns.forEach(j => {
+      const m = String(j.counts.mode || '');
+      if (!perMode[m] || j.counts.realtime_x < perMode[m]) perMode[m] = j.counts.realtime_x;
+    });
+    const modeBits = Object.keys(perMode).sort().map(m => m.replace('mode', 'Mode ') + ' ' + perMode[m].toFixed(1) + 'x');
+    const yoloLine = modeBits.length
+      ? ' With YOLO on, the slowest run per mode: ' + modeBits.join(', ') + '.'
+      : '';
     if (summary) {
-      summary.textContent = slow === 0
+      summary.textContent = (slow === 0
         ? 'Every recorded run finished faster than the video plays (' + runs.length + ' run' + (runs.length === 1 ? '' : 's') + ').'
-        : slow + ' of ' + runs.length + ' recorded runs were slower than the video plays.';
+        : slow + ' of ' + runs.length + ' recorded runs were slower than the video plays.') + yoloLine;
     }
     if (wrap) wrap.hidden = false;
     if (note) note.hidden = false;

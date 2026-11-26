@@ -33,6 +33,7 @@ def insert_segment(
     vehicle_count: int = 0,
     person_count: int = 0,
     pose_verified_person_count: int = 0,
+    detection_times: str | None = None,   # JSON object, e.g. '{"person": 3.2, "car": 11.0}'
     db_path: str | Path = DB_NAME,
 ) -> None:
     """Insert one encoded segment into the metadata index.
@@ -65,6 +66,8 @@ def insert_segment(
             bbox classifier. Counts pose-confirmed person regions summed
             across frames, so use it as a yes/no filter (> 0), not as a
             comparison against person_count.
+        detection_times: JSON object mapping each stored class to the second,
+            counted from the start of this clip, where it first appears.
         db_path: Path to the SQLite database file.
     """
     with get_connection(db_path) as conn:
@@ -76,9 +79,9 @@ def insert_segment(
                 avg_sharpness, sharpness_label,
                 object_classes, dominant_color, scene_type,
                 time_of_day, vehicle_count, person_count,
-                pose_verified_person_count
+                pose_verified_person_count, detection_times
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 timestamp,
@@ -98,6 +101,7 @@ def insert_segment(
                 vehicle_count,
                 person_count,
                 pose_verified_person_count,
+                detection_times,
             ),
         )
         conn.commit()

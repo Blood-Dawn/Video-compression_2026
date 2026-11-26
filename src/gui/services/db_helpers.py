@@ -82,3 +82,45 @@ def _rows_to_segment_list(rows, base_dir: Path | None = None) -> list:
             "playable_url": playable_url,
         })
     return segs
+
+
+def hourly_detection_counts(db_path) -> dict:
+    """How many clips had people and vehicles in them, by hour of the local day.
+
+    Reads ``timestamp`` (UTC, ``YYYYmmddTHHMMSSZ``), ``person_count`` and
+    ``vehicle_count`` from the segments table. Those two counts say whether a
+    class was seen in the clip, so the chart is "clips with a person" and
+    "clips with a vehicle" per hour, not a headcount. Hours are converted to the
+    machine's local time so 9pm shows as 21. Never raises: an unreadable or
+    empty database returns zeros.
+    """
+    import sqlite3
+    from datetime import datetime, timezone
+
+    people = [0] * 24
+    vehicles = [0] * 24
+    clips = 0
+    try:
+        conn = sqlite3.connect(f"file:{Path(db_path).as_posix()}?mode=ro", uri=True, timeout=2)
+        try:
+            rows = conn.execute(
+                "SELECT timestamp, COALESCE(person_count,0), COALESCE(vehicle_count,0)"
+                " FROM segments WHERE hidden IS NULL OR hidden = 0").fetchall()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        rows = []
+    for ts, pc, vc in rows:
+        try:
+            when = datetime.strptime(str(ts), "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc).astimezone()
+        except ValueError:
+            continue
+        clips += 1
+        if pc:
+            people[when.hour] += 1
+        if vc:
+            vehicles[when.hour] += 1
+    return {
+        "clips": clips,
+        "hours": [{"hour": h, "people": people[h], "vehicles": vehicles[h]} for h in range(24)],
+    }

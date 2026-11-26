@@ -16,6 +16,7 @@ Author: Bloodawn (KheivenD), 2026-08-16 (R5 TASK 5.4).
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from datetime import date, timedelta
@@ -234,6 +235,34 @@ def parse(q: str) -> dict[str, Any]:
     return {"clauses": clauses, "params": params, "explain": explain}
 
 
+def _with_seek(row: dict, wanted: list) -> dict:
+    """Add ``seek_seconds``: where in the clip the searched thing first appears.
+
+    ``detection_times`` is a JSON object {class: seconds}. When the phrase named
+    classes, the earliest of those wins; with no class in the phrase, the
+    earliest of anything detected. None when the clip has no timings (clips
+    made before they were stored).
+    """
+    raw = row.pop("detection_times", None)
+    seek = None
+    try:
+        times = json.loads(raw) if raw else {}
+    except (ValueError, TypeError):
+        times = {}
+    if isinstance(times, dict) and times:
+        # "car" in a phrase also covers truck and bus, as the class filter does.
+        group = {"car": {"car", "truck", "bus", "motorcycle"}}
+        names = set()
+        for w in wanted:
+            names |= group.get(w, {w})
+        vals = [float(v) for k, v in times.items()
+                if (not names or k in names) and isinstance(v, (int, float))]
+        if vals:
+            seek = min(vals)
+    row["seek_seconds"] = seek
+    return row
+
+
 def search(q: str, db_path: str, limit: int = 100) -> dict[str, Any]:
     """Run a parsed phrase against the segments DB. Parameterized throughout.
 
@@ -255,7 +284,7 @@ def search(q: str, db_path: str, limit: int = 100) -> dict[str, Any]:
     sql = (
         "SELECT id, timestamp, camera_id, file_path, object_type, object_classes,"
         " dominant_color, scene_type, time_of_day, person_count, vehicle_count,"
-        " duration, file_size FROM segments"
+        " duration, file_size, detection_times FROM segments"
         f" WHERE {where} ORDER BY timestamp DESC LIMIT ?"
     )
     limit = max(1, min(int(limit), 500))
@@ -269,5 +298,5 @@ def search(q: str, db_path: str, limit: int = 100) -> dict[str, Any]:
         "query": q,
         "explain": parsed["explain"],
         "count": len(rows),
-        "segments": [dict(r) for r in rows],
+        "segments": [_with_seek(dict(r), parsed["explain"].get("classes") or []) for r in rows],
     }

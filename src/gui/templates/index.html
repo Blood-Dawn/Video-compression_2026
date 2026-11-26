@@ -3997,12 +3997,20 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
           </div>
         </div>
 
+        <div class="x-card" id="mhour-card">
+          <div class="x-row x-between"><h3 class="x-h3">People and vehicles by hour <span class="x-n">clips with each, by hour of the day</span></h3>
+            <button type="button" class="x-link" aria-expanded="false" aria-controls="mchart-hour-table" onclick="xChartTable('hour', this)">View as table</button></div>
+          <p class="x-d" id="mhour-summary">Counts clips that had a person or a vehicle in them, across everything in the library.</p>
+          <div id="mchart-hour" class="x-chart"></div>
+          <div id="mchart-hour-table" class="x-chart-table" hidden></div>
+        </div>
+
         <div class="x-card" id="mspeed-card">
           <div class="x-row x-between"><h3 class="x-h3">Compression speed <span class="x-n">video length against compression time</span></h3></div>
           <p class="x-d" id="mspeed-summary">Run a compression to see how long it took against how long the video plays.</p>
           <div class="x-tablewrap" id="mspeed-wrap" hidden>
             <table class="x-speed" aria-label="Compression time against video length">
-              <thead><tr><th>Video</th><th>Mode</th><th>Video length</th><th>Compression time</th><th title="Compression time divided by video time">Time ratio</th><th>Speed</th><th>Smaller by</th></tr></thead>
+              <thead><tr><th>Video</th><th>Mode</th><th title="Whether YOLO object detection was on">YOLO</th><th>Video length</th><th>Compression time</th><th title="Compression time divided by video time">Time ratio</th><th>Speed</th><th>Smaller by</th></tr></thead>
               <tbody id="mspeed-rows"></tbody>
             </table>
           </div>

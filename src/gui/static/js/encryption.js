@@ -384,6 +384,24 @@ function loadDailySummary() { toggleArchivePanel(); setTimeout(loadArchiveDaily,
 // The parser is deterministic and server-side (gui/services/nl_query.py);
 // this renderer only escapes and displays. Author: Bloodawn (KheivenD),
 // 2026-08-16 (R5 TASK 5.4 UI).
+// "0:12" style label for a second count.
+function _nlClock(sec) {
+  const t = Math.max(0, Math.round(Number(sec) || 0));
+  return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0');
+}
+
+// The moment in the clip where the searched thing first shows up. A link that
+// opens the clip at that second (browser media fragment) when the file is a
+// plain mp4; just the time when it is encrypted or missing.
+function _nlMomentCell(s) {
+  if (s.seek_seconds === null || s.seek_seconds === undefined) return '';
+  const label = 'at ' + _nlClock(s.seek_seconds);
+  const path = String(s.file_path || '');
+  if (!/\.(mp4|webm|mov)$/i.test(path)) return escHtml(label);
+  const url = '/api/media?path=' + encodeURIComponent(path) + '#t=' + Number(s.seek_seconds);
+  return '<a href="' + escHtml(url) + '" target="_blank" rel="noopener">' + escHtml(label) + '</a>';
+}
+
 async function runNlSearch() {
   const q = (document.getElementById('nl-search-q').value || '').trim();
   const explainEl = document.getElementById('nl-search-explain');
@@ -401,9 +419,9 @@ async function runNlSearch() {
   table.style.display = 'table';
   table.querySelector('thead tr').innerHTML = `
     <th>Timestamp</th><th>Camera</th><th>Type</th><th>Classes</th>
-    <th>Color</th><th>Scene</th><th>Time of day</th><th>Vehicles</th><th>People</th><th>File</th>`;
+    <th>Color</th><th>Scene</th><th>Time of day</th><th>Vehicles</th><th>People</th><th>File</th><th>Moment</th>`;
   const body = table.querySelector('tbody');
-  body.innerHTML = '<tr><td colspan="10" style="color:var(--text-dim);">Searching...</td></tr>';
+  body.innerHTML = '<tr><td colspan="11" style="color:var(--text-dim);">Searching...</td></tr>';
   try {
     const r = await fetch('/api/nl_search?q=' + encodeURIComponent(q));
     const data = await r.json();
@@ -426,7 +444,7 @@ async function runNlSearch() {
       : 'No structured filters recognized; matched as free text.';
     countEl.textContent = data.count + (data.count === 1 ? ' result' : ' results');
     if (!data.segments.length) {
-      body.innerHTML = '<tr><td colspan="10" style="color:var(--text-dim);">No matches.</td></tr>';
+      body.innerHTML = '<tr><td colspan="11" style="color:var(--text-dim);">No matches.</td></tr>';
       return;
     }
     body.innerHTML = data.segments.map(s => `
@@ -441,10 +459,11 @@ async function runNlSearch() {
         <td>${Number(s.vehicle_count) || 0}</td>
         <td>${Number(s.person_count) || 0}</td>
         <td title="${escHtml(s.file_path || '')}">${escHtml(String(s.file_path || '').split(/[\\/]/).pop())}</td>
+        <td>${_nlMomentCell(s)}</td>
       </tr>`).join('');
   } catch (e) {
     explainEl.textContent = '';
-    body.innerHTML = '<tr><td colspan="10" style="color:#f66;">Search failed: '
+    body.innerHTML = '<tr><td colspan="11" style="color:#f66;">Search failed: '
       + escHtml(String(e && e.message ? e.message : e)) + '</td></tr>';
   }
 }

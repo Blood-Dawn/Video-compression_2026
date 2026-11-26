@@ -1122,6 +1122,7 @@ class ROIEncoder:
         vehicle_count: int = 0,
         person_count: int = 0,
         pose_verified_person_count: int = 0,
+        detection_times: str | None = None,
     ) -> dict:
         """Close the FFmpeg pipe, save DB record, and return segment metadata.
 
@@ -1143,7 +1144,7 @@ class ROIEncoder:
             return self._finish_segment_inner(
                 timeout, object_classes, dominant_color, scene_type,
                 time_of_day, vehicle_count, person_count,
-                pose_verified_person_count)
+                pose_verified_person_count, detection_times)
         finally:
             if _active_outputs is not None:
                 _active_outputs.mark_done(_guarded_output)
@@ -1158,6 +1159,7 @@ class ROIEncoder:
         vehicle_count,
         person_count,
         pose_verified_person_count=0,
+        detection_times=None,
     ) -> dict:
         proc = self._stream_process
         try:
@@ -1232,6 +1234,7 @@ class ROIEncoder:
             vehicle_count   = vehicle_count,
             person_count    = person_count,
             pose_verified_person_count = pose_verified_person_count,
+            detection_times = detection_times,
             db_path         = self.db_path,
         )
 

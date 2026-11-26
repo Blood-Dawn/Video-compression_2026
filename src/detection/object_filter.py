@@ -60,6 +60,19 @@ _ANIMAL_CLASSES  = {"bird", "cat", "dog", "horse", "sheep", "cow",
                     "elephant", "bear", "zebra", "giraffe"}
 _CARRIED_CLASSES = {"backpack", "handbag", "suitcase"}
 
+# The only classes that are written to a clip's metadata (and so reach Search).
+# The detector knows all 80 COCO classes, and at the 0.30 confidence threshold
+# it sometimes calls a person's shadow a "cow" or a bag a "chair". Those hits
+# may still help decide what to keep, but they are not worth finding later.
+STORED_CLASSES = frozenset({
+    "person", "car", "truck", "bus", "motorcycle", "bicycle", "dog", "cat",
+})
+
+
+def storable(classes) -> set:
+    """The subset of ``classes`` that should be stored with the clip."""
+    return {c for c in classes if c in STORED_CLASSES}
+
 
 def _label_from_classes(classes: set) -> str:
     """Map a set of COCO class names to a human-readable segment type label."""

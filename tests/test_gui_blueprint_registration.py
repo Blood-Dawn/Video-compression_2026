@@ -50,6 +50,7 @@ EXPECTED = {
     "/api/nl_search": "queries",
     "/api/daily_summary": "queries",
     "/api/busiest": "queries",
+    "/api/detections_by_hour": "queries",
     "/api/demo": "demo",
     "/api/demo/status": "demo",
     "/api/demo/search_debug": "demo",
@@ -184,7 +185,7 @@ def test_route_count():
     # competitive-gap pass's /api/timelapse (quiet-period summary generation),
     # then +1 for /api/upload/limit (GET+POST on one rule, upload size cap).
     rules = _rules()
-    assert len(rules) == 105, f"expected 105 non-static routes, got {len(rules)}: {sorted(rules)}"
+    assert len(rules) == 106, f"expected 106 non-static routes, got {len(rules)}: {sorted(rules)}"
 
 
 def test_all_blueprints_registered():

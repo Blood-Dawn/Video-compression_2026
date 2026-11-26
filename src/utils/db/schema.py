@@ -43,6 +43,9 @@ _ADDED_COLUMNS = [
     # pose/keypoint estimation, not just the bbox classifier (planner 6.11,
     # detection/pose_onnx_backend.py).
     ("pose_verified_person_count", "INTEGER DEFAULT 0"),
+    # JSON object {class: seconds from the start of the clip where it first
+    # appears}, so a search result can open the clip at that moment.
+    ("detection_times", "TEXT DEFAULT NULL"),
 ]
 
 

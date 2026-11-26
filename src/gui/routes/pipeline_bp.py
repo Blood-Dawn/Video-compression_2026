@@ -38,6 +38,8 @@ pipeline_bp = Blueprint("pipeline", __name__)
 
 _CAMERA_ID_RE = re.compile(r"^[a-zA-Z0-9_\-]{1,64}$")
 _LIVE_URL_RE = re.compile(r"^(rtsp|rtsps|rtmp|http|https)://", re.I)
+# How long STOP waits for a live camera's last segment to be saved.
+_LIVE_STOP_GRACE_SECONDS = 45
 
 # Supported VMAF target band, taken from the search module so the route and the
 # searcher cannot drift apart.
@@ -362,12 +364,37 @@ def api_stop():
 
     # A thread blocked in finish_segment() waiting for FFmpeg needs the pipe
     # aborted so it can exit.
+    #
+    # A camera or stream is different from a file: the segment being written
+    # is footage that cannot be recorded again, so STOP lets the pipeline save
+    # it (a few seconds) instead of killing FFmpeg. If that has not finished
+    # in _LIVE_STOP_GRACE_SECONDS the pipe is aborted as before, so a stuck
+    # encoder can never make STOP hang.
     enc = _pipeline_runner._active_encoder
     if enc is not None:
-        try:
-            enc.abort_segment()
-            log.info("Active FFmpeg pipe aborted.")
-        except Exception as exc:  # noqa: BLE001 - best effort; the stop event is already set
-            log.debug("abort_segment failed: %s", exc)
+        with _state_lock:
+            src = (_status.get("last_config") or {}).get("input_source")
+        live = isinstance(src, int) or (
+            isinstance(src, str) and bool(_LIVE_URL_RE.match(src)))
+        if live:
+            def _abort_if_still_running(_enc=enc):
+                with _state_lock:
+                    still = _status["running"]
+                if still:
+                    try:
+                        _enc.abort_segment()
+                        log.warning("Live stop: saving took over %ds, FFmpeg pipe aborted.",
+                                    _LIVE_STOP_GRACE_SECONDS)
+                    except Exception as exc:  # noqa: BLE001
+                        log.debug("abort_segment failed: %s", exc)
+            _t = threading.Timer(_LIVE_STOP_GRACE_SECONDS, _abort_if_still_running)
+            _t.daemon = True
+            _t.start()
+        else:
+            try:
+                enc.abort_segment()
+                log.info("Active FFmpeg pipe aborted.")
+            except Exception as exc:  # noqa: BLE001 - best effort; the stop event is already set
+                log.debug("abort_segment failed: %s", exc)
 
     return jsonify({"ok": True})

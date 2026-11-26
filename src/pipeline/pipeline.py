@@ -45,6 +45,7 @@ from demo.demo_metadata import DemoMetadataWriter
 from pipeline.modes import get_mode_decision, validate_mode
 from detection.object_filter import (
     ObjectFilter,
+    storable as _storable_classes,
     detect_dominant_color,
     detect_scene_type,
     _VEHICLE_CLASSES,
@@ -802,7 +803,8 @@ def run_pipeline(
     # Colors and brightness are running tallies, not per-frame lists: in modes
     # 1-3 a segment stays open until it has enough *buffered* frames, which on
     # a quiet live camera can mean hours of skipped frames in between.
-    _seg_all_classes: set = set()        # union of YOLO classes seen
+    _seg_all_classes: set = set()        # union of YOLO classes seen (stored ones only)
+    _seg_first_seen: dict = {}           # class -> seconds into the segment it first appeared
     _seg_colors: Counter = Counter()     # dominant_color label -> sample count
     _seg_motion_vecs: list = []          # (dx, dy) vectors for detect_scene_type
     _seg_prev_centroids: list = []       # previous frame's centroids
@@ -810,11 +812,19 @@ def run_pipeline(
     _seg_brightness_n = 0
     _seg_pose_confirmed = 0              # pose-verified person detections (6.11)
 
+    def _note_classes(labels, t_seconds: float) -> None:
+        """Remember stored classes seen in this segment and when each first showed up."""
+        for c in _storable_classes(labels):
+            _seg_all_classes.add(c)
+            _seg_first_seen.setdefault(c, round(float(t_seconds), 1))
+
     def _open_new_segment(first_frame, first_regions):
         """Open FFmpeg pipe for a new segment.  Returns the background frame used."""
         nonlocal segment_start_background, _seg_all_classes, _seg_colors, _seg_motion_vecs
+        nonlocal _seg_first_seen
         nonlocal _seg_prev_centroids, _seg_brightness_sum, _seg_brightness_n, _seg_pose_confirmed
         _seg_all_classes = set()
+        _seg_first_seen = {}
         _seg_colors = Counter()
         _seg_motion_vecs = []
         _seg_prev_centroids = []
@@ -832,7 +842,7 @@ def run_pipeline(
         if obj_filter is not None and hasattr(obj_filter, "last_detected_classes"):
             obj_type = obj_filter.classify_detected_objects()
             for labels in obj_filter.last_detected_classes.values():
-                _seg_all_classes |= labels
+                _note_classes(labels, 0.0)
         else:
             obj_type = "unknown"
 
@@ -899,9 +909,13 @@ def run_pipeline(
 
         # Sorted so the stored JSON is stable from run to run.
         _obj_cls_json = json.dumps(sorted(_seg_all_classes)) if _seg_all_classes else None
+        # When each class first appeared, in seconds from the start of this
+        # clip, so a search result can jump straight to the moment.
+        _times_json = json.dumps(_seg_first_seen, sort_keys=True) if _seg_first_seen else None
 
         out = encoder.finish_segment(
             object_classes = _obj_cls_json,
+            detection_times = _times_json,
             dominant_color = _dom_color,
             scene_type     = _scene,
             time_of_day    = _tod,
@@ -975,7 +989,7 @@ def run_pipeline(
                 # Accumulate YOLO labels for this segment's metadata
                 if segment_open and hasattr(obj_filter, "last_detected_classes"):
                     for labels in obj_filter.last_detected_classes.values():
-                        _seg_all_classes |= labels
+                        _note_classes(labels, frames_in_segment / max(fps, 1.0))
                     # Pose-verified subset of person detections (planner 6.11).
                     if hasattr(obj_filter, "pose_confirmed_count"):
                         _seg_pose_confirmed += obj_filter.pose_confirmed_count()
@@ -1230,13 +1244,16 @@ def run_pipeline(
         stopping = _stop_requested(stop_event)
         # Close any open pipe for the final partial segment
         if segment_open and frames_in_segment > 0:
-            if stopping:
-                # User hit STOP. Kill FFmpeg immediately, no flush wait.
+            if stopping and not _is_live_source:
+                # User hit STOP on a file. Kill FFmpeg immediately, no flush wait.
                 log.info("Stop requested: aborting open segment (%d frames).", frames_in_segment)
                 _close_segment(discard=True)
             else:
                 log.info("Flushing final partial segment (%d frames).", frames_in_segment)
-                _close_segment()
+                try:
+                    _close_segment()
+                except Exception as _fexc:  # noqa: BLE001 - a bad last clip must not hide why the run ended
+                    log.error("Could not save the final segment: %s", _fexc)
         elif segment_open:
             # Pipe open but no frames written. Discard cleanly.
             encoder.abort_segment()

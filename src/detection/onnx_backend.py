@@ -54,6 +54,40 @@ COCO_NAMES: tuple[str, ...] = (
 
 _IMGSZ_NOTED: set = set()
 
+# Detector sizes the user can pick. Smaller is faster, larger sees small or
+# distant objects better. The 320 model is the one that ships as yolov8n.onnx;
+# the others live beside it as yolov8n_<size>.onnx once exported.
+DETECTOR_SIZES = (320, 416, 512, 640)
+_selected_size = None
+
+
+def set_detector_size(size) -> None:
+    """Choose the detector size for runs started after this call (None = default)."""
+    global _selected_size
+    try:
+        size = int(size)
+    except (TypeError, ValueError):
+        _selected_size = None
+        return
+    _selected_size = size if size in DETECTOR_SIZES else None
+
+
+def get_detector_size():
+    return _selected_size
+
+
+def model_path_for_size(size) -> Path:
+    """The model file for a size, or the default file when that size is not installed."""
+    default = _default_model_path()
+    if size in DETECTOR_SIZES:
+        sized = default.with_name(f"{default.stem}_{size}{default.suffix}")
+        if sized.is_file():
+            return sized
+        if size != 320:
+            log.warning("Detector size %d is not installed (%s); using %s instead.",
+                        size, sized.name, default.name)
+    return default
+
 class Detection(NamedTuple):
     class_id: int
     class_name: str
@@ -91,7 +125,8 @@ class YoloOnnxDetector:
         self.confidence = float(confidence)
         self.iou = float(iou)
         self.imgsz = int(imgsz)
-        self.model_path = Path(model_path) if model_path else _default_model_path()
+        self.model_path = (Path(model_path) if model_path
+                           else model_path_for_size(_selected_size))
         self._session = None
         self._input_name: str | None = None
         self._available = False

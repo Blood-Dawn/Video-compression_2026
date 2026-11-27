@@ -379,7 +379,12 @@ class ObjectFilter:
                 from src.detection.onnx_backend import YoloOnnxDetector  # type: ignore
             except ImportError:
                 return False
-        det = YoloOnnxDetector(confidence=self.confidence, device=self._device)
+        try:
+            from detection.onnx_backend import get_detector_size
+        except ImportError:  # pragma: no cover - import path shim
+            from src.detection.onnx_backend import get_detector_size  # type: ignore
+        det = YoloOnnxDetector(confidence=self.confidence, device=self._device,
+                               imgsz=get_detector_size() or 640)
         if not det.available:
             return False
         self._onnx = det

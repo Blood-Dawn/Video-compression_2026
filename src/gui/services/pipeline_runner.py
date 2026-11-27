@@ -236,6 +236,12 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
 
         _enh.Enhancer.__init__ = _patched_enh_init
 
+        try:
+            from detection.onnx_backend import set_detector_size
+        except ModuleNotFoundError:
+            from src.detection.onnx_backend import set_detector_size
+        set_detector_size(config.get("detector_size"))
+
         run_pipeline(
             input_source=config.get("input_source", 0),
             camera_id=config.get("camera_id", "cam_00"),

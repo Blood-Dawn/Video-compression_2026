@@ -29,6 +29,7 @@
       advanced_open: !!(panel && panel.classList.contains("open")),
       bg_method: val("bg-method"),
       warmup_frames: num("warmup-frames"),
+      detector_size: num("detector-size"),
       object_filter: chk("object-filter-toggle"),
       filter_confidence: num("filter-confidence"),
       enhance: chk("enhance-toggle"),
@@ -83,6 +84,7 @@
     if (cfg.mode) set("mode-select", cfg.mode);
     set("bg-method", cfg.bg_method);
     set("warmup-frames", cfg.warmup_frames);
+    set("detector-size", cfg.detector_size);
     set("object-filter-toggle", cfg.object_filter);
     if (typeof _onObjectFilterChange === "function") _onObjectFilterChange(chk("object-filter-toggle"));
     set("filter-confidence", cfg.filter_confidence);

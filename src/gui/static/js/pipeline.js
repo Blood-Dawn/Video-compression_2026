@@ -488,6 +488,7 @@ async function startPipeline() {
     output_dir:       document.getElementById('output-dir').value.trim(),
     segment_seconds:  parseInt(document.getElementById('segment-seconds').value),
     warmup_frames:    parseInt(document.getElementById('warmup-frames').value),
+    detector_size:    parseInt((document.getElementById('detector-size') || {}).value) || null,
     bg_method:        document.getElementById('bg-method').value,
     mode:             document.getElementById('mode-select').value,
     enhance:          document.getElementById('enhance-toggle').checked,
@@ -646,6 +647,8 @@ function _applyImportedConfig(cfg) {
     if (bgMethodEl) bgMethodEl.value = cfg.bg_method;
     const wfEl = document.getElementById('warmup-frames');
     if (cfg.warmup_frames != null && wfEl) wfEl.value = cfg.warmup_frames;
+    const dsEl = document.getElementById('detector-size');
+    if (cfg.detector_size != null && dsEl) dsEl.value = String(cfg.detector_size);
 
     // Snap the sensitivity slider to the first matching position.
     let bestIdx = 2; // default "Balanced"

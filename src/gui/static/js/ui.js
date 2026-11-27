@@ -31,7 +31,7 @@ function setPipelineRunning(running) {
   // Disable config fields while running
   const fields = document.querySelectorAll(
     '#input-source, #camera-id, #output-dir, #mode-select, #bg-method, ' +
-    '#segment-seconds, #warmup-frames, #enhance-toggle, #enhance-model, ' +
+    '#segment-seconds, #warmup-frames, #detector-size, #enhance-toggle, #enhance-model, ' +
     '#enhance-scale, #enhance-every-n, #enhance-max-roi, #enhance-device, #encrypt-toggle, #encrypt-password, #encrypt-keyfile, ' +
     '#sensitivity-slider, #segment-seconds-slider'
   );

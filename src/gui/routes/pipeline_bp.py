@@ -231,6 +231,7 @@ def _build_start_config(data: dict, camera_id: str, resolved_input, output_dir: 
         "segment_seconds": data.get("segment_seconds", _default_segment_seconds),
         "bg_method": data.get("bg_method", "MOG2"),
         "warmup_frames": data.get("warmup_frames", 120),
+        "detector_size": data.get("detector_size"),
         "mode": data.get("mode", "mode0"),
         "enhance": bool(data.get("enhance", False)),
         "enhance_model": data.get("enhance_model", "bicubic"),

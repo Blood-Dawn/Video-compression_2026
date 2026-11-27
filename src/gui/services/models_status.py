@@ -72,7 +72,25 @@ def models_status() -> dict:
             mid, "Real-ESRGAN general (ONNX)", "Best quality upscaler, runs on ONNX Runtime.",
             models_dir / spec["filename"], required=False))
 
+    sizes = []
+    try:
+        base = Path(yolo_path())
+        try:
+            import onnxruntime as ort
+            dims = ort.InferenceSession(str(base), providers=["CPUExecutionProvider"]).get_inputs()[0].shape
+            native = int(dims[2]) if isinstance(dims[2], int) else 640
+        except Exception:  # noqa: BLE001
+            native = 320
+        labels = {320: "Fastest", 416: "Fast", 512: "Balanced", 640: "Best quality"}
+        for size, label in labels.items():
+            f = base.with_name(f"{base.stem}_{size}{base.suffix}")
+            installed = f.is_file() or (base.is_file() and size == native)
+            sizes.append({"size": size, "label": label, "installed": bool(installed)})
+    except Exception:  # noqa: BLE001
+        sizes = []
+
     return {
+        "detector_sizes": sizes,
         "detectors": detectors,
         "enhancement": enhancement,
         "models_dir": str(models_dir),

@@ -3620,6 +3620,16 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
                 <label class="config-label" for="warmup-frames">Warmup Frames</label>
                 <input type="number" id="warmup-frames" value="120" min="0" max="9999" aria-label="warmup frames"/>
               </div>
+              <div class="config-field">
+                <label class="config-label" for="detector-size">Detector size</label>
+                <select id="detector-size" aria-label="detector size" aria-describedby="detector-size-hint">
+                  <option value="320" selected>320 · fastest</option>
+                  <option value="416">416 · fast</option>
+                  <option value="512">512 · balanced</option>
+                  <option value="640">640 · best quality, slowest</option>
+                </select>
+                <div id="detector-size-hint" class="config-hint">Smaller sizes run faster. Larger sizes find small or distant people and vehicles more reliably. A size that is not installed falls back to 320 (see Tools, AI models).</div>
+              </div>
               <div class="config-field" style="margin-top:0.75rem;">
                 <label class="config-label" style="display:flex;align-items:center;gap:0.5rem;cursor:pointer;">
                   <input type="checkbox" id="object-filter-toggle" checked onchange="_onObjectFilterChange(this.checked)" aria-describedby="object-filter-hint"/>

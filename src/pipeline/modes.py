@@ -82,11 +82,14 @@ def get_mode_decision(mode: str, regions: Iterable[object]) -> ModeDecision:
 
     has_targets = len(regions) > 0
 
-    if mode == "mode0":
-        # Baseline: keep every post-warmup frame, regardless of detections.
+    if mode != "mode1":
+        # mode0 (baseline), mode2 (background plus object patches) and mode3
+        # (objects on black) keep EVERY post-warmup frame, so the output is as
+        # long as the source and a time in it matches the same time in the
+        # source. Frames with no target still shrink to almost nothing because
+        # mode2 shows the clean background and mode3 shows a black frame.
         return ModeDecision(buffer_frame=True, target_detected=has_targets)
 
-    # mode1 (event recording), mode2 (background keyframe plus patches) and
-    # mode3 (object-only) all keep event frames only; they differ in how the
-    # encoder renders those frames, not in which frames are kept.
+    # mode1 (event recording) is the one mode that drops frames: it keeps only
+    # frames with foreground activity.
     return ModeDecision(buffer_frame=has_targets, target_detected=has_targets)

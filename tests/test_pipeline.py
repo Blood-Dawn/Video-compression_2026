@@ -553,10 +553,14 @@ class TestMode2Behavior:
             mode2_clean_seconds=2.0,
         )
 
-        assert calls["encode_segment"] == 2
-        assert calls["encoded_frame_counts"] == [1, 1]
-        assert calls["object_only"] == [False, False]
-        assert calls["background_values"] == [0, 4]
+        # Mode 2 keeps every frame now (one frame per segment at this tiny
+        # segment length), so there is one segment per source frame.
+        assert calls["encode_segment"] == 9
+        assert calls["encoded_frame_counts"] == [1] * 9
+        assert calls["object_only"] == [False] * 9
+        # The plate only refreshes once a clean stretch of 2 s has ended: the
+        # last frame's segment starts from the plate learned in frames 4 to 7.
+        assert calls["background_values"] == [0] * 8 + [4]
 
     def test_mode2_does_not_learn_clean_background_during_first_second_after_warmup(
         self, monkeypatch, tmp_path
@@ -728,7 +732,9 @@ class TestMode2Behavior:
         )
 
         assert calls["encode_segment"] == 1
-        assert calls["background_values_per_write"] == [0, 5, 5]
+        # Every frame is written. The plate refreshes when the first target
+        # arrives after the clean gap (frame 9), so frames 9 and 10 get 5.
+        assert calls["background_values_per_write"] == [0] * 9 + [5, 5]
 
 
 # ---------------------------------------------------------------------------
@@ -792,7 +798,7 @@ class TestMode3Behavior:
                             object_only=False, mode_label="", draw_roi_boxes=None,
                             measure_sharpness=True, compress_background=False, **kwargs):
                 self._frame_count += 1
-                self._bbox_count += 1
+                self._bbox_count += len(boxes or [])
                 if self._object_only is None:
                     self._object_only = object_only
 
@@ -833,10 +839,11 @@ class TestMode3Behavior:
         )
 
         # Mode 3 contract: object_only=True is passed on every write_frame,
-        # the encoder is called once per segment, and 3 frames + 3 bboxes
-        # made it through.
+        # the encoder is called once per segment, and all 6 frames made it
+        # through (frames with no object are plain black), 3 of them with a
+        # bounding box.
         assert calls["encode_segment"] == 1
-        assert calls["encoded_frame_count"] == 3
+        assert calls["encoded_frame_count"] == 6
         assert calls["encoded_bboxes_count"] == 3
         assert calls["object_only"] is True
         # mode3 uses ultrafast (CPU) and the most aggressive CRF 38

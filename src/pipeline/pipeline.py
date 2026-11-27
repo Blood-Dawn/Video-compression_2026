@@ -488,16 +488,17 @@ def run_pipeline(
     MODES:
     mode0 (default): All post-warmup frames are buffered and encoded. Baseline
                      H.264 dual-CRF ROI encoding on every frame.
-    mode1:           Frame gating. Only frames with detected foreground activity
-                     are buffered. Segments are formed from active frames only,
-                     reducing storage when the scene is mostly static.
-    mode2:           Background keyframe plus object patches. Only frames with
-                     foreground detections are buffered; the encoded segment is
-                     built by compositing each detected bounding box over the
-                     latest clean background frame.
-    mode3:           Object-only segment output. Only frames with foreground
-                     detections are buffered, and pixels outside each detected
-                     bounding box are blacked out before MP4 encoding.
+    mode1:           Frame gating, the only mode that drops frames. Only frames
+                     with detected foreground activity are buffered. Segments
+                     are formed from active frames only, reducing storage when
+                     the scene is mostly static.
+    mode2:           Background keyframe plus object patches. Every frame is
+                     kept; each is built by compositing the detected bounding
+                     boxes over the latest clean background frame, so a frame
+                     with no objects is just the clean background.
+    mode3:           Object-only output. Every frame is kept, and pixels
+                     outside each detected bounding box are blacked out before
+                     encoding, so a frame with no objects is plain black.
 
     Args:
         input_source: Camera index (int) or video file / CDnet scene path (str).
@@ -1116,10 +1117,10 @@ def run_pipeline(
 
             # Track clean-background streak for mode2 keyframe refresh.
             #
-            # A frame is only eligible if mode2 would skip it. That means the
-            # clean background comes from actual empty gaps between encoded
-            # events, including frames that were skipped after optional YOLO
-            # filtering. Never learn a clean keyframe during warmup or during
+            # A frame is only eligible if it has no target. That means the
+            # clean background comes from actual empty gaps between events,
+            # including frames where optional YOLO filtering rejected every
+            # detection. Never learn a clean keyframe during warmup or during
             # the first second after warmup; that window is where the detector
             # is most likely to briefly miss an object already on screen.
             #
@@ -1134,7 +1135,7 @@ def run_pipeline(
                 if in_post_warmup_quarantine:
                     clean_frame_streak = 0
                     clean_frame_buffer.clear()
-                elif mode_decision.buffer_frame:
+                elif mode_decision.target_detected:
                     if clean_frame_streak >= mode2_clean_frames and clean_frame_buffer:
                         lag_index = max(
                             0,
@@ -1173,7 +1174,7 @@ def run_pipeline(
                     break
 
             if not mode_decision.buffer_frame:
-                # This frame is not included in any segment (mode1/2/3 gate)
+                # Mode 1 only: a frame with no activity is not part of any segment
                 continue
 
             # Full-frame output upscale - increases the output video resolution.

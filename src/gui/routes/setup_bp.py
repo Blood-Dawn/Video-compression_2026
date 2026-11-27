@@ -175,7 +175,16 @@ def api_setup_dependencies():
         model, present = "", False
     deps["onnx_model"] = _dep_entry(present, model if present else "")
 
-    return jsonify({"dependencies": deps})
+    try:
+        try:
+            from gui.services.models_status import models_status
+        except ModuleNotFoundError:  # pragma: no cover - import path shim
+            from src.gui.services.models_status import models_status
+        models = models_status()
+    except Exception:  # noqa: BLE001 - the card shows "unknown", never a 500
+        models = None
+
+    return jsonify({"dependencies": deps, "models": models})
 
 
 @setup_bp.route("/api/setup/reset", methods=["POST"])

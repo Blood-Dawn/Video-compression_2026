@@ -32,7 +32,7 @@ function _setField(id, value) {
   el.dispatchEvent(new Event("input", { bubbles: true }));
 }
 
-function applyPreset(key) {
+function applyPreset(key, quiet) {
   const cfg = window._svcsPresetConfigs[key];
   if (!cfg) return;
   // Mode: set the select and highlight the matching preset card if present.
@@ -56,7 +56,9 @@ function applyPreset(key) {
   window._svcsPreset = { key: key, background_crf: cfg.background_crf };
   const sel = document.getElementById("preset-select");
   if (sel && sel.value !== key) sel.value = key;
-  if (typeof pushNotif === "function") {
+  // "Preset applied" only when someone picked it, not on page load or when a
+  // saved profile fills the form: a pop-up nobody asked for is just noise.
+  if (!quiet && typeof pushNotif === "function") {
     const meta = (window._svcsPresetMeta || {})[key];
     pushNotif("Preset applied", (meta && meta.label) || key, "info", null, 2500);
   }
@@ -88,7 +90,7 @@ async function loadPresets() {
     sel.value = data.default || (data.presets[0] && data.presets[0].key);
     sel.addEventListener("change", () => applyPreset(sel.value));
     // Apply the default preset on first load so the form starts sensible.
-    if (sel.value) applyPreset(sel.value);
+    if (sel.value) applyPreset(sel.value, true);
   }
 }
 

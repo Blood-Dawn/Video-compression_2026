@@ -91,6 +91,7 @@ async function pollStatus() {
         // user-dismissed completion summary and refresh the job record.
         maybeShowLatestJobSummary('pipeline');
         loadRecentJobs();
+        if (typeof refreshRunSummary === 'function') setTimeout(refreshRunSummary, 1500);
         // The index records the output just after the run ends.
         pollMeasuredSavings();
         setTimeout(pollMeasuredSavings, 3000);

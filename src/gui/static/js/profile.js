@@ -75,7 +75,7 @@
   // values win over what a preset sets.
   function apply(cfg) {
     if (cfg.preset && window._svcsPresetConfigs && window._svcsPresetConfigs[cfg.preset]) {
-      applyPreset(cfg.preset);
+      applyPreset(cfg.preset, true);
     } else if (cfg.mode) {
       var card = document.querySelector('.preset-card[data-mode="' + cfg.mode + '"]');
       if (card && typeof selectPreset === "function") selectPreset(card); else set("mode-select", cfg.mode);

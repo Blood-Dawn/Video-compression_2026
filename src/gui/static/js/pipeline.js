@@ -365,6 +365,46 @@ async function _uploadVideo(input) {
   });
 })();
 
+// ── Drop a video anywhere on the page ─────────────────────────
+// The upload box is small, and a file dropped anywhere else would make the
+// browser open it and leave the dashboard. So the whole page takes the drop:
+// a video is uploaded like one dropped on the box; anything else is ignored
+// with a short message instead of navigating away.
+(function _initPageDropZone() {
+  const VIDEO_EXT = /\.(mp4|avi|mov|mkv|m4v|h264|webm)$/i;
+  let depth = 0;
+  const hasFiles = (e) => e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') !== -1;
+  const isVideo = (f) => (f.type && f.type.indexOf('video/') === 0) || VIDEO_EXT.test(f.name || '');
+  document.addEventListener('dragenter', (e) => {
+    if (!hasFiles(e)) return;
+    depth += 1;
+    document.body.classList.add('page-drop');
+  });
+  document.addEventListener('dragleave', (e) => {
+    if (!hasFiles(e)) return;
+    depth = Math.max(0, depth - 1);
+    if (!depth) document.body.classList.remove('page-drop');
+  });
+  document.addEventListener('dragover', (e) => {
+    if (hasFiles(e)) e.preventDefault();
+  });
+  document.addEventListener('drop', async (e) => {
+    if (!hasFiles(e)) return;
+    e.preventDefault();
+    depth = 0;
+    document.body.classList.remove('page-drop');
+    const zone = document.getElementById('upload-zone');
+    if (zone && zone.contains(e.target)) return;          // the box handles its own drop
+    const file = Array.prototype.find.call(e.dataTransfer.files || [], isVideo);
+    if (!file) {
+      if (typeof pushNotif === 'function') pushNotif('Not a video', 'Drop an MP4, AVI, MOV or MKV file.', 'error', null, 3500);
+      return;
+    }
+    if (typeof switchTab === 'function') switchTab('home');
+    await _uploadVideoFile(file);
+  });
+})();
+
 // ── Clear output segments ─────────────────────────────────────
 async function clearSegments() {
   if (!confirm('Hide all segments from the dashboard? Files on disk are kept. This only clears the view.')) return;

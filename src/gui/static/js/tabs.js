@@ -339,7 +339,7 @@ function xBuildToolsNav() {
   if (!nav || !body) return;
   const items = [];
   const names = {
-    "update-panel": "App updates", "push-panel": "Phone alerts", "webhook-panel": "Webhook",
+    "update-panel": "App updates", "models-panel": "AI models", "push-panel": "Phone alerts", "webhook-panel": "Webhook",
     "events-panel": "Recent events", "zone-editor-panel": "Zone editor", "devices-panel": "Paired devices",
     "danger-zone": "Danger zone",
   };
@@ -373,3 +373,46 @@ function xBuildToolsNav() {
 }
 window.xBuildToolsNav = xBuildToolsNav;
 window.addEventListener("DOMContentLoaded", xBuildToolsNav);
+
+// ── Tools: AI models card ──────────────────────────────────────────────────
+// Reads the "models" list that /api/setup/dependencies already returns.
+function _xFmtBytes(n) {
+  if (!n) return "";
+  if (n >= 1048576) return (n / 1048576).toFixed(1) + " MB";
+  return Math.max(1, Math.round(n / 1024)) + " KB";
+}
+async function xModelsRefresh() {
+  const box = document.getElementById("models-list");
+  const sum = document.getElementById("models-summary");
+  if (!box) return;
+  box.textContent = "Checking...";
+  let m = null;
+  try {
+    const r = await fetch("/api/setup/dependencies");
+    m = (await r.json()).models;
+  } catch (e) { m = null; }
+  if (!m) { box.textContent = "Could not check the model files."; return; }
+  const row = (e) => {
+    const state = e.present ? "installed" : (e.required ? "missing, needed" : "not installed, optional");
+    const size = e.present ? " (" + _xFmtBytes(e.size_bytes) + ")" : "";
+    const d = document.createElement("div");
+    d.style.cssText = "padding:0.25rem 0;border-bottom:1px solid var(--border);";
+    d.textContent = e.label + ": " + state + size + ". " + e.role + " File: " + e.file + ".";
+    if (!e.present && e.required) d.style.color = "var(--danger, #c0392b)";
+    return d;
+  };
+  box.innerHTML = "";
+  [["Detectors", m.detectors], ["Enhancement", m.enhancement]].forEach(([title, list]) => {
+    const h = document.createElement("div");
+    h.style.cssText = "margin:0.5rem 0 0.2rem;color:var(--text);";
+    h.textContent = title;
+    box.appendChild(h);
+    (list || []).forEach((e) => box.appendChild(row(e)));
+  });
+  const dir = document.createElement("div");
+  dir.style.cssText = "margin-top:0.5rem;";
+  dir.textContent = "Enhancement models folder: " + m.models_dir;
+  box.appendChild(dir);
+  if (sum) sum.textContent = m.ready ? "Detectors ready." : "A required detector is missing.";
+}
+window.xModelsRefresh = xModelsRefresh;

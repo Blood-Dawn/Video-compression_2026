@@ -507,3 +507,37 @@ async function loadRecentJobs() {
 let _hlsInstance = null;
 let _hlsStatusTimer = null;
 
+
+
+// ── One-line "what happened" for the newest run ───────────────────────────────
+// "45s of video, 1.6 MB, 17.0x smaller, finished in 24s". Built from the job
+// record, so it only states what was measured; a part that is not known (a
+// live camera has no video length to compare with) is left out.
+function runSummaryLine(job) {
+  if (!job || !job.counts) return '';
+  const c = job.counts;
+  const bits = [];
+  const vs = Number(c.video_seconds) || 0;
+  if (vs > 0) bits.push(fmtDuration(vs) + ' of video');
+  const out = Number(job.bytes_out) || 0;
+  const inn = Number(job.bytes_in) || 0;
+  if (out > 0) bits.push(fmtBytes(out));
+  if (out > 0 && inn > out) bits.push((inn / out).toFixed(1) + 'x smaller');
+  const wall = Number(c.wall_seconds) || Number(job.elapsed_s) || 0;
+  if (wall > 0) bits.push((job.status === 'stopped' ? 'stopped after ' : 'finished in ') + _fmtSecs(wall));
+  return bits.length > 1 ? bits.join(', ') : '';
+}
+
+async function refreshRunSummary() {
+  const el = document.getElementById('lr-summary');
+  if (!el) return;
+  try {
+    const data = await (await fetch('/api/jobs/recent?limit=10')).json();
+    const job = (data.jobs || []).find(j => j.kind === 'pipeline');
+    const line = runSummaryLine(job);
+    el.textContent = line;
+    el.hidden = !line;
+  } catch (e) { /* the card keeps what it had */ }
+}
+window.refreshRunSummary = refreshRunSummary;
+document.addEventListener('DOMContentLoaded', () => setTimeout(refreshRunSummary, 800));

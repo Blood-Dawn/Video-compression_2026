@@ -2352,6 +2352,18 @@ header{min-height:56px;height:auto}
 .codec-more>summary{cursor:pointer;font-family:var(--body);font-size:1rem;color:var(--text);padding:0.6rem 0;min-height:44px;display:flex;align-items:center}
 .codec-more>summary:hover{color:var(--amber-text)}
 .preset-modeno{display:none}
+/* Whole-page video drop: a dashed frame and a label while a file is dragged over. */
+body.page-drop::after{content:"Drop a video to upload it";position:fixed;inset:0.75rem;z-index:9999;display:flex;align-items:center;justify-content:center;
+  border:3px dashed var(--teal);border-radius:12px;background:rgba(10,14,20,0.82);color:var(--text-bright);font-family:var(--display);font-size:1.6rem;letter-spacing:0.06em;pointer-events:none}
+/* Recent Jobs on a phone: let long names and the file buttons wrap instead of running off the edge. */
+@media (max-width:720px){
+  #jobs-panel,#jobs-list{min-width:0;max-width:100%}
+  .job-row{flex-wrap:wrap;row-gap:0.2rem}
+  .job-row .job-label{flex:1 1 100%;white-space:normal;word-break:break-word}
+  .job-row .job-meta{white-space:normal}
+  .job-file{flex-wrap:wrap;row-gap:0.25rem}
+  .job-file .jf-name{flex:1 1 100%;white-space:normal;word-break:break-all}
+}
 @media (min-width:721px){
   main{grid-template-columns:minmax(400px,34%) 1fr}
   .sidebar{background:var(--bg)}
@@ -2530,6 +2542,22 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
               </div>
               <button class="btn btn-ghost" onclick="checkForUpdate()">Check for updates</button>
               <span id="tools-update-result" role="status" style="display:block;margin-top:4px;font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
+            </div>
+          </details>
+
+          <!-- Which AI model files are installed (detectors and enhancement). -->
+          <details class="source-advanced x-card x-tool" id="models-panel" data-sec="models-panel" ontoggle="if(this.open)xModelsRefresh()">
+            <summary class="x-sum"><span class="x-h3">AI models</span><span class="x-hint">See which detector and enhancement models are installed.</span></summary>
+            <div style="padding:0.5rem 0 0;">
+              <div style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.6;margin-bottom:0.6rem;">
+                Modes 1 to 3 need the object detector. The enhancement models are optional: without
+                one, upscaling falls back to plain bicubic.
+              </div>
+              <div id="models-list" role="status" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.6;"></div>
+              <div style="margin-top:0.5rem;display:flex;gap:0.6rem;align-items:center;flex-wrap:wrap;">
+                <button class="btn btn-ghost" onclick="xModelsRefresh()">Check again</button>
+                <span id="models-summary" style="font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
+              </div>
             </div>
           </details>
 
@@ -3783,6 +3811,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
         <div class="lr-k">Last result</div>
         <div class="lr-head" id="lr-head"></div>
         <div class="lr-detail" id="lr-detail"></div>
+        <div class="lr-detail" id="lr-summary" hidden></div>
         <div class="lr-note">Measured from the file sizes on disk.</div>
       </div>
             <div id="start-hint" role="status" hidden style="margin-top:auto;margin-bottom:0.4rem;font-size:0.8rem;color:var(--amber-text);">Choose an output destination in Setup first.</div>

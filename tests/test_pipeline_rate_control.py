@@ -78,10 +78,10 @@ def measured(monkeypatch):
     return fake, calls
 
 
-def test_mode0_is_never_capped_or_measured(measured):
+def test_mode0_is_capped_at_the_source_bitrate(measured):
     _, calls = measured
-    assert pl._resolve_max_bitrate_kbps("mode0", 0, "clip.mp4", 100, 25.0) == 0
-    assert calls == []
+    assert pl._resolve_max_bitrate_kbps("mode0", 0, "clip.mp4", 100, 25.0) == 1500
+    assert calls == [("clip.mp4", 100, 25.0)]
 
 
 @pytest.mark.parametrize("given", [500, 99999])

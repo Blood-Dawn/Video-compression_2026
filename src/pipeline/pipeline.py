@@ -263,11 +263,11 @@ def _resolve_max_bitrate_kbps(mode: str, max_bitrate_kbps, input_source,
     CRF encoding can land above the source's own bitrate and produce a
     "compressed" file bigger than the original. Without an explicit
     --max-bitrate-kbps, cap at the source file's average bitrate. Skipped for
-    mode0 (its Archive preset is "quality over size"), for live sources (no
-    file to measure), and when the caller gave a cap (theirs wins, even above
-    the source rate). Returns the value to hand the encoder.
+    live sources (no file to measure) and when the caller gave a cap (theirs wins, even above
+    the source rate). Mode 0 is capped too: a corpus run saw a Mode 0 file
+    twice the size of its source. Returns the value to hand the encoder.
     """
-    if max_bitrate_kbps or mode == "mode0":
+    if max_bitrate_kbps:
         return max_bitrate_kbps
     auto_cap_kbps = _source_bitrate_kbps(input_source, total_frames, fps)
     if auto_cap_kbps > 0:
@@ -557,6 +557,12 @@ def run_pipeline(
 
     # If the source provides a temporal_roi (CDnet benchmark), use that as the
     # warmup count so results are comparable to published CDnet scores.
+    # A fixed 120 frames eats a third of a short clip, so scale the default
+    # down to at most a tenth of the file (never below 15 frames). Long clips
+    # keep the full warm-up.
+    _clip_frames = int(getattr(src, "total_frames", 0) or 0)
+    if _clip_frames > 0 and warmup_frames > 0:
+        warmup_frames = min(warmup_frames, max(15, _clip_frames // 10))
     effective_warmup = src.get_warmup_frames(fallback=warmup_frames)
 
     fps = src.fps

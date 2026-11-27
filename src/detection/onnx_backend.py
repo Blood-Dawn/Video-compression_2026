@@ -52,6 +52,8 @@ COCO_NAMES: tuple[str, ...] = (
 )
 
 
+_IMGSZ_NOTED: set = set()
+
 class Detection(NamedTuple):
     class_id: int
     class_name: str
@@ -145,9 +147,12 @@ class YoloOnnxDetector:
                         "assumes square and may misbehave.", w, h)
             return
         if h != self.imgsz:
-            log.warning("ONNX model %s expects %dx%d input, not the configured "
-                        "imgsz=%d; using %d to match the model.",
-                        self.model_path.name, w, h, self.imgsz, h)
+            key = (str(self.model_path), h)
+            if key not in _IMGSZ_NOTED:  # once per process, not once per job
+                _IMGSZ_NOTED.add(key)
+                log.warning("ONNX model %s expects %dx%d input, not the configured "
+                            "imgsz=%d; using %d to match the model.",
+                            self.model_path.name, w, h, self.imgsz, h)
             self.imgsz = h
 
     @staticmethod

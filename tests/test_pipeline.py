@@ -984,14 +984,14 @@ class TestAutoBitrateCap:
         )
         assert cap == 800
 
-    def test_mode0_is_exempt_stays_uncapped(self, monkeypatch, tmp_path):
-        # Archive (mode0) is explicitly "quality over size" - must not be
-        # silently capped just because no explicit limit was given.
+    def test_mode0_is_capped_at_the_source_bitrate(self, monkeypatch, tmp_path):
+        # A corpus run saw a Mode 0 file twice the size of its source, so
+        # Mode 0 gets the same safety cap as the other modes.
         cap = self._run(
             monkeypatch, tmp_path, mode="mode0",
             source_bytes=1_000_000, total_frames=100, fps=10.0,
         )
-        assert cap == 0
+        assert cap == 800
 
     def test_explicit_cap_is_never_overridden(self, monkeypatch, tmp_path):
         # Even though the source's own rate (800 kbps) is lower, an explicit

@@ -35,6 +35,7 @@
       ["result", $("last-result")],
       ["progress", $("status-message")],
       ["progress", progressRow],
+      ["progress", $("live-clips")],
       ["jobs", $("jobs-panel")],
       ["jobs", $("home-preview-wrap")],
     ];

@@ -89,6 +89,17 @@ def _patch_encoder(enc_obj):
         result = original_finish(*args, **kwargs)
         with _state_lock:
             _status["segment_count"] += 1
+            # Remember each playable clip so the dashboard can offer it while
+            # the rest of the run is still compressing. Encrypted clips
+            # (.enc) cannot be played in a browser, so they are skipped.
+            try:
+                fp = str(result.get("file_path") or "")
+            except AttributeError:
+                fp = ""
+            if fp and not fp.lower().endswith(".enc"):
+                files = list(_status.get("segment_files") or [])
+                files.append(fp)
+                _status["segment_files"] = files[-20:]
             _status["encryption_failures"] = getattr(enc_obj, "encryption_failures", 0)
         return result
 
@@ -150,6 +161,7 @@ def _run_pipeline_thread(config: dict, stop_event: threading.Event) -> None:
         _status["running"] = True
         _status["frame_count"] = 0
         _status["segment_count"] = 0
+        _status["segment_files"] = []
         _status["total_frames"] = 0
         _status["error"] = None
         _status["start_time"] = time.time()

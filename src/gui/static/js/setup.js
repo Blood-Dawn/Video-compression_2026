@@ -254,12 +254,31 @@ async function _checkForUpdate(showResult) {
         : "Up to date (" + data.current_version + ").";
     if (out) out.textContent = msg;
     if (toolsOut) toolsOut.textContent = msg;
+    _renderUpdateNotes(data);
   }
   if (actions) actions.style.display = data.update_available ? "block" : "none";
   if (data.update_available) {
     _showUpdateNotif(data);
   }
 }
+// "What's new" lines from the release, shown under the Tools update card.
+function _renderUpdateNotes(data) {
+  const box = document.getElementById("tools-update-notes");
+  if (!box) return;
+  box.innerHTML = "";
+  const notes = (data && data.update_available && data.notes) || [];
+  if (!notes.length) { box.style.display = "none"; return; }
+  const h = document.createElement("div");
+  h.textContent = "What's new in " + data.latest_version;
+  h.style.cssText = "color:var(--text);margin-bottom:0.2rem;";
+  box.appendChild(h);
+  const ul = document.createElement("ul");
+  ul.style.cssText = "margin:0;padding-left:1.1rem;";
+  notes.forEach((n) => { const li = document.createElement("li"); li.textContent = n; ul.appendChild(li); });
+  box.appendChild(ul);
+  box.style.display = "block";
+}
+
 window.checkForUpdate = () => _checkForUpdate(true);
 window.addEventListener("DOMContentLoaded", () => _checkForUpdate(false));
 
@@ -297,7 +316,8 @@ function _showUpdateNotif(info) {
       : null);
   _updateNotifCard = pushNotif(
     "Update available",
-    "SVCS " + info.latest_version + " is out - you have " + info.current_version + ".",
+    "SVCS " + info.latest_version + " is out - you have " + info.current_version + "."
+      + ((info.notes && info.notes.length) ? " New: " + info.notes.slice(0, 3).join("; ") + "." : ""),
     "info",
     actionButtons,
     0,

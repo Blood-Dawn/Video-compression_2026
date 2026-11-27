@@ -442,3 +442,12 @@ def test_download_refuses_an_untrusted_url_without_any_network_call(monkeypatch,
     assert calls == []
     assert um.get_status()["phase"] == "error"
     assert list(tmp_path.iterdir()) == []
+
+
+def test_release_notes_are_plain_short_lines():
+    from gui.services.update_manager import release_notes
+
+    body = "## What's new\n- **HTTPS** pairing with a [QR code](http://x)\n* Search shows the moment\n\nFull Changelog: v1...v2\n```\ncode\n```\n"
+    assert release_notes(body) == ["HTTPS pairing with a QR code", "Search shows the moment"]
+    assert release_notes(None) == []
+    assert len(release_notes("\n".join("- item %d" % i for i in range(20)))) == 6

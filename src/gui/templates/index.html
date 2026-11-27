@@ -2542,6 +2542,7 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
               </div>
               <button class="btn btn-ghost" onclick="checkForUpdate()">Check for updates</button>
               <span id="tools-update-result" role="status" style="display:block;margin-top:4px;font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);"></span>
+              <div id="tools-update-notes" style="display:none;margin-top:0.5rem;font-family:var(--mono);font-size: 0.75rem;color:var(--text-dim);line-height:1.6;"></div>
             </div>
           </details>
 
@@ -3857,6 +3858,16 @@ html[data-theme="light"] .btn-primary:hover:not(:disabled){background:#a15f00;bo
         <!-- Scrollable content body -->
         <div class="home-body" id="content-top">
           <div id="error-banner" role="alert"></div>
+
+          <!-- Finished clips of the run in progress: watch them while the rest compresses. -->
+          <div id="live-clips" class="x-card" style="display:none;margin-bottom:0.8rem;padding:0.6rem 0.8rem;">
+            <div style="display:flex;gap:0.6rem;align-items:baseline;flex-wrap:wrap;">
+              <span class="x-h3">Finished clips</span>
+              <span class="x-hint">Watch these now, the run keeps going.</span>
+            </div>
+            <div id="live-clips-list" style="display:flex;gap:0.4rem;flex-wrap:wrap;margin:0.5rem 0;"></div>
+            <video id="live-clips-player" controls playsinline preload="metadata" style="display:none;width:100%;max-height:50vh;background:#000;border-radius:6px;"></video>
+          </div>
 
           <div class="stats-grid">
             <div class="stat-card">

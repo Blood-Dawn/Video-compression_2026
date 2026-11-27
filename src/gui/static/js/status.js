@@ -48,6 +48,7 @@ async function pollStatus() {
       pushNotif('SEGMENT SAVED', `${delta} new compressed clip${delta > 1 ? 's' : ''} written - ${curSeg} total`, 'success', null, 4000);
     }
     _lastSegmentCount = curSeg;
+    renderLiveClips(data.segment_files || []);
 
     const fill  = document.getElementById('progress-fill');
     const pctEl = document.getElementById('progress-pct');
@@ -322,3 +323,38 @@ function _updateCompressionRatio() {
 // Store segment data for tooltip lookups (keyed by row index)
 let _segmentData = [];
 
+
+
+// Finished clips of the current run. Each button loads its clip into the
+// player; the clip being watched is kept when new ones arrive, so a playing
+// video is never reset by a status poll.
+let _liveClipsKey = '';
+function renderLiveClips(files) {
+  const box = document.getElementById('live-clips');
+  const list = document.getElementById('live-clips-list');
+  const player = document.getElementById('live-clips-player');
+  if (!box || !list || !player) return;
+  if (!files.length) {
+    box.style.display = 'none'; _liveClipsKey = '';
+    player.pause(); player.removeAttribute('src'); player.style.display = 'none';
+    return;
+  }
+  const key = files.join('|');
+  if (key === _liveClipsKey) return;
+  _liveClipsKey = key;
+  box.style.display = 'block';
+  list.innerHTML = '';
+  files.forEach((fp, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'btn btn-ghost';
+    b.textContent = 'Clip ' + (i + 1);
+    b.addEventListener('click', () => {
+      player.src = '/api/media?path=' + encodeURIComponent(fp);
+      player.style.display = 'block';
+      player.play().catch(() => {});
+    });
+    list.appendChild(b);
+  });
+}
+window.renderLiveClips = renderLiveClips;

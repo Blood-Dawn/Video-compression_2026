@@ -34,6 +34,7 @@ _status: dict = {
     "config": {},
     "frame_count": 0,
     "segment_count": 0,
+    "segment_files": [],   # newest-last paths of clips saved so far this run
     "total_frames": 0,   # 0 = live/unknown, >0 = video file with known length
     "error": None,
     # Resolved SR backend of the current/last run ("realesrgan-<device>" or

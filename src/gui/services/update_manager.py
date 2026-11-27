@@ -156,6 +156,34 @@ def _best_desktop_release(releases: list) -> tuple[str | None, dict | None]:
     return best_tag, best_release
 
 
+def release_notes(body, limit: int = 6) -> list[str]:
+    """Plain-text bullet lines from a GitHub release body, for the update prompt.
+
+    Takes list items and short sentences, drops headings, links' markup and
+    emphasis marks, and keeps at most ``limit`` lines of 140 characters.
+    """
+    if not isinstance(body, str):
+        return []
+    out: list[str] = []
+    in_fence = False
+    for raw in body.splitlines():
+        line = raw.strip()
+        if line.startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence or not line or line.startswith("#"):
+            continue
+        line = re.sub(r"^[-*+]\s+|^\d+[.)]\s+", "", line)
+        line = re.sub(r"\[([^\]]+)\]\([^)]*\)", r"\1", line)
+        line = re.sub(r"[*_`]", "", line).strip()
+        if len(line) < 3 or line.lower().startswith(("full changelog", "sha256")):
+            continue
+        out.append(line[:140])
+        if len(out) >= limit:
+            break
+    return out
+
+
 def check_for_update(current_version: str | None = None) -> dict:
     """Check GitHub releases for a newer DESKTOP build.
 
@@ -172,6 +200,7 @@ def check_for_update(current_version: str | None = None) -> dict:
         "release_url": None,
         "download_url": None,
         "checksum_url": None,
+        "notes": [],
         "checked": False,
     }
 
@@ -184,6 +213,7 @@ def check_for_update(current_version: str | None = None) -> dict:
         result["latest_version"] = best_tag
         result["update_available"] = is_newer(best_tag, current)
         result["release_url"] = best_release.get("html_url")
+        result["notes"] = release_notes(best_release.get("body"))
         for asset in best_release.get("assets") or []:
             if not isinstance(asset, dict):
                 continue

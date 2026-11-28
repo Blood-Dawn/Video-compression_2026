@@ -150,7 +150,7 @@ def api_config_import():
         "segment_seconds":  _int("segment_seconds", 60, lo=10, hi=3600),
         "bg_method":        _choice("bg_method", _VALID_BG, "MOG2"),
         "warmup_frames":    _int("warmup_frames", 120, lo=0, hi=9999),
-        "detector_size":    _choice("detector_size", ("320", "416", "512", "640"), "320"),
+        "detector_size":    _choice("detector_size", ("320", "416", "512", "640", "960", "1280"), "320"),
         "enhance":          _bool("enhance"),
         "enhance_model":    _choice("enhance_model", _VALID_MODELS, "bicubic"),
         "enhance_scale":    _int("enhance_scale", 4, lo=2, hi=8),

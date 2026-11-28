@@ -25,7 +25,7 @@ def test_setter_accepts_known_sizes_and_strings():
     assert ob.get_detector_size() == 416
 
 
-@pytest.mark.parametrize("bad", [None, "", "abc", 100, 1280, 0])
+@pytest.mark.parametrize("bad", [None, "", "abc", 100, 1281, 0])
 def test_setter_ignores_unknown_values(bad):
     ob.set_detector_size(512)
     ob.set_detector_size(bad)
@@ -53,5 +53,5 @@ def test_installed_size_is_picked_up(tmp_path, monkeypatch):
 def test_models_status_lists_every_size():
     from gui.services.models_status import models_status
     sizes = models_status()["detector_sizes"]
-    assert [s["size"] for s in sizes] == [320, 416, 512, 640]
+    assert [s["size"] for s in sizes] == [320, 416, 512, 640, 960, 1280]
     assert all({"label", "installed"} <= set(s) for s in sizes)

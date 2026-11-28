@@ -81,7 +81,8 @@ def models_status() -> dict:
             native = int(dims[2]) if isinstance(dims[2], int) else 640
         except Exception:  # noqa: BLE001
             native = 320
-        labels = {320: "Fastest", 416: "Fast", 512: "Balanced", 640: "Best quality"}
+        labels = {320: "Fastest", 416: "Fast", 512: "Balanced", 640: "Best quality",
+                  960: "Maximum", 1280: "Maximum (very slow)"}
         for size, label in labels.items():
             f = base.with_name(f"{base.stem}_{size}{base.suffix}")
             installed = f.is_file() or (base.is_file() and size == native)

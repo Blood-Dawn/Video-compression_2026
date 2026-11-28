@@ -57,7 +57,7 @@ _IMGSZ_NOTED: set = set()
 # Detector sizes the user can pick. Smaller is faster, larger sees small or
 # distant objects better. The 320 model is the one that ships as yolov8n.onnx;
 # the others live beside it as yolov8n_<size>.onnx once exported.
-DETECTOR_SIZES = (320, 416, 512, 640)
+DETECTOR_SIZES = (320, 416, 512, 640, 960, 1280)
 _selected_size = None
 
 

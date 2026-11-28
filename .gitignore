@@ -44,6 +44,8 @@ data/processed/
 *.pth
 *.pt
 *.onnx
+# The default 320 detector ships in git so a plain clone can run the app (12.7 MB).
+!/yolov8n.onnx
 *.pb
 *.h5
 
